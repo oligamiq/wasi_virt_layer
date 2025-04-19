@@ -25,13 +25,4 @@ fn main() {
         building::build_vfs(manifest_path.clone(), building_crate).expect("Failed to build VFS");
 
     println!("Generated VFS: {ret}");
-
-    // let mut cmd = cargo_metadata::MetadataCommand::new();
-    // if let Some(manifest_path) = args.manifest_path {
-    //     cmd.manifest_path(manifest_path);
-    // }
-    // let metadata = cmd.exec().unwrap();
-    // let target_dir = metadata.target_directory;
-
-    // println!("{target_dir}");
 }
