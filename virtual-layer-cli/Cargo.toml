@@ -6,6 +6,7 @@ description = "CLI for the wasip1_vfs crate"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
+camino = "1.1.9"
 cargo_metadata = "0.19.2"
 clap = { version = "4.5.36", features = ["derive"] }
 console = "0.15.11"

@@ -323,3 +323,107 @@
 [1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
 [1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.44s
 [1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.22s
+[1m[32m   Compiling[0m proc-macro2 v1.0.95
+[1m[32m   Compiling[0m unicode-ident v1.0.18
+[1m[32m   Compiling[0m stable_deref_trait v1.2.0
+[1m[32m   Compiling[0m serde v1.0.219
+[1m[32m   Compiling[0m icu_locid_transform_data v1.5.1
+[1m[32m   Compiling[0m writeable v0.5.5
+[1m[32m   Compiling[0m litemap v0.7.5
+[1m[32m   Compiling[0m semver v1.0.26
+[1m[32m   Compiling[0m icu_properties_data v1.5.1
+[1m[32m   Compiling[0m icu_normalizer_data v1.5.1
+[1m[32m   Compiling[0m foldhash v0.1.5
+[1m[32m   Compiling[0m smallvec v1.15.0
+[1m[32m   Compiling[0m wasmparser v0.227.1
+[1m[32m   Compiling[0m serde_json v1.0.140
+[1m[32m   Compiling[0m equivalent v1.0.2
+[1m[32m   Compiling[0m hashbrown v0.15.2
+[1m[32m   Compiling[0m bitflags v2.9.0
+[1m[32m   Compiling[0m write16 v1.0.0
+[1m[32m   Compiling[0m itoa v1.0.15
+[1m[32m   Compiling[0m ryu v1.0.20
+[1m[32m   Compiling[0m memchr v2.7.4
+[1m[32m   Compiling[0m anyhow v1.0.98
+[1m[32m   Compiling[0m utf8_iter v1.0.4
+[1m[32m   Compiling[0m utf16_iter v1.0.5
+[1m[32m   Compiling[0m quote v1.0.40
+[1m[32m   Compiling[0m autocfg v1.4.0
+[1m[32m   Compiling[0m adler2 v2.0.0
+[1m[32m   Compiling[0m cfg-if v1.0.0
+[1m[32m   Compiling[0m syn v2.0.100
+[1m[32m   Compiling[0m percent-encoding v2.3.1
+[1m[32m   Compiling[0m prettyplease v0.2.32
+[1m[32m   Compiling[0m wasm-encoder v0.227.1
+[1m[32m   Compiling[0m form_urlencoded v1.2.1
+[1m[32m   Compiling[0m slab v0.4.9
+[1m[32m   Compiling[0m crc32fast v1.4.2
+[1m[32m   Compiling[0m miniz_oxide v0.8.8
+[1m[32m   Compiling[0m id-arena v2.2.1
+[1m[32m   Compiling[0m leb128fmt v0.1.0
+[1m[32m   Compiling[0m log v0.4.27
+[1m[32m   Compiling[0m futures-core v0.3.31
+[1m[32m   Compiling[0m topological-sort v0.2.2
+[1m[32m   Compiling[0m futures-sink v0.3.31
+[1m[32m   Compiling[0m unicode-xid v0.2.6
+[1m[32m   Compiling[0m spdx v0.10.8
+[1m[32m   Compiling[0m futures-channel v0.3.31
+[1m[32m   Compiling[0m flate2 v1.1.1
+[1m[32m   Compiling[0m futures-task v0.3.31
+[1m[32m   Compiling[0m pin-utils v0.1.0
+[1m[32m   Compiling[0m futures-io v0.3.31
+[1m[32m   Compiling[0m pin-project-lite v0.2.16
+[1m[32m   Compiling[0m heck v0.5.0
+[1m[32m   Compiling[0m wit-bindgen-rust v0.41.0
+[1m[32m   Compiling[0m wit-bindgen-rt v0.41.0
+[1m[32m   Compiling[0m wit-bindgen-rust-macro v0.41.0
+[1m[32m   Compiling[0m once_cell v1.21.3
+[1m[32m   Compiling[0m syn v2.0.100
+[1m[32m   Compiling[0m synstructure v0.13.1
+[1m[32m   Compiling[0m prettyplease v0.2.32
+[1m[32m   Compiling[0m zerofrom-derive v0.1.6
+[1m[32m   Compiling[0m yoke-derive v0.7.5
+[1m[32m   Compiling[0m zerovec-derive v0.10.3
+[1m[32m   Compiling[0m displaydoc v0.2.5
+[1m[32m   Compiling[0m serde_derive v1.0.219
+[1m[32m   Compiling[0m icu_provider_macros v1.5.0
+[1m[32m   Compiling[0m futures-macro v0.3.31
+[1m[32m   Compiling[0m futures-util v0.3.31
+[1m[32m   Compiling[0m zerofrom v0.1.6
+[1m[32m   Compiling[0m yoke v0.7.5
+[1m[32m   Compiling[0m zerovec v0.10.4
+[1m[32m   Compiling[0m serde v1.0.219
+[1m[32m   Compiling[0m tinystr v0.7.6
+[1m[32m   Compiling[0m icu_collections v1.5.0
+[1m[32m   Compiling[0m icu_locid v1.5.0
+[1m[32m   Compiling[0m icu_provider v1.5.0
+[1m[32m   Compiling[0m icu_locid_transform v1.5.0
+[1m[32m   Compiling[0m futures-executor v0.3.31
+[1m[32m   Compiling[0m icu_properties v1.5.1
+[1m[32m   Compiling[0m semver v1.0.26
+[1m[32m   Compiling[0m indexmap v2.9.0
+[1m[32m   Compiling[0m serde_json v1.0.140
+[1m[32m   Compiling[0m futures v0.3.31
+[1m[32m   Compiling[0m wit-bindgen-rt v0.41.0
+[1m[32m   Compiling[0m wasmparser v0.227.1
+[1m[32m   Compiling[0m auditable-serde v0.8.0
+[1m[32m   Compiling[0m icu_normalizer v1.5.0
+[1m[32m   Compiling[0m idna_adapter v1.2.0
+[1m[32m   Compiling[0m idna v1.0.3
+[1m[32m   Compiling[0m url v2.5.4
+[1m[32m   Compiling[0m wit-parser v0.227.1
+[1m[32m   Compiling[0m wasm-encoder v0.227.1
+[1m[32m   Compiling[0m wasm-metadata v0.227.1
+[1m[32m   Compiling[0m wit-bindgen-core v0.41.0
+[1m[32m   Compiling[0m wit-component v0.227.1
+[1m[32m   Compiling[0m wit-bindgen-rust v0.41.0
+[1m[32m   Compiling[0m wit-bindgen-rust-macro v0.41.0
+[1m[32m   Compiling[0m wit-bindgen v0.41.0
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.59s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.68s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 2.13s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.62s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.47s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.59s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.53s

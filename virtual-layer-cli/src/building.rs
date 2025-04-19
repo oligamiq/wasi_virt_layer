@@ -47,7 +47,12 @@ impl<const T: usize, R: BufRead> Iterator for CustomReadIterator<T, R> {
     }
 }
 
-pub fn build_vfs(manifest_path: Option<String>, metadata: cargo_metadata::Metadata) {
+pub fn build_vfs(
+    manifest_path: Option<String>,
+    building_crate: cargo_metadata::Package,
+) -> Option<camino::Utf8PathBuf> {
+    let mut ret = None;
+
     let mut command = std::process::Command::new("cargo")
         .args({
             let mut args = vec![
@@ -97,37 +102,6 @@ pub fn build_vfs(manifest_path: Option<String>, metadata: cargo_metadata::Metada
             parse_sender.send(message).unwrap();
         }
     });
-
-    let building_crate = {
-        let packages = metadata.packages.clone();
-        let workspace = metadata.workspace_members.clone();
-        let workspace_default_packages = metadata.workspace_default_packages();
-
-        if workspace_default_packages.is_empty() {
-            packages
-                .iter()
-                .filter(|package| {
-                    workspace
-                        .iter()
-                        .any(|workspace_package| package.id == *workspace_package)
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-        } else {
-            packages
-                .iter()
-                .filter(|package| {
-                    workspace_default_packages
-                        .iter()
-                        .any(|workspace_package| package.id == workspace_package.id)
-                })
-                .cloned()
-                .collect::<Vec<_>>()
-        }
-    }
-    .into_iter()
-    .next()
-    .unwrap();
 
     let mut before_msgs: Vec<String> = Vec::new();
 
@@ -188,6 +162,16 @@ pub fn build_vfs(manifest_path: Option<String>, metadata: cargo_metadata::Metada
                         file.write_all(format!("{:?}", artifact).as_bytes())
                             .unwrap();
                         file.write_all(b"\n").unwrap();
+
+                        if let Some(wasm) = artifact
+                            .filenames
+                            .iter()
+                            .filter(|f| f.extension() == Some("wasm"))
+                            .next()
+                            .cloned()
+                        {
+                            ret = Some(wasm);
+                        }
                     }
                 }
                 cargo_metadata::Message::CompilerMessage(msg) => {
@@ -199,7 +183,7 @@ pub fn build_vfs(manifest_path: Option<String>, metadata: cargo_metadata::Metada
                     print!("\x1b[39m");
 
                     // Handle the build finished message
-                    println!("Build Finished: {:?}", finished);
+                    // println!("Build Finished: {:?}", finished);
 
                     if finished.success {
                         println!("Build succeeded!");
@@ -219,4 +203,41 @@ pub fn build_vfs(manifest_path: Option<String>, metadata: cargo_metadata::Metada
     msg_thread.join().unwrap();
     parse_thread.join().unwrap();
     command.wait().unwrap();
+
+    ret
+}
+
+pub fn get_building_crate(metadata: &cargo_metadata::Metadata) -> cargo_metadata::Package {
+    let building_crate = {
+        let packages = metadata.packages.clone();
+        let workspace = metadata.workspace_members.clone();
+        let workspace_default_packages = metadata.workspace_default_packages();
+
+        if workspace_default_packages.is_empty() {
+            packages
+                .iter()
+                .filter(|package| {
+                    workspace
+                        .iter()
+                        .any(|workspace_package| package.id == *workspace_package)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        } else {
+            packages
+                .iter()
+                .filter(|package| {
+                    workspace_default_packages
+                        .iter()
+                        .any(|workspace_package| package.id == workspace_package.id)
+                })
+                .cloned()
+                .collect::<Vec<_>>()
+        }
+    }
+    .into_iter()
+    .next()
+    .unwrap();
+
+    building_crate
 }
