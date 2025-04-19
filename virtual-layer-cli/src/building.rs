@@ -1,9 +1,4 @@
-use std::{
-    io::{BufRead, BufReader, Write as _},
-    process::ChildStdout,
-};
-
-use clap::parser;
+use std::io::{BufRead, Write as _};
 
 use crate::down_color;
 

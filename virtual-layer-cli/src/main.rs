@@ -1,7 +1,3 @@
-use std::io::{BufRead, Write as _};
-
-use cargo_metadata::Message;
-
 pub mod args;
 pub mod building;
 pub mod down_color;
