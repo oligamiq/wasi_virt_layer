@@ -1,0 +1,31 @@
+use std::io::{BufRead, Write as _};
+
+use cargo_metadata::Message;
+
+pub mod args;
+pub mod build;
+pub mod down_color;
+
+fn main() {
+    let parsed_args = args::Args::new();
+
+    let manifest_path = parsed_args.get_manifest_path();
+    let cargo_metadata = {
+        let mut metadata_command = cargo_metadata::MetadataCommand::new();
+        if let Some(manifest_path) = manifest_path {
+            metadata_command.manifest_path(manifest_path);
+        }
+        metadata_command.exec().unwrap()
+    };
+
+    build::build_vfs(manifest_path.clone(), cargo_metadata);
+
+    // let mut cmd = cargo_metadata::MetadataCommand::new();
+    // if let Some(manifest_path) = args.manifest_path {
+    //     cmd.manifest_path(manifest_path);
+    // }
+    // let metadata = cmd.exec().unwrap();
+    // let target_dir = metadata.target_directory;
+
+    // println!("{target_dir}");
+}
