@@ -1,5 +1,3 @@
-use wasi::errno;
-
 pub mod wasi;
 pub mod wit;
 
@@ -34,11 +32,4 @@ impl MemoryAccess for Memory {
     fn get_memory_mut(&mut self) -> &mut [u8] {
         &mut self.data
     }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn holder(fd: i32, iovs: i32, iovs_len: i32, written: i32) -> i32 {
-    // static DATA
-
-    0
 }

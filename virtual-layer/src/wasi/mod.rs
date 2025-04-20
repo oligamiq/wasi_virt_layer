@@ -1,29 +1,31 @@
+// https://github.com/bytecodealliance/wasmtime/blob/cff811b55e8b715e037226f2f3c36c65676d319a/crates/wasi-preview1-component-adapter/src/lib.rs#L1655
+
+use wasip1::*;
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn environ_sizes_get(environ_count: *mut u32, environ_size: *mut u32) -> u32 {
-    0
+pub unsafe extern "C" fn environ_sizes_get(
+    environc: &mut Size,
+    environ_buf_size: &mut Size,
+) -> Errno {
+    ERRNO_SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn environ_get(environ: *mut *mut u8, environ_buf: *mut u8) -> u32 {
-    0
+pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut u8) -> Errno {
+    ERRNO_SUCCESS
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn proc_exit(exit_code: u32) -> ! {
-    std::process::exit(exit_code as i32);
+pub unsafe extern "C" fn proc_exit(rval: Exitcode) -> ! {
+    std::process::exit(rval as i32);
 }
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn fd_write(
-    fd: u32,
-    iovs: *const *const u8,
-    iovs_len: u32,
-    written: *mut u32,
-) -> u32 {
-    0
-}
-
-pub mod errno {
-    pub type Errno = u16;
-    pub const SUCCESS: Errno = 0;
+    fd: Fd,
+    mut iovs_ptr: *const Ciovec,
+    mut iovs_len: usize,
+    nwritten: &mut Size,
+) -> Errno {
+    ERRNO_SUCCESS
 }
