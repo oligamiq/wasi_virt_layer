@@ -1,0 +1,9 @@
+{
+    "rust-analyzer.linkedProjects": [
+        "${workspaceFolder}/virtual-layer/Cargo.toml",
+        "${workspaceFolder}/virtual-layer-cli/Cargo.toml",
+        "${workspaceFolder}/example/Cargo.toml",
+        "${workspaceFolder}/test_wasm/Cargo.toml",
+        "${workspaceFolder}/adapter/Cargo.toml",
+    ]
+}

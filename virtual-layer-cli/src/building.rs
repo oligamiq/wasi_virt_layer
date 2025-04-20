@@ -1,4 +1,8 @@
-use std::io::{BufRead, Write as _};
+use std::{
+    collections::VecDeque,
+    io::{BufRead, Write as _},
+    sync::{LazyLock, mpsc::Receiver},
+};
 
 use crate::down_color;
 
@@ -79,7 +83,7 @@ pub fn build_vfs(
     let mut before_len = 0;
     let term = console::Term::stdout();
 
-    let mut last_lines = std::collections::VecDeque::with_capacity(3);
+    let mut last_lines = VecDeque::with_capacity(3);
 
     let (msg_sender, msg_receiver) = std::sync::mpsc::channel();
     let (parse_sender, parse_receiver) = std::sync::mpsc::channel();
@@ -100,104 +104,158 @@ pub fn build_vfs(
 
     let mut before_msgs: Vec<String> = Vec::new();
 
-    loop {
-        if let Some(line) = msg_receiver.try_recv().ok() {
-            // line print to file
-            {
-                let mut file = std::fs::OpenOptions::new()
-                    .append(true)
-                    .create(true)
-                    .open("output.txt")
-                    .unwrap();
-                file.write_all(line.as_bytes()).unwrap();
-                file.write_all(b"\n").unwrap();
-            }
+    fn process_msg(
+        msg_receiver: &Receiver<String>,
+        last_lines: &mut VecDeque<String>,
+        before_msgs: &mut Vec<String>,
+        before_len: &mut usize,
+        term: &console::Term,
+    ) {
+        let mut is_change = false;
+        'inner: loop {
+            if let Some(line) = msg_receiver.try_recv().ok() {
+                fn check_finish_or_compiling(line: &str) -> bool {
+                    static NON_ANSI: LazyLock<regex::Regex> =
+                        LazyLock::new(|| regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap());
 
-            // Skip lines with carriage return
-            if line.contains("\r") {
-                last_lines.pop_back();
-                last_lines.push_back(line.to_string());
-            } else {
-                last_lines.push_back(line.to_string());
-                if last_lines.len() > 3 {
-                    last_lines.pop_front();
+                    let line = NON_ANSI.replace_all(line, "");
+
+                    if line.contains("Finished") || line.contains("Compiling") {
+                        let index = line
+                            .find("Finished")
+                            .or_else(|| line.find("Compiling"))
+                            .unwrap();
+
+                        let line = &line[..index];
+
+                        line.as_bytes().iter().all(|&b| b == b' ')
+                    } else {
+                        return false;
+                    }
                 }
-            }
 
-            term.clear_last_lines(before_len).unwrap();
+                if check_finish_or_compiling(&line) {
+                    // line print to file
+                    {
+                        let mut file = std::fs::OpenOptions::new()
+                            .append(true)
+                            .create(true)
+                            .open("output.txt")
+                            .unwrap();
+                        file.write_all(line.as_bytes()).unwrap();
+                        file.write_all(b"\n").unwrap();
+                    }
+
+                    // Skip lines with carriage return
+                    if line.contains("\r") {
+                        last_lines.pop_back();
+                        last_lines.push_back(line.to_string());
+                    } else {
+                        last_lines.push_back(line.to_string());
+                        if last_lines.len() > 3 {
+                            last_lines.pop_front();
+                        }
+                    }
+                } else {
+                    before_msgs.push(line.to_string());
+                }
+                is_change = true;
+            } else {
+                break 'inner;
+            }
+        }
+
+        if is_change || !before_msgs.is_empty() {
+            term.clear_last_lines(*before_len).unwrap();
 
             for msg in before_msgs.iter() {
                 term.write_line(msg).unwrap();
             }
             before_msgs.clear();
 
-            before_len = last_lines.len();
+            *before_len = last_lines.len();
             for line in last_lines.iter() {
                 term.write_line(&down_color::reduce_saturation(line, 0.5))
                     .unwrap();
             }
             term.flush().unwrap();
-        } else {
-            for msg in before_msgs.iter() {
-                term.write_line(msg).unwrap();
-            }
-            before_msgs.clear();
-            term.flush().unwrap();
         }
+    }
 
-        if let Some(message) = parse_receiver.try_recv().ok() {
-            match message {
-                cargo_metadata::Message::CompilerArtifact(artifact) => {
-                    if building_crate.id == artifact.package_id {
-                        let mut file = std::fs::OpenOptions::new()
-                            .append(true)
-                            .create(true)
-                            .open("output_artifact.txt")
-                            .unwrap();
-                        file.write_all(format!("{:?}", artifact).as_bytes())
-                            .unwrap();
-                        file.write_all(b"\n").unwrap();
+    let finished = 'outer: loop {
+        process_msg(
+            &msg_receiver,
+            &mut last_lines,
+            &mut before_msgs,
+            &mut before_len,
+            &term,
+        );
 
-                        if let Some(wasm) = artifact
-                            .filenames
-                            .iter()
-                            .filter(|f| f.extension() == Some("wasm"))
-                            .next()
-                            .cloned()
-                        {
-                            ret = Some(wasm);
+        'inner: loop {
+            if let Some(message) = parse_receiver.try_recv().ok() {
+                match message {
+                    cargo_metadata::Message::CompilerArtifact(artifact) => {
+                        if building_crate.id == artifact.package_id {
+                            // let mut file = std::fs::OpenOptions::new()
+                            //     .append(true)
+                            //     .create(true)
+                            //     .open("output_artifact.txt")
+                            //     .unwrap();
+                            // file.write_all(format!("{:?}", artifact).as_bytes())
+                            //     .unwrap();
+                            // file.write_all(b"\n").unwrap();
+
+                            if let Some(wasm) = artifact
+                                .filenames
+                                .iter()
+                                .filter(|f| f.extension() == Some("wasm"))
+                                .next()
+                                .cloned()
+                            {
+                                ret = Some(wasm);
+                            }
                         }
                     }
-                }
-                cargo_metadata::Message::CompilerMessage(msg) => {
-                    if let Some(ref rendered) = msg.message.rendered {
-                        before_msgs.push(rendered.to_string());
+                    cargo_metadata::Message::CompilerMessage(msg) => {
+                        if let Some(ref rendered) = msg.message.rendered {
+                            before_msgs.push(rendered.to_string());
+                        }
                     }
-                }
-                cargo_metadata::Message::BuildFinished(finished) => {
-                    print!("\x1b[39m");
+                    cargo_metadata::Message::BuildFinished(finished) => {
+                        // Handle the build finished message
+                        // println!("Build Finished: {:?}", finished);
 
-                    // Handle the build finished message
-                    // println!("Build Finished: {:?}", finished);
-
-                    if finished.success {
-                        println!("Build succeeded!");
-                    } else {
-                        println!("Build failed!");
+                        break 'outer finished;
                     }
-
-                    break;
+                    _ => {}
                 }
-                _ => {}
+            } else {
+                break 'inner;
             }
         }
 
         std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+    };
 
     msg_thread.join().unwrap();
     parse_thread.join().unwrap();
     command.wait().unwrap();
+
+    process_msg(
+        &msg_receiver,
+        &mut last_lines,
+        &mut before_msgs,
+        &mut before_len,
+        &term,
+    );
+
+    print!("\x1b[39m");
+
+    if finished.success {
+        println!("Build succeeded!");
+    } else {
+        println!("Build failed!");
+    }
 
     ret
 }

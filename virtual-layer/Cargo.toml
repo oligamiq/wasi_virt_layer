@@ -1,0 +1,6 @@
+[package]
+name = "wasip1-virtual-layer"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]

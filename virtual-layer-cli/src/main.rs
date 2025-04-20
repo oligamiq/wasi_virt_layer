@@ -20,5 +20,16 @@ fn main() {
     let ret =
         building::build_vfs(manifest_path.clone(), building_crate).expect("Failed to build VFS");
 
+    let cmd = std::process::Command::new("wasm-merge")
+        .spawn()
+        .expect("Failed to spawn wasm-merge command");
+
     println!("Generated VFS: {ret}");
+
+    println!("Translating Wasm to Component...");
+
+    println!("Translating Component to JS...");
+    // let transpiled = parsed_args
+    //     .transpile_to_js(&ret, &building_crate.name)
+    //     .expect("Failed to transpile Wasm to Component");
 }
