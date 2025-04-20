@@ -4,6 +4,8 @@ use std::{
     sync::{LazyLock, mpsc::Receiver},
 };
 
+use anyhow::Context as _;
+
 use crate::down_color;
 
 struct CustomReadIterator<const T: usize, R: BufRead> {
@@ -293,4 +295,56 @@ pub fn get_building_crate(metadata: &cargo_metadata::Metadata) -> cargo_metadata
     .unwrap();
 
     building_crate
+}
+
+pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::Utf8PathBuf> {
+    let output_path = wasm_path.with_extension("opt.wasm");
+    if output_path.exists() {
+        std::fs::remove_file(&output_path)?;
+    }
+
+    let command = std::process::Command::new("wasm-opt")
+        .args(["-Oz", wasm_path.as_str()])
+        .args(["--output", output_path.as_str()])
+        .stdout(std::process::Stdio::piped())
+        .spawn()?;
+
+    let output = command.wait_with_output()?;
+
+    if !output.status.success() {
+        anyhow::bail!("wasm-opt failed.");
+    }
+
+    Ok(output_path)
+}
+
+pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::Utf8PathBuf> {
+    let output_path = wasm_path.with_extension("component.wasm");
+    if output_path.exists() {
+        std::fs::remove_file(&output_path)?;
+    }
+
+    // https://github.com/bytecodealliance/wasm-tools/blob/main/src/bin/wasm-tools/component.rs#L259
+    let wasm = std::fs::read(wasm_path)?;
+    let mut encoder = wit_component::ComponentEncoder::default()
+        .validate(true)
+        .reject_legacy_names(false);
+
+    encoder = encoder.module(&wasm)?;
+
+    encoder = encoder.realloc_via_memory_grow(true);
+
+    let bytes = encoder
+        .encode()
+        .context("failed to encode a component from module")?;
+
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(&output_path)?;
+    file.write_all(&bytes)?;
+    file.sync_data()?;
+
+    Ok(output_path)
 }

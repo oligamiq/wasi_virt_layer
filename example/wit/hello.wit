@@ -1,0 +1,7 @@
+// wit/virtual_file_system.wit
+// wit is only kebab-case
+package hello:host;
+
+world hello {
+  export %world: func();
+}

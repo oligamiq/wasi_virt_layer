@@ -1,6 +1,7 @@
 use wasi::errno;
 
 pub mod wasi;
+pub mod wit;
 
 pub trait VirtualFileSystem {
     fn new() -> Self;
@@ -9,4 +10,35 @@ pub trait VirtualFileSystem {
     fn remove_file(&mut self, path: &str);
     fn list_files(&self) -> Vec<String>;
     fn clear(&mut self);
+}
+
+pub trait MemoryAccess {
+    fn get_memory(&self) -> &[u8];
+    fn set_memory(&mut self, offset: usize, data: &[u8]);
+    fn get_memory_mut(&mut self) -> &mut [u8];
+}
+
+pub struct Memory {
+    data: Vec<u8>,
+}
+
+impl MemoryAccess for Memory {
+    fn get_memory(&self) -> &[u8] {
+        &self.data
+    }
+
+    fn set_memory(&mut self, offset: usize, data: &[u8]) {
+        self.data[offset..offset + data.len()].copy_from_slice(data);
+    }
+
+    fn get_memory_mut(&mut self) -> &mut [u8] {
+        &mut self.data
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn holder(fd: i32, iovs: i32, iovs_len: i32, written: i32) -> i32 {
+    // static DATA
+
+    0
 }
