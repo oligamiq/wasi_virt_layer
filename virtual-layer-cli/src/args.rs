@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, path::PathBuf};
 
 use clap::{Parser, command};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 pub struct Args {
+    /// Path to the wasip1 wasm file
+    pub wasm: PathBuf,
+
     /// Path to the Cargo.toml file
     #[arg(long)]
     pub manifest_path: Option<String>,
@@ -64,7 +67,7 @@ impl Args {
                 valid_lifting_optimization: self.transpile_opts.valid_lifting_optimization,
                 tracing: self.transpile_opts.tracing,
                 no_namespaced_exports: self.transpile_opts.no_namespaced_exports,
-                multi_memory: self.transpile_opts.multi_memory,
+                multi_memory: true,
                 guest: self.transpile_opts.guest,
                 async_mode: None,
             },
@@ -113,10 +116,6 @@ pub struct TranspileOpts {
     /// Whether to generate namespaced exports like foo as "local:package/foo". These exports can break typescript builds.
     #[arg(long, default_value = "false")]
     no_namespaced_exports: bool,
-
-    /// Whether to output core Wasm utilizing multi-memory or to polyfill this handling.
-    #[arg(long, default_value = "false")]
-    multi_memory: bool,
 
     /// Whether to generate types for a guest module using module declarations.
     #[arg(long, default_value = "false")]

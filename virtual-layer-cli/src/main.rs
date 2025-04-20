@@ -3,6 +3,7 @@ use rewrite::adjust_wasm;
 pub mod args;
 pub mod building;
 pub mod down_color;
+pub mod merge;
 pub mod rewrite;
 
 fn main() {
@@ -32,11 +33,19 @@ fn main() {
     println!("Optimizing Wasm...");
     let ret = building::optimize_wasm(&ret).expect("Failed to optimize Wasm");
 
-    let cmd = std::process::Command::new("wasm-merge")
-        .spawn()
-        .expect("Failed to spawn wasm-merge command");
-
     println!("Generated VFS: {ret}");
+
+    println!("Merging Wasm...");
+    let output = format!("{}/merged.wasm", parsed_args.out_dir);
+    if std::fs::metadata(&output).is_ok() {
+        std::fs::remove_file(&output).expect("Failed to remove existing file");
+    }
+    merge::merge(&ret, &parsed_args.wasm, &output).expect("Failed to merge Wasm");
+
+    println!("Optimizing Merged Wasm...");
+    let ret = building::optimize_wasm(&output.into()).expect("Failed to optimize merged Wasm");
+
+    println!("Adjusting Merged Wasm...");
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret).expect("Failed to convert Wasm to Component");
