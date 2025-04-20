@@ -1,8 +1,5 @@
 use regex::Regex;
-use std::{
-    collections::HashMap,
-    sync::LazyLock,
-};
+use std::{collections::HashMap, sync::LazyLock};
 
 static RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(
