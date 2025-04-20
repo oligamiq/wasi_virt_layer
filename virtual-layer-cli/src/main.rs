@@ -72,10 +72,7 @@ fn main() {
         std::fs::write(file_name, &data).expect("Failed to write file");
     }
 
-    // remove output
-    std::fs::remove_file(&output).expect("Failed to remove existing file");
-    // remove ret
-    std::fs::remove_file(&ret).expect("Failed to remove existing file");
-    // remove component
-    std::fs::remove_file(&component).expect("Failed to remove existing file");
+    std::fs::remove_file(&output).expect("Failed to remove tmp file");
+    std::fs::remove_file(&ret).expect("Failed to remove tmp file");
+    std::fs::remove_file(&component).expect("Failed to remove tmp file");
 }
