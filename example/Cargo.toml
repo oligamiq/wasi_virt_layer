@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 wit-bindgen = "0.41.0"
 wasip1-virtual-layer = { path = "../virtual-layer/" }
+const_struct = "0.5.3"
 
 [lib]
 crate-type = ["cdylib"]

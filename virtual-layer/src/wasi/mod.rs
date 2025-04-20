@@ -1,14 +1,8 @@
 // https://github.com/bytecodealliance/wasmtime/blob/cff811b55e8b715e037226f2f3c36c65676d319a/crates/wasi-preview1-component-adapter/src/lib.rs#L1655
 
-use wasip1::*;
+pub mod env;
 
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn environ_sizes_get(
-    environc: &mut Size,
-    environ_buf_size: &mut Size,
-) -> Errno {
-    ERRNO_SUCCESS
-}
+use wasip1::*;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut u8) -> Errno {

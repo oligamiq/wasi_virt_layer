@@ -5,5 +5,12 @@
         "${workspaceFolder}/example/Cargo.toml",
         "${workspaceFolder}/test_wasm/Cargo.toml",
         "${workspaceFolder}/adapter/Cargo.toml",
+    ],
+    "cSpell.words": [
+        "environc",
+        "Errno",
+        "Exitcode",
+        "wasi",
+        "wasip1"
     ]
 }

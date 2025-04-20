@@ -1,5 +1,6 @@
 pub mod wasi;
 pub mod wit;
+pub use wasip1;
 
 pub trait VirtualFileSystem {
     fn new() -> Self;
