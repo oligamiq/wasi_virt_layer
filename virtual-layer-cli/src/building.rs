@@ -298,24 +298,40 @@ pub fn get_building_crate(metadata: &cargo_metadata::Metadata) -> cargo_metadata
 }
 
 pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::Utf8PathBuf> {
-    let output_path = wasm_path.with_extension("opt.wasm");
-    if output_path.exists() {
-        std::fs::remove_file(&output_path)?;
+    let mut before_path = wasm_path.clone();
+
+    loop {
+        let output_path = before_path.with_extension("opt.wasm");
+        if output_path.exists() {
+            std::fs::remove_file(&output_path)?;
+        }
+
+        let command = std::process::Command::new("wasm-opt")
+            .args(["-Oz", wasm_path.as_str()])
+            .args(["--output", output_path.as_str()])
+            .stdout(std::process::Stdio::piped())
+            .spawn()?;
+
+        let output = command.wait_with_output()?;
+
+        if !output.status.success() {
+            anyhow::bail!("wasm-opt failed.");
+        }
+
+        let before_size = std::fs::metadata(&before_path)?.len();
+        let after_size = std::fs::metadata(&output_path)?.len();
+
+        if before_size <= after_size {
+            // remove
+            std::fs::remove_file(&output_path)?;
+
+            break;
+        }
+
+        before_path = output_path.clone();
     }
 
-    let command = std::process::Command::new("wasm-opt")
-        .args(["-Oz", wasm_path.as_str()])
-        .args(["--output", output_path.as_str()])
-        .stdout(std::process::Stdio::piped())
-        .spawn()?;
-
-    let output = command.wait_with_output()?;
-
-    if !output.status.success() {
-        anyhow::bail!("wasm-opt failed.");
-    }
-
-    Ok(output_path)
+    Ok(before_path)
 }
 
 pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::Utf8PathBuf> {

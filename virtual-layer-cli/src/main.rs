@@ -35,7 +35,14 @@ fn main() {
 
     println!("Generated VFS: {ret}");
 
+    println!("Remove existing output directory...");
+    if std::fs::metadata(&parsed_args.out_dir).is_ok() {
+        std::fs::remove_dir_all(&parsed_args.out_dir).expect("Failed to remove existing directory");
+    }
+    std::fs::create_dir_all(&parsed_args.out_dir).expect("Failed to create output directory");
+
     println!("Merging Wasm...");
+
     let output = format!("{}/merged.wasm", parsed_args.out_dir);
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
@@ -43,7 +50,8 @@ fn main() {
     merge::merge(&ret, &parsed_args.wasm, &output).expect("Failed to merge Wasm");
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&output.into()).expect("Failed to optimize merged Wasm");
+    let ret =
+        building::optimize_wasm(&output.clone().into()).expect("Failed to optimize merged Wasm");
 
     println!("Adjusting Merged Wasm...");
 
@@ -56,7 +64,18 @@ fn main() {
         .transpile_to_js(&binary, &building_crate.name)
         .expect("Failed to transpile Wasm to Component");
 
-    println!("Transpiled to JS: {:#?}", transpiled.exports);
-    println!("Transpiled to JS: {:#?}", transpiled.imports);
-    println!("Transpiled to JS: {:#?}", transpiled.files);
+    for (name, data) in transpiled.files.iter() {
+        let file_name = format!("{}/{name}", parsed_args.out_dir);
+        if std::fs::metadata(&file_name).is_ok() {
+            std::fs::remove_file(&file_name).expect("Failed to remove existing file");
+        }
+        std::fs::write(file_name, &data).expect("Failed to write file");
+    }
+
+    // remove output
+    std::fs::remove_file(&output).expect("Failed to remove existing file");
+    // remove ret
+    std::fs::remove_file(&ret).expect("Failed to remove existing file");
+    // remove component
+    std::fs::remove_file(&component).expect("Failed to remove existing file");
 }
