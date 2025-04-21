@@ -20,17 +20,17 @@ impl Guest for Hello {
 
 export!(Hello);
 
-import_wasm!(test_wasm);
+// import_wasm!(test_wasm);
 
-// Use const to optimize as much as possible at compile time
-use const_struct::*;
+// // Use const to optimize as much as possible at compile time
+// use const_struct::*;
 
-#[const_struct]
-const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
-    environ: &["RUST_MIN_STACK=16777216"],
-};
+// #[const_struct]
+// const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
+//     environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
+// };
 
-export_env!(@const, VirtualEnvTy, test_wasm);
+// export_env!(@const, VirtualEnvTy, test_wasm);
 
 // struct VirtualEnvState {
 //     environ: Vec<String>,
@@ -51,4 +51,4 @@ export_env!(@const, VirtualEnvTy, test_wasm);
 //     Mutex::new(VirtualEnvState { environ })
 // });
 
-// export_env!(@static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+// export_env!(@block, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);

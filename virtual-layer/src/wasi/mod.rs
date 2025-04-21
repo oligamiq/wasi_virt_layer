@@ -18,3 +18,16 @@ pub unsafe extern "C" fn fd_write(
 ) -> Errno {
     ERRNO_SUCCESS
 }
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn environ_sizes_get(
+    _: *mut wasip1::Size,
+    _: *mut wasip1::Size,
+) -> wasip1::Errno {
+    ERRNO_SUCCESS
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn environ_get(_: *mut *const u8, _: *mut u8) -> wasip1::Errno {
+    ERRNO_SUCCESS
+}

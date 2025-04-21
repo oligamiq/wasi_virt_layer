@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-wit-bindgen = "0.41.0"
+wasip1 = { version = "0.11.0", default-features = false, package = "wasi" }
 
 [lib]
 crate-type = ["cdylib"]

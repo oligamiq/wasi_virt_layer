@@ -1,5 +1,6 @@
 use rewrite::adjust_wasm;
 
+pub mod adjust;
 pub mod args;
 pub mod building;
 pub mod down_color;
@@ -54,6 +55,7 @@ fn main() {
         building::optimize_wasm(&output.clone().into()).expect("Failed to optimize merged Wasm");
 
     println!("Adjusting Merged Wasm...");
+    let ret = adjust::adjust_merged_wasm(&ret).expect("Failed to adjust merged Wasm");
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret).expect("Failed to convert Wasm to Component");

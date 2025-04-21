@@ -1,3 +1,5 @@
+/// By entering the names of the files to be combined, a bridge for the combination is created.
+/// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
 #[macro_export]
 macro_rules! import_wasm {
     ($name:ident) => {
@@ -5,7 +7,7 @@ macro_rules! import_wasm {
             #[allow(non_camel_case_types)]
             struct $name;
 
-            $crate::import_wasm!(@store, $name, u8);
+            $crate::import_wasm!(@store, $name, u8, usize);
 
             impl $crate::memory::MemoryAccess for $name {
                 #[inline(always)]
@@ -32,12 +34,12 @@ macro_rules! import_wasm {
             impl $crate::memory::MemoryAccessTypes<$name> for $ty {
                 #[inline(always)]
                 fn memcpy(offset: *mut Self, data: &[Self]) {
-                    unsafe { [<$name _memory_copy $middle $normal_ty>](offset, data.as_ptr(), data.len()) };
+                    unsafe { [<__wasip1_vfs_ $name _memory_copy $middle $normal_ty>](offset, data.as_ptr(), data.len()) };
                 }
 
                 #[inline(always)]
                 fn store_le(offset: *mut Self, value: Self) {
-                    unsafe { [<$name _memory_store_le $middle $normal_ty>](offset, value) };
+                    unsafe { [<__wasip1_vfs_ $name _memory_store_le $middle $normal_ty>](offset, value) };
                 }
             }
 
@@ -46,14 +48,14 @@ macro_rules! import_wasm {
             unsafe extern "C" {
                 /// https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Memory/Copy
                 #[unsafe(no_mangle)]
-                pub fn [<$name _memory_copy $middle $normal_ty>](
+                pub fn [<__wasip1_vfs_ $name _memory_copy $middle $normal_ty>](
                     offset: *mut $ty,
                     src: *const $ty,
                     len: usize,
                 );
 
                 #[unsafe(no_mangle)]
-                pub fn [<$name _memory_store_le $middle $normal_ty>](
+                pub fn [<__wasip1_vfs_ $name _memory_store_le $middle $normal_ty>](
                     offset: *mut $ty,
                     value: $ty,
                 );
@@ -68,12 +70,11 @@ macro_rules! import_wasm {
             $crate::import_wasm!(@store_inner, $name, *mut $ty, $ty, _mut_ptr_);
         )*
     };
-
 }
 
 #[unsafe(no_mangle)]
 #[doc(hidden)]
-unsafe extern "C" fn _use_vfs_memory(ptr: *mut u8, src: *mut u8) {
+unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
 }
 

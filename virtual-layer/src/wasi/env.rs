@@ -4,44 +4,69 @@ use wasip1::*;
 
 use crate::memory::{MemoryAccess, MemoryAccessTypes};
 
+/// @block or @through
+/// Whether to import JavaScript runtime env from vfs,
+/// @through if retrieving from JavaScript runtime.
 #[macro_export]
 macro_rules! export_env {
-    (@const, $ty:ty, $wasm:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn environ_sizes_get(
-            environ_count: &mut $crate::wasip1::Size,
-            environ_buf_size: &mut $crate::wasip1::Size,
-        ) -> $crate::wasip1::Errno {
-            $crate::wasi::env::environ_sizes_get_const_inner::<$ty>(environ_count, environ_buf_size)
-        }
+    (@inner, @const, $ty:ty, $wasm:ident) => {
+        $crate::paste::paste! {
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<$wasm _environ_sizes_get>](
+                environ_count: *mut $crate::wasip1::Size,
+                environ_buf_size: *mut $crate::wasip1::Size,
+            ) -> $crate::wasip1::Errno {
+                $crate::wasi::env::environ_sizes_get_const_inner::<$ty, $wasm>(environ_count, environ_buf_size)
+            }
 
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn environ_get(
-            environ: *mut *const u8,
-            environ_buf: *mut u8,
-        ) -> $crate::wasip1::Errno {
-            $crate::wasi::env::environ_get_const_inner::<$ty, $wasm>(environ, environ_buf)
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<$wasm _environ_get>](
+                environ: *mut *const u8,
+                environ_buf: *mut u8,
+            ) -> $crate::wasip1::Errno {
+                $crate::wasi::env::environ_get_const_inner::<$ty, $wasm>(environ, environ_buf)
+            }
         }
     };
 
-    (@static, $state:expr, $wasm:ident) => {
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn environ_sizes_get(
-            environ_count: &mut $crate::wasip1::Size,
-            environ_buf_size: &mut $crate::wasip1::Size,
-        ) -> $crate::wasip1::Errno {
-            let state = $state;
-            $crate::wasi::env::environ_sizes_get_inner(state, environ_count, environ_buf_size)
-        }
+    (@inner, @static, $state:expr, $wasm:ident) => {
+        $crate::paste::paste! {
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<$wasm _environ_sizes_get>](
+                environ_count: *mut $crate::wasip1::Size,
+                environ_buf_size: *mut $crate::wasip1::Size,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::env::environ_sizes_get_inner::<$wasm>(state, environ_count, environ_buf_size)
+            }
 
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn environ_get(
-            environ: *mut *const u8,
-            environ_buf: *mut u8,
-        ) -> $crate::wasip1::Errno {
-            let state = $state;
-            $crate::wasi::env::environ_get_inner::<$wasm>(state, environ, environ_buf)
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<$wasm _environ_get>](
+                environ: *mut *const u8,
+                environ_buf: *mut u8,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::env::environ_get_inner::<$wasm>(state, environ, environ_buf)
+            }
         }
+    };
+
+    (@block, @const, $ty:ty, $wasm:ident) => {
+        pub unsafe extern "C" fn __wasip1_vfs_block_environ() {}
+        $crate::export_env!(@inner, @const, $ty, $wasm);
+    };
+
+    (@block, @static, $state:expr, $wasm:ident) => {
+        pub unsafe extern "C" fn __wasip1_vfs_block_environ() {}
+        $crate::export_env!(@inner, @static, $state, $wasm);
+    };
+
+    (@through, @const, $ty:ty, $wasm:ident) => {
+        $crate::export_env!(@inner, @const, $ty, $wasm);
+    };
+
+    (@through, @static, $state:expr, $wasm:ident) => {
+        $crate::export_env!(@inner, @static, $state, $wasm);
     };
 }
 
@@ -51,10 +76,16 @@ pub struct VirtualEnvConstState {
 }
 
 #[inline]
-pub const fn environ_sizes_get_const_inner<T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>>(
-    environ_count: &mut Size,
-    environ_buf_size: &mut Size,
-) -> Errno {
+pub fn environ_sizes_get_const_inner<
+    T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
+    Wasm: MemoryAccess,
+>(
+    environ_count: *mut Size,
+    environ_buf_size: *mut Size,
+) -> Errno
+where
+    Size: MemoryAccessTypes<Wasm>,
+{
     const fn inner<T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>>() -> (Size, Size) {
         let mut size = 0;
         let mut count = 0;
@@ -67,8 +98,8 @@ pub const fn environ_sizes_get_const_inner<T: PrimitiveTraits<DATATYPE = Virtual
         (size, count)
     }
 
-    *environ_buf_size = inner::<T>().0;
-    *environ_count = inner::<T>().1;
+    Wasm::store_le(environ_buf_size, inner::<T>().0);
+    Wasm::store_le(environ_count, inner::<T>().1);
     ERRNO_SUCCESS
 }
 
@@ -147,24 +178,27 @@ impl<'a, T: std::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<'
     type Str = U::Str;
 
     fn get_environ(&'a mut self) -> &'a [Self::Str] {
-        let u: &'a mut U = self.deref_mut();
-        u.get_environ()
+        self.deref_mut().get_environ()
     }
 
     fn environ_sizes_get(&'a mut self) -> (Size, Size) {
-        let u: &'a mut U = self.deref_mut();
-        u.environ_sizes_get()
+        self.deref_mut().environ_sizes_get()
     }
 }
 
-pub fn environ_sizes_get_inner<'a>(
+pub fn environ_sizes_get_inner<'a, Wasm: MemoryAccess>(
     state: &'a mut impl VirtualEnv<'a>,
-    environ_count: &mut Size,
-    environ_buf_size: &mut Size,
-) -> Errno {
+    environ_count: *mut Size,
+    environ_buf_size: *mut Size,
+) -> Errno
+where
+    Size: MemoryAccessTypes<Wasm>,
+{
     let (size, count) = state.environ_sizes_get();
-    *environ_buf_size = size;
-    *environ_count = count;
+
+    Wasm::store_le(environ_buf_size, size);
+    Wasm::store_le(environ_count, count);
+
     ERRNO_SUCCESS
 }
 
