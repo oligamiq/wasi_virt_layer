@@ -674,6 +674,7 @@ version = "0.1.0"
 dependencies = [
  "const_for",
  "const_struct",
+ "paste",
  "wasi",
  "wit-bindgen",
 ]

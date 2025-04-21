@@ -5,11 +5,6 @@ pub mod env;
 use wasip1::*;
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn environ_get(environ: *mut *const u8, environ_buf: *mut u8) -> Errno {
-    ERRNO_SUCCESS
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn proc_exit(rval: Exitcode) -> ! {
     std::process::exit(rval as i32);
 }

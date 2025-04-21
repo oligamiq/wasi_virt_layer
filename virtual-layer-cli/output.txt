@@ -268,3 +268,37 @@
 [1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
 [1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
 [1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.63s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 5.13s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 2.02s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.70s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.50s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.61s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.87s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.38s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.44s
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 0.39s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 2.93s
+[1m[32m   Compiling[0m wasip1-virtual-layer v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer)
+[1m[32m   Compiling[0m wasip1_vfs v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\example)
+[1m[32m    Finished[0m ]8;;https://doc.rust-lang.org/cargo/reference/profiles.html#default-profiles\`release` profile [optimized]]8;;\ target(s) in 1.46s
