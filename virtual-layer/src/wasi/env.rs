@@ -7,11 +7,31 @@ use crate::memory::{MemoryAccess, MemoryAccessTypes};
 /// @block or @through
 /// Whether to import JavaScript runtime env from vfs,
 /// @through if retrieving from JavaScript runtime.
+///
+/// @const or @static
+/// Whether to use const or static env.
+/// @const if using const env.
+/// @static if using static env.
+/// @const is faster and small than @static.
+///
+/// ```rust
+/// // @const
+/// import_wasm!(test_wasm);
+///
+/// use const_struct::*;
+/// use wasip1_virtual_layer::prelude::*;
+/// #[const_struct]
+/// const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
+///     environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
+/// };
+/// export_env!(@block, @const, VirtualEnvTy, test_wasm);
+/// ```
 #[macro_export]
 macro_rules! export_env {
-    (@inner, @const, $ty:ty, $wasm:ident) => {
+    (@inner, @const, $ty:ty, $wasm:ty) => {
         $crate::paste::paste! {
             #[unsafe(no_mangle)]
+            #[cfg(target_arch = "wasm32")]
             pub unsafe extern "C" fn [<$wasm _environ_sizes_get>](
                 environ_count: *mut $crate::wasip1::Size,
                 environ_buf_size: *mut $crate::wasip1::Size,
@@ -19,6 +39,7 @@ macro_rules! export_env {
                 $crate::wasi::env::environ_sizes_get_const_inner::<$ty, $wasm>(environ_count, environ_buf_size)
             }
 
+            #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<$wasm _environ_get>](
                 environ: *mut *const u8,
@@ -29,8 +50,9 @@ macro_rules! export_env {
         }
     };
 
-    (@inner, @static, $state:expr, $wasm:ident) => {
+    (@inner, @static, $state:expr, $wasm:ty) => {
         $crate::paste::paste! {
+            #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<$wasm _environ_sizes_get>](
                 environ_count: *mut $crate::wasip1::Size,
@@ -40,6 +62,7 @@ macro_rules! export_env {
                 $crate::wasi::env::environ_sizes_get_inner::<$wasm>(state, environ_count, environ_buf_size)
             }
 
+            #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<$wasm _environ_get>](
                 environ: *mut *const u8,
@@ -51,21 +74,43 @@ macro_rules! export_env {
         }
     };
 
-    (@block, @const, $ty:ty, $wasm:ident) => {
-        pub unsafe extern "C" fn __wasip1_vfs_block_environ() {}
+    (@block_inner) => {
+        #[cfg(target_arch = "wasm32")]
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn __wasip1_vfs_environ_sizes_get(
+            environ_count: *mut $crate::wasip1::Size,
+            environ_buf_size: *mut $crate::wasip1::Size,
+        ) -> $crate::wasip1::Errno {
+            unsafe { *environ_count = 0 };
+            unsafe { *environ_buf_size = 0 };
+            $crate::wasip1::ERRNO_SUCCESS
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        #[unsafe(no_mangle)]
+        pub unsafe extern "C" fn __wasip1_vfs_environ_get(
+            environ: *mut *const u8,
+            environ_buf: *mut u8,
+        ) -> $crate::wasip1::Errno {
+            $crate::wasip1::ERRNO_SUCCESS
+        }
+    };
+
+    (@block, @const, $ty:ty, $wasm:ty) => {
+        $crate::export_env!(@block_inner);
         $crate::export_env!(@inner, @const, $ty, $wasm);
     };
 
-    (@block, @static, $state:expr, $wasm:ident) => {
-        pub unsafe extern "C" fn __wasip1_vfs_block_environ() {}
+    (@block, @static, $state:expr, $wasm:ty) => {
+        $crate::export_env!(@block_inner);
         $crate::export_env!(@inner, @static, $state, $wasm);
     };
 
-    (@through, @const, $ty:ty, $wasm:ident) => {
+    (@through, @const, $ty:ty, $wasm:ty) => {
         $crate::export_env!(@inner, @const, $ty, $wasm);
     };
 
-    (@through, @static, $state:expr, $wasm:ident) => {
+    (@through, @static, $state:expr, $wasm:ty) => {
         $crate::export_env!(@inner, @static, $state, $wasm);
     };
 }

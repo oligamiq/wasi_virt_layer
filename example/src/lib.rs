@@ -32,23 +32,23 @@ export!(Hello);
 
 // export_env!(@const, VirtualEnvTy, test_wasm);
 
-// struct VirtualEnvState {
-//     environ: Vec<String>,
-// }
+struct VirtualEnvState {
+    environ: Vec<String>,
+}
 
-// impl<'a> VirtualEnv<'a> for VirtualEnvState {
-//     type Str = String;
+impl<'a> VirtualEnv<'a> for VirtualEnvState {
+    type Str = String;
 
-//     fn get_environ(&mut self) -> &[Self::Str] {
-//         &self.environ
-//     }
-// }
+    fn get_environ(&mut self) -> &[Self::Str] {
+        &self.environ
+    }
+}
 
-// static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
-//     let mut environ = Vec::<String>::new();
-//     environ.push("RUST_MIN_STACK=16777216".into());
-//     environ.push("HOME=~/".into());
-//     Mutex::new(VirtualEnvState { environ })
-// });
+static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
+    let mut environ = Vec::<String>::new();
+    environ.push("RUST_MIN_STACK=16777216".into());
+    environ.push("HOME=~/".into());
+    Mutex::new(VirtualEnvState { environ })
+});
 
-// export_env!(@block, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+export_env!(@block, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);

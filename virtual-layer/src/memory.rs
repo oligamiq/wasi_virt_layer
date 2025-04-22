@@ -34,17 +34,26 @@ macro_rules! import_wasm {
             impl $crate::memory::MemoryAccessTypes<$name> for $ty {
                 #[inline(always)]
                 fn memcpy(offset: *mut Self, data: &[Self]) {
+                    #[cfg(target_arch = "wasm32")]
                     unsafe { [<__wasip1_vfs_ $name _memory_copy $middle $normal_ty>](offset, data.as_ptr(), data.len()) };
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
                 }
 
                 #[inline(always)]
                 fn store_le(offset: *mut Self, value: Self) {
+                    #[cfg(target_arch = "wasm32")]
                     unsafe { [<__wasip1_vfs_ $name _memory_store_le $middle $normal_ty>](offset, value) };
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
                 }
             }
 
             #[doc(hidden)]
-            #[cfg_attr(target_arch = "wasm32", link(wasm_import_module = "wasip1-vfs"))]
+            #[cfg(target_arch = "wasm32")]
+            #[link(wasm_import_module = "wasip1-vfs")]
             unsafe extern "C" {
                 /// https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Memory/Copy
                 #[unsafe(no_mangle)]
@@ -73,6 +82,7 @@ macro_rules! import_wasm {
 }
 
 #[unsafe(no_mangle)]
+#[cfg(target_arch = "wasm32")]
 #[doc(hidden)]
 unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
