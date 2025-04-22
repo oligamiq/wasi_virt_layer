@@ -5,7 +5,7 @@ pub use paste;
 pub use wasip1;
 
 pub mod prelude {
-    pub use crate::wasi::env::VirtualEnvConstState;
+    pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
     pub use crate::{export_env, import_wasm};
 }
 

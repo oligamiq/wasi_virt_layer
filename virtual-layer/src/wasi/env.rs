@@ -26,6 +26,32 @@ use crate::memory::{MemoryAccess, MemoryAccessTypes};
 /// };
 /// export_env!(@block, @const, VirtualEnvTy, test_wasm);
 /// ```
+///
+/// ```rust
+/// // @static
+/// import_wasm!(test_wasm);
+///
+/// use std::sync::{LazyLock, Mutex};
+/// use wasip1_virtual_layer::prelude::*;
+///
+/// struct VirtualEnvState {
+///    environ: Vec<String>,
+/// }
+/// impl<'a> VirtualEnv<'a> for VirtualEnvState {
+///    type Str = String;
+///
+///   fn get_environ(&mut self) -> &[Self::Str] {
+///       &self.environ
+///   }
+/// }
+/// static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
+///    let mut environ = Vec::<String>::new();
+///   environ.push("RUST_MIN_STACK=16777216".into());
+///   environ.push("HOME=~/".into());
+///   Mutex::new(VirtualEnvState { environ })
+/// });
+/// export_env!(@through, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+/// ```
 #[macro_export]
 macro_rules! export_env {
     (@inner, @const, $ty:ty, $wasm:ty) => {
