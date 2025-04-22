@@ -5,7 +5,7 @@
         "${workspaceFolder}/example/Cargo.toml",
         "${workspaceFolder}/test_wasm/Cargo.toml",
     ],
-    "rust-analyzer.cargo.target": "wasm32-wasi",
+    "rust-analyzer.cargo.target": "wasm32-wasip1",
     "cSpell.words": [
         "environc",
         "Errno",

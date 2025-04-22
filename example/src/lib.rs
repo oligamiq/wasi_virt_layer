@@ -1,9 +1,5 @@
 use std::sync::{LazyLock, Mutex};
-
-use wasip1_virtual_layer::{
-    wasi::env::{VirtualEnv, VirtualEnvConstState},
-    *,
-};
+use wasip1_virtual_layer::prelude::*;
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
