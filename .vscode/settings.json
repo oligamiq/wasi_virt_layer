@@ -10,6 +10,7 @@
         "environc",
         "Errno",
         "Exitcode",
+        "funcs",
         "nonoverlapping",
         "wasi",
         "wasip1"

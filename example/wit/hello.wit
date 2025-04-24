@@ -1,4 +1,4 @@
-// wit/virtual_file_system.wit
+// wit/hello.wit
 // wit is only kebab-case
 package hello:host;
 

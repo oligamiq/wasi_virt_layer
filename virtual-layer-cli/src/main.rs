@@ -6,6 +6,7 @@ pub mod building;
 pub mod down_color;
 pub mod merge;
 pub mod rewrite;
+pub mod util;
 
 fn main() {
     let parsed_args = args::Args::new();
