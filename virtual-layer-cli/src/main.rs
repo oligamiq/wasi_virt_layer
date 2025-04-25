@@ -34,14 +34,14 @@ fn main() -> eyre::Result<()> {
 
     println!("Optimizing VfS Wasm...");
     let ret =
-        building::optimize_wasm(&ret).with_context(|| eyre::eyre!("Failed to optimize Wasm"))?;
+        building::optimize_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Adjusting VFS Wasm...");
-    let ret = adjust_wasm(&ret).with_context(|| eyre::eyre!("Failed to adjust Wasm"))?;
+    let ret = adjust_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
 
     println!("Optimizing VFS Wasm...");
     let ret =
-        building::optimize_wasm(&ret).with_context(|| eyre::eyre!("Failed to optimize Wasm"))?;
+        building::optimize_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Generated VFS: {ret}");
 
@@ -61,10 +61,10 @@ fn main() -> eyre::Result<()> {
             std::fs::copy(old_wasm, &wasm).expect("Failed to copy file");
             println!("Optimizing target Wasm [{name}]...");
             let wasm = building::optimize_wasm(&wasm.into())
-                .with_context(|| eyre::eyre!("Failed to optimize Wasm"))?;
+                .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
             println!("Adjusting target Wasm [{name}]...");
             let wasm = target::adjust_target_wasm(&wasm)
-                .with_context(|| eyre::eyre!("Failed to adjust Wasm"))?;
+                .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
             Ok(wasm)
         })
         .collect::<eyre::Result<Vec<_>>>()?;
@@ -75,7 +75,7 @@ fn main() -> eyre::Result<()> {
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
-    merge::merge(&ret, &wasm, &output).with_context(|| eyre::eyre!("Failed to merge Wasm"))?;
+    merge::merge(&ret, &wasm, &output).wrap_err_with(|| eyre::eyre!("Failed to merge Wasm"))?;
 
     println!("Optimizing Merged Wasm...");
     let ret = building::optimize_wasm(&output.clone().into())
@@ -83,18 +83,18 @@ fn main() -> eyre::Result<()> {
 
     println!("Adjusting Merged Wasm...");
     let ret = adjust::adjust_merged_wasm(&ret, &wasm)
-        .with_context(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
+        .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret)
-        .with_context(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
+        .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
 
     println!("Translating Component to JS...");
     let binary =
-        std::fs::read(&component).with_context(|| eyre::eyre!("Failed to read component"))?;
+        std::fs::read(&component).wrap_err_with(|| eyre::eyre!("Failed to read component"))?;
     let transpiled = parsed_args
         .transpile_to_js(&binary, &building_crate.name)
-        .with_context(|| eyre::eyre!("Failed to transpile to JS"))?;
+        .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))?;
 
     for (name, data) in transpiled.files.iter() {
         let file_name = format!("{}/{name}", parsed_args.out_dir);
