@@ -1,97 +1,64 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
+use eyre::Context;
 use walrus::{
     LocalId,
     ir::{MemArg, StoreKind, Value},
 };
 
-pub fn adjust_merged_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
-    let mut module = walrus::Module::from_file(path)?;
+use crate::{
+    common::WASIP1_FUNC,
+    util::{CaminoUtilModule, ResultUtil as _, WalrusUtilModule},
+};
 
-    // module
-    //     .imports
-    //     .remove("$root", "[static]wasip1.fd-write-import")
-    //     .expect("fd_write_import not found");
+pub fn adjust_merged_wasm(
+    path: &Utf8PathBuf,
+    wasm: &[impl AsRef<Path>],
+) -> eyre::Result<Utf8PathBuf> {
+    let mut module = walrus::Module::from_file(path)
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
 
-    let memory_id = module
-        .memories
-        .iter()
-        .next()
-        .expect("Memory not found")
-        .id();
+    for wasm in wasm {
+        let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
 
-    let import_id = module
-        .imports
-        .find("$root", "[static]wasip1.environ-sizes-get-import")
-        .expect("environ_sizes_get_import not found");
+        for name in WASIP1_FUNC.iter() {
+            let export_name = format!("__wasip1_vfs_{wasm_name}_{name}");
 
-    let fid = module
-        .funcs
-        .iter()
-        .find(|f| {
-            if let walrus::FunctionKind::Import(imported_function) = &f.kind {
-                imported_function.import == import_id
+            if module
+                .imports
+                .find("wasi_snapshot_preview1", name)
+                .is_some()
+            {
+                module
+                    .connect_func("wasi_snapshot_preview1", name, &export_name)
+                    .wrap_err_with(|| eyre::eyre!("Failed to connect {name}"))?;
             } else {
-                false
+                if module.exports.get_func(&export_name).is_ok() {
+                    module
+                        .exports
+                        .remove(&export_name)
+                        .to_eyre()
+                        .wrap_err_with(|| eyre::eyre!("Failed to remove {name} export"))?;
+                }
             }
-        })
-        .expect("environ_sizes_get_import not found")
-        .id();
+        }
 
-    // module
-    //     .replace_imported_func(fid, |(body, arg_locals)| {
-    //         // #[unsafe(no_mangle)]
-    //         // pub unsafe extern "C" fn environ_sizes_get(
-    //         //     environ_count: *mut wasip1::Size,
-    //         //     environ_buf: *mut wasip1::Size,
-    //         // ) -> wasip1::Errno {
-    //         //     unsafe { *environ_count = 0 };
-    //         //     unsafe { *environ_buf = 0 };
-    //         //     ERRNO_SUCCESS
-    //         // }
-
-    //         // (func $environ_sizes_get (;0;) (type 0) (param i32 i32) (result i32)
-    //         //     local.get 0
-    //         //     i32.const 0
-    //         //     i32.store
-    //         //     local.get 1
-    //         //     i32.const 0
-    //         //     i32.store
-    //         //     i32.const 0
-    //         // )
-
-    //         body.local_get(arg_locals[0])
-    //             .const_(Value::I32(0))
-    //             .store(
-    //                 memory_id,
-    //                 StoreKind::I32 { atomic: false },
-    //                 MemArg {
-    //                     align: 0,
-    //                     offset: 0,
-    //                 },
-    //             )
-    //             .local_get(arg_locals[1])
-    //             .const_(Value::I32(0))
-    //             .store(
-    //                 memory_id,
-    //                 StoreKind::I32 { atomic: false },
-    //                 MemArg {
-    //                     align: 0,
-    //                     offset: 0,
-    //                 },
-    //             )
-    //             .const_(Value::I32(0))
-    //             .return_();
-    //     })
-    //     .expect("Failed to replace fd_write_import");
+        let memory_id = module
+            .get_target_memory_id(&wasm_name)
+            .wrap_err_with(|| eyre::eyre!("Failed to get memory id"))?;
+    }
 
     let new_path = path.with_extension("adjusted.wasm");
 
     if fs::metadata(&new_path).is_ok() {
         fs::remove_file(&new_path).expect("Failed to remove existing file");
     }
-    module.emit_wasm_file(new_path.clone())?;
+    module
+        .emit_wasm_file(new_path.clone())
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
 
     Ok(new_path)
 }

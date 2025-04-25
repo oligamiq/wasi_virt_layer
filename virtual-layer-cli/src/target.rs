@@ -1,12 +1,15 @@
 use std::fs;
 
 use camino::Utf8PathBuf;
+use eyre::Context as _;
 use walrus::*;
 
-use crate::util::{CaminoUtilModule as _, WalrusUtilModule};
+use crate::util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule};
 
-pub fn adjust_target_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
-    let mut module = walrus::Module::from_file(path)?;
+pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
+    let mut module = walrus::Module::from_file(path)
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
 
     // unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     //     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
@@ -16,11 +19,11 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
         let mut func_body = builder.func_body();
 
         if memories.is_empty() {
-            return Err(anyhow::anyhow!("No memories found"));
+            return Err(eyre::eyre!("No memories found"));
         }
 
         if memories.len() > 1 {
-            return Err(anyhow::anyhow!("Multiple memories found. This is not supported yet. If you need this, please open an issue."));
+            return Err(eyre::eyre!("Multiple memories found. This is not supported yet. If you need this, please open an issue."));
         }
 
         let memory_id = memories.iter().next().unwrap().id();
@@ -55,7 +58,10 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
     if fs::metadata(&new_path).is_ok() {
         fs::remove_file(&new_path).expect("Failed to remove existing file");
     }
-    module.emit_wasm_file(new_path.clone())?;
+    module
+        .emit_wasm_file(new_path.clone())
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
 
     Ok(new_path)
 }

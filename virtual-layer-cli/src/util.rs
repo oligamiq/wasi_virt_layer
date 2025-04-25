@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use eyre::Context as _;
 use walrus::*;
 
 pub(crate) trait WalrusUtilImport {
@@ -15,7 +16,7 @@ pub(crate) trait WalrusUtilModule {
         import_module: impl AsRef<str>,
         import_name: impl AsRef<str>,
         export_name: impl AsRef<str>,
-    ) -> anyhow::Result<()>;
+    ) -> eyre::Result<()>;
 
     /// add fake function to the module
     /// and return the function id
@@ -23,8 +24,12 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         params: &[ValType],
         results: &[ValType],
-        fn_: impl FnOnce(&ModuleMemories, &mut FunctionBuilder, &Vec<LocalId>) -> anyhow::Result<()>,
-    ) -> anyhow::Result<FunctionId>;
+        fn_: impl FnOnce(&ModuleMemories, &mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
+    ) -> eyre::Result<FunctionId>;
+
+    /// get the memory id from target name
+    /// and remove anchor
+    fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId>;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -44,10 +49,18 @@ impl WalrusUtilModule for walrus::Module {
         import_module: impl AsRef<str>,
         import_name: impl AsRef<str>,
         export_name: impl AsRef<str>,
-    ) -> anyhow::Result<()> {
-        let fid = self.imports.get_func(import_module, import_name)?;
+    ) -> eyre::Result<()> {
+        let fid = self
+            .imports
+            .get_func(import_module, import_name.as_ref())
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("import {} not found", import_name.as_ref()))?;
 
-        let export_id = self.exports.get_func(&export_name)?;
+        let export_id = self
+            .exports
+            .get_func(&export_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("export {} not found", export_name.as_ref()))?;
 
         self.replace_imported_func(fid, |(builder, arg_locals)| {
             let mut func_body = builder.func_body();
@@ -57,9 +70,14 @@ impl WalrusUtilModule for walrus::Module {
             }
             func_body.call(export_id);
             func_body.return_();
-        })?;
+        })
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
 
-        self.exports.remove(export_name)?;
+        self.exports
+            .remove(export_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("Failed to remove export"))?;
 
         Ok(())
     }
@@ -68,8 +86,8 @@ impl WalrusUtilModule for walrus::Module {
         &mut self,
         params: &[ValType],
         results: &[ValType],
-        fn_: impl FnOnce(&ModuleMemories, &mut FunctionBuilder, &Vec<LocalId>) -> anyhow::Result<()>,
-    ) -> anyhow::Result<FunctionId> {
+        fn_: impl FnOnce(&ModuleMemories, &mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
+    ) -> eyre::Result<FunctionId> {
         let mut builder = FunctionBuilder::new(&mut self.types, params, results);
 
         let args = params
@@ -80,6 +98,46 @@ impl WalrusUtilModule for walrus::Module {
         fn_(&self.memories, &mut builder, &args)?;
 
         Ok(builder.finish(vec![], &mut self.funcs))
+    }
+
+    /// if vfs, get vfs memory_id
+    fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId> {
+        let anchor_name = format!("__wasip1_vfs_flag_{}_memory", name.as_ref());
+
+        let anchor_func_id = self
+            .exports
+            .get_func(&anchor_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("anchor {} not found", anchor_name))?;
+
+        let anchor_body = &self.funcs.get(anchor_func_id).kind;
+        if let FunctionKind::Local(local_func) = anchor_body {
+            let entry_id = local_func.entry_block();
+            let func_body = local_func.block(entry_id);
+            let memory_id = func_body
+                .iter()
+                .map(|(block, _)| block)
+                .filter_map(|block| match block {
+                    ir::Instr::Load(ir::Load { memory, .. }) => Some(*memory),
+                    ir::Instr::Store(ir::Store { memory, .. }) => Some(*memory),
+                    _ => None,
+                })
+                .fold(Ok(Option::<MemoryId>::None), |a, b| match a? {
+                    Some(a) if a == b => Ok(Some(a)),
+                    None => Ok(Some(b)),
+                    Some(_) => Err(eyre::eyre!(
+                        "Anchor access double memory, cannot determine memory id"
+                    )),
+                })?
+                .ok_or_else(|| eyre::eyre!("Memory not found"));
+
+            memory_id
+        } else {
+            Err(eyre::eyre!(
+                "anchor (local function) {} not found",
+                anchor_name
+            ))
+        }
     }
 }
 
@@ -113,6 +171,20 @@ impl CaminoUtilModule for PathBuf {
 impl CaminoUtilModule for Path {
     fn get_file_main_name(&self) -> Option<String> {
         camino::Utf8Path::new(self.to_str().unwrap()).get_file_main_name()
+    }
+}
+
+pub trait ResultUtil<T> {
+    fn to_eyre(self) -> eyre::Result<T>;
+}
+
+impl<T> ResultUtil<T> for anyhow::Result<T> {
+    fn to_eyre(self) -> eyre::Result<T> {
+        self.map_err(|e| {
+            eyre::eyre!(Box::<dyn std::error::Error + Send + Sync + 'static>::from(
+                e
+            ))
+        })
     }
 }
 

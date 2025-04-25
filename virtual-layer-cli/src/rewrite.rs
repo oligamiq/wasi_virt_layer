@@ -1,16 +1,20 @@
 use std::fs;
 
 use camino::Utf8PathBuf;
+use eyre::Context as _;
 
-use crate::util::{WalrusUtilImport, WalrusUtilModule};
-
-const WASIP1_FUNC: [&str; 4] = ["fd_write", "environ_sizes_get", "environ_get", "proc_exit"];
+use crate::{
+    common::WASIP1_FUNC,
+    util::{ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
+};
 
 /// wasip1 import to adjust to wit
 /// block vfs-wasm's environ_sizes_get etc
 /// embedding __wasip1_vfs_flag_{name}_memory
-pub fn adjust_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
-    let mut module = walrus::Module::from_file(path)?;
+pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
+    let mut module = walrus::Module::from_file(path)
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
 
     for name in WASIP1_FUNC.iter() {
         let component_name = format!("[static]wasip1.{}-import", name.replace("_", "-"));
@@ -26,7 +30,7 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
             .map(|import| {
                 import.module = "archived".to_string();
             })
-            .ok_or_else(|| anyhow::anyhow!("{name} import not found"))?;
+            .ok_or_else(|| eyre::eyre!("{name} import not found"))?;
 
         module
             .imports
@@ -35,19 +39,19 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
                 import.module = "$root".to_string();
                 import.name = component_name;
             })
-            .ok_or_else(|| anyhow::anyhow!("{name} import not found"))?;
+            .ok_or_else(|| eyre::eyre!("{name} import not found"))?;
     }
 
     let check = block_func(&mut module, "environ_get")?;
     let next_check = block_func(&mut module, "environ_sizes_get")?;
 
     if check != next_check {
-        return Err(anyhow::anyhow!(
+        return Err(eyre::eyre!(
             "environ_get and environ_sizes_get are not the same"
         ));
     }
 
-    fn block_func(module: &mut walrus::Module, func_name: impl AsRef<str>) -> anyhow::Result<bool> {
+    fn block_func(module: &mut walrus::Module, func_name: impl AsRef<str>) -> eyre::Result<bool> {
         let export_func_name = format!("__wasip1_vfs_{}", func_name.as_ref());
 
         if matches!(
@@ -74,7 +78,10 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
     if fs::metadata(&new_path).is_ok() {
         fs::remove_file(&new_path).expect("Failed to remove existing file");
     }
-    module.emit_wasm_file(new_path.clone())?;
+    module
+        .emit_wasm_file(new_path.clone())
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
 
     Ok(new_path)
 }

@@ -16,7 +16,7 @@ impl Guest for Hello {
 
 export!(Hello);
 
-import_wasm!(test_wasm);
+import_wasm!(test_wasm_opt);
 
 struct VirtualEnvState {
     environ: Vec<String>,
@@ -37,4 +37,4 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-export_env!(@block, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+export_env!(@block, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm_opt);

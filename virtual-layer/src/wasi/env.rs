@@ -58,7 +58,7 @@ macro_rules! export_env {
         $crate::paste::paste! {
             #[unsafe(no_mangle)]
             #[cfg(target_arch = "wasm32")]
-            pub unsafe extern "C" fn [<$wasm _environ_sizes_get>](
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
                 environ_count: *mut $crate::wasip1::Size,
                 environ_buf_size: *mut $crate::wasip1::Size,
             ) -> $crate::wasip1::Errno {
@@ -67,7 +67,7 @@ macro_rules! export_env {
 
             #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<$wasm _environ_get>](
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
                 environ: *mut *const u8,
                 environ_buf: *mut u8,
             ) -> $crate::wasip1::Errno {
@@ -80,7 +80,7 @@ macro_rules! export_env {
         $crate::paste::paste! {
             #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<$wasm _environ_sizes_get>](
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
                 environ_count: *mut $crate::wasip1::Size,
                 environ_buf_size: *mut $crate::wasip1::Size,
             ) -> $crate::wasip1::Errno {
@@ -90,7 +90,7 @@ macro_rules! export_env {
 
             #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<$wasm _environ_get>](
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
                 environ: *mut *const u8,
                 environ_buf: *mut u8,
             ) -> $crate::wasip1::Errno {

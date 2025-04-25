@@ -1,16 +1,19 @@
 use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
+use eyre::Context as _;
 
-use crate::util::CaminoUtilModule;
+use crate::util::{CaminoUtilModule, ResultUtil as _};
 
-pub fn merge<T: AsRef<Path>, U: AsRef<Path>>(
+pub fn merge(
     vfs: &Utf8PathBuf,
-    wasm: &[T],
-    output: &U,
-) -> anyhow::Result<()> {
+    wasm: &[impl AsRef<Path>],
+    output: impl AsRef<Path>,
+) -> eyre::Result<()> {
     let custom_section = {
-        let mut vfs_module = walrus::Module::from_file(vfs)?;
+        let mut vfs_module = walrus::Module::from_file(vfs)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
         let custom_section_names = vfs_module
             .customs
             .iter()
@@ -53,7 +56,9 @@ pub fn merge<T: AsRef<Path>, U: AsRef<Path>>(
         .wait()
         .expect("Failed to wait for wasm-merge command");
 
-    let mut module = walrus::Module::from_file(output)?;
+    let mut module = walrus::Module::from_file(output.as_ref())
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
     for section in custom_section {
         module.customs.add(section);
     }

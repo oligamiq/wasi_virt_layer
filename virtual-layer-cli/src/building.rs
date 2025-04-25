@@ -4,9 +4,9 @@ use std::{
     sync::{LazyLock, mpsc::Receiver},
 };
 
-use anyhow::Context as _;
+use eyre::Context as _;
 
-use crate::down_color;
+use crate::{down_color, util::ResultUtil as _};
 
 struct CustomReadIterator<const T: usize, R: BufRead> {
     r: R,
@@ -297,7 +297,7 @@ pub fn get_building_crate(metadata: &cargo_metadata::Metadata) -> cargo_metadata
     building_crate
 }
 
-pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::Utf8PathBuf> {
+pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino::Utf8PathBuf> {
     let mut before_path = wasm_path.clone();
 
     loop {
@@ -315,7 +315,7 @@ pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::
         let output = command.wait_with_output()?;
 
         if !output.status.success() {
-            anyhow::bail!("wasm-opt failed.");
+            Err(eyre::eyre!("wasm-opt failed."))?;
         }
 
         let before_size = std::fs::metadata(&before_path)?.len();
@@ -334,7 +334,7 @@ pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::
     Ok(before_path)
 }
 
-pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<camino::Utf8PathBuf> {
+pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino::Utf8PathBuf> {
     let output_path = wasm_path.with_extension("component.wasm");
     if output_path.exists() {
         std::fs::remove_file(&output_path)?;
@@ -346,13 +346,17 @@ pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> anyhow::Result<cami
         .validate(true)
         .reject_legacy_names(false);
 
-    encoder = encoder.module(&wasm)?;
+    encoder = encoder
+        .module(&wasm)
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("failed to add module"))?;
 
     encoder = encoder.realloc_via_memory_grow(true);
 
     let bytes = encoder
         .encode()
-        .context("failed to encode a component from module")?;
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("failed to encode a component"))?;
 
     let mut file = std::fs::OpenOptions::new()
         .write(true)

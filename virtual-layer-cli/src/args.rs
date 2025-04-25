@@ -2,6 +2,9 @@ use std::collections::HashMap;
 
 use camino::Utf8PathBuf;
 use clap::{Parser, command};
+use eyre::Context as _;
+
+use crate::util::ResultUtil as _;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -43,7 +46,7 @@ impl Args {
         &self,
         component: &[u8],
         name: &str,
-    ) -> Result<js_component_bindgen::Transpiled, anyhow::Error> {
+    ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
         js_component_bindgen::transpile(
             component,
             js_component_bindgen::TranspileOpts {
@@ -73,6 +76,8 @@ impl Args {
                 async_mode: None,
             },
         )
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))
     }
 }
 
