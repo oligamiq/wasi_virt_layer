@@ -2,9 +2,11 @@ use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
 
+use crate::util::CaminoUtilModule;
+
 pub fn merge<T: AsRef<Path>, U: AsRef<Path>>(
     vfs: &Utf8PathBuf,
-    wasm: &T,
+    wasm: &[T],
     output: &U,
 ) -> anyhow::Result<()> {
     let custom_section = {
@@ -29,9 +31,15 @@ pub fn merge<T: AsRef<Path>, U: AsRef<Path>>(
     };
 
     let mut merge_cmd = std::process::Command::new("wasm-merge");
+
+    for wasm in wasm {
+        merge_cmd.arg(wasm.as_ref()).arg(format!(
+            "wasip1_vfs_{}",
+            wasm.as_ref().get_file_main_name().unwrap()
+        ));
+    }
+
     merge_cmd
-        .arg(wasm.as_ref())
-        .arg("main")
         .arg(vfs)
         .arg("wasi_snapshot_preview1")
         .arg("--output")

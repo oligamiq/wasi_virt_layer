@@ -1,4 +1,5 @@
 use rewrite::adjust_wasm;
+use util::CaminoUtilModule as _;
 
 pub mod adjust;
 pub mod args;
@@ -6,6 +7,7 @@ pub mod building;
 pub mod down_color;
 pub mod merge;
 pub mod rewrite;
+pub mod target;
 pub mod util;
 
 fn main() {
@@ -26,13 +28,13 @@ fn main() {
     let ret = building::build_vfs(manifest_path.clone(), building_crate.clone())
         .expect("Failed to build VFS");
 
-    println!("Optimizing Wasm...");
+    println!("Optimizing VfS Wasm...");
     let ret = building::optimize_wasm(&ret).expect("Failed to optimize Wasm");
 
-    println!("Adjusting Wasm...");
+    println!("Adjusting VFS Wasm...");
     let ret = adjust_wasm(&ret).expect("Failed to adjust Wasm");
 
-    println!("Optimizing Wasm...");
+    println!("Optimizing VFS Wasm...");
     let ret = building::optimize_wasm(&ret).expect("Failed to optimize Wasm");
 
     println!("Generated VFS: {ret}");
@@ -43,13 +45,30 @@ fn main() {
     }
     std::fs::create_dir_all(&parsed_args.out_dir).expect("Failed to create output directory");
 
+    println!("Preparing target Wasm...");
+    let wasm = parsed_args
+        .wasm
+        .iter()
+        .map(|old_wasm| {
+            let name = old_wasm.get_file_main_name().unwrap();
+            let wasm = format!("{}/{}", parsed_args.out_dir, old_wasm.file_name().unwrap());
+            std::fs::copy(old_wasm, &wasm).expect("Failed to copy file");
+            println!("Optimizing target Wasm [{name}]...");
+            let wasm =
+                building::optimize_wasm(&wasm.into()).expect("Failed to optimize target Wasm");
+            println!("Adjusting target Wasm [{name}]...");
+            let wasm = target::adjust_target_wasm(&wasm).expect("Failed to adjust target Wasm");
+            wasm
+        })
+        .collect::<Vec<_>>();
+
     println!("Merging Wasm...");
 
     let output = format!("{}/merged.wasm", parsed_args.out_dir);
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
-    merge::merge(&ret, &parsed_args.wasm, &output).expect("Failed to merge Wasm");
+    merge::merge(&ret, &wasm, &output).expect("Failed to merge Wasm");
 
     println!("Optimizing Merged Wasm...");
     let ret =

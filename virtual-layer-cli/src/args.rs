@@ -1,12 +1,13 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
+use camino::Utf8PathBuf;
 use clap::{Parser, command};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 pub struct Args {
     /// Path to the wasip1 wasm file
-    pub wasm: PathBuf,
+    pub wasm: Vec<Utf8PathBuf>,
 
     /// Path to the Cargo.toml file
     #[arg(long)]

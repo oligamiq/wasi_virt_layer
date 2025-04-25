@@ -8,6 +8,7 @@ const WASIP1_FUNC: [&str; 4] = ["fd_write", "environ_sizes_get", "environ_get", 
 
 /// wasip1 import to adjust to wit
 /// block vfs-wasm's environ_sizes_get etc
+/// embedding __wasip1_vfs_flag_{name}_memory
 pub fn adjust_wasm(path: &Utf8PathBuf) -> anyhow::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)?;
 
