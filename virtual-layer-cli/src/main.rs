@@ -85,6 +85,10 @@ fn main() -> eyre::Result<()> {
     let ret = adjust::adjust_merged_wasm(&ret, &wasm)
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
 
+    println!("Optimizing Merged Wasm...");
+    let ret = building::optimize_wasm(&ret)
+        .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
+
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret)
         .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;

@@ -1,5 +1,5 @@
 [package]
-name = "wasip1_vfs"
+name = "example_vfs"
 version = "0.1.0"
 edition = "2024"
 

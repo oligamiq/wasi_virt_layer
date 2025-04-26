@@ -125,6 +125,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "example_vfs"
+version = "0.1.0"
+dependencies = [
+ "const_struct",
+ "wasip1-virtual-layer",
+ "wit-bindgen",
+]
+
+[[package]]
 name = "flate2"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -676,15 +685,6 @@ dependencies = [
  "const_struct",
  "paste",
  "wasi",
- "wit-bindgen",
-]
-
-[[package]]
-name = "wasip1_vfs"
-version = "0.1.0"
-dependencies = [
- "const_struct",
- "wasip1-virtual-layer",
  "wit-bindgen",
 ]
 

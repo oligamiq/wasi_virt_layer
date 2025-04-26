@@ -101,6 +101,9 @@ impl WalrusUtilModule for walrus::Module {
     }
 
     /// if vfs, get vfs memory_id
+    /// ```rust
+    /// todo!()
+    /// ```
     fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId> {
         let anchor_name = format!("__wasip1_vfs_flag_{}_memory", name.as_ref());
 
