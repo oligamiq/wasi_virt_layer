@@ -178,6 +178,7 @@ pub trait ResultUtil<T> {
     fn to_eyre(self) -> eyre::Result<T>;
 }
 
+// https://github.com/eyre-rs/eyre/issues/31
 impl<T> ResultUtil<T> for anyhow::Result<T> {
     fn to_eyre(self) -> eyre::Result<T> {
         self.map_err(|e| {

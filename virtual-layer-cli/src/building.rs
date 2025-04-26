@@ -30,14 +30,6 @@ impl<const T: usize, R: BufRead> Iterator for CustomReadIterator<T, R> {
             if read == 0 {
                 return None;
             }
-            let mut file = std::fs::OpenOptions::new()
-                .append(true)
-                .create(true)
-                .open("output_one.txt")
-                .unwrap();
-            file.write_all(&one_buffer).unwrap();
-            file.write_all(b"\n").unwrap();
-
             if self.chars.contains(&(one_buffer[0] as char)) {
                 let line = String::from_utf8(buf).unwrap();
                 return Some(line);
@@ -137,17 +129,6 @@ pub fn build_vfs(
                 }
 
                 if check_finish_or_compiling(&line) {
-                    // line print to file
-                    {
-                        let mut file = std::fs::OpenOptions::new()
-                            .append(true)
-                            .create(true)
-                            .open("output.txt")
-                            .unwrap();
-                        file.write_all(line.as_bytes()).unwrap();
-                        file.write_all(b"\n").unwrap();
-                    }
-
                     // Skip lines with carriage return
                     if line.contains("\r") {
                         last_lines.pop_back();
