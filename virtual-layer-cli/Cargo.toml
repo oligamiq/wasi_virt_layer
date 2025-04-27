@@ -1,6 +1,6 @@
 [package]
 name = "wasip1_vfs-cli"
-version = "0.1.0"
+version.workspace = true
 edition = "2024"
 description = "CLI for the wasip1_vfs crate"
 license = "MIT OR Apache-2.0"
@@ -21,6 +21,3 @@ serde_json = "1.0.140"
 walrus = "0.23.3"
 wasmtime-environ = { version = "31.0.0", features = ["component-model"] }
 wit-component = "0.229.0"
-
-[profile.release]
-debug = true

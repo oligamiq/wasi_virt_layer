@@ -2,12 +2,17 @@
 // wit is only kebab-case
 package wasip1-vfs:host;
 
+// wit-bindgen rust virtual-layer/wit --out-dir ./virtual-layer/src/wit/
+
 world virtual-file-system {
   resource wasip1 {
     fd-write-import: static func(fd: s32, iovs: s32, iovs-len: s32, written: s32) -> s32;
     environ-sizes-get-import: static func(environ-count: s32, environ-size: s32) -> s32;
     environ-get-import: static func(environ: s32, environ-buf: s32) -> s32;
     proc-exit-import: static func(code: s32);
+    random-get-import: static func(buf: s32, buf-len: s32) -> s32;
+    sched-yield-import: static func() -> s32;
+    clock-time-get-import: static func(id: s32, precision: s64, time: s32) -> s32;
   }
 
   // export fd-write-export: func(fd: s32, iovs: s32, iovs-len: s32, written: s32) -> s32;

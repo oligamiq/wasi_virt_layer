@@ -3,7 +3,15 @@ use walrus::*;
 
 use crate::util::ResultUtil as _;
 
-pub const WASIP1_FUNC: [&str; 4] = ["fd_write", "environ_sizes_get", "environ_get", "proc_exit"];
+pub const WASIP1_FUNC: [&str; 7] = [
+    "fd_write",
+    "environ_sizes_get",
+    "environ_get",
+    "proc_exit",
+    "random_get",
+    "sched_yield",
+    "clock_time_get",
+];
 
 pub const WASIP1_OP: [&str; 2] = ["memory_store_le", "memory_copy"];
 
@@ -21,6 +29,15 @@ pub enum Wasip1OpKind {
         offset: walrus::ValType,
         src: walrus::ValType,
         len: walrus::ValType,
+    },
+    MemoryCopyTo {
+        offset: walrus::ValType,
+        src: walrus::ValType,
+        len: walrus::ValType,
+    },
+    MemoryLoadLe {
+        offset: walrus::ValType,
+        result: walrus::ValType,
     },
 }
 
@@ -108,6 +125,37 @@ impl Wasip1Op {
                 memory_copy(ty.params())
                     .wrap_err_with(|| eyre::eyre!("Invalid memory_copy params"))?
             }
+            _ if name.starts_with("memory_copy_to") => {
+                fn memory_copy_to(params: &[ValType]) -> eyre::Result<Wasip1OpKind> {
+                    check_len!(params, 3);
+                    assert_ptr!(params[0]);
+                    assert_ptr!(params[1]);
+                    assert_len!(params[2]);
+                    Ok(Wasip1OpKind::MemoryCopyTo {
+                        offset: params[0],
+                        src: params[1],
+                        len: params[2],
+                    })
+                }
+                memory_copy_to(ty.params())
+                    .wrap_err_with(|| eyre::eyre!("Invalid memory_copy_to params"))?
+            }
+            _ if name.starts_with("memory_load_le") => {
+                fn memory_load_le(
+                    params: &[ValType],
+                    results: &[ValType],
+                ) -> eyre::Result<Wasip1OpKind> {
+                    check_len!(params, 1);
+                    assert_ptr!(params[0]);
+                    check_len!(results, 1);
+                    Ok(Wasip1OpKind::MemoryLoadLe {
+                        offset: params[0],
+                        result: results[0],
+                    })
+                }
+                memory_load_le(ty.params(), ty.results())
+                    .wrap_err_with(|| eyre::eyre!("Invalid memory_load_le params"))?
+            }
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 
@@ -153,6 +201,29 @@ impl Wasip1Op {
                             .local_get(arg_locals[1])
                             .local_get(arg_locals[2])
                             .memory_copy(vfs_mem, wasm_mem)
+                            .return_();
+                    }
+                    Wasip1OpKind::MemoryCopyTo { .. } => {
+                        body.local_get(arg_locals[0])
+                            .local_get(arg_locals[1])
+                            .local_get(arg_locals[2])
+                            .memory_copy(wasm_mem, vfs_mem)
+                            .return_();
+                    }
+                    Wasip1OpKind::MemoryLoadLe { result, .. } => {
+                        if result != walrus::ValType::I32 {
+                            unimplemented!("Unimplemented value type: {result} yet");
+                        }
+
+                        body.local_get(arg_locals[0])
+                            .load(
+                                wasm_mem,
+                                ir::LoadKind::I32 { atomic: false },
+                                ir::MemArg {
+                                    offset: 0,
+                                    align: 0,
+                                },
+                            )
                             .return_();
                     }
                 }

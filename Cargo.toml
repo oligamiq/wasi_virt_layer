@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["virtual-layer-cli", "virtual-layer"]
+default-members = ["virtual-layer-cli"]
+exclude = ["example", "test_wasm"]
+
+[workspace.package]
+authors = ["oligami <nziq53@gmail.com>"]
+version = "0.1.0"
+edition = "2024"
+description = ""
+license = "MIT/Apache-2.0"
+rust-version = "1.80.0"
+keywords = []
+repository = ""
+documentation = ""
+homepage = ""
+readme = "README.md"

@@ -6,6 +6,8 @@ use crate::memory::{MemoryAccess, MemoryAccessTypes};
 
 /// @block or @through
 /// Whether to import JavaScript runtime env from vfs,
+/// env is automatically imported even if you are not using it,
+/// so that you can block it
 /// @through if retrieving from JavaScript runtime.
 ///
 /// @const or @static

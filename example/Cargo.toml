@@ -7,6 +7,7 @@ edition = "2024"
 wit-bindgen = "0.41.0"
 wasip1-virtual-layer = { path = "../virtual-layer/" }
 const_struct = "0.5.3"
+parking_lot = "0.12.3"
 
 [lib]
 crate-type = ["cdylib"]

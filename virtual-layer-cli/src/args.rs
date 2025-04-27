@@ -22,7 +22,7 @@ pub struct Args {
 
     /// Disable transpile to JS, you can use jco to transpile wasm to js.
     #[arg(long, default_value = "false")]
-    pub no_transpile: bool,
+    pub no_transpile: Option<bool>,
 
     /// Disable transpile to Component, you can use wasm-tools component to transpile wasm to component.
     #[arg(long, default_value = "false")]
@@ -31,11 +31,24 @@ pub struct Args {
     // transpile options
     #[command(flatten)]
     pub transpile_opts: TranspileOpts,
+
+    // -p, --package
+    /// Package name to build
+    #[arg(short, long)]
+    pub package: Option<String>,
 }
 
 impl Args {
     pub fn new() -> Self {
-        Args::parse()
+        let parsed = Args::parse();
+        if parsed.wasm.is_empty() {
+            todo!();
+        }
+        if parsed.package.is_some() {
+            todo!();
+        }
+
+        parsed
     }
 
     pub fn get_manifest_path(&self) -> &'_ Option<String> {
@@ -65,7 +78,7 @@ impl Args {
                         None
                     }
                 },
-                no_nodejs_compat: self.transpile_opts.no_nodejs_compat,
+                no_nodejs_compat: self.transpile_opts.no_nodejs_compat.unwrap(),
                 base64_cutoff: self.transpile_opts.base64_cutoff,
                 tla_compat: self.transpile_opts.tla_compat,
                 valid_lifting_optimization: self.transpile_opts.valid_lifting_optimization,
@@ -101,7 +114,7 @@ pub struct TranspileOpts {
 
     /// Disables compatibility in Node.js without a fetch global.
     #[arg(long, default_value = "true")]
-    no_nodejs_compat: bool,
+    no_nodejs_compat: Option<bool>,
 
     /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode (set to 0 to disable all base64 inlining)
     #[arg(long, default_value = "0")]

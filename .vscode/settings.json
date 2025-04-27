@@ -1,18 +1,24 @@
 {
     "rust-analyzer.linkedProjects": [
-        "${workspaceFolder}/virtual-layer/Cargo.toml",
-        "${workspaceFolder}/virtual-layer-cli/Cargo.toml",
+        "${workspaceFolder}/Cargo.toml",
         "${workspaceFolder}/example/Cargo.toml",
         "${workspaceFolder}/test_wasm/Cargo.toml",
     ],
     "rust-analyzer.cargo.target": "wasm32-wasip1",
     "cSpell.words": [
+        "BADF",
         "camino",
         "environc",
         "Errno",
+        "ewrite",
         "Exitcode",
+        "Fdflags",
         "funcs",
         "nonoverlapping",
+        "NOTSUP",
+        "Oflags",
+        "sched",
+        "Uninit",
         "wasi",
         "wasip1"
     ]

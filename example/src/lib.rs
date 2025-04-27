@@ -1,5 +1,13 @@
-use std::sync::{LazyLock, Mutex};
-use wasip1_virtual_layer::prelude::*;
+use const_struct::const_struct;
+use parking_lot::Mutex;
+use std::sync::LazyLock;
+use wasip1_virtual_layer::{
+    ConstFiles, export_fs,
+    prelude::*,
+    wasi::file::non_atomic::{
+        ConstFileSystemRoot, DefaultStdIO, VirtualFileSystemConstState, WasiConstFile,
+    },
+};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -37,4 +45,35 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-export_env!(@block, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm_opt);
+export_env!(@block, @static, &mut VIRTUAL_ENV.lock(), test_wasm_opt);
+
+#[const_struct]
+const FILES: ConstFileSystemRoot<WasiConstFile<&'static str>, 3> = ConstFiles!([
+    ("/", { WasiConstFile::new("This is root") }),
+    (
+        ".",
+        [
+            ("hey", { WasiConstFile::new("Hey!") }),
+            (
+                "hello",
+                [
+                    ("world", { WasiConstFile::new("Hello, world!") }),
+                    ("everyone", { WasiConstFile::new("Hello, everyone!") }),
+                ]
+            )
+        ]
+    ),
+    (
+        "~",
+        [
+            ("home", { WasiConstFile::new("This is home") }),
+            ("user", { WasiConstFile::new("This is user") }),
+        ]
+    )
+]);
+
+static FS_STATE: std::sync::LazyLock<
+    Mutex<VirtualFileSystemConstState<WasiConstFile<&str>, 3, FilesTy, DefaultStdIO>>,
+> = std::sync::LazyLock::new(|| Mutex::new(VirtualFileSystemConstState::new(&FILES)));
+
+export_fs!(@const, &mut (*FS_STATE.lock()), test_wasm_opt);
