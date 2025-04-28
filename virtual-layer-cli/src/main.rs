@@ -12,6 +12,7 @@ pub mod down_color;
 pub mod merge;
 pub mod rewrite;
 pub mod target;
+pub mod test_run;
 pub mod util;
 
 fn main() -> eyre::Result<()> {
@@ -117,15 +118,9 @@ fn main() -> eyre::Result<()> {
     std::fs::OpenOptions::new()
         .write(true)
         .create(true)
-        .open(format!("{}/wasip1.js", parsed_args.out_dir))
+        .open(format!("{}/test_run.ts", parsed_args.out_dir))
         .expect("Failed to create file")
-        .write_all(
-            br#"
-const Wasip1 = {};
-
-export default Wasip1;
-"#,
-        )
+        .write_all(test_run::TEST_RUN.trim_start().as_bytes())
         .expect("Failed to write file");
 
     Ok(())

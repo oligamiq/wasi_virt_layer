@@ -86,7 +86,7 @@ impl Args {
                 base64_cutoff: self.transpile_opts.base64_cutoff,
                 tla_compat: self.transpile_opts.tla_compat,
                 valid_lifting_optimization: self.transpile_opts.valid_lifting_optimization,
-                tracing: self.transpile_opts.tracing,
+                tracing: !self.transpile_opts.no_tracing,
                 no_namespaced_exports: self.transpile_opts.no_namespaced_exports,
                 multi_memory: true,
                 guest: self.transpile_opts.guest,
@@ -134,8 +134,8 @@ pub struct TranspileOpts {
     valid_lifting_optimization: bool,
 
     /// Whether or not to emit tracing calls on function entry/exit.
-    #[arg(long, default_value = "true")]
-    tracing: bool,
+    #[arg(long, default_value = "false")]
+    no_tracing: bool,
 
     /// Whether to generate namespaced exports like foo as "local:package/foo". These exports can break typescript builds.
     #[arg(long, default_value = "false")]

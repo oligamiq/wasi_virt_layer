@@ -20,6 +20,16 @@ impl Guest for Hello {
     fn world() {
         println!("Hello, world!");
     }
+
+    fn add_env(env: String) {
+        let mut state = VIRTUAL_ENV.lock();
+        state.environ.push(env.clone());
+        println!("Adding env: {}", env);
+    }
+
+    fn get_envs() -> Vec<String> {
+        VIRTUAL_ENV.lock().get_environ().to_vec()
+    }
 }
 
 export!(Hello);
@@ -34,6 +44,8 @@ impl<'a> VirtualEnv<'a> for VirtualEnvState {
     type Str = String;
 
     fn get_environ(&mut self) -> &[Self::Str] {
+        println!("called get_environ");
+
         &self.environ
     }
 }

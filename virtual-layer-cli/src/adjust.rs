@@ -76,6 +76,49 @@ pub fn adjust_merged_wasm(
             .wrap_err_with(|| eyre::eyre!("Failed to replace imports"))?;
     }
 
+    // rename vfs memory to "memory"
+    // because this memory is used by wit-bindgen
+    // and the name is hardcoded in the generated code
+    // module
+    //     .exports
+    //     .get_exported_memory(vfs_memory_id)
+    //     .unwrap()
+    //     .
+    let memory_named = module
+        .exports
+        .iter()
+        .find(|export| export.name == "memory")
+        .map(|export| export.id());
+
+    // let used_vfs_memory_name = module
+    //     .exports
+    //     .get_exported_memory(vfs_memory_id)
+    //     .unwrap()
+    //     .name
+    //     .clone();
+    let used_vfs_memory_name = module
+        .exports
+        .iter_mut()
+        .find(|export| match export.item {
+            walrus::ExportItem::Memory(memory) => memory == vfs_memory_id,
+            _ => false,
+        })
+        .map(|export| {
+            let before_name = export.name.clone();
+            export.name = "memory".to_string();
+            before_name
+        })
+        .unwrap();
+    if let Some(memory_id) = memory_named {
+        module
+            .exports
+            .iter_mut()
+            .find(|export| export.id() == memory_id)
+            .map(|export| {
+                export.name = used_vfs_memory_name;
+            });
+    }
+
     let new_path = path.with_extension("adjusted.wasm");
 
     if fs::metadata(&new_path).is_ok() {

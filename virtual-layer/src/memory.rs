@@ -7,7 +7,7 @@ macro_rules! import_wasm {
             #[allow(non_camel_case_types)]
             struct $name;
 
-            $crate::import_wasm!(@store, $name, u8, usize);
+            $crate::import_wasm!(@store, $name, u8, usize, isize);
 
             impl $crate::memory::MemoryAccess for $name {
                 #[inline(always)]
@@ -39,7 +39,7 @@ macro_rules! import_wasm {
                 where
                     T: $crate::memory::MemoryAccessTypes<Self>,
                 {
-                    <T as $crate::memory::MemoryAccessTypes<Self>>::load_le(offset)
+                    // <T as $crate::memory::MemoryAccessTypes<Self>>::load_le(offset)
                 }
             }
         }

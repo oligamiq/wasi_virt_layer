@@ -190,8 +190,8 @@ impl Wasip1Op {
                                 wasm_mem,
                                 ir::StoreKind::I32 { atomic: false },
                                 ir::MemArg {
-                                    offset: 0,
                                     align: 0,
+                                    offset: 0,
                                 },
                             )
                             .return_();

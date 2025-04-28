@@ -7,7 +7,6 @@ use crate::memory::{MemoryAccess, MemoryAccessTypes};
 pub mod non_atomic {
     use std::{collections::HashMap, io::Write as _};
 
-    use const_struct::*;
     use wasip1::*;
 
     use super::Wasip1FileSystem;
@@ -429,17 +428,25 @@ pub mod non_atomic {
 
     pub trait StdIO {
         fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            print!("writing to stdout: ");
+
             std::io::stdout()
                 .write_all(buf)
-                .map_err(|_| wasip1::ERRNO_BADF)?;
+                .expect("Failed to write to stdout");
+
+            std::io::stdout().flush().expect("Failed to flush stdout");
 
             Ok(buf.len() as Size)
         }
 
         fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            eprint!("writing to stderr: ");
+
             std::io::stderr()
                 .write_all(buf)
-                .map_err(|_| wasip1::ERRNO_BADF)?;
+                .expect("Failed to write to stderr");
+
+            std::io::stderr().flush().expect("Failed to flush stderr");
 
             Ok(buf.len() as Size)
         }
@@ -486,25 +493,34 @@ where
     usize: MemoryAccessTypes<Wasm>,
     *const u8: MemoryAccessTypes<Wasm>,
     u8: MemoryAccessTypes<Wasm>,
+    isize: MemoryAccessTypes<Wasm>,
     Size: MemoryAccessTypes<Wasm>,
 {
-    let mut len = 0;
-    for i in 0..iovs_len {
-        let iovs_ptr = unsafe { iovs_ptr.add(i) };
-        let buf_len = unsafe { Wasm::load_le((iovs_ptr as *const usize).add(1)) };
-        len += buf_len;
-    }
+    let mut iovs_vec: Vec<Ciovec> = Vec::with_capacity(iovs_len);
+    unsafe { iovs_vec.set_len(iovs_len) };
+
+    Wasm::memcpy_to(
+        &mut unsafe {
+            core::slice::from_raw_parts_mut::<u8>(
+                iovs_vec.as_mut_ptr() as *mut u8,
+                iovs_len * core::mem::size_of::<Ciovec>(),
+            )
+        },
+        iovs_ptr as *const u8,
+    );
+
+    let len = iovs_vec.iter().map(|iovs| iovs.buf_len).sum::<usize>();
 
     let mut space = Vec::<u8>::with_capacity(len);
     unsafe { space.set_len(len) };
 
     let mut offset = 0;
-    for i in 0..iovs_len {
-        let iovs_ptr = unsafe { iovs_ptr.add(i) };
-        let buf_ptr = Wasm::load_le(iovs_ptr as *const *const u8);
-        let buf_len = unsafe { Wasm::load_le((iovs_ptr as *const usize).add(1)) };
+    for iovs in iovs_vec {
+        let buf_len = iovs.buf_len;
+        let buf_ptr = iovs.buf;
 
         Wasm::memcpy_to(&mut space[offset..offset + buf_len], buf_ptr);
+
         offset += buf_len;
     }
 
