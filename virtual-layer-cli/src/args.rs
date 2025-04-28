@@ -105,6 +105,7 @@ pub struct TranspileOpts {
     no_typescript: bool,
 
     /// Provide a custom JS instantiation API for the component instead of the direct importable native ESM output.
+    /// Sync, Async, Normal, Default is Async.
     #[arg(long, value_parser = analysis::analysis_instantiation, default_value = "CustomInstantiationMode(None)")]
     instantiation: CustomInstantiationMode,
 
@@ -157,7 +158,7 @@ pub(super) mod analysis {
         match s {
             "Sync" => Ok(CustomInstantiationMode(Some(InstantiationMode::Sync))),
             "Async" => Ok(CustomInstantiationMode(Some(InstantiationMode::Async))),
-            "Common" => Ok(CustomInstantiationMode(None)),
+            "Normal" => Ok(CustomInstantiationMode(None)),
             _ => Ok(CustomInstantiationMode(Some(InstantiationMode::Async))),
         }
     }
