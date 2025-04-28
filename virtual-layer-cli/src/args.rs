@@ -36,6 +36,10 @@ pub struct Args {
     /// Package name to build
     #[arg(short, long)]
     pub package: Option<String>,
+
+    /// threads
+    #[arg(long)]
+    pub threads: Option<usize>,
 }
 
 impl Args {
@@ -65,7 +69,7 @@ impl Args {
             js_component_bindgen::TranspileOpts {
                 name: name.to_string(),
                 no_typescript: self.transpile_opts.no_typescript,
-                instantiation: self.transpile_opts.instantiation.clone(),
+                instantiation: self.transpile_opts.instantiation.clone().0,
                 import_bindings: self.transpile_opts.import_bindings.clone(),
                 map: {
                     if let Some(opts_map) = &self.transpile_opts.map {
@@ -101,8 +105,8 @@ pub struct TranspileOpts {
     no_typescript: bool,
 
     /// Provide a custom JS instantiation API for the component instead of the direct importable native ESM output.
-    #[arg(long, value_parser = analysis::analysis_instantiation)]
-    instantiation: Option<js_component_bindgen::InstantiationMode>,
+    #[arg(long, value_parser = analysis::analysis_instantiation, default_value = "CustomInstantiationMode(None)")]
+    instantiation: CustomInstantiationMode,
 
     /// Configure how import bindings are provided, as high-level JS bindings, or as hybrid optimized bindings.
     #[arg(long, value_parser = analysis::analysis_import_bindings)]
@@ -141,14 +145,20 @@ pub struct TranspileOpts {
     guest: bool,
 }
 
+#[derive(Clone, Debug)]
+pub struct CustomInstantiationMode(Option<js_component_bindgen::InstantiationMode>);
+
 pub(super) mod analysis {
     use js_component_bindgen::{BindingsMode, InstantiationMode};
 
-    pub fn analysis_instantiation(s: &str) -> Result<Option<InstantiationMode>, clap::Error> {
+    use super::CustomInstantiationMode;
+
+    pub fn analysis_instantiation(s: &str) -> Result<CustomInstantiationMode, clap::Error> {
         match s {
-            "Sync" => Ok(Some(InstantiationMode::Sync)),
-            "Async" => Ok(Some(InstantiationMode::Async)),
-            _ => Ok(None),
+            "Sync" => Ok(CustomInstantiationMode(Some(InstantiationMode::Sync))),
+            "Async" => Ok(CustomInstantiationMode(Some(InstantiationMode::Async))),
+            "Common" => Ok(CustomInstantiationMode(None)),
+            _ => Ok(CustomInstantiationMode(Some(InstantiationMode::Async))),
         }
     }
 

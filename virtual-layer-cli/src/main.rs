@@ -1,3 +1,5 @@
+use std::io::Write as _;
+
 use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
@@ -112,5 +114,21 @@ fn main() -> eyre::Result<()> {
     std::fs::remove_file(&ret).expect("Failed to remove tmp file");
     std::fs::remove_file(&component).expect("Failed to remove tmp file");
 
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(format!("{}/wasip1.js", parsed_args.out_dir))
+        .expect("Failed to create file")
+        .write_all(
+            br#"
+const Wasip1 = {};
+
+export default Wasip1;
+"#,
+        )
+        .expect("Failed to write file");
+
     Ok(())
 }
+
+// deno run dist/example_vfs.js

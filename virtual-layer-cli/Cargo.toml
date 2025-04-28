@@ -14,8 +14,6 @@ color-eyre = { version = "0.6.3", default-features = false }
 console = "0.15.11"
 eyre = { version = "0.6.12", default-features = false }
 js-component-bindgen = "1.10.0"
-oxc_ast = "0.64.0"
-oxc_parser = "0.64.0"
 regex = "1.11.1"
 serde_json = "1.0.140"
 walrus = "0.23.3"
