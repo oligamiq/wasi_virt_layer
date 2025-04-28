@@ -1,7 +1,7 @@
 // https://docs.rs/wasmtime-wasi/17.0.3/wasmtime_wasi/struct.WasiCtx.html
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
-use crate::memory::{MemoryAccess, MemoryAccessTypes};
+use crate::memory::MemoryAccess;
 
 #[cfg(not(target_feature = "atomics"))]
 pub mod non_atomic {
@@ -488,26 +488,11 @@ pub fn fd_write_inner<Wasm: MemoryAccess>(
     iovs_ptr: *const Ciovec,
     iovs_len: usize,
     nwritten: *mut Size,
-) -> Errno
-where
-    usize: MemoryAccessTypes<Wasm>,
-    *const u8: MemoryAccessTypes<Wasm>,
-    u8: MemoryAccessTypes<Wasm>,
-    isize: MemoryAccessTypes<Wasm>,
-    Size: MemoryAccessTypes<Wasm>,
-{
+) -> Errno {
     let mut iovs_vec: Vec<Ciovec> = Vec::with_capacity(iovs_len);
     unsafe { iovs_vec.set_len(iovs_len) };
 
-    Wasm::memcpy_to(
-        &mut unsafe {
-            core::slice::from_raw_parts_mut::<u8>(
-                iovs_vec.as_mut_ptr() as *mut u8,
-                iovs_len * core::mem::size_of::<Ciovec>(),
-            )
-        },
-        iovs_ptr as *const u8,
-    );
+    Wasm::memcpy_to(&mut iovs_vec, iovs_ptr);
 
     let len = iovs_vec.iter().map(|iovs| iovs.buf_len).sum::<usize>();
 

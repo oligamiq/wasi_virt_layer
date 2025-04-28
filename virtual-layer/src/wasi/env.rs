@@ -2,7 +2,7 @@ use const_for::const_for;
 use const_struct::*;
 use wasip1::*;
 
-use crate::memory::{MemoryAccess, MemoryAccessTypes};
+use crate::memory::MemoryAccess;
 
 /// @block or @through
 /// Whether to import JavaScript runtime env from vfs,
@@ -155,10 +155,7 @@ pub fn environ_sizes_get_const_inner<
 >(
     environ_count: *mut Size,
     environ_buf_size: *mut Size,
-) -> Errno
-where
-    Size: MemoryAccessTypes<Wasm>,
-{
+) -> Errno {
     const fn inner<T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>>() -> (Size, Size) {
         let mut size = 0;
         let mut count = 0;
@@ -183,11 +180,7 @@ pub fn environ_get_const_inner<
 >(
     environ: *mut *const u8,
     environ_buf: *mut u8,
-) -> Errno
-where
-    *const u8: MemoryAccessTypes<Wasm>,
-    u8: MemoryAccessTypes<Wasm>,
-{
+) -> Errno {
     let mut environ = environ;
     let mut environ_buf = environ_buf;
 
@@ -225,11 +218,7 @@ pub trait VirtualEnv<'a> {
         &'a mut self,
         environ: *mut *const u8,
         environ_buf: *mut u8,
-    ) -> Errno
-    where
-        *const u8: MemoryAccessTypes<Wasm>,
-        u8: MemoryAccessTypes<Wasm>,
-    {
+    ) -> Errno {
         let mut environ = environ;
         let mut environ_buf = environ_buf;
 
@@ -263,10 +252,7 @@ pub fn environ_sizes_get_inner<'a, Wasm: MemoryAccess>(
     state: &'a mut impl VirtualEnv<'a>,
     environ_count: *mut Size,
     environ_buf_size: *mut Size,
-) -> Errno
-where
-    Size: MemoryAccessTypes<Wasm>,
-{
+) -> Errno {
     let (size, count) = state.environ_sizes_get();
 
     Wasm::store_le(environ_buf_size, size);
@@ -280,10 +266,6 @@ pub fn environ_get_inner<'a, Wasm: MemoryAccess>(
     state: &'a mut impl VirtualEnv<'a>,
     environ: *mut *const u8,
     environ_buf: *mut u8,
-) -> Errno
-where
-    *const u8: MemoryAccessTypes<Wasm>,
-    u8: MemoryAccessTypes<Wasm>,
-{
-    state.environ_get(environ, environ_buf)
+) -> Errno {
+    state.environ_get::<Wasm>(environ, environ_buf)
 }
