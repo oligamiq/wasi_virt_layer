@@ -47,8 +47,6 @@ wasi.start({
         ...inst.exports,
         _start: () => {
             // init only
-            console.log("[WASI init]");
-            inst.exports.__wasip1_vfs_test_wasm_opt__start();
             console.log("[WASI main]");
             inst.exports.main();
             console.log("[WASI root.world()]");

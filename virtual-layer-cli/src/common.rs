@@ -45,6 +45,14 @@ pub enum Wasip1OpKind {
         main_void_func_id: FunctionId,
         start_func_id: FunctionId,
     },
+    Start {
+        start_func_id: FunctionId,
+    },
+    Reset {
+        global: Box<[(walrus::GlobalId, walrus::ir::Value)]>,
+        memory: walrus::MemoryId,
+        zero_range: Box<[(i32, Option<i32>)]>,
+    },
 }
 
 macro_rules! assert_ptr {
@@ -82,6 +90,7 @@ impl Wasip1Op {
         module: &walrus::Module,
         import: &walrus::Import,
         wasm_name: impl AsRef<str>,
+        memory_id: walrus::MemoryId,
     ) -> eyre::Result<Self> {
         let name = import.name.as_str();
         let wasm_name = wasm_name.as_ref();
@@ -180,6 +189,78 @@ impl Wasip1Op {
                     start_func_id,
                 }
             }
+            _ if name.starts_with("_start") => {
+                let start_func_id = module
+                    .exports
+                    .get_func(&format!("__wasip1_vfs_{wasm_name}__start"))
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to get start function"))?;
+
+                Wasip1OpKind::Start { start_func_id }
+            }
+            _ if name.starts_with("reset") => {
+                let global = module
+                    .globals
+                    .iter()
+                    .filter(|global| global.mutable)
+                    .filter_map(|global| {
+                        if let GlobalKind::Local(ConstExpr::Value(v)) = global.kind {
+                            Some((global.id(), v.clone()))
+                        } else {
+                            log::warn!("Global segment {:?} is not a value", global.kind);
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+
+                let data_range = module
+                    .data
+                    .iter()
+                    .filter_map(|data| match data.kind {
+                        walrus::DataKind::Active { memory, offset } => {
+                            if memory == memory_id {
+                                if let ConstExpr::Value(v) = offset {
+                                    if let ir::Value::I32(offset) = v {
+                                        Some((offset, data.value.len()))
+                                    } else {
+                                        log::warn!("Data segment {:?} is not i32", offset);
+                                        None
+                                    }
+                                } else {
+                                    log::warn!("Data segment {:?} is not a value", offset);
+                                    None
+                                }
+                            } else {
+                                None
+                            }
+                        }
+                        _ => {
+                            log::warn!("Data segment passive is not supported");
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let zero_range = std::iter::once(Some(0i32))
+                    .chain(
+                        data_range
+                            .into_iter()
+                            .flat_map(|(offset, len)| [Some(offset), Some(offset + len as i32)]),
+                    )
+                    .chain(std::iter::once(None))
+                    .collect::<Vec<_>>()
+                    .chunks(2)
+                    .map(|chunk| (chunk[0].unwrap(), chunk[1]))
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice();
+
+                Wasip1OpKind::Reset {
+                    global,
+                    memory: memory_id,
+                    zero_range,
+                }
+            }
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 
@@ -217,6 +298,17 @@ impl Wasip1Op {
         Ok(())
     }
 
+    pub fn start(
+        &self,
+        module: &mut walrus::Module,
+        fid: FunctionId,
+        start_func_id: FunctionId,
+    ) -> eyre::Result<()> {
+        module.connect_func_inner(fid, start_func_id)?;
+
+        Ok(())
+    }
+
     pub fn replace(
         self,
         module: &mut walrus::Module,
@@ -233,6 +325,8 @@ impl Wasip1Op {
         } = self.kind
         {
             self.main_void(module, self.fid, main_void_func_id, start_func_id)?;
+        } else if let Wasip1OpKind::Start { start_func_id } = self.kind {
+            self.start(module, self.fid, start_func_id)?;
         } else {
             let Self { fid, kind } = self;
 
@@ -240,9 +334,9 @@ impl Wasip1Op {
                 .replace_imported_func(fid, |(body, arg_locals)| {
                     let mut body = body.func_body();
 
-                    match kind {
+                    match &kind {
                         Wasip1OpKind::MemoryStoreLe { value, .. } => {
-                            if value != walrus::ValType::I32 {
+                            if *value != walrus::ValType::I32 {
                                 todo!("Unimplemented value type: {value} yet");
                             }
 
@@ -273,7 +367,7 @@ impl Wasip1Op {
                                 .return_();
                         }
                         Wasip1OpKind::MemoryLoadLe { result, .. } => {
-                            if result != walrus::ValType::I32 {
+                            if *result != walrus::ValType::I32 {
                                 todo!("Unimplemented value type: {result} yet");
                             }
 
@@ -288,7 +382,33 @@ impl Wasip1Op {
                                 )
                                 .return_();
                         }
-                        Wasip1OpKind::MainVoid { .. } => {}
+                        Wasip1OpKind::MainVoid { .. } => unreachable!(),
+                        Wasip1OpKind::Start { .. } => unreachable!(),
+                        Wasip1OpKind::Reset {
+                            global,
+                            memory,
+                            zero_range,
+                        } => {
+                            for global in global.iter() {
+                                let (id, value) = global;
+                                body.const_(*value).global_set(*id);
+                            }
+                            for (start, end) in zero_range.iter() {
+                                body.i32_const(*start).i32_const(0);
+
+                                if let Some(end) = end {
+                                    body.i32_const(*end - *start);
+                                } else {
+                                    body.memory_size(*memory)
+                                        .i32_const(64 * 1024)
+                                        .binop(ir::BinaryOp::I32Mul)
+                                        .i32_const(*start)
+                                        .binop(ir::BinaryOp::I32Sub);
+                                }
+                                body.memory_fill(*memory);
+                            }
+                            body.return_();
+                        }
                     }
                 })
                 .to_eyre()

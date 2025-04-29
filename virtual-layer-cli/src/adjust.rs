@@ -59,7 +59,7 @@ pub fn adjust_merged_wasm(
                     .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
             })
             .map(|import| {
-                let op = Wasip1Op::parse(&module, import, &wasm_name)
+                let op = Wasip1Op::parse(&module, import, &wasm_name, memory_id)
                     .wrap_err_with(|| eyre::eyre!("Failed to parse import"))?;
 
                 Ok(op)

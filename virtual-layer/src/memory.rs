@@ -28,6 +28,12 @@ macro_rules! import_wasm {
 
                 #[unsafe(no_mangle)]
                 pub fn [<__wasip1_vfs_ $name ___main_void>]();
+
+                #[unsafe(no_mangle)]
+                pub fn [<__wasip1_vfs_ $name __start>]();
+
+                #[unsafe(no_mangle)]
+                pub fn [<__wasip1_vfs_ $name _reset>]();
             }
 
             impl $crate::memory::WasmAccess for $name {
@@ -101,6 +107,26 @@ macro_rules! import_wasm {
                     #[cfg(target_arch = "wasm32")]
                     unsafe { [<__wasip1_vfs_ $name ___main_void>]() };
                 }
+
+                #[inline(always)]
+                fn reset()
+                {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_arch = "wasm32")]
+                    unsafe { [<__wasip1_vfs_ $name _reset>]() };
+                }
+
+                #[inline(always)]
+                fn _start()
+                {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_arch = "wasm32")]
+                    unsafe { [<__wasip1_vfs_ $name __start>]() };
+                }
             }
         }
     };
@@ -135,4 +161,20 @@ pub trait WasmAccess {
     /// Using this and export_env,
     /// it is possible to override arguments, for example, to call
     fn main();
+
+    /// memory reset to memory which instantiate
+    /// to suppose
+    /// - memory copied from data-segment is not mutable
+    /// function's roll
+    /// - other memory fill zeroed
+    /// - reset global variables
+    /// if you call this function,
+    /// virtual file system's memory isn't changed
+    /// _start is not called
+    fn reset();
+
+    /// Calls the initialization function provided.
+    /// If you are using the main function of the same TRAIT,
+    /// RUST's main function will not be automatically executed during initialization.
+    fn _start();
 }
