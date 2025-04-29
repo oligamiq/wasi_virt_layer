@@ -1,7 +1,10 @@
 use eyre::Context as _;
 use walrus::*;
 
-use crate::util::ResultUtil as _;
+use crate::{
+    instrs::InstrRewrite,
+    util::{ResultUtil as _, WalrusUtilModule},
+};
 
 pub const WASIP1_FUNC: [&str; 7] = [
     "fd_write",
@@ -18,6 +21,7 @@ pub struct Wasip1Op {
     kind: Wasip1OpKind,
 }
 
+#[derive(Debug)]
 pub enum Wasip1OpKind {
     MemoryStoreLe {
         offset: walrus::ValType,
@@ -36,6 +40,10 @@ pub enum Wasip1OpKind {
     MemoryLoadLe {
         offset: walrus::ValType,
         result: walrus::ValType,
+    },
+    MainVoid {
+        main_void_func_id: FunctionId,
+        start_func_id: FunctionId,
     },
 }
 
@@ -154,6 +162,24 @@ impl Wasip1Op {
                 memory_load_le(ty.params(), ty.results())
                     .wrap_err_with(|| eyre::eyre!("Invalid memory_load_le params"))?
             }
+            _ if name.starts_with("__main_void") => {
+                let main_void_func_id = module
+                    .exports
+                    .get_func(&format!("__wasip1_vfs_{wasm_name}___main_void"))
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to get main_void function"))?;
+
+                let start_func_id = module
+                    .exports
+                    .get_func(&format!("__wasip1_vfs_{wasm_name}__start"))
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to get start function"))?;
+
+                Wasip1OpKind::MainVoid {
+                    main_void_func_id,
+                    start_func_id,
+                }
+            }
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 
@@ -164,70 +190,110 @@ impl Wasip1Op {
         Ok(op)
     }
 
+    pub fn main_void(
+        &self,
+        module: &mut walrus::Module,
+        fid: FunctionId,
+        main_void_func_id: FunctionId,
+        start_func_id: FunctionId,
+    ) -> eyre::Result<()> {
+        let start_func = module.funcs.get_mut(start_func_id);
+        if let walrus::FunctionKind::Local(func) = &mut start_func.kind {
+            func.builder_mut().func_body().rewrite(|instr, _| {
+                if let ir::Instr::Call(call) = instr {
+                    if call.func == main_void_func_id {
+                        *instr = ir::Instr::Const(ir::Const {
+                            value: ir::Value::I32(0),
+                        })
+                    }
+                }
+            })?;
+        } else {
+            eyre::bail!("Invalid start function kind");
+        }
+
+        module.connect_func_inner(fid, main_void_func_id)?;
+
+        Ok(())
+    }
+
     pub fn replace(
         self,
         module: &mut walrus::Module,
         wasm_mem: walrus::MemoryId,
         vfs_mem: walrus::MemoryId,
     ) -> eyre::Result<()> {
-        let Self { fid, kind } = self;
+        // if matches!(self.kind, Wasip1OpKind::MainVoid) {
+        //     self.main_void(module, self.fid)?;
+        // }
 
-        module
-            .replace_imported_func(fid, |(body, arg_locals)| {
-                let mut body = body.func_body();
+        if let Wasip1OpKind::MainVoid {
+            main_void_func_id,
+            start_func_id,
+        } = self.kind
+        {
+            self.main_void(module, self.fid, main_void_func_id, start_func_id)?;
+        } else {
+            let Self { fid, kind } = self;
 
-                match kind {
-                    Wasip1OpKind::MemoryStoreLe { value, .. } => {
-                        if value != walrus::ValType::I32 {
-                            unimplemented!("Unimplemented value type: {value} yet");
+            module
+                .replace_imported_func(fid, |(body, arg_locals)| {
+                    let mut body = body.func_body();
+
+                    match kind {
+                        Wasip1OpKind::MemoryStoreLe { value, .. } => {
+                            if value != walrus::ValType::I32 {
+                                todo!("Unimplemented value type: {value} yet");
+                            }
+
+                            body.local_get(arg_locals[0])
+                                .local_get(arg_locals[1])
+                                .store(
+                                    wasm_mem,
+                                    ir::StoreKind::I32 { atomic: false },
+                                    ir::MemArg {
+                                        align: 0,
+                                        offset: 0,
+                                    },
+                                )
+                                .return_();
                         }
-
-                        body.local_get(arg_locals[0])
-                            .local_get(arg_locals[1])
-                            .store(
-                                wasm_mem,
-                                ir::StoreKind::I32 { atomic: false },
-                                ir::MemArg {
-                                    align: 0,
-                                    offset: 0,
-                                },
-                            )
-                            .return_();
-                    }
-                    Wasip1OpKind::MemoryCopy { .. } => {
-                        body.local_get(arg_locals[0])
-                            .local_get(arg_locals[1])
-                            .local_get(arg_locals[2])
-                            .memory_copy(vfs_mem, wasm_mem)
-                            .return_();
-                    }
-                    Wasip1OpKind::MemoryCopyTo { .. } => {
-                        body.local_get(arg_locals[0])
-                            .local_get(arg_locals[1])
-                            .local_get(arg_locals[2])
-                            .memory_copy(wasm_mem, vfs_mem)
-                            .return_();
-                    }
-                    Wasip1OpKind::MemoryLoadLe { result, .. } => {
-                        if result != walrus::ValType::I32 {
-                            unimplemented!("Unimplemented value type: {result} yet");
+                        Wasip1OpKind::MemoryCopy { .. } => {
+                            body.local_get(arg_locals[0])
+                                .local_get(arg_locals[1])
+                                .local_get(arg_locals[2])
+                                .memory_copy(vfs_mem, wasm_mem)
+                                .return_();
                         }
+                        Wasip1OpKind::MemoryCopyTo { .. } => {
+                            body.local_get(arg_locals[0])
+                                .local_get(arg_locals[1])
+                                .local_get(arg_locals[2])
+                                .memory_copy(wasm_mem, vfs_mem)
+                                .return_();
+                        }
+                        Wasip1OpKind::MemoryLoadLe { result, .. } => {
+                            if result != walrus::ValType::I32 {
+                                todo!("Unimplemented value type: {result} yet");
+                            }
 
-                        body.local_get(arg_locals[0])
-                            .load(
-                                wasm_mem,
-                                ir::LoadKind::I32 { atomic: false },
-                                ir::MemArg {
-                                    offset: 0,
-                                    align: 0,
-                                },
-                            )
-                            .return_();
+                            body.local_get(arg_locals[0])
+                                .load(
+                                    wasm_mem,
+                                    ir::LoadKind::I32 { atomic: false },
+                                    ir::MemArg {
+                                        offset: 0,
+                                        align: 0,
+                                    },
+                                )
+                                .return_();
+                        }
+                        Wasip1OpKind::MainVoid { .. } => {}
                     }
-                }
-            })
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to replace function"))?;
+                })
+                .to_eyre()
+                .wrap_err_with(|| eyre::eyre!("Failed to replace function: {:?}", kind))?;
+        }
 
         Ok(())
     }

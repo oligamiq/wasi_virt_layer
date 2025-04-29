@@ -2,7 +2,7 @@ use const_for::const_for;
 use const_struct::*;
 use wasip1::*;
 
-use crate::memory::MemoryAccess;
+use crate::memory::WasmAccess;
 
 /// @block or @through
 /// Whether to import JavaScript runtime env from vfs,
@@ -151,7 +151,7 @@ pub struct VirtualEnvConstState {
 #[inline]
 pub fn environ_sizes_get_const_inner<
     T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
-    Wasm: MemoryAccess,
+    Wasm: WasmAccess,
 >(
     environ_count: *mut Size,
     environ_buf_size: *mut Size,
@@ -176,7 +176,7 @@ pub fn environ_sizes_get_const_inner<
 #[inline]
 pub fn environ_get_const_inner<
     T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
-    Wasm: MemoryAccess,
+    Wasm: WasmAccess,
 >(
     environ: *mut *const u8,
     environ_buf: *mut u8,
@@ -214,7 +214,7 @@ pub trait VirtualEnv<'a> {
         (size, count)
     }
 
-    fn environ_get<Wasm: MemoryAccess>(
+    fn environ_get<Wasm: WasmAccess>(
         &'a mut self,
         environ: *mut *const u8,
         environ_buf: *mut u8,
@@ -251,7 +251,7 @@ impl<'a, T: std::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<'
     }
 }
 
-pub fn environ_sizes_get_inner<'a, Wasm: MemoryAccess>(
+pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
     state: &'a mut impl VirtualEnv<'a>,
     environ_count: *mut Size,
     environ_buf_size: *mut Size,
@@ -265,7 +265,7 @@ pub fn environ_sizes_get_inner<'a, Wasm: MemoryAccess>(
 }
 
 #[inline]
-pub fn environ_get_inner<'a, Wasm: MemoryAccess>(
+pub fn environ_get_inner<'a, Wasm: WasmAccess>(
     state: &'a mut impl VirtualEnv<'a>,
     environ: *mut *const u8,
     environ_buf: *mut u8,

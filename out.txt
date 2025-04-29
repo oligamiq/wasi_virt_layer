@@ -46,6 +46,12 @@
   sockShutdownImport: [Function (anonymous)],
   sockAcceptImport: [Function (anonymous)]
 }
+[WASI init]
+[WASI main]
+[WASI stdout] Hello, world!
+[WASI stdout] called get_environ
+[WASI stdout] called get_environ
+[WASI stdout] Environ: ["RUST_MIN_STACK=16777216", "HOME=~/"]
 [WASI root.world()]
 [WASI stdout] Hello, world!
 [WASI root.addEnv("RUST_BACKTRACE=1")
@@ -53,8 +59,6 @@
 [WASI root.getEnvs()
 [WASI stdout] called get_environ
 [ "RUST_MIN_STACK=16777216", "HOME=~/", "RUST_BACKTRACE=1" ]
-[WASI _start]
+[WASI main]
 [WASI stdout] Hello, world!
-[WASI stdout] called get_environ
-[WASI stdout] called get_environ
-[WASI stdout] Environ: ["RUST_MIN_STACK=16777216", "HOME=~/", "RUST_BACKTRACE=1"]
+[WASI stdout] Environ: ["RUST_MIN_STACK=16777216", "HOME=~/"]

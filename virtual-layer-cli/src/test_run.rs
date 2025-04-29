@@ -46,17 +46,22 @@ wasi.start({
     exports: {
         ...inst.exports,
         _start: () => {
+            // init only
+            console.log("[WASI init]");
+            inst.exports.__wasip1_vfs_test_wasm_opt__start();
+            console.log("[WASI main]");
+            inst.exports.main();
             console.log("[WASI root.world()]");
             root.world();
             console.log('[WASI root.addEnv("RUST_BACKTRACE=1")');
             root.addEnv("RUST_BACKTRACE=1");
             console.log('[WASI root.getEnvs()');
             console.log(root.getEnvs());
-            console.log("[WASI _start]");
-            inst.exports._start();
+            console.log("[WASI main]");
+            console.log("rust have virtual env layer so envs are no changed");
+            inst.exports.main();
         }
     },
 });
-
 
 "#;

@@ -18,6 +18,8 @@ pub(crate) trait WalrusUtilModule {
         export_name: impl AsRef<str>,
     ) -> eyre::Result<()>;
 
+    fn connect_func_inner(&mut self, fid: FunctionId, export_id: FunctionId) -> eyre::Result<()>;
+
     /// add fake function to the module
     /// and return the function id
     fn add_func(
@@ -44,6 +46,37 @@ impl WalrusUtilImport for ModuleImports {
 }
 
 impl WalrusUtilModule for walrus::Module {
+    fn connect_func_inner(&mut self, fid: FunctionId, export_id: FunctionId) -> eyre::Result<()> {
+        self.replace_imported_func(fid, |(builder, arg_locals)| {
+            let mut func_body = builder.func_body();
+
+            for local in arg_locals {
+                func_body.local_get(*local);
+            }
+            func_body.call(export_id);
+            func_body.return_();
+        })
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
+
+        let export_id = self
+            .exports
+            .iter()
+            .find(|f| {
+                if let walrus::ExportItem::Function(f) = f.item {
+                    f == export_id
+                } else {
+                    false
+                }
+            })
+            .map(|f| f.id())
+            .ok_or_else(|| eyre::eyre!("Export not found"))?;
+
+        self.exports.delete(export_id);
+
+        Ok(())
+    }
+
     fn connect_func(
         &mut self,
         import_module: impl AsRef<str>,
@@ -62,24 +95,7 @@ impl WalrusUtilModule for walrus::Module {
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("export {} not found", export_name.as_ref()))?;
 
-        self.replace_imported_func(fid, |(builder, arg_locals)| {
-            let mut func_body = builder.func_body();
-
-            for local in arg_locals {
-                func_body.local_get(*local);
-            }
-            func_body.call(export_id);
-            func_body.return_();
-        })
-        .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
-
-        self.exports
-            .remove(export_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to remove export"))?;
-
-        Ok(())
+        self.connect_func_inner(fid, export_id)
     }
 
     fn add_func(
@@ -101,9 +117,6 @@ impl WalrusUtilModule for walrus::Module {
     }
 
     /// if vfs, get vfs memory_id
-    /// ```rust
-    /// todo!()
-    /// ```
     fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId> {
         let anchor_name = format!("__wasip1_vfs_flag_{}_memory", name.as_ref());
 
@@ -112,6 +125,11 @@ impl WalrusUtilModule for walrus::Module {
             .get_func(&anchor_name)
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("anchor {} not found", anchor_name))?;
+
+        self.exports
+            .remove(&anchor_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("Failed to remove anchor export"))?;
 
         let anchor_body = &self.funcs.get(anchor_func_id).kind;
         if let FunctionKind::Local(local_func) = anchor_body {

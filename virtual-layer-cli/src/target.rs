@@ -4,7 +4,10 @@ use camino::Utf8PathBuf;
 use eyre::Context as _;
 use walrus::*;
 
-use crate::util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule};
+use crate::{
+    common::WASIP1_FUNC,
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule},
+};
 
 pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)
@@ -14,7 +17,6 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
     // unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     //     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
     // }
-
     let id = module.add_func(&[ValType::I32, ValType::I32], &[], |memories, builder, arg_locals| {
         let mut func_body = builder.func_body();
 
@@ -52,6 +54,34 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
         ),
         id,
     );
+
+    let rewrite_exports = ["_start", "__main_void", "memory"];
+
+    module
+        .exports
+        .iter_mut()
+        .filter(|export| rewrite_exports.contains(&export.name.as_str()))
+        .for_each(|export| {
+            export.name = format!(
+                "__wasip1_vfs_{}_{}",
+                path.get_file_main_name().unwrap(),
+                export.name
+            );
+        });
+
+    module
+        .imports
+        .iter_mut()
+        .filter(|import| {
+            WASIP1_FUNC.contains(&import.name.as_str()) && import.module == "wasi_snapshot_preview1"
+        })
+        .for_each(|import| {
+            import.name = format!(
+                "__wasip1_vfs_{}_{}",
+                path.get_file_main_name().unwrap(),
+                import.name
+            );
+        });
 
     let new_path = path.with_extension("adjusted.wasm");
 

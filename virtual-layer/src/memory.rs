@@ -25,9 +25,12 @@ macro_rules! import_wasm {
                     src: *const u8,
                     len: usize,
                 );
+
+                #[unsafe(no_mangle)]
+                pub fn [<__wasip1_vfs_ $name ___main_void>]();
             }
 
-            impl $crate::memory::MemoryAccess for $name {
+            impl $crate::memory::WasmAccess for $name {
                 #[inline(always)]
                 fn memcpy<T>(offset: *mut T, data: &[T])
                 {
@@ -88,6 +91,16 @@ macro_rules! import_wasm {
                             .assume_init()
                     }
                 }
+
+                #[inline(always)]
+                fn main()
+                {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_arch = "wasm32")]
+                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() };
+                }
             }
         }
     };
@@ -100,9 +113,26 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
 }
 
-pub trait MemoryAccess {
+pub trait WasmAccess {
     fn memcpy<T>(offset: *mut T, data: &[T]);
     fn memcpy_to<T>(offset: &mut [T], src: *const T);
     fn store_le<T>(offset: *mut T, value: T);
     fn load_le<T: core::fmt::Debug>(offset: *const T) -> T;
+
+    /// wrapping wasm's _start function
+    /// By default in Rust code, when _start is called,
+    /// the main function is executed.
+    /// If you wish to call it again,
+    /// you must use the __main_void function.
+    /// When you write code that explicitly calls this function,
+    /// the command-line tool (virtual-layer-cli) detects it,
+    /// and as a result,
+    /// __main_void will no longer be invoked from within _start.
+    /// Instead, it can only be called through the function
+    /// that wraps __main_void.
+    /// This does not apply if it's used as a library.
+    ///
+    /// Using this and export_env,
+    /// it is possible to override arguments, for example, to call
+    fn main();
 }

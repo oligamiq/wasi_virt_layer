@@ -9,6 +9,7 @@ pub mod args;
 pub mod building;
 pub mod common;
 pub mod down_color;
+pub mod instrs;
 pub mod merge;
 pub mod rewrite;
 pub mod target;
@@ -16,6 +17,9 @@ pub mod test_run;
 pub mod util;
 
 fn main() -> eyre::Result<()> {
+    env_logger::Builder::new()
+        .filter_level(log::LevelFilter::Info)
+        .init();
     color_eyre::install()?;
 
     let parsed_args = args::Args::new();

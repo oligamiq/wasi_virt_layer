@@ -1,7 +1,7 @@
 // https://docs.rs/wasmtime-wasi/17.0.3/wasmtime_wasi/struct.WasiCtx.html
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
-use crate::memory::MemoryAccess;
+use crate::memory::WasmAccess;
 
 #[cfg(not(target_feature = "atomics"))]
 pub mod non_atomic {
@@ -478,7 +478,7 @@ pub trait Wasip1FileSystem {
 use wasip1::*;
 
 #[inline]
-pub fn fd_write_inner<Wasm: MemoryAccess>(
+pub fn fd_write_inner<Wasm: WasmAccess>(
     state: &mut impl Wasip1FileSystem,
     fd: Fd,
     iovs_ptr: *const Ciovec,

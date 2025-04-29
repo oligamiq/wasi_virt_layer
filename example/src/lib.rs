@@ -3,6 +3,7 @@ use parking_lot::Mutex;
 use std::sync::LazyLock;
 use wasip1_virtual_layer::{
     ConstFiles, export_fs,
+    memory::WasmAccess,
     prelude::*,
     wasi::file::non_atomic::{
         ConstFileSystemRoot, DefaultStdIO, VirtualFileSystemConstState, WasiConstFile,
@@ -29,6 +30,10 @@ impl Guest for Hello {
 
     fn get_envs() -> Vec<String> {
         VIRTUAL_ENV.lock().get_environ().to_vec()
+    }
+
+    fn main() {
+        test_wasm_opt::main();
     }
 }
 

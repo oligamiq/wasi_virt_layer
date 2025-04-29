@@ -15,6 +15,7 @@
         "Exitcode",
         "Fdflags",
         "funcs",
+        "instrs",
         "iovs",
         "nonoverlapping",
         "NOTSUP",
