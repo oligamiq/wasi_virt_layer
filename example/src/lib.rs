@@ -32,9 +32,12 @@ impl Guest for Hello {
         VIRTUAL_ENV.lock().get_environ().to_vec()
     }
 
+    fn start() {
+        test_wasm_opt::_start();
+    }
+
     fn main() {
         test_wasm_opt::reset();
-        test_wasm_opt::_start();
         test_wasm_opt::main();
     }
 }

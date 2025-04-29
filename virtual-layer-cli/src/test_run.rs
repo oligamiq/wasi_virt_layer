@@ -47,6 +47,8 @@ wasi.start({
         ...inst.exports,
         _start: () => {
             // init only
+            console.log("[WASI init]");
+            inst.exports.start();
             console.log("[WASI main]");
             inst.exports.main();
             console.log("[WASI root.world()]");

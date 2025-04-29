@@ -24,6 +24,7 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
             return Err(eyre::eyre!("No memories found"));
         }
 
+        // todo!(); check wasi func's access
         if memories.len() > 1 {
             return Err(eyre::eyre!("Multiple memories found. This is not supported yet. If you need this, please open an issue."));
         }

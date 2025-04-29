@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use eyre::Context as _;
 
 use crate::{
-    common::{WASIP1_FUNC, Wasip1Op},
+    common::{VFSExternalMemoryManager, WASIP1_FUNC, Wasip1Op, Wasip1OpKind},
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
 
@@ -19,6 +19,8 @@ pub fn adjust_merged_wasm(
     let vfs_memory_id = module
         .get_target_memory_id("vfs")
         .wrap_err_with(|| eyre::eyre!("Failed to get memory id"))?;
+
+    let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
     for wasm in wasm {
         let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
@@ -49,7 +51,7 @@ pub fn adjust_merged_wasm(
             .get_target_memory_id(&wasm_name)
             .wrap_err_with(|| eyre::eyre!("Failed to get memory id"))?;
 
-        module
+        let mut ops = module
             .imports
             .iter()
             .filter(|import| import.module == "wasip1-vfs")
@@ -59,27 +61,44 @@ pub fn adjust_merged_wasm(
                     .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
             })
             .map(|import| {
-                let op = Wasip1Op::parse(&module, import, &wasm_name, memory_id)
+                let op = Wasip1Op::parse(&module, import, &wasm_name, &mut manager, memory_id)
                     .wrap_err_with(|| eyre::eyre!("Failed to parse import"))?;
 
                 Ok(op)
             })
             .collect::<eyre::Result<Vec<_>>>()
-            .wrap_err_with(|| eyre::eyre!("Failed to collect imports"))?
-            .into_iter()
+            .wrap_err_with(|| eyre::eyre!("Failed to collect imports"))?;
+
+        let (reset_op_i, _) = ops
+            .iter()
+            .enumerate()
+            .find(|(_, op)| matches!(op.kind, Wasip1OpKind::Reset { .. }))
+            .unwrap();
+
+        let reset_op = ops.remove(reset_op_i);
+
+        ops.into_iter()
             .map(|op| {
-                op.replace(&mut module, memory_id, vfs_memory_id)
+                op.replace(&mut module, memory_id, vfs_memory_id, Some(&reset_op))
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import"))?;
                 Ok(())
             })
             .collect::<eyre::Result<Vec<_>>>()
             .wrap_err_with(|| eyre::eyre!("Failed to replace imports"))?;
 
+        reset_op
+            .replace(&mut module, memory_id, vfs_memory_id, None)
+            .wrap_err_with(|| eyre::eyre!("Failed to replace import"))?;
+
         // rm memory export
         module
             .exports
             .delete(module.exports.get_exported_memory(memory_id).unwrap().id());
     }
+
+    manager
+        .flush(&mut module)
+        .wrap_err_with(|| eyre::eyre!("Failed to flush memory"))?;
 
     // rename vfs memory to "memory"
     // because this memory is used by wit-bindgen

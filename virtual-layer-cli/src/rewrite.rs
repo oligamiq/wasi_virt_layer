@@ -42,6 +42,7 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
             .ok_or_else(|| eyre::eyre!("{name} import not found"))?;
     }
 
+    // todo!(); separate block system from environ
     let check = block_func(&mut module, "environ_get")?;
     let next_check = block_func(&mut module, "environ_sizes_get")?;
 

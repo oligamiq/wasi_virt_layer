@@ -163,18 +163,21 @@ pub trait WasmAccess {
     fn main();
 
     /// memory reset to memory which instantiate
-    /// to suppose
-    /// - memory copied from data-segment is not mutable
     /// function's roll
     /// - other memory fill zeroed
     /// - reset global variables
+    /// - memory copied from data-segment
     /// if you call this function,
     /// virtual file system's memory isn't changed
     /// _start is not called
+    ///
+    /// to call this function after _start
     fn reset();
 
     /// Calls the initialization function provided.
     /// If you are using the main function of the same TRAIT,
     /// RUST's main function will not be automatically executed during initialization.
+    ///
+    /// if you want to use reset, call this function first otherwise
     fn _start();
 }
