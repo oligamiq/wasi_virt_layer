@@ -13,7 +13,7 @@ macro_rules! import_wasm {
             unsafe extern "C" {
                 /// https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Memory/Copy
                 #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name _memory_copy>](
+                pub fn [<__wasip1_vfs_ $name _memory_copy_from>](
                     offset: *mut u8,
                     src: *const u8,
                     len: usize,
@@ -35,7 +35,7 @@ macro_rules! import_wasm {
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_arch = "wasm32")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_copy>](
+                    unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
                         offset as *mut u8,
                         data.as_ptr() as *const u8,
                         core::mem::size_of::<T>() * data.len(),
@@ -63,7 +63,7 @@ macro_rules! import_wasm {
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_arch = "wasm32")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_copy>](
+                    unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
                         offset as *mut u8,
                         &value as *const T as *const u8,
                         core::mem::size_of::<T>(),
@@ -71,7 +71,7 @@ macro_rules! import_wasm {
                 }
 
                 #[inline(always)]
-                fn load_le<T>(offset: *const T) -> T
+                fn load_le<T: core::fmt::Debug>(offset: *const T) -> T
                 {
                     #[cfg(not(target_arch = "wasm32"))]
                     unimplemented!("this is not supported on this architecture");
@@ -104,5 +104,5 @@ pub trait MemoryAccess {
     fn memcpy<T>(offset: *mut T, data: &[T]);
     fn memcpy_to<T>(offset: &mut [T], src: *const T);
     fn store_le<T>(offset: *mut T, value: T);
-    fn load_le<T>(offset: *const T) -> T;
+    fn load_le<T: core::fmt::Debug>(offset: *const T) -> T;
 }

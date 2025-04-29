@@ -185,10 +185,10 @@ pub fn environ_get_const_inner<
     let mut environ_buf = environ_buf;
 
     const_for!(i in 0..T::__DATA.environ.len() => {
-        Wasm::store_le(environ, environ_buf);
+        Wasm::store_le(environ, environ_buf as *const u8);
 
         Wasm::memcpy(environ_buf, T::__DATA.environ[i].as_bytes());
-        Wasm::store_le(unsafe { environ_buf.add(T::__DATA.environ[i].len()) }, 0);
+        Wasm::store_le(unsafe { environ_buf.add(T::__DATA.environ[i].len()) }, 0u8);
 
         environ = unsafe { environ.add(1) };
         environ_buf = unsafe { environ_buf.add(T::__DATA.environ[i].len() + 1) };
@@ -223,10 +223,13 @@ pub trait VirtualEnv<'a> {
         let mut environ_buf = environ_buf;
 
         for env in self.get_environ() {
-            Wasm::store_le(environ, environ_buf);
+            Wasm::store_le(environ, environ_buf as *const u8);
 
             Wasm::memcpy(environ_buf, env.as_ref().as_bytes());
-            Wasm::store_le(unsafe { environ_buf.add(env.as_ref().len()) }, 0);
+            Wasm::store_le(
+                unsafe { environ_buf.add(env.as_ref().len()) as *mut u8 },
+                0u8,
+            );
 
             environ = unsafe { environ.add(1) };
             environ_buf = unsafe { environ_buf.add(env.as_ref().len() + 1) };

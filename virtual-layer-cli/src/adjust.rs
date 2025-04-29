@@ -68,7 +68,7 @@ pub fn adjust_merged_wasm(
             .wrap_err_with(|| eyre::eyre!("Failed to collect imports"))?
             .into_iter()
             .map(|op| {
-                op.replace(&mut module, vfs_memory_id, memory_id)
+                op.replace(&mut module, memory_id, vfs_memory_id)
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import"))?;
                 Ok(())
             })

@@ -107,15 +107,15 @@ pub mod non_atomic {
         StdIo: StdIO + 'static,
     > Wasip1FileSystem for VirtualFileSystemConstState<File, LEN, ROOTS, StdIo>
     {
-        fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno> {
+        fn fd_write(&mut self, fd: Fd, data: &[u8]) -> (Size, wasip1::Errno) {
             match fd {
-                wasip1::FD_STDOUT => Ok(StdIo::write(&data)?),
-                wasip1::FD_STDERR => Ok(StdIo::ewrite(&data)?),
+                wasip1::FD_STDOUT => StdIo::write(&data),
+                wasip1::FD_STDERR => StdIo::ewrite(&data),
                 _ => {
                     if self.map.contains_key(&fd) {
-                        Err(wasip1::ERRNO_PERM)
+                        (0, wasip1::ERRNO_PERM)
                     } else {
-                        Err(wasip1::ERRNO_BADF)
+                        (0, wasip1::ERRNO_BADF)
                     }
                 }
             }
@@ -427,28 +427,24 @@ pub mod non_atomic {
     impl StdIO for DefaultStdIO {}
 
     pub trait StdIO {
-        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            print!("writing to stdout: ");
-
+        fn write(buf: &[u8]) -> (Size, wasip1::Errno) {
             std::io::stdout()
                 .write_all(buf)
                 .expect("Failed to write to stdout");
 
             std::io::stdout().flush().expect("Failed to flush stdout");
 
-            Ok(buf.len() as Size)
+            (buf.len() as Size, wasip1::ERRNO_SUCCESS)
         }
 
-        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            eprint!("writing to stderr: ");
-
+        fn ewrite(buf: &[u8]) -> (Size, wasip1::Errno) {
             std::io::stderr()
                 .write_all(buf)
                 .expect("Failed to write to stderr");
 
             std::io::stderr().flush().expect("Failed to flush stderr");
 
-            Ok(buf.len() as Size)
+            (buf.len() as Size, wasip1::ERRNO_SUCCESS)
         }
     }
 
@@ -465,7 +461,7 @@ pub mod non_atomic {
 }
 
 pub trait Wasip1FileSystem {
-    fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno>;
+    fn fd_write(&mut self, fd: Fd, data: &[u8]) -> (Size, wasip1::Errno);
 
     fn path_open(
         &mut self,
@@ -509,14 +505,9 @@ pub fn fd_write_inner<Wasm: MemoryAccess>(
         offset += buf_len;
     }
 
-    let ret = state.fd_write(fd, &space);
-    match ret {
-        Ok(len) => {
-            Wasm::store_le(nwritten, len);
-            ERRNO_SUCCESS
-        }
-        Err(err) => err,
-    }
+    let (written, ret) = state.fd_write(fd, &space);
+    Wasm::store_le(nwritten, written);
+    ret
 }
 
 #[macro_export]

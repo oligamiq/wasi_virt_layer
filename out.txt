@@ -54,5 +54,7 @@
 [WASI stdout] called get_environ
 [ "RUST_MIN_STACK=16777216", "HOME=~/", "RUST_BACKTRACE=1" ]
 [WASI _start]
-[WASI stdout] writing to stdout: Hello, world!
+[WASI stdout] Hello, world!
 [WASI stdout] called get_environ
+[WASI stdout] called get_environ
+[WASI stdout] Environ: ["RUST_MIN_STACK=16777216", "HOME=~/", "RUST_BACKTRACE=1"]

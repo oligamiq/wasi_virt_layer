@@ -13,8 +13,6 @@ pub const WASIP1_FUNC: [&str; 7] = [
     "clock_time_get",
 ];
 
-pub const WASIP1_OP: [&str; 2] = ["memory_store_le", "memory_copy"];
-
 pub struct Wasip1Op {
     fid: FunctionId,
     kind: Wasip1OpKind,
@@ -110,7 +108,7 @@ impl Wasip1Op {
                 memory_store_le(ty.params())
                     .wrap_err_with(|| eyre::eyre!("Invalid memory_store_le params"))?
             }
-            _ if name.starts_with("memory_copy") => {
+            _ if name.starts_with("memory_copy_from") => {
                 fn memory_copy(params: &[ValType]) -> eyre::Result<Wasip1OpKind> {
                     check_len!(params, 3);
                     assert_ptr!(params[0]);
