@@ -38,6 +38,7 @@ impl Guest for Hello {
 
     fn main() {
         test_wasm_opt::reset();
+        test_wasm_opt::_start();
         test_wasm_opt::main();
     }
 }

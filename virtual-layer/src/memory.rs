@@ -180,7 +180,8 @@ pub trait WasmAccess {
     /// virtual file system's memory isn't changed
     /// _start is not called
     ///
-    /// to call this function after _start
+    /// to call this function after first _start.
+    /// After this, _start must be called before main is called.
     fn reset();
 
     /// Calls the initialization function provided.
