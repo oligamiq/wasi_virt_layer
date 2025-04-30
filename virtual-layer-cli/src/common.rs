@@ -365,7 +365,6 @@ impl Wasip1Op {
                                 .i32_const(*len as i32)
                                 .memory_copy(wasm_mem, vfs_mem);
                         }
-                        println!("mem_init: {mem_init:?}");
                     } else {
                         unreachable!();
                     }

@@ -69,17 +69,16 @@ pub fn adjust_merged_wasm(
             .collect::<eyre::Result<Vec<_>>>()
             .wrap_err_with(|| eyre::eyre!("Failed to collect imports"))?;
 
-        let (reset_op_i, _) = ops
+        let reset_op = ops
             .iter()
             .enumerate()
             .find(|(_, op)| matches!(op.kind, Wasip1OpKind::Reset { .. }))
-            .unwrap();
-
-        let reset_op = ops.remove(reset_op_i);
+            .map(|(reset_op_i, _)| reset_op_i)
+            .map(|reset_op_i| ops.remove(reset_op_i));
 
         ops.into_iter()
             .map(|op| {
-                op.replace(&mut module, memory_id, vfs_memory_id, Some(&reset_op))
+                op.replace(&mut module, memory_id, vfs_memory_id, reset_op.as_ref())
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import"))?;
                 Ok(())
             })
@@ -87,8 +86,12 @@ pub fn adjust_merged_wasm(
             .wrap_err_with(|| eyre::eyre!("Failed to replace imports"))?;
 
         reset_op
-            .replace(&mut module, memory_id, vfs_memory_id, None)
-            .wrap_err_with(|| eyre::eyre!("Failed to replace import"))?;
+            .map(|op| {
+                op.replace(&mut module, memory_id, vfs_memory_id, None)
+                    .wrap_err_with(|| eyre::eyre!("Failed to replace import"))
+            })
+            .transpose()
+            .wrap_err_with(|| eyre::eyre!("Failed to replace imports"))?;
 
         // rm memory export
         module
