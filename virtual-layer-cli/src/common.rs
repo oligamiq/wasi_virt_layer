@@ -356,6 +356,11 @@ impl Wasip1Op {
             .replace_imported_func(fid, |(builder, arg_locals)| {
                 let mut func_body = builder.func_body();
 
+                for local in arg_locals {
+                    func_body.local_get(*local);
+                }
+                func_body.call(start_func_id);
+
                 if let Some(reset) = is_reset_contain {
                     if let Wasip1OpKind::Reset { mem_init, .. } = &reset.kind {
                         for (offset, len, ptr) in mem_init {
@@ -370,10 +375,6 @@ impl Wasip1Op {
                     }
                 }
 
-                for local in arg_locals {
-                    func_body.local_get(*local);
-                }
-                func_body.call(start_func_id);
                 func_body.return_();
             })
             .to_eyre()
