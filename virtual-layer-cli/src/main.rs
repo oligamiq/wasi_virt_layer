@@ -107,13 +107,23 @@ fn main() -> eyre::Result<()> {
         .transpile_to_js(&binary, &building_crate.name)
         .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))?;
 
+    let mut core_wasm = None;
     for (name, data) in transpiled.files.iter() {
         let file_name = format!("{}/{name}", parsed_args.out_dir);
         if std::fs::metadata(&file_name).is_ok() {
             std::fs::remove_file(&file_name).expect("Failed to remove existing file");
         }
-        std::fs::write(file_name, &data).expect("Failed to write file");
+        std::fs::write(&file_name, &data).expect("Failed to write file");
+        if name.ends_with(".core.wasm") {
+            core_wasm = Some(file_name);
+        }
     }
+
+    let core_wasm_opt = building::optimize_wasm(&core_wasm.as_ref().unwrap().into())
+        .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm"))?;
+
+    std::fs::remove_file(&core_wasm.as_ref().unwrap()).expect("Failed to remove existing file");
+    std::fs::rename(&core_wasm_opt, &core_wasm.as_ref().unwrap()).expect("Failed to rename file");
 
     std::fs::remove_file(&output).expect("Failed to remove tmp file");
     std::fs::remove_file(&ret).expect("Failed to remove tmp file");

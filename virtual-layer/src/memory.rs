@@ -36,6 +36,15 @@ macro_rules! import_wasm {
                 pub fn [<__wasip1_vfs_ $name _reset>]();
             }
 
+            #[unsafe(no_mangle)]
+            unsafe extern "C" fn [<__wasip1_vfs_ $name __start_wrap>]() {
+                #[cfg(not(target_arch = "wasm32"))]
+                unimplemented!("this is not supported on this architecture");
+
+                #[cfg(target_arch = "wasm32")]
+                unsafe { [<__wasip1_vfs_ $name __start>]() };
+            }
+
             impl $crate::memory::WasmAccess for $name {
                 #[inline(always)]
                 fn memcpy<T>(offset: *mut T, data: &[T])
