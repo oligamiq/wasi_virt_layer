@@ -1,7 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use eyre::Context as _;
-use walrus::*;
+use walrus::{ir::InstrSeqId, *};
+
+use crate::instrs::InstrRead;
 
 pub(crate) trait WalrusUtilImport {
     fn find_mut(&mut self, module: impl AsRef<str>, name: impl AsRef<str>) -> Option<&mut Import>;
@@ -26,12 +28,20 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         params: &[ValType],
         results: &[ValType],
-        fn_: impl FnOnce(&ModuleMemories, &mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
+        fn_: impl FnOnce(&mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
     ) -> eyre::Result<FunctionId>;
 
     /// get the memory id from target name
     /// and remove anchor
     fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId>;
+
+    fn create_memory_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
+
+    fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
+
+    /// Return all functions that call functions in this fid
+    fn get_using_func(&self, fid: FunctionId)
+    -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>>;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -102,7 +112,7 @@ impl WalrusUtilModule for walrus::Module {
         &mut self,
         params: &[ValType],
         results: &[ValType],
-        fn_: impl FnOnce(&ModuleMemories, &mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
+        fn_: impl FnOnce(&mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
     ) -> eyre::Result<FunctionId> {
         let mut builder = FunctionBuilder::new(&mut self.types, params, results);
 
@@ -111,7 +121,7 @@ impl WalrusUtilModule for walrus::Module {
             .map(|ty| self.locals.add(*ty))
             .collect::<Vec<_>>();
 
-        fn_(&self.memories, &mut builder, &args)?;
+        fn_(&mut builder, &args)?;
 
         Ok(builder.finish(vec![], &mut self.funcs))
     }
@@ -160,6 +170,187 @@ impl WalrusUtilModule for walrus::Module {
             ))
         }
     }
+
+    fn create_memory_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()> {
+        let name = name.as_ref();
+
+        let memories = self
+            .memories
+            .iter()
+            .map(|memory| memory.id())
+            .collect::<Vec<_>>();
+
+        if memories.is_empty() {
+            return Err(eyre::eyre!("No memories found"));
+        }
+
+        // todo!(); check wasi func's access
+        // After calling environ_sizes_get,
+        // identify the memory using the memory referenced
+        // by the code trying to read the pointer
+        let memory_id = if memories.len() > 0 {
+            // environ_sizes_get
+            let import_id = self
+                .imports
+                .get_func("wasi_snapshot_preview1", "environ_sizes_get")
+                .to_eyre()
+                .wrap_err_with(|| eyre::eyre!("Failed to get environ_sizes_get"))?;
+
+            let using_funcs = self.get_using_func(import_id)?;
+
+            println!("Using functions: {using_funcs:?}");
+
+            for (fid, _, _) in using_funcs {
+                let arg_ptr = std::sync::Arc::new(std::sync::Mutex::new(None));
+                let mut interpreter = walrus_simple_interpreter::Interpreter::new(self)
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to create interpreter"))?;
+                interpreter.set_interrupt_handler_mem(|_, instr, _, (id, address, _, ty)| {
+                    println!("Interrupt handler called");
+                    println!("Instr: {instr:?}");
+
+                    Ok(())
+                });
+
+                let memories = memories.clone();
+
+                interpreter.add_function("environ_sizes_get", move |interpreter, args| {
+                    let args = args
+                        .iter()
+                        .map(|arg| {
+                            if let ir::Value::I32(arg) = arg {
+                                Ok(*arg as u32)
+                            } else {
+                                Err(anyhow::anyhow!("Invalid argument type"))
+                            }
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    interpreter.mem_set_i32(memories[0], args[0], 0)?;
+                    interpreter.mem_set_i32(memories[0], args[1], 0)?;
+
+                    arg_ptr.lock().unwrap().replace((args));
+
+                    Ok(vec![ir::Value::I32(0)])
+                });
+
+                let _start_id = self
+                    .exports
+                    .get_func("_start")
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to get _start"))?;
+
+                let args = self
+                    .types
+                    .get(self.funcs.get(fid).ty())
+                    .params()
+                    .iter()
+                    .map(|ty| ty.normal())
+                    .collect::<eyre::Result<Vec<_>>>()
+                    .wrap_err_with(|| eyre::eyre!("Failed to get function args"))?;
+                interpreter
+                    .call(fid, self, &args)
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to call function"))?;
+            }
+
+            return Err(eyre::eyre!(
+                "Multiple memories found. This is not supported yet. If you need this, please open an issue."
+            ));
+        } else {
+            memories[0]
+        };
+
+        // unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
+        //     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
+        // }
+        let id = self.add_func(&[ValType::I32, ValType::I32], &[], |builder, arg_locals| {
+            let mut func_body = builder.func_body();
+
+            func_body
+                .local_get(arg_locals[0])
+                .local_get(arg_locals[1])
+                .load(
+                    memory_id,
+                    ir::LoadKind::I32_8 {
+                        kind: ir::ExtendedLoad::ZeroExtend,
+                    },
+                    ir::MemArg {
+                        offset: 0,
+                        align: 0,
+                    },
+                )
+                .store(
+                    memory_id,
+                    ir::StoreKind::I32_8 { atomic: false },
+                    ir::MemArg {
+                        offset: 0,
+                        align: 0,
+                    },
+                );
+
+            func_body.return_();
+
+            Ok(())
+        })?;
+
+        self.exports
+            .add(&format!("__wasip1_vfs_flag_{name}_memory"), id);
+
+        Ok(())
+    }
+
+    fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()> {
+        let global_ids = self
+            .globals
+            .iter()
+            .map(|global| (global.id(), global.ty))
+            .collect::<Vec<_>>();
+        let id = self.add_func(&[], &[], |builder, _| {
+            let mut func_body = builder.func_body();
+
+            for (id, ty) in global_ids.iter() {
+                func_body
+                    .const_(
+                        ty.normal()
+                            .wrap_err_with(|| eyre::eyre!("Failed to get global type"))?,
+                    )
+                    .global_set(*id);
+            }
+
+            func_body.return_();
+
+            Ok(())
+        })?;
+
+        self.exports
+            .add(&format!("__wasip1_vfs_flag_{}_global", name.as_ref()), id);
+
+        Ok(())
+    }
+
+    fn get_using_func(
+        &self,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>> {
+        Ok(self
+            .funcs
+            .iter_local()
+            .flat_map(|(id, func)| {
+                func.read(|instr, place| {
+                    if let walrus::ir::Instr::Call(walrus::ir::Call { func }) = instr {
+                        if fid == *func {
+                            return Some((id, place));
+                        }
+                    }
+                    None
+                })
+                .unwrap()
+                .into_iter()
+                .filter_map(|v| v)
+                .map(|(a, (b, c))| (a, c, b))
+            })
+            .collect::<Vec<_>>())
+    }
 }
 
 pub trait CaminoUtilModule {
@@ -207,6 +398,23 @@ impl<T> ResultUtil<T> for anyhow::Result<T> {
                 e
             ))
         })
+    }
+}
+
+pub trait Normal<T> {
+    fn normal(self) -> eyre::Result<T>;
+}
+
+impl Normal<walrus::ir::Value> for walrus::ValType {
+    fn normal(self) -> eyre::Result<walrus::ir::Value> {
+        match self {
+            walrus::ValType::I32 => Ok(walrus::ir::Value::I32(0)),
+            walrus::ValType::I64 => Ok(walrus::ir::Value::I64(0)),
+            walrus::ValType::F32 => Ok(walrus::ir::Value::F32(0.0)),
+            walrus::ValType::F64 => Ok(walrus::ir::Value::F64(0.0)),
+            walrus::ValType::V128 => Err(eyre::eyre!("V128 not supported")),
+            ValType::Ref(_) => Err(eyre::eyre!("Ref not supported")),
+        }
     }
 }
 

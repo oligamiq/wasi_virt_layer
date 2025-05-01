@@ -74,6 +74,8 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
         }
     }
 
+    module.create_global_anchor("vfs")?;
+
     let new_path = path.with_extension("adjusted.wasm");
 
     if fs::metadata(&new_path).is_ok() {
