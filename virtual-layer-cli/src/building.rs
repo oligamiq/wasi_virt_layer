@@ -309,7 +309,11 @@ pub fn optimize_wasm(
         let after_size = std::fs::metadata(&output_path)?.len();
 
         if before_size <= after_size {
-            if !first {
+            if first {
+                std::fs::remove_file(&output_path)?;
+                std::fs::copy(&before_path, &output_path)?;
+                before_path = output_path.clone();
+            } else {
                 // remove
                 std::fs::remove_file(&output_path)?;
             }

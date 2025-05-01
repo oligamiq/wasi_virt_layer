@@ -22,6 +22,8 @@ fn main() -> eyre::Result<()> {
         .init();
     color_eyre::install()?;
 
+    let mut tmp_files = Vec::new();
+
     let parsed_args = args::Args::new();
 
     let manifest_path = parsed_args.get_manifest_path();
@@ -67,11 +69,14 @@ fn main() -> eyre::Result<()> {
             let wasm = format!("{}/{}", parsed_args.out_dir, old_wasm.file_name().unwrap());
             std::fs::copy(old_wasm, &wasm).expect("Failed to copy file");
             println!("Optimizing target Wasm [{name}]...");
+            tmp_files.push(wasm.to_string());
             let wasm = building::optimize_wasm(&wasm.into(), &[])
                 .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
+            tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
             let wasm = target::adjust_target_wasm(&wasm)
                 .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
+            tmp_files.push(wasm.to_string());
             Ok(wasm)
         })
         .collect::<eyre::Result<Vec<_>>>()?;
@@ -83,22 +88,27 @@ fn main() -> eyre::Result<()> {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
     merge::merge(&ret, &wasm, &output).wrap_err_with(|| eyre::eyre!("Failed to merge Wasm"))?;
+    tmp_files.push(output.clone());
 
     println!("Optimizing Merged Wasm...");
     let ret = building::optimize_wasm(&output.clone().into(), &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
+    tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
     let ret = adjust::adjust_merged_wasm(&ret, &wasm)
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
+    tmp_files.push(ret.to_string());
 
     println!("Optimizing Merged Wasm...");
     let ret = building::optimize_wasm(&ret, &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
+    tmp_files.push(ret.to_string());
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret)
         .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
+    tmp_files.push(component.to_string());
 
     println!("Translating Component to JS...");
     let binary =
@@ -139,9 +149,9 @@ fn main() -> eyre::Result<()> {
     )
     .expect("Failed to rename file");
 
-    // std::fs::remove_file(&output).expect("Failed to remove tmp file");
-    // std::fs::remove_file(&ret).expect("Failed to remove tmp file");
-    // std::fs::remove_file(&component).expect("Failed to remove tmp file");
+    for tmp_file in tmp_files {
+        std::fs::remove_file(tmp_file).expect("Failed to remove tmp file");
+    }
 
     std::fs::OpenOptions::new()
         .write(true)
