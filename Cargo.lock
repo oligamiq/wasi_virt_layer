@@ -1950,9 +1950,9 @@ dependencies = [
 
 [[package]]
 name = "walrus-simple-interpreter"
-version = "0.2.0"
+version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0756aef5e1f9c62a789a7c82c8d0fe18dc5b689d9d7fcc0766f04b5453124699"
+checksum = "fbfcb60e5e146d871fcd7e8eb6b01dd24f3f4ba460433064606b07b3cedc9780"
 dependencies = [
  "anyhow",
  "log",

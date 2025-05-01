@@ -184,7 +184,6 @@ impl WalrusUtilModule for walrus::Module {
             return Err(eyre::eyre!("No memories found"));
         }
 
-        // todo!(); check wasi func's access
         // After calling environ_sizes_get,
         // identify the memory using the memory referenced
         // by the code trying to read the pointer
@@ -198,16 +197,34 @@ impl WalrusUtilModule for walrus::Module {
 
             let using_funcs = self.get_using_func(import_id)?;
 
-            println!("Using functions: {using_funcs:?}");
+            let ret_mem_id = std::sync::Arc::new(std::sync::Mutex::new(None));
 
             for (fid, _, _) in using_funcs {
-                let arg_ptr = std::sync::Arc::new(std::sync::Mutex::new(None));
+                let arg_ptr = std::sync::Arc::new(std::sync::Mutex::new(Option::<Vec<u32>>::None));
+                let arg_ptr_c = arg_ptr.clone();
+
+                let ret_mem_id_c = ret_mem_id.clone();
+
                 let mut interpreter = walrus_simple_interpreter::Interpreter::new(self)
                     .to_eyre()
                     .wrap_err_with(|| eyre::eyre!("Failed to create interpreter"))?;
-                interpreter.set_interrupt_handler_mem(|_, instr, _, (id, address, _, ty)| {
-                    println!("Interrupt handler called");
-                    println!("Instr: {instr:?}");
+                interpreter.set_interrupt_handler_mem(move |_, _, _, (id, address, _, ty)| {
+
+                    if matches!(ty, walrus_simple_interpreter::MemoryAccessType::Load) {
+                        if let Some(v) = arg_ptr_c.lock().unwrap().as_ref() {
+                            if v.contains(&address) {
+                                if let Some(mem_id) = ret_mem_id_c.clone().lock().unwrap().as_ref() {
+                                    if *mem_id != id {
+                                        return Err(anyhow::anyhow!(
+                                            "Memory access double memory, cannot determine memory id"
+                                        ));
+                                    }
+                                } else {
+                                    ret_mem_id_c.clone().lock().unwrap().replace(id);
+                                }
+                            }
+                        }
+                    }
 
                     Ok(())
                 });
@@ -228,16 +245,10 @@ impl WalrusUtilModule for walrus::Module {
                     interpreter.mem_set_i32(memories[0], args[0], 0)?;
                     interpreter.mem_set_i32(memories[0], args[1], 0)?;
 
-                    arg_ptr.lock().unwrap().replace((args));
+                    arg_ptr.lock().unwrap().replace(args);
 
                     Ok(vec![ir::Value::I32(0)])
                 });
-
-                let _start_id = self
-                    .exports
-                    .get_func("_start")
-                    .to_eyre()
-                    .wrap_err_with(|| eyre::eyre!("Failed to get _start"))?;
 
                 let args = self
                     .types
@@ -247,15 +258,18 @@ impl WalrusUtilModule for walrus::Module {
                     .map(|ty| ty.normal())
                     .collect::<eyre::Result<Vec<_>>>()
                     .wrap_err_with(|| eyre::eyre!("Failed to get function args"))?;
-                interpreter
-                    .call(fid, self, &args)
-                    .to_eyre()
-                    .wrap_err_with(|| eyre::eyre!("Failed to call function"))?;
+                if let Err(e) = interpreter.call(fid, self, &args).to_eyre() {
+                    if ret_mem_id.lock().unwrap().is_none() {
+                        eprintln!("Error: {e}");
+                    }
+                }
             }
 
-            return Err(eyre::eyre!(
-                "Multiple memories found. This is not supported yet. If you need this, please open an issue."
-            ));
+            if let Some(mem_id) = ret_mem_id.lock().unwrap().as_ref() {
+                *mem_id
+            } else {
+                return Err(eyre::eyre!("Memory not found"));
+            }
         } else {
             memories[0]
         };
