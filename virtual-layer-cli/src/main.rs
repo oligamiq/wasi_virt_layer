@@ -40,15 +40,15 @@ fn main() -> eyre::Result<()> {
         .wrap_err_with(|| eyre::eyre!("Failed to build VFS"))?;
 
     println!("Optimizing VfS Wasm...");
-    let ret =
-        building::optimize_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
+    let ret = building::optimize_wasm(&ret, &[])
+        .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Adjusting VFS Wasm...");
     let ret = adjust_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
 
     println!("Optimizing VFS Wasm...");
-    let ret =
-        building::optimize_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
+    let ret = building::optimize_wasm(&ret, &[])
+        .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Generated VFS: {ret}");
 
@@ -67,7 +67,7 @@ fn main() -> eyre::Result<()> {
             let wasm = format!("{}/{}", parsed_args.out_dir, old_wasm.file_name().unwrap());
             std::fs::copy(old_wasm, &wasm).expect("Failed to copy file");
             println!("Optimizing target Wasm [{name}]...");
-            let wasm = building::optimize_wasm(&wasm.into())
+            let wasm = building::optimize_wasm(&wasm.into(), &[])
                 .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
             println!("Adjusting target Wasm [{name}]...");
             let wasm = target::adjust_target_wasm(&wasm)
@@ -85,7 +85,7 @@ fn main() -> eyre::Result<()> {
     merge::merge(&ret, &wasm, &output).wrap_err_with(|| eyre::eyre!("Failed to merge Wasm"))?;
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&output.clone().into())
+    let ret = building::optimize_wasm(&output.clone().into(), &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
 
     println!("Adjusting Merged Wasm...");
@@ -93,7 +93,7 @@ fn main() -> eyre::Result<()> {
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&ret)
+    let ret = building::optimize_wasm(&ret, &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
 
     println!("Translating Wasm to Component...");
@@ -119,15 +119,29 @@ fn main() -> eyre::Result<()> {
         }
     }
 
-    let core_wasm_opt = building::optimize_wasm(&core_wasm.as_ref().unwrap().into())
+    let core_wasm = core_wasm
+        .as_ref()
+        .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
+
+    let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm"))?;
 
-    std::fs::remove_file(&core_wasm.as_ref().unwrap()).expect("Failed to remove existing file");
-    std::fs::rename(&core_wasm_opt, &core_wasm.as_ref().unwrap()).expect("Failed to rename file");
+    std::fs::remove_file(&core_wasm).expect("Failed to remove existing file");
+    std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
-    std::fs::remove_file(&output).expect("Failed to remove tmp file");
-    std::fs::remove_file(&ret).expect("Failed to remove tmp file");
-    std::fs::remove_file(&component).expect("Failed to remove tmp file");
+    println!("Generating single memory Wasm...");
+    let core_single_wasm_opt =
+        building::optimize_wasm(&core_wasm.into(), &["--multi-memory-lowering"])?;
+
+    std::fs::rename(
+        &core_single_wasm_opt,
+        camino::Utf8PathBuf::from(core_wasm.clone()).with_extension("single_memory.wasm"),
+    )
+    .expect("Failed to rename file");
+
+    // std::fs::remove_file(&output).expect("Failed to remove tmp file");
+    // std::fs::remove_file(&ret).expect("Failed to remove tmp file");
+    // std::fs::remove_file(&component).expect("Failed to remove tmp file");
 
     std::fs::OpenOptions::new()
         .write(true)

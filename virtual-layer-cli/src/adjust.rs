@@ -20,6 +20,11 @@ pub fn adjust_merged_wasm(
         .get_target_memory_id("vfs")
         .wrap_err_with(|| eyre::eyre!("Failed to get memory id"))?;
 
+    #[allow(unused)]
+    let vfs_globals = module
+        .get_global_anchor("vfs")
+        .wrap_err_with(|| eyre::eyre!("Failed to get global anchor"))?;
+
     let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
     for wasm in wasm {
@@ -51,6 +56,10 @@ pub fn adjust_merged_wasm(
             .get_target_memory_id(&wasm_name)
             .wrap_err_with(|| eyre::eyre!("Failed to get memory id"))?;
 
+        let globals = module
+            .get_global_anchor(&wasm_name)
+            .wrap_err_with(|| eyre::eyre!("Failed to get global anchor"))?;
+
         let mut ops = module
             .imports
             .iter()
@@ -61,8 +70,15 @@ pub fn adjust_merged_wasm(
                     .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
             })
             .map(|import| {
-                let op = Wasip1Op::parse(&module, import, &wasm_name, &mut manager, memory_id)
-                    .wrap_err_with(|| eyre::eyre!("Failed to parse import"))?;
+                let op = Wasip1Op::parse(
+                    &module,
+                    import,
+                    &wasm_name,
+                    &mut manager,
+                    memory_id,
+                    globals.clone(),
+                )
+                .wrap_err_with(|| eyre::eyre!("Failed to parse import"))?;
 
                 Ok(op)
             })

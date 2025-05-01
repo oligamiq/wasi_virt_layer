@@ -278,8 +278,13 @@ pub fn get_building_crate(metadata: &cargo_metadata::Metadata) -> cargo_metadata
     building_crate
 }
 
-pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino::Utf8PathBuf> {
+pub fn optimize_wasm(
+    wasm_path: &camino::Utf8PathBuf,
+    add_args: &[&str],
+) -> eyre::Result<camino::Utf8PathBuf> {
     let mut before_path = wasm_path.clone();
+
+    let mut first = true;
 
     loop {
         let output_path = before_path.with_extension("opt.wasm");
@@ -288,6 +293,7 @@ pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino::Ut
         }
 
         let command = std::process::Command::new("wasm-opt")
+            .args(add_args)
             .args(["-Oz", wasm_path.as_str()])
             .args(["--output", output_path.as_str()])
             .stdout(std::process::Stdio::piped())
@@ -303,11 +309,15 @@ pub fn optimize_wasm(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino::Ut
         let after_size = std::fs::metadata(&output_path)?.len();
 
         if before_size <= after_size {
-            // remove
-            std::fs::remove_file(&output_path)?;
+            if !first {
+                // remove
+                std::fs::remove_file(&output_path)?;
+            }
 
             break;
         }
+
+        first = false;
 
         before_path = output_path.clone();
     }

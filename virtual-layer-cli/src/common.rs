@@ -130,6 +130,7 @@ impl Wasip1Op {
         wasm_name: impl AsRef<str>,
         mem_manager: &mut VFSExternalMemoryManager,
         wasm_mem: walrus::MemoryId,
+        wasm_global: Vec<walrus::GlobalId>,
     ) -> eyre::Result<Self> {
         let name = import.name.as_str();
         let wasm_name = wasm_name.as_ref();
@@ -241,6 +242,7 @@ impl Wasip1Op {
                 let global = module
                     .globals
                     .iter()
+                    .filter(|g| wasm_global.contains(&g.id()))
                     .filter(|global| global.mutable)
                     .filter_map(|global| {
                         if let GlobalKind::Local(ConstExpr::Value(v)) = global.kind {
@@ -485,7 +487,6 @@ impl Wasip1Op {
                             zero_range,
                             mem_init,
                         } => {
-                            // todo!(); create anchor
                             for global in global.iter() {
                                 let (id, value) = global;
                                 body.const_(*value).global_set(*id);

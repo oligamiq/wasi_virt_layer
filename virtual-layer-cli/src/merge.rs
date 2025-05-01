@@ -35,6 +35,8 @@ pub fn merge(
 
     let mut merge_cmd = std::process::Command::new("wasm-merge");
 
+    merge_cmd.arg(vfs).arg("wasi_snapshot_preview1");
+
     for wasm in wasm {
         merge_cmd.arg(wasm.as_ref()).arg(format!(
             "wasip1_vfs_{}",
@@ -43,8 +45,6 @@ pub fn merge(
     }
 
     merge_cmd
-        .arg(vfs)
-        .arg("wasi_snapshot_preview1")
         .arg("--output")
         .arg(output.as_ref())
         .arg("--rename-export-conflicts")

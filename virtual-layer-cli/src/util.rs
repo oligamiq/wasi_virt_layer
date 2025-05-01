@@ -37,6 +37,8 @@ pub(crate) trait WalrusUtilModule {
 
     fn create_memory_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
 
+    fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>>;
+
     fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
 
     /// Return all functions that call functions in this fid
@@ -311,6 +313,42 @@ impl WalrusUtilModule for walrus::Module {
             .add(&format!("__wasip1_vfs_flag_{name}_memory"), id);
 
         Ok(())
+    }
+
+    fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>> {
+        let anchor_name = format!("__wasip1_vfs_flag_{}_global", name.as_ref());
+
+        let anchor_func_id = self
+            .exports
+            .get_func(&anchor_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("anchor {} not found", anchor_name))?;
+
+        self.exports
+            .remove(&anchor_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("Failed to remove anchor export"))?;
+
+        let anchor_body = &self.funcs.get(anchor_func_id).kind;
+        if let FunctionKind::Local(local_func) = anchor_body {
+            let entry_id = local_func.entry_block();
+            let func_body = local_func.block(entry_id);
+            let global_ids = func_body
+                .iter()
+                .map(|(block, _)| block)
+                .filter_map(|block| match block {
+                    ir::Instr::GlobalSet(ir::GlobalSet { global, .. }) => Some(*global),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            Ok(global_ids)
+        } else {
+            Err(eyre::eyre!(
+                "anchor (local function) {} not found",
+                anchor_name
+            ))
+        }
     }
 
     fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()> {
