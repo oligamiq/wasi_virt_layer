@@ -1,8 +1,8 @@
 [workspace]
 resolver = "2"
-members = ["virtual-layer-cli", "virtual-layer"]
+members = ["virtual-layer-cli", "virtual-layer", "examples/example"]
 default-members = ["virtual-layer-cli"]
-exclude = ["example", "test_wasm"]
+exclude = ["test_wasm"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]
@@ -16,3 +16,6 @@ repository = ""
 documentation = ""
 homepage = ""
 readme = "README.md"
+
+[workspace.dependencies]
+wasip1-virtual-layer = { path = "virtual-layer" }

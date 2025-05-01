@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 wit-bindgen = "0.41.0"
-wasip1-virtual-layer = { path = "../virtual-layer/" }
+wasip1-virtual-layer.workspace = true
 const_struct = "0.5.3"
 parking_lot = "0.12.3"
 
