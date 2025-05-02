@@ -48,9 +48,6 @@ impl Args {
         if parsed.wasm.is_empty() {
             todo!();
         }
-        if parsed.package.is_some() {
-            todo!();
-        }
 
         parsed
     }
@@ -82,7 +79,7 @@ impl Args {
                         None
                     }
                 },
-                no_nodejs_compat: self.transpile_opts.no_nodejs_compat.unwrap(),
+                no_nodejs_compat: self.transpile_opts.no_nodejs_compat,
                 base64_cutoff: self.transpile_opts.base64_cutoff,
                 tla_compat: self.transpile_opts.tla_compat,
                 valid_lifting_optimization: self.transpile_opts.valid_lifting_optimization,
@@ -118,8 +115,8 @@ pub struct TranspileOpts {
     map: Option<HashMap<String, String>>,
 
     /// Disables compatibility in Node.js without a fetch global.
-    #[arg(long, default_value = "true")]
-    no_nodejs_compat: Option<bool>,
+    #[arg(long, default_value = "false")]
+    no_nodejs_compat: bool,
 
     /// Set the cutoff byte size for base64 inlining core Wasm in instantiation mode (set to 0 to disable all base64 inlining)
     #[arg(long, default_value = "0")]

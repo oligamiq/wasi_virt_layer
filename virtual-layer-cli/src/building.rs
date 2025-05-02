@@ -42,6 +42,7 @@ impl<const T: usize, R: BufRead> Iterator for CustomReadIterator<T, R> {
 
 pub fn build_vfs(
     manifest_path: Option<String>,
+    package: &Option<String>,
     building_crate: cargo_metadata::Package,
 ) -> Option<camino::Utf8PathBuf> {
     let mut ret = None;
@@ -57,6 +58,10 @@ pub fn build_vfs(
                 "--color",
                 "always",
             ];
+            if let Some(package_name) = package {
+                args.push("--package");
+                args.push(package_name);
+            }
             if let Some(ref manifest_path) = manifest_path {
                 args.push("--manifest-path");
                 args.push(&manifest_path);
@@ -243,32 +248,44 @@ pub fn build_vfs(
     ret
 }
 
-pub fn get_building_crate(metadata: &cargo_metadata::Metadata) -> cargo_metadata::Package {
+pub fn get_building_crate(
+    metadata: &cargo_metadata::Metadata,
+    package: &Option<String>,
+) -> cargo_metadata::Package {
     let building_crate = {
         let packages = metadata.packages.clone();
-        let workspace = metadata.workspace_members.clone();
-        let workspace_default_packages = metadata.workspace_default_packages();
 
-        if workspace_default_packages.is_empty() {
+        if let Some(package_name) = package {
             packages
                 .iter()
-                .filter(|package| {
-                    workspace
-                        .iter()
-                        .any(|workspace_package| package.id == *workspace_package)
-                })
+                .filter(|package| package.name == *package_name)
                 .cloned()
                 .collect::<Vec<_>>()
         } else {
-            packages
-                .iter()
-                .filter(|package| {
-                    workspace_default_packages
-                        .iter()
-                        .any(|workspace_package| package.id == workspace_package.id)
-                })
-                .cloned()
-                .collect::<Vec<_>>()
+            let workspace = metadata.workspace_members.clone();
+            let workspace_default_packages = metadata.workspace_default_packages();
+
+            if workspace_default_packages.is_empty() {
+                packages
+                    .iter()
+                    .filter(|package| {
+                        workspace
+                            .iter()
+                            .any(|workspace_package| package.id == *workspace_package)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            } else {
+                packages
+                    .iter()
+                    .filter(|package| {
+                        workspace_default_packages
+                            .iter()
+                            .any(|workspace_package| package.id == workspace_package.id)
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>()
+            }
         }
     }
     .into_iter()

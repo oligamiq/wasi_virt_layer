@@ -34,12 +34,16 @@ fn main() -> eyre::Result<()> {
         }
         metadata_command.exec().unwrap()
     };
-    let building_crate = building::get_building_crate(&cargo_metadata);
+    let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package);
 
     println!("Compiling {}", building_crate.name);
 
-    let ret = building::build_vfs(manifest_path.clone(), building_crate.clone())
-        .wrap_err_with(|| eyre::eyre!("Failed to build VFS"))?;
+    let ret = building::build_vfs(
+        manifest_path.clone(),
+        &parsed_args.package,
+        building_crate.clone(),
+    )
+    .wrap_err_with(|| eyre::eyre!("Failed to build VFS"))?;
 
     println!("Optimizing VfS Wasm...");
     let ret = building::optimize_wasm(&ret, &[])
