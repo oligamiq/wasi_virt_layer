@@ -1,8 +1,12 @@
 [workspace]
 resolver = "2"
-members = ["virtual-layer-cli", "virtual-layer", "examples/example"]
+members = [
+    "virtual-layer-cli",
+    "virtual-layer",
+    "examples/vfs/example",
+    "examples/test_wasm/example",
+]
 default-members = ["virtual-layer-cli"]
-exclude = ["test_wasm"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]

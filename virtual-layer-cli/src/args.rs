@@ -43,8 +43,13 @@ pub struct Args {
 }
 
 impl Args {
-    pub fn new() -> Self {
-        let parsed = Args::parse();
+    pub fn new(args: impl IntoIterator<Item = impl Into<String>>) -> Self {
+        let args = args
+            .into_iter()
+            .map(Into::<String>::into)
+            .map(Into::<std::ffi::OsString>::into)
+            .collect::<Vec<_>>();
+        let parsed = Args::parse_from(args);
         if parsed.wasm.is_empty() {
             todo!();
         }

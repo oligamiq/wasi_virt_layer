@@ -1,7 +1,6 @@
 {
     "rust-analyzer.linkedProjects": [
         "${workspaceFolder}/Cargo.toml",
-        "${workspaceFolder}/test_wasm/Cargo.toml",
     ],
     "rust-analyzer.cargo.target": "wasm32-wasip1",
     "cSpell.words": [
