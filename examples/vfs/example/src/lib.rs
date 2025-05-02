@@ -17,25 +17,23 @@ wit_bindgen::generate!({
 
 struct Hello;
 
+import_wasm!(test_wasm_opt);
+
 impl Guest for Hello {
     fn world() {
         println!("Hello, world!");
     }
-
     fn add_env(env: String) {
         let mut state = VIRTUAL_ENV.lock();
         state.environ.push(env.clone());
         println!("Adding env: {}", env);
     }
-
     fn get_envs() -> Vec<String> {
         VIRTUAL_ENV.lock().get_environ().to_vec()
     }
-
     fn start() {
         test_wasm_opt::_start();
     }
-
     fn main() {
         test_wasm_opt::reset();
         test_wasm_opt::_start();
@@ -44,8 +42,6 @@ impl Guest for Hello {
 }
 
 export!(Hello);
-
-import_wasm!(test_wasm_opt);
 
 struct VirtualEnvState {
     environ: Vec<String>,

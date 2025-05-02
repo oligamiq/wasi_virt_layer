@@ -40,7 +40,7 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
             WASIP1_FUNC.contains(&import.name.as_str()) && import.module == "wasi_snapshot_preview1"
         })
         .for_each(|import| {
-            import.name = format!("__wasip1_vfs_{}_{}", &name, import.name);
+            import.name = format!("__wasip1_vfs_{name}_{}", import.name);
         });
 
     let new_path = path.with_extension("adjusted.wasm");

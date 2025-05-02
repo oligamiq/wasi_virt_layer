@@ -30,6 +30,7 @@ pub mod non_atomic {
     }
 
     pub struct VirtualFileSystemConstStateAddInfo {
+        #[allow(dead_code)]
         cursor: usize,
     }
 
