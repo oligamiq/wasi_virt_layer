@@ -16,6 +16,7 @@ fn build_normal() -> color_eyre::Result<()> {
         .assert()
         .success();
 
+    // deno install npm:@bjorn3/browser_wasi_shim
     // deno run --allow-read dist/test_run.ts
     std::process::Command::new("deno")
         .args([

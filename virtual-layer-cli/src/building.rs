@@ -258,7 +258,7 @@ pub fn get_building_crate(
         if let Some(package_name) = package {
             packages
                 .iter()
-                .filter(|package| package.name == *package_name)
+                .filter(|package| *package.name == *package_name)
                 .cloned()
                 .collect::<Vec<_>>()
         } else {

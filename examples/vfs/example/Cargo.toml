@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-wit-bindgen = "0.41.0"
+wit-bindgen = "0.43.0"
 wasip1-virtual-layer.workspace = true
 const_struct = "0.5.3"
 parking_lot = "0.12.3"

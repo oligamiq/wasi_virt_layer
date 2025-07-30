@@ -7,20 +7,20 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 anyhow = "1.0.98"
-camino = "1.1.9"
-cargo_metadata = "0.19.2"
-clap = { version = "4.5.36", features = ["derive"] }
-color-eyre = { version = "0.6.3", default-features = false }
+camino = "1.1.10"
+cargo_metadata = "0.21.0"
+clap = { version = "4.5.41", features = ["derive"] }
+color-eyre = { version = "0.6.5", default-features = false }
 console = "0.15.11"
 env_logger = "0.11.8"
 eyre = { version = "0.6.12", default-features = false }
-js-component-bindgen = "1.10.0"
+js-component-bindgen = "1.11.0"
 log = "0.4.27"
 regex = "1.11.1"
-serde_json = "1.0.140"
+serde_json = "1.0.141"
 walrus = "0.23.3"
-wasmtime-environ = { version = "31.0.0", features = ["component-model"] }
-wit-component = "0.229.0"
+wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
+wit-component = "0.236.0"
 walrus-simple-interpreter = "0.2.0"
 
 [dev-dependencies]

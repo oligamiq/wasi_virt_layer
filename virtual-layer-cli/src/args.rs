@@ -51,7 +51,7 @@ impl Args {
             .collect::<Vec<_>>();
         let parsed = Args::parse_from(args);
         if parsed.wasm.is_empty() {
-            todo!();
+            unimplemented!("target to only self file is not supported yet");
         }
 
         parsed
@@ -96,7 +96,7 @@ impl Args {
             },
         )
         .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))
+        .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS "))
     }
 }
 
@@ -139,7 +139,7 @@ pub struct TranspileOpts {
     #[arg(long, default_value = "false")]
     no_tracing: bool,
 
-    /// Whether to generate namespaced exports like foo as "local:package/foo". These exports can break typescript builds.
+    /// Whether to generate namespaced exports like foo as "local:package/foo ". These exports can break typescript builds.
     #[arg(long, default_value = "false")]
     no_namespaced_exports: bool,
 
