@@ -6,15 +6,25 @@ use crate::{
     util::{ResultUtil as _, WalrusUtilModule},
 };
 
-pub const WASIP1_FUNC: [&str; 7] = [
-    "fd_write",
-    "environ_sizes_get",
-    "environ_get",
-    "proc_exit",
-    "random_get",
-    "sched_yield",
-    "clock_time_get",
-];
+#[derive(
+    strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum Wasip1SnapshotPreview1Func {
+    FdWrite,
+    EnvironSizesGet,
+    EnvironGet,
+    ProcExit,
+    RandomGet,
+    SchedYield,
+    ClockTimeGet,
+    FdReaddir,
+    PathFilestatGet,
+    PathOpen,
+    FdClose,
+    FdPrestatGet,
+    FdPrestatDirName,
+}
 
 pub struct Wasip1Op {
     fid: FunctionId,

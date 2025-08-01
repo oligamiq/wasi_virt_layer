@@ -6,17 +6,29 @@ package wasip1-vfs:host;
 
 world virtual-file-system {
   resource wasip1 {
-    fd-write-import: static func(fd: s32, iovs: s32, iovs-len: s32, written: s32) -> s32;
-    environ-sizes-get-import: static func(environ-count: s32, environ-size: s32) -> s32;
-    environ-get-import: static func(environ: s32, environ-buf: s32) -> s32;
+    fd-write-import: static func(fd: s32, iovs-ptr: s32, iovs-len: s32, written-ptr: s32) -> s32;
+    environ-sizes-get-import: static func(environ-count-ptr: s32, environ-size-ptr: s32) -> s32;
+    environ-get-import: static func(environ-ptr-ptr: s32, environ-buf-ptr: s32) -> s32;
     proc-exit-import: static func(code: s32);
-    random-get-import: static func(buf: s32, buf-len: s32) -> s32;
+    random-get-import: static func(buf-ptr: s32, buf-len: s32) -> s32;
     sched-yield-import: static func() -> s32;
-    clock-time-get-import: static func(id: s32, precision: s64, time: s32) -> s32;
+    clock-time-get-import: static func(id: s32, precision: s64, time-ptr: s32) -> s32;
+    // https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_readdirfd-fd-buf-pointeru8-buf_len-size-cookie-dircookie---resultsize-errno
+    fd-readdir-import: static func(fd: s32, buf-ptr: s32, buf-len: s32, cookie: s64, buf-used-ptr: s32) -> s32;
+    path-filestat-get-import: static func(fd: s32, lookupflags: s32, path-ptr: s32, path-len: s32, filestat-ptr: s32) -> s32;
+    path-open-import: static func(
+      fd: s32,
+      dirflags: s32,
+      path-ptr: s32,
+      path-len: s32,
+      oflags: s32,
+      fs-rights-base: s64,
+      fs-rights-inheriting: s64,
+      fdflags: s32,
+      fd-out-ptr: s32
+    ) -> s32;
+    fd-close-import: static func(fd: s32) -> s32;
+    fd-prestat-get-import: static func(fd: s32, prestat-ptr: s32) -> s32;
+    fd-prestat-dir-name-import: static func(fd: s32, path-ptr: s32, path-len: s32) -> s32;
   }
-
-  // export fd-write-export: func(fd: s32, iovs: s32, iovs-len: s32, written: s32) -> s32;
-  // export environ-sizes-get-export: func(environ-count: s32, environ-size: s32) -> s32;
-  // export environ-get-export: func(environ: s32, environ-buf: s32) -> s32;
-  // export proc-exit-export: func(code: s32);
 }

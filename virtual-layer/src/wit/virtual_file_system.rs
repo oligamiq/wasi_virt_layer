@@ -3,418 +3,524 @@
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct Wasip1 {
-    handle: _rt::Resource<Wasip1>,
+pub struct Wasip1{
+  handle: _rt::Resource<Wasip1>,
+}
+
+impl Wasip1{
+  #[doc(hidden)]
+  pub unsafe fn from_handle(handle: u32) -> Self {
+    Self {
+      handle: unsafe { _rt::Resource::from_handle(handle) },
+    }
+  }
+
+  #[doc(hidden)]
+  pub fn take_handle(&self) -> u32 {
+    _rt::Resource::take_handle(&self.handle)
+  }
+
+  #[doc(hidden)]
+  pub fn handle(&self) -> u32 {
+    _rt::Resource::handle(&self.handle)
+  }
+}
+
+
+unsafe impl _rt::WasmResource for Wasip1{
+  #[inline]
+  unsafe fn drop(_handle: u32) {
+    #[cfg(not(target_arch = "wasm32"))]
+    unreachable!();
+
+    #[cfg(target_arch = "wasm32")]
+    {
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[resource-drop]wasip1"]
+        fn drop(_: u32);
+      }
+
+      unsafe { drop(_handle) };
+    }
+  }
 }
 
 impl Wasip1 {
-    #[doc(hidden)]
-    pub unsafe fn from_handle(handle: u32) -> Self {
-        Self {
-            handle: unsafe { _rt::Resource::from_handle(handle) },
-        }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn fd_write_import(fd: i32,iovs_ptr: i32,iovs_len: i32,written_ptr: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.fd-write-import"]
+        fn wit_import0(_: i32, _: i32, _: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, _: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd), _rt::as_i32(&iovs_ptr), _rt::as_i32(&iovs_len), _rt::as_i32(&written_ptr)) };
+      ret
     }
-
-    #[doc(hidden)]
-    pub fn take_handle(&self) -> u32 {
-        _rt::Resource::take_handle(&self.handle)
-    }
-
-    #[doc(hidden)]
-    pub fn handle(&self) -> u32 {
-        _rt::Resource::handle(&self.handle)
-    }
-}
-
-unsafe impl _rt::WasmResource for Wasip1 {
-    #[inline]
-    unsafe fn drop(_handle: u32) {
-        #[cfg(not(target_arch = "wasm32"))]
-        unreachable!();
-
-        #[cfg(target_arch = "wasm32")]
-        {
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[resource-drop]wasip1"]
-                fn drop(_: u32);
-            }
-
-            unsafe { drop(_handle) };
-        }
-    }
-}
-
-impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn fd_write_import(fd: i32, iovs: i32, iovs_len: i32, written: i32) -> i32 {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.fd-write-import"]
-                fn wit_import0(_: i32, _: i32, _: i32, _: i32) -> i32;
-            }
-
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0(_: i32, _: i32, _: i32, _: i32) -> i32 {
-                unreachable!()
-            }
-            let ret = unsafe {
-                wit_import0(
-                    _rt::as_i32(&fd),
-                    _rt::as_i32(&iovs),
-                    _rt::as_i32(&iovs_len),
-                    _rt::as_i32(&written),
-                )
-            };
-            ret
-        }
-    }
+  }
 }
 impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn environ_sizes_get_import(environ_count: i32, environ_size: i32) -> i32 {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.environ-sizes-get-import"]
-                fn wit_import0(_: i32, _: i32) -> i32;
-            }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn environ_sizes_get_import(environ_count_ptr: i32,environ_size_ptr: i32,) -> i32{
+    unsafe {
 
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0(_: i32, _: i32) -> i32 {
-                unreachable!()
-            }
-            let ret =
-                unsafe { wit_import0(_rt::as_i32(&environ_count), _rt::as_i32(&environ_size)) };
-            ret
-        }
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.environ-sizes-get-import"]
+        fn wit_import0(_: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&environ_count_ptr), _rt::as_i32(&environ_size_ptr)) };
+      ret
     }
+  }
 }
 impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn environ_get_import(environ: i32, environ_buf: i32) -> i32 {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.environ-get-import"]
-                fn wit_import0(_: i32, _: i32) -> i32;
-            }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn environ_get_import(environ_ptr_ptr: i32,environ_buf_ptr: i32,) -> i32{
+    unsafe {
 
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0(_: i32, _: i32) -> i32 {
-                unreachable!()
-            }
-            let ret = unsafe { wit_import0(_rt::as_i32(&environ), _rt::as_i32(&environ_buf)) };
-            ret
-        }
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.environ-get-import"]
+        fn wit_import0(_: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&environ_ptr_ptr), _rt::as_i32(&environ_buf_ptr)) };
+      ret
     }
+  }
 }
 impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn proc_exit_import(code: i32) -> () {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.proc-exit-import"]
-                fn wit_import0(_: i32);
-            }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn proc_exit_import(code: i32,) -> (){
+    unsafe {
 
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0(_: i32) {
-                unreachable!()
-            }
-            unsafe { wit_import0(_rt::as_i32(&code)) };
-        }
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.proc-exit-import"]
+        fn wit_import0(_: i32, );
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, ){ unreachable!() }
+      unsafe { wit_import0(_rt::as_i32(&code)) };
     }
+  }
 }
 impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn random_get_import(buf: i32, buf_len: i32) -> i32 {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.random-get-import"]
-                fn wit_import0(_: i32, _: i32) -> i32;
-            }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn random_get_import(buf_ptr: i32,buf_len: i32,) -> i32{
+    unsafe {
 
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0(_: i32, _: i32) -> i32 {
-                unreachable!()
-            }
-            let ret = unsafe { wit_import0(_rt::as_i32(&buf), _rt::as_i32(&buf_len)) };
-            ret
-        }
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.random-get-import"]
+        fn wit_import0(_: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&buf_ptr), _rt::as_i32(&buf_len)) };
+      ret
     }
+  }
 }
 impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn sched_yield_import() -> i32 {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.sched-yield-import"]
-                fn wit_import0() -> i32;
-            }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn sched_yield_import() -> i32{
+    unsafe {
 
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0() -> i32 {
-                unreachable!()
-            }
-            let ret = unsafe { wit_import0() };
-            ret
-        }
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.sched-yield-import"]
+        fn wit_import0() -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0() -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0() };
+      ret
     }
+  }
 }
 impl Wasip1 {
-    #[allow(unused_unsafe, clippy::all)]
-    pub fn clock_time_get_import(id: i32, precision: i64, time: i32) -> i32 {
-        unsafe {
-            #[cfg(target_arch = "wasm32")]
-            #[link(wasm_import_module = "$root")]
-            unsafe extern "C" {
-                #[link_name = "[static]wasip1.clock-time-get-import"]
-                fn wit_import0(_: i32, _: i64, _: i32) -> i32;
-            }
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn clock_time_get_import(id: i32,precision: i64,time_ptr: i32,) -> i32{
+    unsafe {
 
-            #[cfg(not(target_arch = "wasm32"))]
-            unsafe extern "C" fn wit_import0(_: i32, _: i64, _: i32) -> i32 {
-                unreachable!()
-            }
-            let ret = unsafe {
-                wit_import0(
-                    _rt::as_i32(&id),
-                    _rt::as_i64(&precision),
-                    _rt::as_i32(&time),
-                )
-            };
-            ret
-        }
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.clock-time-get-import"]
+        fn wit_import0(_: i32, _: i64, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i64, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&id), _rt::as_i64(&precision), _rt::as_i32(&time_ptr)) };
+      ret
     }
+  }
+}
+impl Wasip1 {
+  #[allow(unused_unsafe, clippy::all)]
+  /// https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md#-fd_readdirfd-fd-buf-pointeru8-buf_len-size-cookie-dircookie---resultsize-errno
+  pub fn fd_readdir_import(fd: i32,buf_ptr: i32,buf_len: i32,cookie: i64,buf_used_ptr: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.fd-readdir-import"]
+        fn wit_import0(_: i32, _: i32, _: i32, _: i64, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, _: i32, _: i64, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd), _rt::as_i32(&buf_ptr), _rt::as_i32(&buf_len), _rt::as_i64(&cookie), _rt::as_i32(&buf_used_ptr)) };
+      ret
+    }
+  }
+}
+impl Wasip1 {
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn path_filestat_get_import(fd: i32,lookupflags: i32,path_ptr: i32,path_len: i32,filestat_ptr: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.path-filestat-get-import"]
+        fn wit_import0(_: i32, _: i32, _: i32, _: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, _: i32, _: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd), _rt::as_i32(&lookupflags), _rt::as_i32(&path_ptr), _rt::as_i32(&path_len), _rt::as_i32(&filestat_ptr)) };
+      ret
+    }
+  }
+}
+impl Wasip1 {
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn path_open_import(fd: i32,dirflags: i32,path_ptr: i32,path_len: i32,oflags: i32,fs_rights_base: i64,fs_rights_inheriting: i64,fdflags: i32,fd_out_ptr: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.path-open-import"]
+        fn wit_import0(_: i32, _: i32, _: i32, _: i32, _: i32, _: i64, _: i64, _: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, _: i32, _: i32, _: i32, _: i64, _: i64, _: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd), _rt::as_i32(&dirflags), _rt::as_i32(&path_ptr), _rt::as_i32(&path_len), _rt::as_i32(&oflags), _rt::as_i64(&fs_rights_base), _rt::as_i64(&fs_rights_inheriting), _rt::as_i32(&fdflags), _rt::as_i32(&fd_out_ptr)) };
+      ret
+    }
+  }
+}
+impl Wasip1 {
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn fd_close_import(fd: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.fd-close-import"]
+        fn wit_import0(_: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd)) };
+      ret
+    }
+  }
+}
+impl Wasip1 {
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn fd_prestat_get_import(fd: i32,prestat_ptr: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.fd-prestat-get-import"]
+        fn wit_import0(_: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd), _rt::as_i32(&prestat_ptr)) };
+      ret
+    }
+  }
+}
+impl Wasip1 {
+  #[allow(unused_unsafe, clippy::all)]
+  pub fn fd_prestat_dir_name_import(fd: i32,path_ptr: i32,path_len: i32,) -> i32{
+    unsafe {
+
+      #[cfg(target_arch = "wasm32")]
+      #[link(wasm_import_module = "$root")]
+      unsafe extern "C" {
+        #[link_name = "[static]wasip1.fd-prestat-dir-name-import"]
+        fn wit_import0(_: i32, _: i32, _: i32, ) -> i32;
+      }
+
+      #[cfg(not(target_arch = "wasm32"))]
+      unsafe extern "C" fn wit_import0(_: i32, _: i32, _: i32, ) -> i32{ unreachable!() }
+      let ret = unsafe { wit_import0(_rt::as_i32(&fd), _rt::as_i32(&path_ptr), _rt::as_i32(&path_len)) };
+      ret
+    }
+  }
 }
 mod _rt {
-    #![allow(dead_code, clippy::all)]
+  #![allow(dead_code, clippy::all)]
 
-    use core::fmt;
-    use core::marker;
-    use core::sync::atomic::{AtomicU32, Ordering::Relaxed};
 
-    /// A type which represents a component model resource, either imported or
-    /// exported into this component.
+  use core::fmt;
+  use core::marker;
+  use core::sync::atomic::{AtomicU32, Ordering::Relaxed};
+
+  /// A type which represents a component model resource, either imported or
+  /// exported into this component.
+  ///
+  /// This is a low-level wrapper which handles the lifetime of the resource
+  /// (namely this has a destructor). The `T` provided defines the component model
+  /// intrinsics that this wrapper uses.
+  ///
+  /// One of the chief purposes of this type is to provide `Deref` implementations
+  /// to access the underlying data when it is owned.
+  ///
+  /// This type is primarily used in generated code for exported and imported
+  /// resources.
+  #[repr(transparent)]
+  pub struct Resource<T: WasmResource> {
+    // NB: This would ideally be `u32` but it is not. The fact that this has
+    // interior mutability is not exposed in the API of this type except for the
+    // `take_handle` method which is supposed to in theory be private.
+    //
+    // This represents, almost all the time, a valid handle value. When it's
+    // invalid it's stored as `u32::MAX`.
+    handle: AtomicU32,
+    _marker: marker::PhantomData<T>,
+  }
+
+  /// A trait which all wasm resources implement, namely providing the ability to
+  /// drop a resource.
+  ///
+  /// This generally is implemented by generated code, not user-facing code.
+  #[allow(clippy::missing_safety_doc)]
+  pub unsafe trait WasmResource {
+    /// Invokes the `[resource-drop]...` intrinsic.
+    unsafe fn drop(handle: u32);
+  }
+
+  impl<T: WasmResource> Resource<T> {
+    #[doc(hidden)]
+    pub unsafe fn from_handle(handle: u32) -> Self {
+      debug_assert!(handle != u32::MAX);
+      Self {
+        handle: AtomicU32::new(handle),
+        _marker: marker::PhantomData,
+      }
+    }
+
+    /// Takes ownership of the handle owned by `resource`.
     ///
-    /// This is a low-level wrapper which handles the lifetime of the resource
-    /// (namely this has a destructor). The `T` provided defines the component model
-    /// intrinsics that this wrapper uses.
+    /// Note that this ideally would be `into_handle` taking `Resource<T>` by
+    /// ownership. The code generator does not enable that in all situations,
+    /// unfortunately, so this is provided instead.
     ///
-    /// One of the chief purposes of this type is to provide `Deref` implementations
-    /// to access the underlying data when it is owned.
-    ///
-    /// This type is primarily used in generated code for exported and imported
-    /// resources.
-    #[repr(transparent)]
-    pub struct Resource<T: WasmResource> {
-        // NB: This would ideally be `u32` but it is not. The fact that this has
-        // interior mutability is not exposed in the API of this type except for the
-        // `take_handle` method which is supposed to in theory be private.
-        //
-        // This represents, almost all the time, a valid handle value. When it's
-        // invalid it's stored as `u32::MAX`.
-        handle: AtomicU32,
-        _marker: marker::PhantomData<T>,
+    /// Also note that `take_handle` is in theory only ever called on values
+    /// owned by a generated function. For example a generated function might
+    /// take `Resource<T>` as an argument but then call `take_handle` on a
+    /// reference to that argument. In that sense the dynamic nature of
+    /// `take_handle` should only be exposed internally to generated code, not
+    /// to user code.
+    #[doc(hidden)]
+    pub fn take_handle(resource: &Resource<T>) -> u32 {
+      resource.handle.swap(u32::MAX, Relaxed)
     }
 
-    /// A trait which all wasm resources implement, namely providing the ability to
-    /// drop a resource.
-    ///
-    /// This generally is implemented by generated code, not user-facing code.
-    #[allow(clippy::missing_safety_doc)]
-    pub unsafe trait WasmResource {
-        /// Invokes the `[resource-drop]...` intrinsic.
-        unsafe fn drop(handle: u32);
+    #[doc(hidden)]
+    pub fn handle(resource: &Resource<T>) -> u32 {
+      resource.handle.load(Relaxed)
     }
+  }
 
-    impl<T: WasmResource> Resource<T> {
-        #[doc(hidden)]
-        pub unsafe fn from_handle(handle: u32) -> Self {
-            debug_assert!(handle != u32::MAX);
-            Self {
-                handle: AtomicU32::new(handle),
-                _marker: marker::PhantomData,
-            }
+  impl<T: WasmResource> fmt::Debug for Resource<T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+      f.debug_struct("Resource")
+      .field("handle", &self.handle)
+      .finish()
+    }
+  }
+
+  impl<T: WasmResource> Drop for Resource<T> {
+    fn drop(&mut self) {
+      unsafe {
+        match self.handle.load(Relaxed) {
+          // If this handle was "taken" then don't do anything in the
+          // destructor.
+          u32::MAX => {}
+
+          // ... but otherwise do actually destroy it with the imported
+          // component model intrinsic as defined through `T`.
+          other => T::drop(other),
         }
-
-        /// Takes ownership of the handle owned by `resource`.
-        ///
-        /// Note that this ideally would be `into_handle` taking `Resource<T>` by
-        /// ownership. The code generator does not enable that in all situations,
-        /// unfortunately, so this is provided instead.
-        ///
-        /// Also note that `take_handle` is in theory only ever called on values
-        /// owned by a generated function. For example a generated function might
-        /// take `Resource<T>` as an argument but then call `take_handle` on a
-        /// reference to that argument. In that sense the dynamic nature of
-        /// `take_handle` should only be exposed internally to generated code, not
-        /// to user code.
-        #[doc(hidden)]
-        pub fn take_handle(resource: &Resource<T>) -> u32 {
-            resource.handle.swap(u32::MAX, Relaxed)
-        }
-
-        #[doc(hidden)]
-        pub fn handle(resource: &Resource<T>) -> u32 {
-            resource.handle.load(Relaxed)
-        }
+      }
     }
+  }
+  
+  pub fn as_i32<T: AsI32>(t: T) -> i32 {
+    t.as_i32()
+  }
 
-    impl<T: WasmResource> fmt::Debug for Resource<T> {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.debug_struct("Resource")
-                .field("handle", &self.handle)
-                .finish()
-        }
+  pub trait AsI32 {
+    fn as_i32(self) -> i32;
+  }
+
+  impl<'a, T: Copy + AsI32> AsI32 for &'a T {
+    fn as_i32(self) -> i32 {
+      (*self).as_i32()
     }
-
-    impl<T: WasmResource> Drop for Resource<T> {
-        fn drop(&mut self) {
-            unsafe {
-                match self.handle.load(Relaxed) {
-                    // If this handle was "taken" then don't do anything in the
-                    // destructor.
-                    u32::MAX => {}
-
-                    // ... but otherwise do actually destroy it with the imported
-                    // component model intrinsic as defined through `T`.
-                    other => T::drop(other),
-                }
-            }
-        }
+  }
+  
+  impl AsI32 for i32 {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    pub fn as_i32<T: AsI32>(t: T) -> i32 {
-        t.as_i32()
+  }
+  
+  impl AsI32 for u32 {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    pub trait AsI32 {
-        fn as_i32(self) -> i32;
+  }
+  
+  impl AsI32 for i16 {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    impl<'a, T: Copy + AsI32> AsI32 for &'a T {
-        fn as_i32(self) -> i32 {
-            (*self).as_i32()
-        }
+  }
+  
+  impl AsI32 for u16 {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    impl AsI32 for i32 {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  }
+  
+  impl AsI32 for i8 {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    impl AsI32 for u32 {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  }
+  
+  impl AsI32 for u8 {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    impl AsI32 for i16 {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  }
+  
+  impl AsI32 for char {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
-
-    impl AsI32 for u16 {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  }
+  
+  impl AsI32 for usize {
+    #[inline]
+    fn as_i32(self) -> i32 {
+      self as i32
     }
+  }
+  
+  pub fn as_i64<T: AsI64>(t: T) -> i64 {
+    t.as_i64()
+  }
 
-    impl AsI32 for i8 {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
-    }
+  pub trait AsI64 {
+    fn as_i64(self) -> i64;
+  }
 
-    impl AsI32 for u8 {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  impl<'a, T: Copy + AsI64> AsI64 for &'a T {
+    fn as_i64(self) -> i64 {
+      (*self).as_i64()
     }
-
-    impl AsI32 for char {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  }
+  
+  impl AsI64 for i64 {
+    #[inline]
+    fn as_i64(self) -> i64 {
+      self as i64
     }
-
-    impl AsI32 for usize {
-        #[inline]
-        fn as_i32(self) -> i32 {
-            self as i32
-        }
+  }
+  
+  impl AsI64 for u64 {
+    #[inline]
+    fn as_i64(self) -> i64 {
+      self as i64
     }
-
-    pub fn as_i64<T: AsI64>(t: T) -> i64 {
-        t.as_i64()
-    }
-
-    pub trait AsI64 {
-        fn as_i64(self) -> i64;
-    }
-
-    impl<'a, T: Copy + AsI64> AsI64 for &'a T {
-        fn as_i64(self) -> i64 {
-            (*self).as_i64()
-        }
-    }
-
-    impl AsI64 for i64 {
-        #[inline]
-        fn as_i64(self) -> i64 {
-            self as i64
-        }
-    }
-
-    impl AsI64 for u64 {
-        #[inline]
-        fn as_i64(self) -> i64 {
-            self as i64
-        }
-    }
+  }
 }
 
 #[cfg(target_arch = "wasm32")]
 #[unsafe(link_section = "component-type:wit-bindgen:0.41.0:wasip1-vfs:host:virtual-file-system:encoded world")]
 #[doc(hidden)]
 #[allow(clippy::octal_escapes)]
-pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 620] = *b"\
-\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\xe2\x03\x01A\x02\x01\
-A\x0f\x03\0\x06wasip1\x03\x01\x01@\x04\x02fdz\x04iovsz\x08iovs-lenz\x07writtenz\0\
-z\x03\0\x1e[static]wasip1.fd-write-import\x01\x01\x01@\x02\x0denviron-countz\x0c\
-environ-sizez\0z\x03\0'[static]wasip1.environ-sizes-get-import\x01\x02\x01@\x02\x07\
-environz\x0benviron-bufz\0z\x03\0![static]wasip1.environ-get-import\x01\x03\x01@\
-\x01\x04codez\x01\0\x03\0\x1f[static]wasip1.proc-exit-import\x01\x04\x01@\x02\x03\
-bufz\x07buf-lenz\0z\x03\0\x20[static]wasip1.random-get-import\x01\x05\x01@\0\0z\x03\
-\0![static]wasip1.sched-yield-import\x01\x06\x01@\x03\x02idz\x09precisionx\x04ti\
-mez\0z\x03\0$[static]wasip1.clock-time-get-import\x01\x07\x04\0#wasip1-vfs:host/\
-virtual-file-system\x04\0\x0b\x19\x01\0\x13virtual-file-system\x03\0\0\0G\x09pro\
-ducers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bindgen-rust\x06\
-0.41.0";
+pub static __WIT_BINDGEN_COMPONENT_TYPE: [u8; 1166] = *b"\
+\0asm\x0d\0\x01\0\0\x19\x16wit-component-encoding\x04\0\x07\x84\x08\x01A\x02\x01\
+A\x1b\x03\0\x06wasip1\x03\x01\x01@\x04\x02fdz\x08iovs-ptrz\x08iovs-lenz\x0bwritt\
+en-ptrz\0z\x03\0\x1e[static]wasip1.fd-write-import\x01\x01\x01@\x02\x11environ-c\
+ount-ptrz\x10environ-size-ptrz\0z\x03\0'[static]wasip1.environ-sizes-get-import\x01\
+\x02\x01@\x02\x0fenviron-ptr-ptrz\x0fenviron-buf-ptrz\0z\x03\0![static]wasip1.en\
+viron-get-import\x01\x03\x01@\x01\x04codez\x01\0\x03\0\x1f[static]wasip1.proc-ex\
+it-import\x01\x04\x01@\x02\x07buf-ptrz\x07buf-lenz\0z\x03\0\x20[static]wasip1.ra\
+ndom-get-import\x01\x05\x01@\0\0z\x03\0![static]wasip1.sched-yield-import\x01\x06\
+\x01@\x03\x02idz\x09precisionx\x08time-ptrz\0z\x03\0$[static]wasip1.clock-time-g\
+et-import\x01\x07\x01@\x05\x02fdz\x07buf-ptrz\x07buf-lenz\x06cookiex\x0cbuf-used\
+-ptrz\0z\x03\0\x20[static]wasip1.fd-readdir-import\x01\x08\x01@\x05\x02fdz\x0blo\
+okupflagsz\x08path-ptrz\x08path-lenz\x0cfilestat-ptrz\0z\x03\0'[static]wasip1.pa\
+th-filestat-get-import\x01\x09\x01@\x09\x02fdz\x08dirflagsz\x08path-ptrz\x08path\
+-lenz\x06oflagsz\x0efs-rights-basex\x14fs-rights-inheritingx\x07fdflagsz\x0afd-o\
+ut-ptrz\0z\x03\0\x1f[static]wasip1.path-open-import\x01\x0a\x01@\x01\x02fdz\0z\x03\
+\0\x1e[static]wasip1.fd-close-import\x01\x0b\x01@\x02\x02fdz\x0bprestat-ptrz\0z\x03\
+\0$[static]wasip1.fd-prestat-get-import\x01\x0c\x01@\x03\x02fdz\x08path-ptrz\x08\
+path-lenz\0z\x03\0)[static]wasip1.fd-prestat-dir-name-import\x01\x0d\x04\0#wasip\
+1-vfs:host/virtual-file-system\x04\0\x0b\x19\x01\0\x13virtual-file-system\x03\0\0\
+\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-bind\
+gen-rust\x060.41.0";
 
 #[inline(never)]
 #[doc(hidden)]
 pub fn __link_custom_section_describing_imports() {
-    wit_bindgen::rt::maybe_link_cabi_realloc();
+  wit_bindgen::rt::maybe_link_cabi_realloc();
 }
+

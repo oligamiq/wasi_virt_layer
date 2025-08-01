@@ -2,9 +2,10 @@ use std::fs;
 
 use camino::Utf8PathBuf;
 use eyre::Context as _;
+use strum::VariantNames;
 
 use crate::{
-    common::WASIP1_FUNC,
+    common::Wasip1SnapshotPreview1Func,
     util::{ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
 };
 
@@ -16,7 +17,7 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
 
-    for name in WASIP1_FUNC.iter() {
+    for name in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS.iter() {
         let component_name = format!("[static]wasip1.{}-import", name.replace("_", "-"));
 
         module
@@ -38,8 +39,7 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
             .map(|import| {
                 import.module = "$root".to_string();
                 import.name = component_name;
-            })
-            .ok_or_else(|| eyre::eyre!("{name} import not found"))?;
+            });
     }
 
     // todo!(); separate block system from environ

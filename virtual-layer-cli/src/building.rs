@@ -6,7 +6,7 @@ use std::{
 
 use eyre::Context as _;
 
-use crate::{down_color, util::ResultUtil as _};
+use crate::{down_color, is_valid, util::ResultUtil as _};
 
 struct CustomReadIterator<const T: usize, R: BufRead> {
     r: R,
@@ -346,7 +346,10 @@ pub fn optimize_wasm(
     Ok(before_path)
 }
 
-pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino::Utf8PathBuf> {
+pub fn wasm_to_component(
+    wasm_path: &camino::Utf8PathBuf,
+    wasm_names: &[impl AsRef<str>],
+) -> eyre::Result<camino::Utf8PathBuf> {
     let output_path = wasm_path.with_extension("component.wasm");
     if output_path.exists() {
         std::fs::remove_file(&output_path)?;
@@ -354,6 +357,9 @@ pub fn wasm_to_component(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<camino
 
     // https://github.com/bytecodealliance/wasm-tools/blob/main/src/bin/wasm-tools/component.rs#L259
     let wasm = std::fs::read(wasm_path)?;
+
+    is_valid::is_valid_wasm_for_component(&wasm, wasm_names)?;
+
     let mut encoder = wit_component::ComponentEncoder::default()
         .validate(true)
         .reject_legacy_names(false);

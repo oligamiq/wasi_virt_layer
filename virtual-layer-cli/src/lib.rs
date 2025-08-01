@@ -10,6 +10,7 @@ pub mod building;
 pub mod common;
 pub mod down_color;
 pub mod instrs;
+pub mod is_valid;
 pub mod merge;
 pub mod rewrite;
 pub mod target;
@@ -65,7 +66,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     std::fs::create_dir_all(&parsed_args.out_dir).expect("Failed to create output directory");
 
     println!("Preparing target Wasm...");
-    let wasm = parsed_args
+    let (wasm_paths, wasm_names) = parsed_args
         .wasm
         .iter()
         .map(|old_wasm| {
@@ -81,9 +82,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             let wasm = target::adjust_target_wasm(&wasm)
                 .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
             tmp_files.push(wasm.to_string());
-            Ok(wasm)
+            Ok((wasm, name))
         })
-        .collect::<eyre::Result<Vec<_>>>()?;
+        .collect::<eyre::Result<(Vec<_>, Vec<_>)>>()?;
 
     println!("Merging Wasm...");
 
@@ -91,7 +92,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
-    merge::merge(&ret, &wasm, &output).wrap_err_with(|| eyre::eyre!("Failed to merge Wasm"))?;
+    merge::merge(&ret, &wasm_paths, &output)
+        .wrap_err_with(|| eyre::eyre!("Failed to merge Wasm"))?;
     tmp_files.push(output.clone());
 
     println!("Optimizing Merged Wasm...");
@@ -100,7 +102,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm)
+    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths)
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
     tmp_files.push(ret.to_string());
 
@@ -110,7 +112,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Translating Wasm to Component...");
-    let component = building::wasm_to_component(&ret)
+    let component = building::wasm_to_component(&ret, &wasm_names)
         .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
     tmp_files.push(component.to_string());
 

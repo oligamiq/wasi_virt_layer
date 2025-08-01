@@ -511,6 +511,21 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
     ret
 }
 
+// #[inline]
+// pub fn path_open_inner<Wasm: WasmAccess>(
+//     state: &mut impl Wasip1FileSystem,
+//     dir_fd: Fd,
+//     dir_flags: Fdflags,
+//     path_ptr: *const u8,
+//     path_len: usize,
+//     o_flags: Oflags,
+//     fs_rights_base: Rights,
+//     fs_rights_inheriting: Rights,
+//     fd_flags: Fdflags,
+//     fd_ret: *mut Fd,
+// ) -> Errno {
+// }
+
 #[macro_export]
 macro_rules! export_fs {
     (@const, $state:expr, $wasm:ty) => {

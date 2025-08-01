@@ -51,8 +51,6 @@ impl<'a> VirtualEnv<'a> for VirtualEnvState {
     type Str = String;
 
     fn get_environ(&mut self) -> &[Self::Str] {
-        println!("called get_environ");
-
         &self.environ
     }
 }

@@ -52,7 +52,12 @@ pub fn merge(
 
     merge_cmd
         .spawn()
-        .expect("Failed to spawn wasm-merge command")
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => eyre::eyre!(
+                "wasm-merge command not found. Please install wasm-merge from https://github.com/WebAssembly/binaryen/releases/latest"
+            ),
+            _ => e.into(),
+        })?
         .wait()
         .expect("Failed to wait for wasm-merge command");
 

@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use eyre::Context as _;
 
 use crate::{
-    common::{VFSExternalMemoryManager, WASIP1_FUNC, Wasip1Op, Wasip1OpKind},
+    common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
 
@@ -30,7 +30,7 @@ pub fn adjust_merged_wasm(
     for wasm in wasm {
         let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
 
-        for name in WASIP1_FUNC.iter() {
+        for name in <Wasip1SnapshotPreview1Func as strum::VariantNames>::VARIANTS.iter() {
             let export_name = format!("__wasip1_vfs_{wasm_name}_{name}");
 
             if module
