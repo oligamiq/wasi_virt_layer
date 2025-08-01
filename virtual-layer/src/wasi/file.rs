@@ -193,7 +193,8 @@ pub mod non_atomic {
 
         use super::{ConstFileSystemDirOrFile, Wasip1FileTrait};
 
-        #[derive(ConstStruct)]
+        /// A constant file system root that can be used in a WASI component.
+        #[derive(ConstStruct, Debug, PartialEq, Eq, Hash)]
         pub struct ConstFileSystemRoot<File: Wasip1FileTrait + 'static + Copy, const LEN: usize> {
             pub files: [ConstFileSystemDirOrFile<File>; LEN],
         }
@@ -209,9 +210,17 @@ pub mod non_atomic {
         pub fn get_unchecked<'a>(&'a self, index: usize) -> &'a ConstFileSystemDirOrFile<File> {
             unsafe { self.files.get_unchecked(index) }
         }
+
+        pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a ConstFileSystemDirOrFile<File>> {
+            self.files.iter()
+        }
+
+        pub fn flat_children(&'static self) -> impl Iterator<Item = &'static File> {
+            self.iter().flat_map(|child| child.flat_children())
+        }
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
     pub struct ConstFileSystemDir<File: Wasip1FileTrait + 'static + Copy> {
         pub file_or_directories: &'static [ConstFileSystemDirOrFile<File>],
     }
@@ -227,6 +236,10 @@ pub mod non_atomic {
             self.file_or_directories
                 .iter()
                 .flat_map(|child| child.flat_children())
+        }
+
+        pub fn iter(&self) -> impl Iterator<Item = &'static ConstFileSystemDirOrFile<File>> {
+            self.file_or_directories.iter()
         }
     }
 
@@ -286,7 +299,7 @@ pub mod non_atomic {
         }
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
     pub enum ConstFileSystemDirOrFile<File: Wasip1FileTrait + 'static + Copy> {
         File(&'static str, File),
         Dir(&'static str, ConstFileSystemDir<File>),
@@ -321,10 +334,8 @@ pub mod non_atomic {
                 ConstFileSystemDirOrFile::Dir(_, dir) => {
                     if self.index < dir.file_or_directories.len() {
                         let child = &dir.file_or_directories[self.index];
-                        self.index += 1;
 
-                        let nth = child.flat_children().nth(self.flat_index);
-                        if let Some(file) = nth {
+                        if let Some(file) = child.flat_children().nth(self.flat_index) {
                             self.flat_index += 1;
                             Some(file)
                         } else {
@@ -377,7 +388,7 @@ pub mod non_atomic {
         };
     }
 
-    #[derive(Copy, Clone)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
     pub struct WasiConstFile<File: WasiConstPrimitiveFile> {
         file: File,
     }
@@ -559,4 +570,49 @@ macro_rules! export_fs {
             // }
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        ConstFiles,
+        wasi::file::non_atomic::{ConstFileSystemRoot, WasiConstFile},
+    };
+
+    /// cargo test -r --package wasip1-virtual-layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
+    #[test]
+    fn test_file_flat_iterate() {
+        const FILES: ConstFileSystemRoot<WasiConstFile<&'static str>, 3> = ConstFiles!([
+            ("/", { WasiConstFile::new("This is root") }),
+            (
+                ".",
+                [
+                    ("hey", { WasiConstFile::new("Hey!") }),
+                    (
+                        "hello",
+                        [
+                            ("world", { WasiConstFile::new("Hello, world!") }),
+                            ("everyone", { WasiConstFile::new("Hello, everyone!") }),
+                        ]
+                    )
+                ]
+            ),
+            (
+                "~",
+                [
+                    ("home", { WasiConstFile::new("This is home") }),
+                    ("user", { WasiConstFile::new("This is user") }),
+                ]
+            )
+        ]);
+
+        let flat_files = FILES.flat_children().collect::<Vec<_>>();
+
+        assert_eq!(flat_files[0], &WasiConstFile::new("This is root"));
+        assert_eq!(flat_files[1], &WasiConstFile::new("Hey!"));
+        assert_eq!(flat_files[2], &WasiConstFile::new("Hello, world!"));
+        assert_eq!(flat_files[3], &WasiConstFile::new("Hello, everyone!"));
+        assert_eq!(flat_files[4], &WasiConstFile::new("This is home"));
+        assert_eq!(flat_files[5], &WasiConstFile::new("This is user"));
+    }
 }
