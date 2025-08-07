@@ -579,6 +579,7 @@ mod tests {
         wasi::file::non_atomic::{ConstFileSystemRoot, WasiConstFile},
     };
 
+    ///If not using `--release`, compilation will fail with: link error
     /// cargo test -r --package wasip1-virtual-layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
     #[test]
     fn test_file_flat_iterate() {
