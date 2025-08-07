@@ -1,0 +1,247 @@
+pub struct ConstBinaryMap<'a, K, V: Copy, const LEN: usize> {
+    keys: [usize; LEN],
+    values: [V; LEN],
+    __marker: std::marker::PhantomData<&'a K>,
+}
+
+impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
+    pub const fn from_key_and_values(keys: [usize; LEN], values: [V; LEN]) -> Self {
+        let mut tuples = merge_arrays_to_tuples(keys, values);
+
+        quicksort_internal(tuples.as_mut_ptr(), 0, (LEN - 1) as isize);
+
+        Self {
+            keys,
+            values,
+            __marker: std::marker::PhantomData,
+        }
+    }
+
+    pub const fn from_key_values(mut key_values: [(usize, V); LEN]) -> Self {
+        quicksort_internal(key_values.as_mut_ptr(), 0, (LEN - 1) as isize);
+
+        let (keys, values) = split_tuples_to_arrays(&key_values);
+
+        Self {
+            keys,
+            values,
+            __marker: std::marker::PhantomData,
+        }
+    }
+
+    /// this function is not slow
+    /// it is O(log n)
+    pub const fn get(&'a self, key: usize) -> Option<&'a V> {
+        let mut depth = 0;
+
+        loop {
+            if depth >= LEN {
+                return None;
+            }
+
+            let index = (key >> depth) & (LEN - 1);
+            if self.keys[index] == key {
+                return Some(&self.values[index]);
+            }
+
+            depth += 1;
+
+            if depth >= LEN {
+                return None;
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_const_binary_map_sorting() {
+        const KEYS: [usize; 5] = [1, 3, 9, 20, 35];
+        const VALUES: [&str; 5] = ["a", "b", "c", "d", "e"];
+        const MAP: ConstBinaryMap<&str, 5> = ConstBinaryMap::from_key_and_values(KEYS, VALUES);
+
+        assert_eq!(MAP.get(1), Some(&"a"));
+        assert_eq!(MAP.get(3), Some(&"b"));
+        assert_eq!(MAP.get(9), Some(&"c"));
+        assert_eq!(MAP.get(20), Some(&"d"));
+        assert_eq!(MAP.get(35), Some(&"e"));
+        assert_eq!(MAP.get(2), None);
+    }
+
+    #[test]
+    fn test_const_binary_map_non_sorted() {
+        const KEYS: [usize; 5] = [35, 20, 9, 3, 1];
+        const VALUES: [&str; 5] = ["e", "d", "c", "b", "a"];
+        const MAP: ConstBinaryMap<&str, 5> = ConstBinaryMap::from_key_and_values(KEYS, VALUES);
+
+        assert_eq!(MAP.get(1), Some(&"a"));
+        assert_eq!(MAP.get(3), Some(&"b"));
+        assert_eq!(MAP.get(9), Some(&"c"));
+        assert_eq!(MAP.get(20), Some(&"d"));
+        assert_eq!(MAP.get(35), Some(&"e"));
+        assert_eq!(MAP.get(2), None);
+    }
+}
+
+/// https://github.com/slightlyoutofphase/staticvec/blob/a3557755b9ee29238e98302cfab550a75675f339/src/utils.rs#L178
+/// A simple quicksort function for internal use, called in
+/// ['quicksorted_unstable`](crate::StaticVec::quicksorted_unstable).
+#[inline]
+pub(crate) const fn quicksort_internal<T: Copy>(
+    values: *mut (usize, T),
+    mut low: isize,
+    mut high: isize,
+) {
+    // We call this function from exactly one place where `low` and `high` are known to be within an
+    // appropriate range before getting passed into it, so there's no need to check them again here.
+    // We also know that `values` will never be null, so we can safely give an optimizer hint here.
+    loop {
+        let mut i = low;
+        let mut j = high;
+        unsafe {
+            let (p, _) = *values.offset(low + ((high - low) >> 1));
+            loop {
+                while (*values.offset(i)).0 < p {
+                    i += 1;
+                }
+                while (*values.offset(j)).0 > p {
+                    j -= 1;
+                }
+                if i <= j {
+                    if i != j {
+                        let q = *values.offset(i);
+                        *values.offset(i) = *values.offset(j);
+                        *values.offset(j) = q;
+                    }
+                    i += 1;
+                    j -= 1;
+                }
+                if i > j {
+                    break;
+                }
+            }
+        }
+        if j - low < high - i {
+            if low < j {
+                quicksort_internal(values, low, j);
+            }
+            low = i;
+        } else {
+            if i < high {
+                quicksort_internal(values, i, high)
+            }
+            high = j;
+        }
+        if low >= high {
+            break;
+        }
+    }
+}
+
+pub(crate) const fn merge_arrays_to_tuples<T: Copy, U: Copy, const N: usize>(
+    a: [T; N],
+    b: [U; N],
+) -> [(T, U); N] {
+    use const_for::const_for;
+    let mut key_with_values = StaticArrayBuilder::new();
+    const_for!(i in 0..N => {
+        key_with_values.push((a[i], b[i]));
+    });
+    key_with_values.build()
+}
+
+pub(crate) const fn split_tuples_to_arrays<T: Copy, U: Copy, const N: usize>(
+    tuples: &[(T, U); N],
+) -> ([T; N], [U; N]) {
+    use const_for::const_for;
+    let mut keys = StaticArrayBuilder::new();
+    let mut values = StaticArrayBuilder::new();
+    const_for!(i in 0..N => {
+        keys.push(tuples[i].0);
+        values.push(tuples[i].1);
+    });
+    (keys.build(), values.build())
+}
+
+/// This is very slow so use it only on const fn
+pub(crate) struct StaticArrayBuilder<T: Copy, const N: usize> {
+    data: [Option<T>; N],
+    len: usize,
+}
+
+impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
+    pub const fn new() -> Self {
+        Self {
+            data: [None; N],
+            len: 0,
+        }
+    }
+
+    pub const fn push(&mut self, value: T) -> Option<T> {
+        if self.len < N {
+            self.data[self.len] = Some(value);
+            self.len += 1;
+            None
+        } else {
+            Some(value)
+        }
+    }
+
+    pub const fn remove(&mut self, index: usize) -> Option<T> {
+        if index < N {
+            let old_value = self.data[index];
+            self.data[index] = None;
+            self.len -= 1;
+            old_value
+        } else {
+            None
+        }
+    }
+
+    pub const fn pop(&mut self) -> Option<T> {
+        if self.len > 0 {
+            self.len -= 1;
+            self.data[self.len].take()
+        } else {
+            None
+        }
+    }
+
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+
+    pub const fn get(&self, index: usize) -> Option<&T> {
+        if index < N {
+            self.data[index].as_ref()
+        } else {
+            None
+        }
+    }
+
+    pub const fn set(&mut self, index: usize, value: T) -> Option<T> {
+        if index < N {
+            let old_value = self.data[index];
+            self.data[index] = Some(value);
+            old_value
+        } else {
+            None
+        }
+    }
+
+    pub const fn build(self) -> [T; N] {
+        use const_for::const_for;
+
+        let first = self.data.first().unwrap().unwrap();
+        let mut array = [first; N];
+        const_for!(i in 0..N => {
+            if let Some(value) = self.data[i] {
+                array[i] = value;
+            }
+        });
+
+        array
+    }
+}

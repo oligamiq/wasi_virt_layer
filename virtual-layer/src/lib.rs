@@ -3,6 +3,7 @@ pub mod wasi;
 pub mod wit;
 pub use paste;
 pub use wasip1;
+pub mod binary_map;
 
 pub mod prelude {
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};

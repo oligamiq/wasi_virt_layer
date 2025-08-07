@@ -6,6 +6,7 @@
 - rm export func by glob
 - Wasm export/import definitions callable from VFS side
 - adjust test_run.ts to use VFS
+- Fake global allocator and center allocator and merge with vfs
 
 # run example
 ```bash
