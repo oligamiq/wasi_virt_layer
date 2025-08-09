@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, Copy)]
 pub struct ConstBinaryMap<'a, K, V: Copy, const LEN: usize> {
     keys: [usize; LEN],
     values: [V; LEN],
@@ -9,6 +10,8 @@ impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
         let mut tuples = merge_arrays_to_tuples(keys, values);
 
         quicksort_internal(tuples.as_mut_ptr(), 0, (LEN - 1) as isize);
+
+        let (keys, values) = split_tuples_to_arrays(&tuples);
 
         Self {
             keys,
@@ -32,24 +35,20 @@ impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
     /// this function is not slow
     /// it is O(log n)
     pub const fn get(&'a self, key: usize) -> Option<&'a V> {
-        let mut depth = 0;
+        let mut low = 0;
+        let mut high = LEN as isize - 1;
 
-        loop {
-            if depth >= LEN {
-                return None;
-            }
-
-            let index = (key >> depth) & (LEN - 1);
-            if self.keys[index] == key {
-                return Some(&self.values[index]);
-            }
-
-            depth += 1;
-
-            if depth >= LEN {
-                return None;
+        while low <= high {
+            let mid = (low + high) / 2;
+            if self.keys[mid as usize] == key {
+                return Some(&self.values[mid as usize]);
+            } else if self.keys[mid as usize] < key {
+                low = mid + 1;
+            } else {
+                high = mid - 1;
             }
         }
+        None
     }
 }
 
@@ -60,7 +59,8 @@ mod tests {
     fn test_const_binary_map_sorting() {
         const KEYS: [usize; 5] = [1, 3, 9, 20, 35];
         const VALUES: [&str; 5] = ["a", "b", "c", "d", "e"];
-        const MAP: ConstBinaryMap<&str, 5> = ConstBinaryMap::from_key_and_values(KEYS, VALUES);
+        const MAP: ConstBinaryMap<usize, &str, 5> =
+            ConstBinaryMap::from_key_and_values(KEYS, VALUES);
 
         assert_eq!(MAP.get(1), Some(&"a"));
         assert_eq!(MAP.get(3), Some(&"b"));
@@ -74,7 +74,10 @@ mod tests {
     fn test_const_binary_map_non_sorted() {
         const KEYS: [usize; 5] = [35, 20, 9, 3, 1];
         const VALUES: [&str; 5] = ["e", "d", "c", "b", "a"];
-        const MAP: ConstBinaryMap<&str, 5> = ConstBinaryMap::from_key_and_values(KEYS, VALUES);
+        const MAP: ConstBinaryMap<usize, &str, 5> =
+            ConstBinaryMap::from_key_and_values(KEYS, VALUES);
+
+        println!("{:?}", MAP);
 
         assert_eq!(MAP.get(1), Some(&"a"));
         assert_eq!(MAP.get(3), Some(&"b"));
@@ -82,6 +85,23 @@ mod tests {
         assert_eq!(MAP.get(20), Some(&"d"));
         assert_eq!(MAP.get(35), Some(&"e"));
         assert_eq!(MAP.get(2), None);
+    }
+
+    #[test]
+    fn test_quick_sort() {
+        let mut arr = [(3, 'c'), (1, 'a'), (2, 'b')];
+        quicksort_internal(arr.as_mut_ptr(), 0, (arr.len() - 1) as isize);
+        assert_eq!(arr, [(1, 'a'), (2, 'b'), (3, 'c')]);
+    }
+
+    #[test]
+    fn test_quick_sort_const() {
+        const ARR: [(usize, char); 3] = {
+            let mut arr = [(3, 'c'), (1, 'a'), (2, 'b')];
+            quicksort_internal(arr.as_mut_ptr(), 0, (arr.len() - 1) as isize);
+            arr
+        };
+        assert_eq!(ARR, [(1, 'a'), (2, 'b'), (3, 'c')]);
     }
 }
 
@@ -166,7 +186,7 @@ pub(crate) const fn split_tuples_to_arrays<T: Copy, U: Copy, const N: usize>(
 }
 
 /// This is very slow so use it only on const fn
-pub(crate) struct StaticArrayBuilder<T: Copy, const N: usize> {
+pub struct StaticArrayBuilder<T: Copy, const N: usize> {
     data: [Option<T>; N],
     len: usize,
 }
