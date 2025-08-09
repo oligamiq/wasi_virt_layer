@@ -149,7 +149,10 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
 }
 
 pub trait WasmAccess {
+    /// Copies data from the source pointer to the offset.
     fn memcpy<T>(offset: *mut T, data: &[T]);
+
+    /// Copies data from the source pointer to the offset.
     fn memcpy_to<T>(offset: &mut [T], src: *const T);
     fn store_le<T>(offset: *mut T, value: T);
     fn load_le<T: core::fmt::Debug>(offset: *const T) -> T;

@@ -26,7 +26,7 @@ pub mod non_atomic {
     //     ROOTS: VFSConstNormalFiles<File, LEN>,
     //     StdIo: StdIO + 'static,
     // > {
-    //     pub inode: VFSConstNormalInode<File>,
+    //     pub inode: VFSConstNormalInodeBuilder<File>,
     // }
 
     /// posix like local file system
@@ -40,7 +40,7 @@ pub mod non_atomic {
         const LEN: usize,
         StdIo: StdIO + 'static,
     > {
-        add_info: ConstBinaryMap<'static, VFSConstNormalInode<File>, AddInfo, LEN>,
+        add_info: ConstBinaryMap<'static, VFSConstNormalInodeBuilder<File>, AddInfo, LEN>,
         __marker: std::marker::PhantomData<(ConstRoot, File, StdIo)>,
     }
 
@@ -84,7 +84,7 @@ pub mod non_atomic {
         StdIo: StdIO + 'static,
     > Wasip1LFS for VFSConstNormalLFS<ROOT, File, LEN, StdIo>
     {
-        type Inode = &'static VFSConstNormalInode<File>;
+        type Inode = &'static VFSConstNormalInodeBuilder<File>;
     }
 
     pub struct VFSConstVFSAddInfo {
@@ -141,7 +141,7 @@ pub mod non_atomic {
     //     // pub fn get_add_info(&mut self, fd: Fd) -> Option<&mut VFSConstVFSAddInfo> {
     //     //     let (entry) = self.map.get(&fd)?;
 
-    //     //     if let VFSConstNormalInode::File(_, file) = entry {
+    //     //     if let VFSConstNormalInodeBuilder::File(_, file) = entry {
     //     //         self.add_info.get_mut(&(file as *const _ as usize))
     //     //     } else {
     //     //         None
@@ -187,8 +187,8 @@ pub mod non_atomic {
     //         };
 
     //         let dir = match dir {
-    //             VFSConstNormalInode::Dir(_, dir) => dir,
-    //             VFSConstNormalInode::File(..) => {
+    //             VFSConstNormalInodeBuilder::Dir(_, dir) => dir,
+    //             VFSConstNormalInodeBuilder::File(..) => {
     //                 return Err(wasip1::ERRNO_NOTDIR);
     //             }
     //         };
@@ -200,7 +200,7 @@ pub mod non_atomic {
     //                 }
 
     //                 if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY {
-    //                     if let VFSConstNormalInode::File(..) = entry {
+    //                     if let VFSConstNormalInodeBuilder::File(..) = entry {
     //                         return Err(wasip1::ERRNO_NOTDIR);
     //                     }
     //                 }
@@ -217,7 +217,7 @@ pub mod non_atomic {
     //             Err(err) => return Err(err),
     //         };
 
-    //         let add_info = if let VFSConstNormalInode::File(_, file) = entry {
+    //         let add_info = if let VFSConstNormalInodeBuilder::File(_, file) = entry {
     //             file.path_open(o_flags, fs_rights_base, fd_flags)?;
     //             if fd_flags & wasip1::FDFLAGS_APPEND == wasip1::FDFLAGS_APPEND {
     //                 VFSConstVFSAddInfo::with_cursor(file.len())
@@ -239,29 +239,32 @@ pub mod non_atomic {
     mod d {
         use const_struct::ConstStruct;
 
-        use super::{VFSConstNormalInode, Wasip1FileTrait};
+        use super::{VFSConstNormalInodeBuilder, Wasip1FileTrait};
 
         /// A constant file system root that can be used in a WASI component.
-        #[derive(ConstStruct, Debug, PartialEq, Eq, Hash)]
+        #[derive(ConstStruct, Debug)]
         pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const LEN: usize> {
-            pub files: [VFSConstNormalInode<File>; LEN],
+            pub files: [VFSConstNormalInodeBuilder<File>; LEN],
         }
     }
 
     pub use d::*;
 
-    use crate::binary_map::{ConstBinaryMap, StaticArrayBuilder};
+    use crate::{
+        binary_map::{ConstBinaryMap, StaticArrayBuilder},
+        memory::WasmAccess,
+    };
 
     impl<File: Wasip1FileTrait + 'static + Copy, const LEN: usize> VFSConstNormalFiles<File, LEN> {
-        pub fn new(files: [VFSConstNormalInode<File>; LEN]) -> Self {
+        pub fn new(files: [VFSConstNormalInodeBuilder<File>; LEN]) -> Self {
             Self { files }
         }
 
-        pub fn get_unchecked<'a>(&'a self, index: usize) -> &'a VFSConstNormalInode<File> {
+        pub fn get_unchecked<'a>(&'a self, index: usize) -> &'a VFSConstNormalInodeBuilder<File> {
             unsafe { self.files.get_unchecked(index) }
         }
 
-        pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a VFSConstNormalInode<File>> {
+        pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a VFSConstNormalInodeBuilder<File>> {
             self.files.iter()
         }
 
@@ -270,13 +273,13 @@ pub mod non_atomic {
         }
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-    pub struct ConstFileSystemDir<File: Wasip1FileTrait + 'static + Copy> {
-        pub file_or_directories: &'static [VFSConstNormalInode<File>],
+    #[derive(Copy, Clone, Debug)]
+    pub struct VFSConstFileSystemDirBuilder<File: Wasip1FileTrait + 'static + Copy> {
+        pub file_or_directories: &'static [VFSConstNormalInodeBuilder<File>],
     }
 
-    impl<File: Wasip1FileTrait + 'static + Copy> ConstFileSystemDir<File> {
-        pub const fn new(file_or_directories: &'static [VFSConstNormalInode<File>]) -> Self {
+    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstFileSystemDirBuilder<File> {
+        pub const fn new(file_or_directories: &'static [VFSConstNormalInodeBuilder<File>]) -> Self {
             Self {
                 file_or_directories,
             }
@@ -288,16 +291,46 @@ pub mod non_atomic {
                 .flat_map(|child| child.flat_children())
         }
 
-        pub fn iter(&self) -> impl Iterator<Item = &'static VFSConstNormalInode<File>> {
+        pub const fn flat_children_static<'a, const FLAT_LEN: usize>(
+            file_or_directories: [VFSConstNormalInodeBuilder<File>; FLAT_LEN],
+        ) -> [File; FLAT_LEN] {
+            let mut flat_files = StaticArrayBuilder::<File, FLAT_LEN>::new();
+            let mut n = 0;
+
+            use const_for::const_for;
+            const_for!(i in 0..file_or_directories.len() => {
+                if file_or_directories[i].flat_children_static_inner(&mut flat_files) {
+                    panic!("Flat files array is too small to hold all files");
+                }
+            });
+
+            flat_files.build()
+        }
+
+        pub(crate) const fn flat_children_static_inner<const FLAT_LEN: usize>(
+            &self,
+            flat_files: &mut StaticArrayBuilder<File, FLAT_LEN>,
+        ) -> bool {
+            use const_for::const_for;
+
+            const_for!(i in 0..self.file_or_directories.len() => {
+                if self.file_or_directories[i].flat_children_static_inner(flat_files) {
+                    return false;
+                }
+            });
+            true
+        }
+
+        pub fn iter(&self) -> impl Iterator<Item = &'static VFSConstNormalInodeBuilder<File>> {
             self.file_or_directories.iter()
         }
     }
 
-    impl<File: Wasip1FileTrait + 'static + Copy> ConstFileSystemDir<File> {
+    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstFileSystemDirBuilder<File> {
         pub fn get_entry_for_path<'a>(
             &'a self,
             path: &str,
-        ) -> Result<&'a VFSConstNormalInode<File>, wasip1::Errno> {
+        ) -> Result<&'a VFSConstNormalInodeBuilder<File>, wasip1::Errno> {
             let mut parts = path.split('/');
 
             let mut entry = self.file_or_directories;
@@ -312,14 +345,14 @@ pub mod non_atomic {
                 let mut found = false;
                 for child in entry.iter() {
                     match child {
-                        VFSConstNormalInode::File(name, _) => {
+                        VFSConstNormalInodeBuilder::File(name, _) => {
                             if *name == part {
                                 ret_file_entry = Some(child);
                                 found = true;
                                 break;
                             }
                         }
-                        VFSConstNormalInode::Dir(name, dir) => {
+                        VFSConstNormalInodeBuilder::Dir(name, dir) => {
                             if *name == part {
                                 ret_dir_entry = Some(child);
                                 entry = dir.file_or_directories;
@@ -349,39 +382,56 @@ pub mod non_atomic {
         }
     }
 
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-    pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
+    #[derive(Clone, Copy, Debug)]
+    pub enum VFSConstNormalInodeBuilder<File: Wasip1FileTrait + 'static + Copy> {
         File(&'static str, File),
-        Dir(&'static str, ConstFileSystemDir<File>),
+        Dir(&'static str, VFSConstFileSystemDirBuilder<File>),
     }
 
-    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
+    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInodeBuilder<File> {
         pub fn flat_children(&'static self) -> impl Iterator<Item = &'static File> {
-            VFSConstNormalInodeIterator {
+            VFSConstNormalInodeBuilderIterator {
                 index: 0,
                 flat_index: 0,
                 dir_or_file: self,
             }
         }
+
+        pub(crate) const fn flat_children_static_inner<const FLAT_LEN: usize>(
+            &self,
+            flat_files: &mut StaticArrayBuilder<File, FLAT_LEN>,
+        ) -> bool {
+            match self {
+                VFSConstNormalInodeBuilder::File(_, file) => {
+                    if flat_files.push(*file).is_some() {
+                        return false;
+                    }
+                }
+                VFSConstNormalInodeBuilder::Dir(_, dir) => {
+                    dir.flat_children_static_inner(flat_files);
+                }
+            }
+            true
+        }
     }
 
-    pub struct VFSConstNormalInodeIterator<File: Wasip1FileTrait + 'static + Copy> {
+    pub struct VFSConstNormalInodeBuilderIterator<File: Wasip1FileTrait + 'static + Copy> {
         index: usize,
         flat_index: usize,
-        dir_or_file: &'static VFSConstNormalInode<File>,
+        dir_or_file: &'static VFSConstNormalInodeBuilder<File>,
     }
 
-    impl<File: Wasip1FileTrait + 'static + Copy> Iterator for VFSConstNormalInodeIterator<File> {
+    impl<File: Wasip1FileTrait + 'static + Copy> Iterator for VFSConstNormalInodeBuilderIterator<File> {
         type Item = &'static File;
 
         fn next(&mut self) -> Option<Self::Item> {
             match self.dir_or_file {
-                VFSConstNormalInode::File(_, file) => {
+                VFSConstNormalInodeBuilder::File(_, file) => {
                     self.index += 1;
 
                     if self.index == 1 { Some(file) } else { None }
                 }
-                VFSConstNormalInode::Dir(_, dir) => {
+                VFSConstNormalInodeBuilder::Dir(_, dir) => {
                     if self.index < dir.file_or_directories.len() {
                         let child = &dir.file_or_directories[self.index];
 
@@ -406,7 +456,7 @@ pub mod non_atomic {
         (
             [
                 $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
-            ]
+            ] $(,)?
         ) => {
         $crate::wasi::file::non_atomic::VFSConstNormalFiles {
             files: [
@@ -420,9 +470,9 @@ pub mod non_atomic {
         (@inner, $name:expr, [
             $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
         ]) => {
-            $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
+            $crate::wasi::file::non_atomic::VFSConstNormalInodeBuilder::Dir(
                 $name,
-                $crate::wasi::file::non_atomic::ConstFileSystemDir {
+                $crate::wasi::file::non_atomic::VFSConstFileSystemDirBuilder {
                     file_or_directories: &[
                         $(
                             $crate::ConstFiles!(@inner, $file_or_dir_name, $file_or_dir),
@@ -434,7 +484,7 @@ pub mod non_atomic {
 
         (@inner, $name:expr, $file:expr) => {
             #[allow(unused_braces)]
-            $crate::wasi::file::non_atomic::VFSConstNormalInode::File($name, $file)
+            $crate::wasi::file::non_atomic::VFSConstNormalInodeBuilder::File($name, $file)
         };
     }
 
@@ -519,6 +569,38 @@ pub mod non_atomic {
         ) -> Result<(), wasip1::Errno>;
 
         fn len(&self) -> usize;
+
+        /// Reads data from the file into the provided buffer.
+        /// Returns the number of bytes read.
+        /// This function is called by the `fd_read` function.
+        /// Implementing this function directly is more efficient,
+        /// but it is recommended to implement `fn read`!
+        fn read_iovs<Wasm: WasmAccess>(
+            &self,
+            iovs: *const wasip1::Ciovec,
+            iovs_len: usize,
+        ) -> Result<usize, wasip1::Errno> {
+            let mut total_read = 0;
+
+            for i in 0..iovs_len {
+                let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
+                let mut buf = vec![0u8; iov.buf_len];
+                let read = self.read(&mut buf)?;
+                if read == 0 {
+                    break; // EOF
+                }
+                total_read += read;
+                Wasm::memcpy(iov.buf as *mut _, &buf[..read]);
+            }
+
+            Ok(total_read)
+        }
+
+        /// Reads data from the file into the provided buffer.
+        /// Returns the number of bytes read.
+        fn read(&self, _buf: &mut [u8]) -> Result<usize, wasip1::Errno> {
+            return Err(wasip1::ERRNO_NOSYS);
+        }
     }
 }
 
@@ -633,8 +715,8 @@ mod tests {
     /// cargo test -r --package wasip1-virtual-layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
     #[test]
     fn test_file_flat_iterate() {
-        const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 3> = ConstFiles!([
-            ("/", { WasiConstFile::new("This is root") }),
+        const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>> = ConstFiles!([
+            ("/", [("root", WasiConstFile::new("This is root"))]),
             (
                 ".",
                 [
