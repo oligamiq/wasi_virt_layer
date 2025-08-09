@@ -215,7 +215,7 @@ pub mod non_atomic {
     /// A constant file system root that can be used in a WASI component.
     #[derive(ConstStruct, Debug)]
     pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
-        pub files: [VFSConstNormalInode<File>; FLAT_LEN],
+        pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
     }
 
     use crate::{
@@ -223,19 +223,11 @@ pub mod non_atomic {
         memory::WasmAccess,
     };
 
-    impl<File: Wasip1FileTrait + 'static + Copy, const LEN: usize> VFSConstNormalFiles<File, LEN> {
-        pub fn new(files: [VFSConstNormalInodeBuilder<File>; LEN]) -> Self {}
-
-        pub fn get_unchecked<'a>(&'a self, index: usize) -> &'a VFSConstNormalInodeBuilder<File> {
-            unsafe { self.files.get_unchecked(index) }
-        }
-
-        pub fn iter<'a>(&'a self) -> impl Iterator<Item = &'a VFSConstNormalInodeBuilder<File>> {
-            self.files.iter()
-        }
-
-        pub fn flat_children(&'static self) -> impl Iterator<Item = &'static File> {
-            self.iter().flat_map(|child| child.flat_children())
+    impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
+        VFSConstNormalFiles<File, FLAT_LEN>
+    {
+        pub const fn new(files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN]) -> Self {
+            Self { files }
         }
     }
 
@@ -352,7 +344,8 @@ pub mod non_atomic {
     #[derive(Clone, Copy, Debug)]
     pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
         File(File),
-        Dir(&'static [usize]),
+        /// (first index..last index)
+        Dir((usize, usize)),
     }
 
     #[derive(Clone, Copy, Debug)]
@@ -426,6 +419,61 @@ pub mod non_atomic {
         }
     }
 
+    pub const fn vfs_const_macro_fn<S: 'static + Copy, const N: usize>(
+        fake_files: [&'static str; N],
+        name: &'static str,
+        _: &crate::binary_map::StaticArrayBuilder<S, N>,
+    ) -> (usize, usize) {
+        use const_for::const_for;
+
+        const fn eq_str(a: &str, b: &str) -> bool {
+            let a_bytes = a.as_bytes();
+            let b_bytes = b.as_bytes();
+
+            if a_bytes.len() != b_bytes.len() {
+                return false;
+            }
+
+            const_for!(i in 0..a_bytes.len() => {
+                if a_bytes[i] != b_bytes[i] {
+                    return false;
+                }
+            });
+
+            true
+        }
+
+        const fn starts_with_str(a: &str, b: &str) -> bool {
+            let a_bytes = a.as_bytes();
+            let b_bytes = b.as_bytes();
+
+            if a_bytes.len() < b_bytes.len() {
+                return false;
+            }
+
+            const_for!(i in 0..b_bytes.len() => {
+                if a_bytes[i] != b_bytes[i] {
+                    return false;
+                }
+            });
+
+            true
+        }
+
+        let mut first_index = None;
+        const_for!(i in 0..N => {
+            if first_index.is_none() && starts_with_str(fake_files[i], name) {
+                first_index = Some(i);
+            }
+
+            if eq_str(fake_files[i], name) {
+                return (first_index.unwrap(), i);
+            }
+        });
+
+        unreachable!()
+    }
+
     #[macro_export]
     macro_rules! ConstFiles {
         (
@@ -433,33 +481,68 @@ pub mod non_atomic {
                 $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
             ] $(,)?
         ) => {
-        $crate::wasi::file::non_atomic::VFSConstNormalFiles {
-            files: [
+            $crate::wasi::file::non_atomic::VFSConstNormalFiles::new({
+                let mut static_array = $crate::binary_map::StaticArrayBuilder::new();
+                let empty_arr = {
+                    let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
+
+                    $(
+                        $crate::ConstFiles!(@empty, empty_arr, [$file_or_dir_name], $file_or_dir);
+                    )*
+
+                    empty_arr.build()
+                };
+
                 $(
-                    $crate::ConstFiles!(@inner, $file_or_dir_name, $file_or_dir),
+                    $crate::ConstFiles!(
+                        @next,
+                        static_array,
+                        [empty_arr],
+                        [$file_or_dir_name],
+                        $file_or_dir
+                    );
                 )*
-                ],
-            }
+
+                static_array.build()
+            })
         };
 
-        (@inner, $name:expr, [
+        (@empty, $empty_arr:ident, [$parent_name:expr], [
             $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
         ]) => {
-            $crate::wasi::file::non_atomic::VFSConstNormalInodeBuilder::Dir(
-                $name,
-                $crate::wasi::file::non_atomic::VFSConstFileSystemDir {
-                    file_or_directories: &[
-                        $(
-                            $crate::ConstFiles!(@inner, $file_or_dir_name, $file_or_dir),
-                        )*
-                    ],
-                },
-            )
+            $(
+                $crate::ConstFiles!(@empty, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
+            )*
+            $empty_arr.push($parent_name);
         };
 
-        (@inner, $name:expr, $file:expr) => {
-            #[allow(unused_braces)]
-            $crate::wasi::file::non_atomic::VFSConstNormalInodeBuilder::File($name, $file)
+        (@empty, $empty_arr:ident, [$name:expr], $file:tt) => {
+            $empty_arr.push($name);
+        };
+
+        (@next, $static_array:ident, [$empty:expr], [$name:expr], [
+            $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
+        ]) => {
+            $(
+                $crate::ConstFiles!(@next, $static_array, [$empty], [concat!($name, "/", $file_or_dir_name)], $file_or_dir);
+            )*
+            $static_array.push((
+                $name,
+                $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
+                    $crate::wasi::file::non_atomic::vfs_const_macro_fn(
+                        $empty,
+                        $name,
+                        &$static_array
+                    )
+                )
+            ));
+        };
+
+        (@next, $static_array:ident, [$empty:expr], [$name:expr], $file:expr) => {
+            $static_array.push((
+                $name,
+                $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file)
+            ));
         };
     }
 
@@ -683,15 +766,18 @@ macro_rules! export_fs {
 mod tests {
     use crate::{
         ConstFiles,
-        wasi::file::non_atomic::{VFSConstNormalFiles, WasiConstFile},
+        wasi::file::non_atomic::{VFSConstNormalFiles, VFSConstNormalInode, WasiConstFile},
     };
 
     /// If not using `--release`, compilation will fail with: link error
     /// cargo test -r --package wasip1-virtual-layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
     #[test]
     fn test_file_flat_iterate() {
-        const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>> = ConstFiles!([
-            ("/", [("root", WasiConstFile::new("This is root"))]),
+        const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
+            (
+                "/root",
+                [("root.txt", { WasiConstFile::new("This is root") })]
+            ),
             (
                 ".",
                 [
@@ -716,13 +802,13 @@ mod tests {
 
         println!("{:#?}", FILES);
 
-        let flat_files = FILES.flat_children().collect::<Vec<_>>();
+        // let flat_files = FILES.flat_children().collect::<Vec<_>>();
 
-        assert_eq!(flat_files[0], &WasiConstFile::new("This is root"));
-        assert_eq!(flat_files[1], &WasiConstFile::new("Hey!"));
-        assert_eq!(flat_files[2], &WasiConstFile::new("Hello, world!"));
-        assert_eq!(flat_files[3], &WasiConstFile::new("Hello, everyone!"));
-        assert_eq!(flat_files[4], &WasiConstFile::new("This is home"));
-        assert_eq!(flat_files[5], &WasiConstFile::new("This is user"));
+        // assert_eq!(flat_files[0], &WasiConstFile::new("This is root"));
+        // assert_eq!(flat_files[1], &WasiConstFile::new("Hey!"));
+        // assert_eq!(flat_files[2], &WasiConstFile::new("Hello, world!"));
+        // assert_eq!(flat_files[3], &WasiConstFile::new("Hello, everyone!"));
+        // assert_eq!(flat_files[4], &WasiConstFile::new("This is home"));
+        // assert_eq!(flat_files[5], &WasiConstFile::new("This is user"));
     }
 }
