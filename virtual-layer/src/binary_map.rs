@@ -77,8 +77,6 @@ mod tests {
         const MAP: ConstBinaryMap<usize, &str, 5> =
             ConstBinaryMap::from_key_and_values(KEYS, VALUES);
 
-        println!("{:?}", MAP);
-
         assert_eq!(MAP.get(1), Some(&"a"));
         assert_eq!(MAP.get(3), Some(&"b"));
         assert_eq!(MAP.get(9), Some(&"c"));
