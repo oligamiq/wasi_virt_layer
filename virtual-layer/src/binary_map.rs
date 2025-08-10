@@ -2,7 +2,7 @@
 pub struct ConstBinaryMap<'a, K, V: Copy, const LEN: usize> {
     keys: [usize; LEN],
     values: [V; LEN],
-    __marker: std::marker::PhantomData<&'a K>,
+    __marker: core::marker::PhantomData<&'a K>,
 }
 
 impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
@@ -16,7 +16,7 @@ impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
         Self {
             keys,
             values,
-            __marker: std::marker::PhantomData,
+            __marker: core::marker::PhantomData,
         }
     }
 
@@ -28,7 +28,7 @@ impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
         Self {
             keys,
             values,
-            __marker: std::marker::PhantomData,
+            __marker: core::marker::PhantomData,
         }
     }
 

@@ -148,6 +148,74 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
 }
 
+pub struct WasmArrayAccess<T: core::fmt::Debug, Wasm: WasmAccess> {
+    ptr: *const T,
+    len: usize,
+    __marker: core::marker::PhantomData<Wasm>,
+}
+
+impl<T: core::fmt::Debug, Wasm: WasmAccess> WasmArrayAccess<T, Wasm> {
+    #[inline(always)]
+    pub fn new(ptr: *const T, len: usize) -> Self {
+        Self {
+            ptr,
+            len,
+            __marker: core::marker::PhantomData,
+        }
+    }
+
+    #[inline(always)]
+    pub fn get(&self, index: usize) -> T {
+        let ptr = unsafe { self.ptr.add(index) };
+        Wasm::load_le(ptr)
+    }
+
+    #[inline(always)]
+    pub fn iter(&self) -> WasmArrayAccessIterator<T, Wasm> {
+        WasmArrayAccessIterator::new(self.ptr, self.len)
+    }
+}
+
+impl<T: core::fmt::Debug, Wasm: WasmAccess> IntoIterator for WasmArrayAccess<T, Wasm> {
+    type Item = T;
+    type IntoIter = WasmArrayAccessIterator<T, Wasm>;
+
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+pub struct WasmArrayAccessIterator<T: core::fmt::Debug, Wasm: WasmAccess> {
+    ptr: *const T,
+    len: usize,
+    __marker: core::marker::PhantomData<Wasm>,
+}
+
+impl<T: core::fmt::Debug, Wasm: WasmAccess> WasmArrayAccessIterator<T, Wasm> {
+    pub fn new(ptr: *const T, len: usize) -> Self {
+        Self {
+            ptr,
+            len,
+            __marker: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<T: core::fmt::Debug, Wasm: WasmAccess> Iterator for WasmArrayAccessIterator<T, Wasm> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            return None;
+        }
+        let item = Wasm::load_le(self.ptr);
+        self.ptr = unsafe { self.ptr.add(1) };
+        self.len -= 1;
+        Some(item)
+    }
+}
+
 pub trait WasmAccess {
     /// Copies data from the source pointer to the offset.
     fn memcpy<T>(offset: *mut T, data: &[T]);
@@ -156,6 +224,13 @@ pub trait WasmAccess {
     fn memcpy_to<T>(offset: &mut [T], src: *const T);
     fn store_le<T>(offset: *mut T, value: T);
     fn load_le<T: core::fmt::Debug>(offset: *const T) -> T;
+
+    fn as_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> WasmArrayAccess<T, Self>
+    where
+        Self: Sized,
+    {
+        WasmArrayAccess::new(ptr, len)
+    }
 
     /// wrapping wasm's _start function
     /// By default in Rust code, when _start is called,

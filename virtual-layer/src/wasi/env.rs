@@ -239,7 +239,7 @@ pub trait VirtualEnv<'a> {
     }
 }
 
-impl<'a, T: std::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<'a> for T {
+impl<'a, T: core::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<'a> for T {
     type Str = U::Str;
 
     fn get_environ(&'a mut self) -> &'a [Self::Str] {

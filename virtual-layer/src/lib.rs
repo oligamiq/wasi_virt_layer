@@ -1,11 +1,18 @@
+#![cfg_attr(not(feature = "alloc"), no_std)]
+
 pub mod memory;
 pub mod wasi;
 pub mod wit;
 pub use paste;
 pub use wasip1;
 pub mod binary_map;
+pub mod transporter;
 
 pub mod prelude {
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
     pub use crate::{export_env, import_wasm};
+}
+
+pub mod __private {
+    pub use const_for::const_for;
 }

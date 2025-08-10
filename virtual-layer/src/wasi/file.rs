@@ -8,14 +8,13 @@ use crate::memory::WasmAccess;
 #[cfg(not(target_feature = "atomics"))]
 pub mod non_atomic {
     use dashmap::DashMap;
-    use std::{collections::HashMap, hash::Hash, io::Write as _};
     use wasip1::*;
 
     /// small posix like virtual file system
     /// but inode has some metadata
-    pub struct Wasip1VFS<LFS: Wasip1LFS> {
-        lfs: DashMap<Device, LFS>,
-        map: DashMap<Fd, LFS::Inode>,
+    pub struct Wasip1VFS<'a, Inode, const N: usize, const FLAT_LEN: usize> {
+        lfs: [&'a mut dyn Wasip1LFS<Inode = Inode>; N],
+        map: heapless::Vec<Inode, FLAT_LEN>,
     }
 
     /// small posix like local file system
@@ -30,7 +29,7 @@ pub mod non_atomic {
         StdIo: StdIO + 'static,
     > {
         add_info: [VFSConstNormalAddInfo; FLAT_LEN],
-        __marker: std::marker::PhantomData<(ConstRoot, File, StdIo)>,
+        __marker: core::marker::PhantomData<(ConstRoot, File, StdIo)>,
     }
 
     impl<
@@ -43,7 +42,7 @@ pub mod non_atomic {
         pub const fn new() -> Self {
             Self {
                 add_info: [VFSConstNormalAddInfo::new(); FLAT_LEN],
-                __marker: std::marker::PhantomData,
+                __marker: core::marker::PhantomData,
             }
         }
     }
@@ -55,7 +54,7 @@ pub mod non_atomic {
         StdIo: StdIO + 'static,
     > Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
     {
-        type Inode = &'static VFSConstNormalInodeBuilder<File>;
+        type Inode = usize;
     }
 
     #[derive(Copy, Clone, Debug)]
@@ -77,151 +76,15 @@ pub mod non_atomic {
         }
     }
 
-    // use wasmtime_wasi::WasiCtx;
-
-    // impl<File: Wasip1FileTrait + 'static + Copy, const LEN: usize, StdIo: StdIO + 'static>
-    //     VFSConstVFS<File, LEN, ROOT, StdIo>
-    // {
-    //     // I want to generate a reference from ROOTS but it doesn't work
-    //     pub fn new(roots: &'static VFSConstNormalFiles<File, LEN>) -> Self {
-    //         let mut map = HashMap::with_capacity(LEN);
-    //         let mut next_fd = 3;
-
-    //         for i in 0..LEN {
-    //             let fd = next_fd;
-    //             next_fd += 1;
-    //             map.insert(fd, (roots.get_unchecked(i), VFSConstVFSAddInfo::new()));
-    //         }
-
-    //         // let add_info = roots
-    //         //     .files
-    //         //     .iter()
-    //         //     .flat_map(|entry| entry.flat_children())
-    //         //     .map(|file| {
-    //         //         (
-    //         //             file as *const _ as usize,
-    //         //             VFSConstVFSAddInfo::new(),
-    //         //         )
-    //         //     })
-    //         //     .collect::<HashMap<_, _>>();
-
-    //         Self {
-    //             map,
-    //             next_fd,
-    //             // add_info,
-    //             __marker: std::marker::PhantomData,
-    //         }
-    //     }
-
-    //     // pub fn get_add_info(&mut self, fd: Fd) -> Option<&mut VFSConstVFSAddInfo> {
-    //     //     let (entry) = self.map.get(&fd)?;
-
-    //     //     if let VFSConstNormalInodeBuilder::File(_, file) = entry {
-    //     //         self.add_info.get_mut(&(file as *const _ as usize))
-    //     //     } else {
-    //     //         None
-    //     //     }
-    //     // }
-    // }
-
-    // impl<
-    //     File: Wasip1FileTrait + 'static + Copy,
-    //     const LEN: usize,
-    //     ROOTS: VFSConstNormalFiles<File, LEN>,
-    //     StdIo: StdIO + 'static,
-    // > Wasip1FileSystem for VFSConstVFS<File, LEN, ROOTS, StdIo>
-    // {
-    //     fn fd_write(&mut self, fd: Fd, data: &[u8]) -> (Size, wasip1::Errno) {
-    //         match fd {
-    //             wasip1::FD_STDOUT => StdIo::write(&data),
-    //             wasip1::FD_STDERR => StdIo::ewrite(&data),
-    //             _ => {
-    //                 if self.map.contains_key(&fd) {
-    //                     (0, wasip1::ERRNO_PERM)
-    //                 } else {
-    //                     (0, wasip1::ERRNO_BADF)
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     fn path_open(
-    //         &mut self,
-    //         dir_fd: Fd,
-    //         _dir_flags: wasip1::Fdflags,
-    //         path: &str,
-    //         o_flags: wasip1::Oflags,
-    //         fs_rights_base: wasip1::Rights,
-    //         _fs_rights_inheriting: wasip1::Rights,
-    //         fd_flags: wasip1::Fdflags,
-    //     ) -> Result<Fd, wasip1::Errno> {
-    //         let dir = if let Some((dir, _)) = self.map.get(&dir_fd) {
-    //             dir
-    //         } else {
-    //             return Err(wasip1::ERRNO_BADF);
-    //         };
-
-    //         let dir = match dir {
-    //             VFSConstNormalInodeBuilder::Dir(_, dir) => dir,
-    //             VFSConstNormalInodeBuilder::File(..) => {
-    //                 return Err(wasip1::ERRNO_NOTDIR);
-    //             }
-    //         };
-
-    //         let entry = match dir.get_entry_for_path(path) {
-    //             Ok(entry) => {
-    //                 if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
-    //                     return Err(wasip1::ERRNO_EXIST);
-    //                 }
-
-    //                 if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY {
-    //                     if let VFSConstNormalInodeBuilder::File(..) = entry {
-    //                         return Err(wasip1::ERRNO_NOTDIR);
-    //                     }
-    //                 }
-
-    //                 entry
-    //             }
-    //             Err(err) if err == wasip1::ERRNO_NOENT => {
-    //                 if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
-    //                     return Err(wasip1::ERRNO_PERM);
-    //                 } else {
-    //                     return Err(err);
-    //                 }
-    //             }
-    //             Err(err) => return Err(err),
-    //         };
-
-    //         let add_info = if let VFSConstNormalInodeBuilder::File(_, file) = entry {
-    //             file.path_open(o_flags, fs_rights_base, fd_flags)?;
-    //             if fd_flags & wasip1::FDFLAGS_APPEND == wasip1::FDFLAGS_APPEND {
-    //                 VFSConstVFSAddInfo::with_cursor(file.len())
-    //             } else {
-    //                 VFSConstVFSAddInfo::new()
-    //             }
-    //         } else {
-    //             VFSConstVFSAddInfo::new()
-    //         };
-
-    //         let fd = self.next_fd;
-    //         self.next_fd += 1;
-    //         self.map.insert(fd, (entry, add_info));
-    //         Ok(fd)
-    //     }
-    // }
-
     use const_struct::ConstStruct;
+
+    use crate::{memory::WasmAccess, transporter::Wasip1Transporter};
 
     /// A constant file system root that can be used in a WASI component.
     #[derive(ConstStruct, Debug)]
     pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
         pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
     }
-
-    use crate::{
-        binary_map::{ConstBinaryMap, StaticArrayBuilder},
-        memory::WasmAccess,
-    };
 
     impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
         VFSConstNormalFiles<File, FLAT_LEN>
@@ -231,247 +94,11 @@ pub mod non_atomic {
         }
     }
 
-    #[derive(Copy, Clone, Debug)]
-    pub struct VFSConstFileSystemDir<File: Wasip1FileTrait + 'static + Copy> {
-        pub file_or_directories: &'static [VFSConstNormalInodeBuilder<File>],
-    }
-
-    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstFileSystemDir<File> {
-        pub const fn new(file_or_directories: &'static [VFSConstNormalInodeBuilder<File>]) -> Self {
-            Self {
-                file_or_directories,
-            }
-        }
-
-        pub fn flat_children<'a>(&'a self) -> impl Iterator<Item = &'static File> {
-            self.file_or_directories
-                .iter()
-                .flat_map(|child| child.flat_children())
-        }
-
-        pub const fn flat_children_static<'a, const FLAT_LEN: usize>(
-            file_or_directories: [VFSConstNormalInodeBuilder<File>; FLAT_LEN],
-        ) -> [File; FLAT_LEN] {
-            let mut flat_files = StaticArrayBuilder::<File, FLAT_LEN>::new();
-            let mut n = 0;
-
-            use const_for::const_for;
-            const_for!(i in 0..file_or_directories.len() => {
-                if file_or_directories[i].flat_children_static_inner(&mut flat_files, &mut n) {
-                    panic!("Flat files array is too small to hold all files and directories");
-                }
-            });
-
-            flat_files.build()
-        }
-
-        pub(crate) const fn flat_children_static_inner<const FLAT_LEN: usize>(
-            &self,
-            flat_files: &mut StaticArrayBuilder<File, FLAT_LEN>,
-            n: &mut usize,
-        ) -> bool {
-            use const_for::const_for;
-
-            const_for!(i in 0..self.file_or_directories.len() => {
-                if self.file_or_directories[i].flat_children_static_inner(flat_files, n) {
-                    return false;
-                }
-            });
-            true
-        }
-
-        pub fn iter(&self) -> impl Iterator<Item = &'static VFSConstNormalInodeBuilder<File>> {
-            self.file_or_directories.iter()
-        }
-    }
-
-    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstFileSystemDir<File> {
-        pub fn get_entry_for_path<'a>(
-            &'a self,
-            path: &str,
-        ) -> Result<&'a VFSConstNormalInodeBuilder<File>, wasip1::Errno> {
-            let mut parts = path.split('/');
-
-            let mut entry = self.file_or_directories;
-
-            let mut ret_file_entry = None;
-            let mut ret_dir_entry = None;
-            while let Some(part) = parts.next() {
-                if ret_file_entry.is_some() {
-                    return Err(wasip1::ERRNO_NOTDIR);
-                }
-
-                let mut found = false;
-                for child in entry.iter() {
-                    match child {
-                        VFSConstNormalInodeBuilder::File(name, _) => {
-                            if *name == part {
-                                ret_file_entry = Some(child);
-                                found = true;
-                                break;
-                            }
-                        }
-                        VFSConstNormalInodeBuilder::Dir(name, dir) => {
-                            if *name == part {
-                                ret_dir_entry = Some(child);
-                                entry = dir.file_or_directories;
-                                found = true;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                if !found {
-                    return Err(wasip1::ERRNO_NOENT);
-                }
-            }
-
-            if let Some(entry) = ret_file_entry {
-                Ok(entry)
-            } else if let Some(entry) = ret_dir_entry {
-                if path.ends_with("/") {
-                    return Ok(entry);
-                } else {
-                    return Err(wasip1::ERRNO_NOTDIR);
-                }
-            } else {
-                return Err(wasip1::ERRNO_NOENT);
-            }
-        }
-    }
-
     #[derive(Clone, Copy, Debug)]
     pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
         File(File),
         /// (first index..last index)
         Dir((usize, usize)),
-    }
-
-    #[derive(Clone, Copy, Debug)]
-    pub enum VFSConstNormalInodeBuilder<File: Wasip1FileTrait + 'static + Copy> {
-        File(&'static str, File),
-        Dir(&'static str, VFSConstFileSystemDir<File>),
-    }
-
-    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInodeBuilder<File> {
-        pub fn flat_children(&'static self) -> impl Iterator<Item = &'static File> {
-            VFSConstNormalInodeIterator {
-                index: 0,
-                flat_index: 0,
-                dir_or_file: self,
-            }
-        }
-
-        pub(crate) const fn flat_children_static_inner<const FLAT_LEN: usize>(
-            &self,
-            flat_files: &mut StaticArrayBuilder<File, FLAT_LEN>,
-            n: &mut usize,
-        ) -> bool {
-            match self {
-                VFSConstNormalInodeBuilder::File(_, file) => {
-                    *n += 1;
-                    if flat_files.push(*file).is_some() {
-                        return false;
-                    }
-                }
-                VFSConstNormalInodeBuilder::Dir(_, dir) => {
-                    dir.flat_children_static_inner(flat_files, n);
-                }
-            }
-            true
-        }
-    }
-
-    pub struct VFSConstNormalInodeIterator<File: Wasip1FileTrait + 'static + Copy> {
-        index: usize,
-        flat_index: usize,
-        dir_or_file: &'static VFSConstNormalInodeBuilder<File>,
-    }
-
-    impl<File: Wasip1FileTrait + 'static + Copy> Iterator for VFSConstNormalInodeIterator<File> {
-        type Item = &'static File;
-
-        fn next(&mut self) -> Option<Self::Item> {
-            match self.dir_or_file {
-                VFSConstNormalInodeBuilder::File(_, file) => {
-                    self.index += 1;
-
-                    if self.index == 1 { Some(file) } else { None }
-                }
-                VFSConstNormalInodeBuilder::Dir(_, dir) => {
-                    if self.index < dir.file_or_directories.len() {
-                        let child = &dir.file_or_directories[self.index];
-
-                        if let Some(file) = child.flat_children().nth(self.flat_index) {
-                            self.flat_index += 1;
-                            Some(file)
-                        } else {
-                            self.flat_index = 0;
-                            self.index += 1;
-                            self.next()
-                        }
-                    } else {
-                        None
-                    }
-                }
-            }
-        }
-    }
-
-    pub const fn vfs_const_macro_fn<S: 'static + Copy, const N: usize>(
-        fake_files: [&'static str; N],
-        name: &'static str,
-        _: &crate::binary_map::StaticArrayBuilder<S, N>,
-    ) -> (usize, usize) {
-        use const_for::const_for;
-
-        const fn eq_str(a: &str, b: &str) -> bool {
-            let a_bytes = a.as_bytes();
-            let b_bytes = b.as_bytes();
-
-            if a_bytes.len() != b_bytes.len() {
-                return false;
-            }
-
-            const_for!(i in 0..a_bytes.len() => {
-                if a_bytes[i] != b_bytes[i] {
-                    return false;
-                }
-            });
-
-            true
-        }
-
-        const fn starts_with_str(a: &str, b: &str) -> bool {
-            let a_bytes = a.as_bytes();
-            let b_bytes = b.as_bytes();
-
-            if a_bytes.len() < b_bytes.len() {
-                return false;
-            }
-
-            const_for!(i in 0..b_bytes.len() => {
-                if a_bytes[i] != b_bytes[i] {
-                    return false;
-                }
-            });
-
-            true
-        }
-
-        let mut first_index = None;
-        const_for!(i in 0..N => {
-            if first_index.is_none() && starts_with_str(fake_files[i], name) {
-                first_index = Some(i);
-            }
-
-            if eq_str(fake_files[i], name) {
-                return (first_index.unwrap(), i);
-            }
-        });
-
-        unreachable!()
     }
 
     #[macro_export]
@@ -509,6 +136,61 @@ pub mod non_atomic {
                 }
 
                 asserter(&static_array);
+
+                const fn vfs_const_macro_fn<S: 'static + Copy, const N: usize>(
+                    fake_files: [&'static str; N],
+                    name: &'static str,
+                    _: &$crate::binary_map::StaticArrayBuilder<S, N>,
+                ) -> (usize, usize) {
+                    use $crate::__private::const_for;
+
+                    const fn eq_str(a: &str, b: &str) -> bool {
+                        let a_bytes = a.as_bytes();
+                        let b_bytes = b.as_bytes();
+
+                        if a_bytes.len() != b_bytes.len() {
+                            return false;
+                        }
+
+                        const_for!(i in 0..a_bytes.len() => {
+                            if a_bytes[i] != b_bytes[i] {
+                                return false;
+                            }
+                        });
+
+                        true
+                    }
+
+                    const fn starts_with_str(a: &str, b: &str) -> bool {
+                        let a_bytes = a.as_bytes();
+                        let b_bytes = b.as_bytes();
+
+                        if a_bytes.len() < b_bytes.len() {
+                            return false;
+                        }
+
+                        const_for!(i in 0..b_bytes.len() => {
+                            if a_bytes[i] != b_bytes[i] {
+                                return false;
+                            }
+                        });
+
+                        true
+                    }
+
+                    let mut first_index = None;
+                    const_for!(i in 0..N => {
+                        if first_index.is_none() && starts_with_str(fake_files[i], name) {
+                            first_index = Some(i);
+                        }
+
+                        if eq_str(fake_files[i], name) {
+                            return (first_index.unwrap(), i);
+                        }
+                    });
+
+                    unreachable!()
+                }
 
                 let empty_arr = {
                     let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
@@ -569,7 +251,7 @@ pub mod non_atomic {
             $static_array.push((
                 $name,
                 $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
-                    $crate::wasi::file::non_atomic::vfs_const_macro_fn(
+                    vfs_const_macro_fn(
                         $empty,
                         $name,
                         &$static_array
@@ -604,7 +286,7 @@ pub mod non_atomic {
     impl<'a> WasiConstPrimitiveFile for &'a str {
         #[inline(always)]
         fn len(&self) -> usize {
-            <Self as std::ops::Deref>::deref(self).len()
+            <Self as core::ops::Deref>::deref(self).len()
         }
     }
 
@@ -634,28 +316,24 @@ pub mod non_atomic {
 
     pub struct DefaultStdIO;
 
-    impl StdIO for DefaultStdIO {}
+    impl StdIO for DefaultStdIO {
+        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            Wasip1Transporter::write_to_stdout(buf)
+        }
+
+        // fn write_direct(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+        //     Wasip1Transporter::write_to_stdout_direct(buf, len)
+        // }
+
+        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            Wasip1Transporter::write_to_stderr(buf)
+        }
+    }
 
     pub trait StdIO {
-        fn write(buf: &[u8]) -> (Size, wasip1::Errno) {
-            std::io::stdout()
-                .write_all(buf)
-                .expect("Failed to write to stdout");
+        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno>;
 
-            std::io::stdout().flush().expect("Failed to flush stdout");
-
-            (buf.len() as Size, wasip1::ERRNO_SUCCESS)
-        }
-
-        fn ewrite(buf: &[u8]) -> (Size, wasip1::Errno) {
-            std::io::stderr()
-                .write_all(buf)
-                .expect("Failed to write to stderr");
-
-            std::io::stderr().flush().expect("Failed to flush stderr");
-
-            (buf.len() as Size, wasip1::ERRNO_SUCCESS)
-        }
+        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno>;
     }
 
     pub trait Wasip1FileTrait {
@@ -678,20 +356,29 @@ pub mod non_atomic {
             iovs: *const wasip1::Ciovec,
             iovs_len: usize,
         ) -> Result<usize, wasip1::Errno> {
-            let mut total_read = 0;
+            #[cfg(feature = "alloc")]
+            {
+                let mut total_read = 0;
 
-            for i in 0..iovs_len {
-                let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
-                let mut buf = vec![0u8; iov.buf_len];
-                let read = self.read(&mut buf)?;
-                if read == 0 {
-                    break; // EOF
+                for i in 0..iovs_len {
+                    let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
+                    let mut buf = vec![0u8; iov.buf_len];
+                    let read = self.read(&mut buf)?;
+                    if read == 0 {
+                        break; // EOF
+                    }
+                    total_read += read;
+                    Wasm::memcpy(iov.buf as *mut _, &buf[..read]);
                 }
-                total_read += read;
-                Wasm::memcpy(iov.buf as *mut _, &buf[..read]);
+
+                Ok(total_read)
             }
 
-            Ok(total_read)
+            #[cfg(not(feature = "alloc"))]
+            {
+                // Stub implementation for non-std environments
+                Err(wasip1::ERRNO_NOSYS)
+            }
         }
 
         /// Reads data from the file into the provided buffer.
@@ -703,7 +390,14 @@ pub mod non_atomic {
 }
 
 pub trait Wasip1FileSystem {
-    fn fd_write(&mut self, fd: Fd, data: &[u8]) -> (Size, wasip1::Errno);
+    fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno>;
+
+    fn fd_write_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        data: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno>;
 
     fn path_open(
         &mut self,
@@ -727,29 +421,28 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
     iovs_len: usize,
     nwritten: *mut Size,
 ) -> Errno {
-    let mut iovs_vec: Vec<Ciovec> = Vec::with_capacity(iovs_len);
-    unsafe { iovs_vec.set_len(iovs_len) };
+    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-    Wasm::memcpy_to(&mut iovs_vec, iovs_ptr);
+    let mut writed = 0;
 
-    let len = iovs_vec.iter().map(|iovs| iovs.buf_len).sum::<usize>();
-
-    let mut space = Vec::<u8>::with_capacity(len);
-    unsafe { space.set_len(len) };
-
-    let mut offset = 0;
     for iovs in iovs_vec {
         let buf_len = iovs.buf_len;
         let buf_ptr = iovs.buf;
 
-        Wasm::memcpy_to(&mut space[offset..offset + buf_len], buf_ptr);
+        match state.fd_write_raw::<Wasm>(fd, buf_ptr, buf_len) {
+            Ok(nwritten) => {
+                writed += nwritten;
+            }
+            Err(e) => {
+                return e;
+            }
+        }
 
-        offset += buf_len;
+        writed += buf_len;
     }
 
-    let (written, ret) = state.fd_write(fd, &space);
-    Wasm::store_le(nwritten, written);
-    ret
+    Wasm::store_le(nwritten, writed);
+    return wasip1::ERRNO_SUCCESS;
 }
 
 // #[inline]
@@ -840,7 +533,7 @@ mod tests {
             )
         ]);
 
-        // println!("{:#?}", FILES);
+        println!("{:#?}", FILES);
 
         // let flat_files = FILES.flat_children().collect::<Vec<_>>();
 

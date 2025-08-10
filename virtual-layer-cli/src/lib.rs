@@ -72,7 +72,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .map(|old_wasm| {
             let name = old_wasm.get_file_main_name().unwrap();
             let wasm = format!("{}/{}", parsed_args.out_dir, old_wasm.file_name().unwrap());
-            std::fs::copy(old_wasm, &wasm).expect("Failed to copy file");
+            std::fs::copy(old_wasm, &wasm)
+                .wrap_err_with(|| eyre::eyre!("Failed to find Wasm file {old_wasm}"))?;
             println!("Optimizing target Wasm [{name}]...");
             tmp_files.push(wasm.to_string());
             let wasm = building::optimize_wasm(&wasm.into(), &[])

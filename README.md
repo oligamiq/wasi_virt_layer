@@ -10,7 +10,7 @@
 
 # run example
 ```bash
-cargo r -- -p example_vfs examples/test_wasm/test_wasm_opt.wasm
+cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
 ```
 
 # cannot
