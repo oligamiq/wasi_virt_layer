@@ -5,7 +5,7 @@ use wasip1_virtual_layer::{
     ConstFiles, export_fs,
     memory::WasmAccess,
     prelude::*,
-    wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalFiles, VFSConstVFS, WasiConstFile},
+    wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalFiles, WasiConstFile},
 };
 
 wit_bindgen::generate!({
@@ -63,7 +63,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
 export_env!(@block, @static, &mut VIRTUAL_ENV.lock(), test_wasm_opt);
 
 #[const_struct]
-const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 3> = ConstFiles!([
+const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 9> = ConstFiles!([
     ("/", { WasiConstFile::new("This is root") }),
     (
         ".",
@@ -87,8 +87,8 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 3> = ConstFiles!([
     )
 ]);
 
-static FS_STATE: std::sync::LazyLock<
-    Mutex<VFSConstVFS<WasiConstFile<&str>, 3, FilesTy, DefaultStdIO>>,
-> = std::sync::LazyLock::new(|| Mutex::new(VFSConstVFS::new(&FILES)));
+// static FS_STATE: std::sync::LazyLock<
+//     Mutex<VFSConstVFS<WasiConstFile<&str>, 3, FilesTy, DefaultStdIO>>,
+// > = std::sync::LazyLock::new(|| Mutex::new(VFSConstVFS::new(&FILES)));
 
-export_fs!(@const, &mut (*FS_STATE.lock()), test_wasm_opt);
+// export_fs!(@const, &mut (*FS_STATE.lock()), test_wasm_opt);

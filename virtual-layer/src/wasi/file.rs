@@ -482,7 +482,34 @@ pub mod non_atomic {
             ] $(,)?
         ) => {
             $crate::wasi::file::non_atomic::VFSConstNormalFiles::new({
+                const COUNT: usize = {
+                    let mut count = 0;
+
+                    $(
+                        $crate::ConstFiles!(@counter, count, $file_or_dir);
+                    )*
+
+                    count
+                };
+
                 let mut static_array = $crate::binary_map::StaticArrayBuilder::new();
+
+                struct CheckEqNumberOfFilesAndDirs<const L: usize, const R: usize>;
+
+                #[allow(dead_code)]
+                impl<const L: usize, const R: usize> CheckEqNumberOfFilesAndDirs<L, R> {
+                    #[allow(non_upper_case_globals)]
+                    const number_of_files_and_dirs_equals_FLAT_LEN_so_you_must_set_VFSConstNormalFiles_num: usize = (R - L) + (L - R);
+                }
+
+                const fn asserter<S: 'static + Copy, const N: usize>(
+                    _: &$crate::binary_map::StaticArrayBuilder<S, N>,
+                ) {
+                    CheckEqNumberOfFilesAndDirs::<COUNT, N>::number_of_files_and_dirs_equals_FLAT_LEN_so_you_must_set_VFSConstNormalFiles_num;
+                }
+
+                asserter(&static_array);
+
                 let empty_arr = {
                     let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
 
@@ -505,6 +532,19 @@ pub mod non_atomic {
 
                 static_array.build()
             })
+        };
+
+        (@counter, $count:ident, [
+            $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
+        ]) => {
+            $(
+                $crate::ConstFiles!(@counter, $count, $file_or_dir);
+            )*
+            $count += 1;
+        };
+
+        (@counter, $count:ident, $file:tt) => {
+            $count += 1;
         };
 
         (@empty, $empty_arr:ident, [$parent_name:expr], [
@@ -800,7 +840,7 @@ mod tests {
             )
         ]);
 
-        println!("{:#?}", FILES);
+        // println!("{:#?}", FILES);
 
         // let flat_files = FILES.flat_children().collect::<Vec<_>>();
 
