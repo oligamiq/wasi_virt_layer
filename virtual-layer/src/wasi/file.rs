@@ -11,33 +11,38 @@ pub mod non_atomic {
 
     /// small posix like virtual file system
     /// but inode has some metadata
-    pub struct Wasip1VFS<'a, Inode, const N: usize, const FLAT_LEN: usize> {
-        lfs: [&'a mut (dyn Wasip1LFS<Inode = Inode> + Sync); N],
-        map: heapless::Vec<(Device, Inode), FLAT_LEN>,
+    pub struct Wasip1VFS<
+        LFS: Wasip1LFS<Inode = Inode> + Sync,
+        Inode,
+        const N: usize,
+        const FLAT_LEN: usize,
+    > {
+        lfs: LFS,
+        map: heapless::Vec<Inode, FLAT_LEN>,
     }
 
-    impl<'a, Inode, const N: usize, const FLAT_LEN: usize> Wasip1VFS<'a, Inode, N, FLAT_LEN> {
-        pub const fn new(lfs: [&'a mut (dyn Wasip1LFS<Inode = Inode> + Sync); N]) -> Self {
+    impl<LFS: Wasip1LFS<Inode = Inode> + Sync, Inode, const N: usize, const FLAT_LEN: usize>
+        Wasip1VFS<LFS, Inode, N, FLAT_LEN>
+    {
+        pub const fn new(lfs: LFS) -> Self {
             let map = heapless::Vec::new();
             Self { lfs, map }
         }
 
         #[inline]
-        pub fn get_inode(&self, fd: Fd) -> Option<&(Device, Inode)> {
+        pub fn get_inode(&self, fd: Fd) -> Option<&Inode> {
             self.map.get(fd as usize)
         }
 
         #[inline]
-        pub fn get_lfs(
-            &'a mut self,
-            device: Device,
-        ) -> &'a mut (dyn Wasip1LFS<Inode = Inode> + Sync) {
-            self.lfs[device as usize]
+        pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&Inode, &mut LFS)> {
+            let inode = self.map.get(fd as usize)?;
+            Some((inode, &mut self.lfs))
         }
     }
 
-    impl<'a, Inode, const N: usize, const FLAT_LEN: usize> Wasip1FileSystem
-        for Wasip1VFS<'a, Inode, N, FLAT_LEN>
+    impl<LFS: Wasip1LFS<Inode = Inode> + Sync, Inode, const N: usize, const FLAT_LEN: usize>
+        Wasip1FileSystem for Wasip1VFS<LFS, Inode, N, FLAT_LEN>
     {
         fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno> {
             todo!()
@@ -49,9 +54,20 @@ pub mod non_atomic {
             data: *const u8,
             len: usize,
         ) -> Result<Size, wasip1::Errno> {
-            let (device, inode) = self.get_inode(fd).ok_or(wasip1::ERRNO_BADF)?;
-            let lfs = self.get_lfs(*device);
-            todo!()
+            match fd {
+                1 => {
+                    // stdout
+                    self.lfs.write_to_stdout::<Wasm>(data, len)
+                }
+                2 => {
+                    // stderr
+                    self.lfs.write_to_stderr::<Wasm>(data, len)
+                }
+                _ => {
+                    let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+                    lfs.fd_write_raw::<Wasm>(inode, data, len)
+                }
+            }
         }
 
         fn path_open(
@@ -71,6 +87,25 @@ pub mod non_atomic {
     /// small posix like local file system
     pub trait Wasip1LFS {
         type Inode;
+
+        fn write_to_stdout<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno>;
+
+        fn write_to_stderr<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno>;
+
+        fn fd_write_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            data: *const u8,
+            data_len: usize,
+        ) -> Result<Size, wasip1::Errno>;
     }
 
     pub struct VFSConstNormalLFS<
@@ -96,6 +131,12 @@ pub mod non_atomic {
                 __marker: core::marker::PhantomData,
             }
         }
+
+        #[inline]
+        pub fn update_access_time(&mut self, inode: &usize, atime: usize) {
+            let add_info = &mut self.add_info[*inode];
+            add_info.atime = atime;
+        }
     }
 
     impl<
@@ -106,6 +147,31 @@ pub mod non_atomic {
     > Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
     {
         type Inode = usize;
+
+        fn fd_write_raw<Wasm: WasmAccess>(
+            &mut self,
+            _: &Self::Inode,
+            _: *const u8,
+            _: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            return Err(wasip1::ERRNO_ROFS);
+        }
+
+        fn write_to_stdout<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            StdIo::write_direct::<Wasm>(data, len)
+        }
+
+        fn write_to_stderr<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            StdIo::write_direct::<Wasm>(data, len)
+        }
     }
 
     #[derive(Copy, Clone, Debug)]
@@ -369,23 +435,63 @@ pub mod non_atomic {
     pub struct DefaultStdIO;
 
     impl StdIO for DefaultStdIO {
-        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            Wasip1Transporter::write_to_stdout(buf)
+        fn write_direct<Wasm: WasmAccess>(
+            buf: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            Wasip1Transporter::write_to_stdout_direct::<Wasm>(buf, len)
         }
 
-        // fn write_direct(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
-        //     Wasip1Transporter::write_to_stdout_direct(buf, len)
-        // }
-
-        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            Wasip1Transporter::write_to_stderr(buf)
+        fn ewrite_direct<Wasm: WasmAccess>(
+            buf: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            Wasip1Transporter::write_to_stderr_direct::<Wasm>(buf, len)
         }
     }
 
     pub trait StdIO {
-        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno>;
+        #[allow(unused_variables)]
+        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            Err(wasip1::ERRNO_NOSYS)
+        }
 
-        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno>;
+        fn write_direct<Wasm: WasmAccess>(
+            buf: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            #[cfg(feature = "alloc")]
+            {
+                Self::write(&Wasm::get_array(buf, len))
+            }
+
+            #[cfg(not(feature = "alloc"))]
+            {
+                // Stub implementation for non-std environments
+                Err(wasip1::ERRNO_NOSYS)
+            }
+        }
+
+        #[allow(unused_variables)]
+        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            Err(wasip1::ERRNO_NOSYS)
+        }
+
+        fn ewrite_direct<Wasm: WasmAccess>(
+            buf: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            #[cfg(feature = "alloc")]
+            {
+                Self::ewrite(&Wasm::get_array(buf, len))
+            }
+
+            #[cfg(not(feature = "alloc"))]
+            {
+                // Stub implementation for non-std environments
+                Err(wasip1::ERRNO_NOSYS)
+            }
+        }
     }
 
     pub trait Wasip1FileTrait {

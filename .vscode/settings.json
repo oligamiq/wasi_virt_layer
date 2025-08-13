@@ -20,6 +20,7 @@
         "iovs",
         "lookupflags",
         "nonoverlapping",
+        "NOSYS",
         "NOTSUP",
         "nwritten",
         "Oflags",

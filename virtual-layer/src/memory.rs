@@ -263,6 +263,18 @@ pub trait WasmAccess {
         WasmArrayAccess::new(ptr, len)
     }
 
+    /// utility internal
+    #[cfg(feature = "alloc")]
+    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> Vec<T>
+    where
+        Self: Sized,
+    {
+        let mut vec = Vec::<T>::with_capacity(len);
+        unsafe { vec.set_len(len) };
+        Self::memcpy_to(&mut vec, ptr);
+        vec
+    }
+
     fn memory_directer<T>(ptr: *const T) -> *const T;
     fn memory_directer_mut<T>(ptr: *mut T) -> *mut T;
 
