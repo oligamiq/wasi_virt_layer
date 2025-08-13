@@ -79,7 +79,7 @@ macro_rules! export_env {
     };
 
     (@inner, @static, $state:expr, $wasm:ty) => {
-        $crate::paste::paste! {
+        $crate::__private::paste::paste! {
             #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](

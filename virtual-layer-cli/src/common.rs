@@ -101,6 +101,7 @@ pub enum Wasip1OpKind {
         zero_range: Box<[(i32, Option<i32>)]>,
         mem_init: Box<[(i32, usize, usize)]>,
     },
+    MemoryTrap {},
 }
 
 macro_rules! assert_ptr {
@@ -147,10 +148,10 @@ impl Wasip1Op {
 
         let name = name
             .strip_prefix("__wasip1_vfs_")
-            .ok_or_else(|| eyre::eyre!("Invalid import name: {name}"))?;
+            .ok_or_else(|| eyre::eyre!("Invalid import name prefix: {name}"))?;
         let name = name
             .strip_prefix(&format!("{wasm_name}_"))
-            .ok_or_else(|| eyre::eyre!("Invalid import name: {name}"))?;
+            .ok_or_else(|| eyre::eyre!("Invalid import name main: {name}"))?;
 
         let import_fn_id = if let ImportKind::Function(fid) = import.kind {
             fid
@@ -318,6 +319,7 @@ impl Wasip1Op {
                     mem_init,
                 }
             }
+            _ if name.starts_with("memory_trap") => Wasip1OpKind::MemoryTrap {},
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 
@@ -522,6 +524,19 @@ impl Wasip1Op {
                                     .memory_copy(vfs_mem, wasm_mem);
                             }
                             body.return_();
+                        }
+                        Wasip1OpKind::MemoryTrap { .. } => {
+                            body.i32_const(0)
+                                .i32_const(0)
+                                .store(
+                                    wasm_mem,
+                                    ir::StoreKind::I32 { atomic: false },
+                                    ir::MemArg {
+                                        align: 0,
+                                        offset: 0,
+                                    },
+                                )
+                                .return_();
                         }
                     }
                 })

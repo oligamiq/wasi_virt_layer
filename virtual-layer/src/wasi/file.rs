@@ -7,14 +7,65 @@ use crate::memory::WasmAccess;
 
 #[cfg(not(target_feature = "atomics"))]
 pub mod non_atomic {
-    use dashmap::DashMap;
     use wasip1::*;
 
     /// small posix like virtual file system
     /// but inode has some metadata
     pub struct Wasip1VFS<'a, Inode, const N: usize, const FLAT_LEN: usize> {
-        lfs: [&'a mut dyn Wasip1LFS<Inode = Inode>; N],
-        map: heapless::Vec<Inode, FLAT_LEN>,
+        lfs: [&'a mut (dyn Wasip1LFS<Inode = Inode> + Sync); N],
+        map: heapless::Vec<(Device, Inode), FLAT_LEN>,
+    }
+
+    impl<'a, Inode, const N: usize, const FLAT_LEN: usize> Wasip1VFS<'a, Inode, N, FLAT_LEN> {
+        pub const fn new(lfs: [&'a mut (dyn Wasip1LFS<Inode = Inode> + Sync); N]) -> Self {
+            let map = heapless::Vec::new();
+            Self { lfs, map }
+        }
+
+        #[inline]
+        pub fn get_inode(&self, fd: Fd) -> Option<&(Device, Inode)> {
+            self.map.get(fd as usize)
+        }
+
+        #[inline]
+        pub fn get_lfs(
+            &'a mut self,
+            device: Device,
+        ) -> &'a mut (dyn Wasip1LFS<Inode = Inode> + Sync) {
+            self.lfs[device as usize]
+        }
+    }
+
+    impl<'a, Inode, const N: usize, const FLAT_LEN: usize> Wasip1FileSystem
+        for Wasip1VFS<'a, Inode, N, FLAT_LEN>
+    {
+        fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno> {
+            todo!()
+        }
+
+        fn fd_write_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            data: *const u8,
+            len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            let (device, inode) = self.get_inode(fd).ok_or(wasip1::ERRNO_BADF)?;
+            let lfs = self.get_lfs(*device);
+            todo!()
+        }
+
+        fn path_open(
+            &mut self,
+            dir_fd: Fd,
+            dir_flags: wasip1::Fdflags,
+            path: &str,
+            o_flags: wasip1::Oflags,
+            fs_rights_base: wasip1::Rights,
+            fs_rights_inheriting: wasip1::Rights,
+            fd_flags: wasip1::Fdflags,
+        ) -> Result<Fd, wasip1::Errno> {
+            todo!()
+        }
     }
 
     /// small posix like local file system
@@ -78,7 +129,7 @@ pub mod non_atomic {
 
     use const_struct::ConstStruct;
 
-    use crate::{memory::WasmAccess, transporter::Wasip1Transporter};
+    use crate::{memory::WasmAccess, transporter::Wasip1Transporter, wasi::file::Wasip1FileSystem};
 
     /// A constant file system root that can be used in a WASI component.
     #[derive(ConstStruct, Debug)]
@@ -132,6 +183,7 @@ pub mod non_atomic {
                 const fn asserter<S: 'static + Copy, const N: usize>(
                     _: &$crate::binary_map::StaticArrayBuilder<S, N>,
                 ) {
+                    #[allow(path_statements)]
                     CheckEqNumberOfFilesAndDirs::<COUNT, N>::number_of_files_and_dirs_equals_FLAT_LEN_so_you_must_set_VFSConstNormalFiles_num;
                 }
 
@@ -298,11 +350,11 @@ pub mod non_atomic {
             _fd_flags: wasip1::Fdflags,
         ) -> Result<(), wasip1::Errno> {
             if fs_rights_base & wasip1::RIGHTS_FD_WRITE == wasip1::RIGHTS_FD_WRITE {
-                return Err(wasip1::ERRNO_PERM);
+                return Err(wasip1::ERRNO_ROFS);
             }
 
             if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
-                return Err(wasip1::ERRNO_PERM);
+                return Err(wasip1::ERRNO_ROFS);
             }
 
             Ok(())
@@ -351,6 +403,7 @@ pub mod non_atomic {
         /// This function is called by the `fd_read` function.
         /// Implementing this function directly is more efficient,
         /// but it is recommended to implement `fn read`!
+        #[cfg_attr(not(feature = "alloc"), allow(unused_variables))]
         fn read_iovs<Wasm: WasmAccess>(
             &self,
             iovs: *const wasip1::Ciovec,
@@ -463,7 +516,7 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
 #[macro_export]
 macro_rules! export_fs {
     (@const, $state:expr, $wasm:ty) => {
-        $crate::paste::paste! {
+        $crate::__private::paste::paste! {
             #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_write>](
@@ -499,7 +552,7 @@ macro_rules! export_fs {
 mod tests {
     use crate::{
         ConstFiles,
-        wasi::file::non_atomic::{VFSConstNormalFiles, VFSConstNormalInode, WasiConstFile},
+        wasi::file::non_atomic::{VFSConstNormalFiles, WasiConstFile},
     };
 
     /// If not using `--release`, compilation will fail with: link error
@@ -533,9 +586,7 @@ mod tests {
             )
         ]);
 
-        println!("{:#?}", FILES);
-
-        // let flat_files = FILES.flat_children().collect::<Vec<_>>();
+        let flat_files = FILES;
 
         // assert_eq!(flat_files[0], &WasiConstFile::new("This is root"));
         // assert_eq!(flat_files[1], &WasiConstFile::new("Hey!"));

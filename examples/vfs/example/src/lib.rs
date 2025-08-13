@@ -5,7 +5,7 @@ use wasip1_virtual_layer::{
     ConstFiles, export_fs,
     memory::WasmAccess,
     prelude::*,
-    wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalFiles, WasiConstFile},
+    wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalFiles, VFSConstNormalLFS, WasiConstFile},
 };
 
 wit_bindgen::generate!({
@@ -87,8 +87,31 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 9> = ConstFiles!([
     )
 ]);
 
-// static FS_STATE: std::sync::LazyLock<
-//     Mutex<VFSConstVFS<WasiConstFile<&str>, 3, FilesTy, DefaultStdIO>>,
-// > = std::sync::LazyLock::new(|| Mutex::new(VFSConstVFS::new(&FILES)));
+mod fs {
+    use super::test_wasm_opt;
+    use wasip1_virtual_layer::{
+        export_fs,
+        wasi::file::non_atomic::{
+            DefaultStdIO, VFSConstNormalLFS, WasiConstFile, Wasip1LFS, Wasip1VFS,
+        },
+    };
 
-// export_fs!(@const, &mut (*FS_STATE.lock()), test_wasm_opt);
+    use crate::FilesTy;
+
+    static mut VIRTUAL_FILE_SYSTEM: Wasip1VFS<usize, 1, 9> = Wasip1VFS::new({
+        static mut LOCAL_FILE_SYSTEM: VFSConstNormalLFS<
+            FilesTy,
+            WasiConstFile<&'static str>,
+            9,
+            DefaultStdIO,
+        > = VFSConstNormalLFS::new();
+
+        #[allow(static_mut_refs)]
+        [unsafe { &mut LOCAL_FILE_SYSTEM } as &mut (dyn Wasip1LFS<Inode = usize> + Sync)]
+    });
+
+    export_fs!(@const, {
+        #[allow(static_mut_refs)]
+        unsafe { &mut VIRTUAL_FILE_SYSTEM }
+    }, test_wasm_opt);
+}

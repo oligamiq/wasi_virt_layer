@@ -4,11 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
+default = ["alloc"]
 alloc = []
-
-# When the memory is finally synthesised, the memory data can be passed directly.
-# If not synthesised, do not turn direct on as it cannot be passed directly!
-direct = []
 
 [dependencies]
 wit-bindgen = { version = "0.43.0", default-features = false }
@@ -19,6 +16,6 @@ paste = "1.0.15"
 dashmap = "6.1.0"
 heapless = "0.8.0"
 
-[dev-dependencies]
+# [dev-dependencies]
 # wasi preview1 latest
-wasmtime-wasi = "17.0.3"
+# wasmtime-wasi = "17.0.3"

@@ -3,7 +3,7 @@
 #[macro_export]
 macro_rules! import_wasm {
     ($name:ident) => {
-        $crate::paste::paste! {
+        $crate::__private::paste::paste! {
             #[allow(non_camel_case_types)]
             struct $name;
 
@@ -27,6 +27,12 @@ macro_rules! import_wasm {
                 );
 
                 #[unsafe(no_mangle)]
+                pub fn [<__wasip1_vfs_ $name _memory_trap>]();
+
+                #[unsafe(no_mangle)]
+                pub fn [<__wasip1_vfs_ $name _memory_directer>](ptr: isize) -> isize;
+
+                #[unsafe(no_mangle)]
                 pub fn [<__wasip1_vfs_ $name ___main_void>]();
 
                 #[unsafe(no_mangle)]
@@ -36,13 +42,16 @@ macro_rules! import_wasm {
                 pub fn [<__wasip1_vfs_ $name _reset>]();
             }
 
+            #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
             unsafe extern "C" fn [<__wasip1_vfs_ $name __start_wrap>]() {
-                #[cfg(not(target_arch = "wasm32"))]
-                unimplemented!("this is not supported on this architecture");
-
-                #[cfg(target_arch = "wasm32")]
                 unsafe { [<__wasip1_vfs_ $name __start>]() };
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            #[unsafe(no_mangle)]
+            unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_wrap>]() {
+                unsafe { [<__wasip1_vfs_ $name _memory_trap>]() };
             }
 
             impl $crate::memory::WasmAccess for $name {
@@ -102,9 +111,30 @@ macro_rules! import_wasm {
                             offset as *const u8,
                             core::mem::size_of::<T>(),
                         );
-                        value
-                            .assume_init()
+                        core::ptr::read(value.as_ptr() as *const T)
                     }
+                }
+
+                #[inline(always)]
+                fn memory_directer<T>(ptr: *const T) -> *const T {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_arch = "wasm32")]
+                    unsafe { [<__wasip1_vfs_ $name _memory_directer>](
+                        ptr as isize
+                    ) as *const T }
+                }
+
+                #[inline(always)]
+                fn memory_directer_mut<T>(ptr: *mut T) -> *mut T {
+                    #[cfg(not(target_arch = "wasm32"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_arch = "wasm32")]
+                    unsafe { [<__wasip1_vfs_ $name _memory_directer>](
+                        ptr as isize
+                    ) as *mut T }
                 }
 
                 #[inline(always)]
@@ -225,12 +255,16 @@ pub trait WasmAccess {
     fn store_le<T>(offset: *mut T, value: T);
     fn load_le<T: core::fmt::Debug>(offset: *const T) -> T;
 
+    /// utility internal
     fn as_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> WasmArrayAccess<T, Self>
     where
         Self: Sized,
     {
         WasmArrayAccess::new(ptr, len)
     }
+
+    fn memory_directer<T>(ptr: *const T) -> *const T;
+    fn memory_directer_mut<T>(ptr: *mut T) -> *mut T;
 
     /// wrapping wasm's _start function
     /// By default in Rust code, when _start is called,
