@@ -107,6 +107,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
     tmp_files.push(ret.to_string());
 
+    println!("Generating single memory Wasm...");
+    let single_memory = camino::Utf8PathBuf::from(ret.clone()).with_extension("single_memory.wasm");
+    std::fs::copy(&ret, &single_memory).expect("Failed to rename file");
+    let single_memory = building::optimize_wasm(&single_memory, &["--multi-memory-lowering"])?;
+
     println!("Optimizing Merged Wasm...");
     let ret = building::optimize_wasm(&ret, &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
@@ -117,12 +122,21 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
     tmp_files.push(component.to_string());
 
+    let component_single_memory = building::wasm_to_component(&single_memory, &wasm_names)
+        .wrap_err_with(|| eyre::eyre!("Failed to translate single memory Wasm to Component"))?;
+
     println!("Translating Component to JS...");
     let binary =
         std::fs::read(&component).wrap_err_with(|| eyre::eyre!("Failed to read component"))?;
     let transpiled = parsed_args
         .transpile_to_js(&binary, &building_crate.name)
         .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))?;
+
+    let binary_single_memory = std::fs::read(&component_single_memory)
+        .wrap_err_with(|| eyre::eyre!("Failed to read component single memory"))?;
+    let transpiled_single_memory = parsed_args
+        .transpile_to_js(&binary_single_memory, &building_crate.name)
+        .wrap_err_with(|| eyre::eyre!("Failed to transpile single memory to JS"))?;
 
     let mut core_wasm = None;
     for (name, data) in transpiled.files.iter() {
@@ -140,21 +154,40 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .as_ref()
         .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
+    let mut core_wasm_single_memory = None;
+    for (name, data) in transpiled_single_memory.files.iter() {
+        let file_name = format!("{}/{name}", parsed_args.out_dir);
+        let file_name = camino::Utf8PathBuf::from(file_name).with_extension("single_memory.wasm");
+
+        if name.ends_with(".core.wasm") {
+            std::fs::write(&file_name, &data).expect("Failed to write file");
+            core_wasm_single_memory = Some(file_name);
+        } else if std::fs::metadata(&file_name).is_ok() {
+            let file = std::fs::read(&file_name).unwrap();
+            if &file != data {
+                panic!(
+                    "File {file_name} is different single memory component and normal memory component"
+                );
+            }
+        }
+    }
+
+    let core_wasm_single_memory = core_wasm_single_memory
+        .as_ref()
+        .ok_or_else(|| eyre::eyre!("Failed to find core wasm single memory"))?;
+
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm"))?;
+
+    let core_wasm_single_memory_opt = building::optimize_wasm(&core_wasm_single_memory.into(), &[])
+        .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm single memory"))?;
 
     std::fs::remove_file(&core_wasm).expect("Failed to remove existing file");
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
-    println!("Generating single memory Wasm...");
-    let core_single_wasm_opt =
-        building::optimize_wasm(&core_wasm.into(), &["--multi-memory-lowering"])?;
-
-    std::fs::rename(
-        &core_single_wasm_opt,
-        camino::Utf8PathBuf::from(core_wasm.clone()).with_extension("single_memory.wasm"),
-    )
-    .expect("Failed to rename file");
+    std::fs::remove_file(&core_wasm_single_memory).expect("Failed to remove existing file");
+    std::fs::rename(&core_wasm_single_memory_opt, &core_wasm_single_memory)
+        .expect("Failed to rename file");
 
     for tmp_file in tmp_files {
         std::fs::remove_file(tmp_file).expect("Failed to remove tmp file");

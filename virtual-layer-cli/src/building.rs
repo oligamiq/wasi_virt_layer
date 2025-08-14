@@ -314,11 +314,14 @@ pub fn optimize_wasm(
             .args(["-Oz", wasm_path.as_str()])
             .args(["--output", output_path.as_str()])
             .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
             .spawn()?;
 
         let output = command.wait_with_output()?;
 
         if !output.status.success() {
+            let err = String::from_utf8_lossy(&output.stderr);
+            println!("err: {err}");
             Err(eyre::eyre!("wasm-opt failed."))?;
         }
 
