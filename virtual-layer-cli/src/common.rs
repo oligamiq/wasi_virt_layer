@@ -102,6 +102,7 @@ pub enum Wasip1OpKind {
         mem_init: Box<[(i32, usize, usize)]>,
     },
     MemoryTrap {},
+    Skip,
 }
 
 macro_rules! assert_ptr {
@@ -320,6 +321,7 @@ impl Wasip1Op {
                 }
             }
             _ if name.starts_with("memory_trap") => Wasip1OpKind::MemoryTrap {},
+            _ if name.starts_with("memory_directer") => Wasip1OpKind::Skip {},
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 
@@ -437,6 +439,7 @@ impl Wasip1Op {
                 vfs_mem,
                 is_reset_contain,
             )?;
+        } else if let Wasip1OpKind::Skip = self.kind {
         } else {
             let Self { fid, kind } = self;
 
@@ -537,6 +540,9 @@ impl Wasip1Op {
                                     },
                                 )
                                 .return_();
+                        }
+                        Wasip1OpKind::Skip => {
+                            unreachable!();
                         }
                     }
                 })

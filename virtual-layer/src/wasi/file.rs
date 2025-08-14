@@ -54,20 +54,20 @@ pub mod non_atomic {
             data: *const u8,
             len: usize,
         ) -> Result<Size, wasip1::Errno> {
-            match fd {
-                1 => {
-                    // stdout
-                    self.lfs.write_to_stdout::<Wasm>(data, len)
-                }
-                2 => {
-                    // stderr
-                    self.lfs.write_to_stderr::<Wasm>(data, len)
-                }
-                _ => {
-                    let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
-                    lfs.fd_write_raw::<Wasm>(inode, data, len)
-                }
-            }
+            // match fd {
+            //     1 => {
+            //         // stdout
+            //         self.lfs.write_to_stdout::<Wasm>(data, len)
+            //     }
+            //     2 => {
+            //         // stderr
+            //         self.lfs.write_to_stderr::<Wasm>(data, len)
+            //     }
+            //     _ => {
+            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+            lfs.fd_write_raw::<Wasm>(inode, data, len)
+            //     }
+            // }
         }
 
         fn path_open(
