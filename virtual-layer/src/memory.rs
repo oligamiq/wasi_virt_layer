@@ -30,7 +30,7 @@ macro_rules! import_wasm {
                 pub fn [<__wasip1_vfs_ $name _memory_trap>]();
 
                 #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name _memory_directer>](ptr: isize) -> isize;
+                pub fn [<__wasip1_vfs_ $name _memory_director>](ptr: isize) -> isize;
 
                 #[unsafe(no_mangle)]
                 pub fn [<__wasip1_vfs_ $name ___main_void>]();
@@ -116,23 +116,23 @@ macro_rules! import_wasm {
                 }
 
                 #[inline(always)]
-                fn memory_directer<T>(ptr: *const T) -> *const T {
+                fn memory_director<T>(ptr: *const T) -> *const T {
                     #[cfg(not(target_arch = "wasm32"))]
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_arch = "wasm32")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_directer>](
+                    unsafe { [<__wasip1_vfs_ $name _memory_director>](
                         ptr as isize
                     ) as *const T }
                 }
 
                 #[inline(always)]
-                fn memory_directer_mut<T>(ptr: *mut T) -> *mut T {
+                fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
                     #[cfg(not(target_arch = "wasm32"))]
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_arch = "wasm32")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_directer>](
+                    unsafe { [<__wasip1_vfs_ $name _memory_director>](
                         ptr as isize
                     ) as *mut T }
                 }
@@ -275,8 +275,8 @@ pub trait WasmAccess {
         vec
     }
 
-    fn memory_directer<T>(ptr: *const T) -> *const T;
-    fn memory_directer_mut<T>(ptr: *mut T) -> *mut T;
+    fn memory_director<T>(ptr: *const T) -> *const T;
+    fn memory_director_mut<T>(ptr: *mut T) -> *mut T;
 
     /// wrapping wasm's _start function
     /// By default in Rust code, when _start is called,

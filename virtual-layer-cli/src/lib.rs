@@ -8,6 +8,7 @@ pub mod adjust;
 pub mod args;
 pub mod building;
 pub mod common;
+pub mod director;
 pub mod down_color;
 pub mod instrs;
 pub mod is_valid;
@@ -107,18 +108,24 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
     tmp_files.push(ret.to_string());
 
-    println!("Generating single memory Wasm...");
+    println!("Generating single memory Merged Wasm...");
     let single_memory = camino::Utf8PathBuf::from(ret.clone()).with_extension("single_memory.wasm");
     std::fs::copy(&ret, &single_memory).expect("Failed to rename file");
     let single_memory = building::optimize_wasm(&single_memory, &["--multi-memory-lowering"])?;
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&ret, &[])
+    let multi_memory = building::optimize_wasm(&ret, &[])
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
-    tmp_files.push(ret.to_string());
+    tmp_files.push(multi_memory.to_string());
+
+    println!("Directing process single memory Merged Wasm...");
+    let single_memory = director::director(&single_memory, &wasm_paths, true)?;
+
+    println!("Directing process multi memory Merged Wasm...");
+    let multi_memory = director::director(&multi_memory, &wasm_paths, false)?;
 
     println!("Translating Wasm to Component...");
-    let component = building::wasm_to_component(&ret, &wasm_names)
+    let component = building::wasm_to_component(&multi_memory, &wasm_names)
         .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
     tmp_files.push(component.to_string());
 

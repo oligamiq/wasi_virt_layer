@@ -25,7 +25,7 @@ impl Wasip1Transporter {
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
         let ciovec_arr = [wasip1::Ciovec {
-            buf: Wasm::memory_directer(buf),
+            buf: Wasm::memory_director(buf),
             buf_len: len,
         }];
 
@@ -46,7 +46,7 @@ impl Wasip1Transporter {
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
         let ciovec_arr = [wasip1::Ciovec {
-            buf: Wasm::memory_directer(buf),
+            buf: Wasm::memory_director(buf),
             buf_len: len,
         }];
 
