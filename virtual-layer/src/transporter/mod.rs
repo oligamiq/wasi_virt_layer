@@ -12,6 +12,7 @@ impl Wasip1Transporter {
         unsafe { wasip1::fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
     }
 
+    #[cfg(not(feature = "multi_memory"))]
     pub fn write_to_stdout_direct<Wasm: WasmAccess>(
         buf: *const u8,
         len: usize,
@@ -33,6 +34,7 @@ impl Wasip1Transporter {
         unsafe { wasip1::fd_write(wasip1::FD_STDERR, &ciovec_arr) }
     }
 
+    #[cfg(not(feature = "multi_memory"))]
     pub fn write_to_stderr_direct<Wasm: WasmAccess>(
         buf: *const u8,
         len: usize,

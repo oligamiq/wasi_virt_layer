@@ -136,9 +136,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
     tmp_files.push(ret.to_string());
 
-    println!("Directing process {target_memory_type} memory Merged Wasm...");
-    let ret = director::director(&ret, &wasm_paths, target_memory_type)?;
-    tmp_files.push(ret.to_string());
+    let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
+        println!("Directing process {target_memory_type} memory Merged Wasm...");
+        let ret = director::director(&ret, &wasm_paths)?;
+        tmp_files.push(ret.to_string());
+        ret
+    } else {
+        ret
+    };
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret, &wasm_names)

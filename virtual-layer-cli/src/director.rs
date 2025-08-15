@@ -8,11 +8,7 @@ use crate::{
     util::{CaminoUtilModule as _, ResultUtil as _},
 };
 
-pub fn director(
-    path: &Utf8PathBuf,
-    wasm: &[impl AsRef<Path>],
-    memory_type: TargetMemoryType,
-) -> eyre::Result<Utf8PathBuf> {
+pub fn director(path: &Utf8PathBuf, wasm: &[impl AsRef<Path>]) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
@@ -30,10 +26,7 @@ pub fn director(
     for wasm in wasm {
         let wasm = wasm?;
 
-        print!("Wasm file: {wasm}");
         let wasm_name = wasm.get_file_main_name().unwrap();
-
-        print!("Wasm name: {wasm_name}");
 
         let trap_id = module
             .exports
@@ -41,37 +34,6 @@ pub fn director(
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("Failed to get export function"))?;
 
-        // let trap_id = match &module.funcs.get(trap_id).kind {
-        //     walrus::FunctionKind::Local(local_function) => {
-        //         let start_block = local_function.entry_block();
-        //         let block = local_function.block(start_block);
-        //         let (instr, _) = block.instrs[1].clone();
-        //         match instr {
-        //             walrus::ir::Instr::Call(walrus::ir::Call { func }) => func,
-        //             _ => {
-        //                 eyre::bail!("Unexpected instruction in trap function: {instr:?}");
-        //             }
-        //         }
-        //     }
-        //     _ => panic!("Unexpected function kind"),
-        // };
-
-        // example multi memory trap function
-        //   (func (;233;) (type 3) (param i32) (result i32)
-        //     local.get 0
-        //     i32.const 0
-        //     i32.store 1 align=1
-        //     i32.const 0
-        //     return
-        //   )
-        //   (func (;269;) (type 7) (param i32) (result i32)
-        //     global.get 2
-        //     local.get 0
-        //     i32.add
-        //     i32.const 0
-        //     i32.store align=1
-        //     i32.const 0
-        //   )
         let trap_body = match &mut module.funcs.get_mut(trap_id).kind {
             walrus::FunctionKind::Local(local_function) => {
                 let start_block = local_function.entry_block();
@@ -79,6 +41,7 @@ pub fn director(
             }
             _ => panic!("Unexpected function kind"),
         };
+
         // Remove the fake value instruction
         let (store_index, store_info) = trap_body
             .iter()
@@ -142,12 +105,4 @@ pub fn director(
         .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
 
     Ok(new_path)
-}
-
-pub fn director_single(path: &Utf8PathBuf, wasm: impl AsRef<Path>) -> eyre::Result<Utf8PathBuf> {
-    Ok(path.clone())
-}
-
-pub fn director_multi(path: &Utf8PathBuf, wasm: impl AsRef<Path>) -> eyre::Result<Utf8PathBuf> {
-    Ok(path.clone())
 }

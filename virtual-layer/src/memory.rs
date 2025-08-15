@@ -172,6 +172,7 @@ macro_rules! __memory_director_wasm_access {
 }
 
 #[cfg(feature = "multi_memory")]
+#[macro_export]
 macro_rules! __memory_director_wasm_access {
     ($_:ident) => {};
 }
@@ -208,6 +209,7 @@ macro_rules! __memory_director_import_etc {
 }
 
 #[cfg(feature = "multi_memory")]
+#[macro_export]
 macro_rules! __memory_director_import_etc {
     ($_:ident) => {};
 }
@@ -298,6 +300,9 @@ impl<T: core::fmt::Debug, Wasm: WasmAccess> Iterator for WasmArrayAccessIterator
         Some(item)
     }
 }
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 
 pub trait WasmAccess {
     /// Copies data from the source pointer to the offset.

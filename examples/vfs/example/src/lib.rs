@@ -2,10 +2,10 @@ use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
 use wasip1_virtual_layer::{
-    ConstFiles, export_fs,
+    ConstFiles,
     memory::WasmAccess,
     prelude::*,
-    wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalFiles, VFSConstNormalLFS, WasiConstFile},
+    wasi::file::non_atomic::{VFSConstNormalFiles, WasiConstFile},
 };
 
 wit_bindgen::generate!({
@@ -57,6 +57,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     let mut environ = Vec::<String>::new();
     environ.push("RUST_MIN_STACK=16777216".into());
     environ.push("HOME=~/".into());
+    environ.push("RUST_BACKTRACE=1".into());
     Mutex::new(VirtualEnvState { environ })
 });
 

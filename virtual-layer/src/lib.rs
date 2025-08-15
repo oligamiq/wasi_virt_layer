@@ -1,4 +1,4 @@
-#![cfg_attr(not(feature = "alloc"), no_std)]
+// #![no_std]
 
 pub mod memory;
 pub mod wasi;

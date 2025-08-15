@@ -155,7 +155,17 @@ pub mod non_atomic {
             data: *const u8,
             len: usize,
         ) -> Result<Size, wasip1::Errno> {
-            StdIo::write_direct::<Wasm>(data, len)
+            #[cfg(not(feature = "multi_memory"))]
+            {
+                StdIo::write_direct::<Wasm>(data, len)
+            }
+            #[cfg(feature = "multi_memory")]
+            {
+                let mut buf = Vec::with_capacity(len);
+                unsafe { buf.set_len(len) };
+                Wasm::memcpy_to(&mut buf, data);
+                StdIo::write(&buf)
+            }
         }
 
         fn write_to_stderr<Wasm: WasmAccess>(
@@ -163,7 +173,17 @@ pub mod non_atomic {
             data: *const u8,
             len: usize,
         ) -> Result<Size, wasip1::Errno> {
-            StdIo::write_direct::<Wasm>(data, len)
+            #[cfg(not(feature = "multi_memory"))]
+            {
+                StdIo::write_direct::<Wasm>(data, len)
+            }
+            #[cfg(feature = "multi_memory")]
+            {
+                let mut buf = Vec::with_capacity(len);
+                unsafe { buf.set_len(len) };
+                Wasm::memcpy_to(&mut buf, data);
+                StdIo::write(&buf)
+            }
         }
     }
 
@@ -428,6 +448,11 @@ pub mod non_atomic {
     pub struct DefaultStdIO;
 
     impl StdIO for DefaultStdIO {
+        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            Wasip1Transporter::write_to_stdout(buf)
+        }
+
+        #[cfg(not(feature = "multi_memory"))]
         fn write_direct<Wasm: WasmAccess>(
             buf: *const u8,
             len: usize,
@@ -435,6 +460,11 @@ pub mod non_atomic {
             Wasip1Transporter::write_to_stdout_direct::<Wasm>(buf, len)
         }
 
+        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+            Wasip1Transporter::write_to_stderr(buf)
+        }
+
+        #[cfg(not(feature = "multi_memory"))]
         fn ewrite_direct<Wasm: WasmAccess>(
             buf: *const u8,
             len: usize,
@@ -449,6 +479,7 @@ pub mod non_atomic {
             Err(wasip1::ERRNO_NOSYS)
         }
 
+        #[cfg(not(feature = "multi_memory"))]
         fn write_direct<Wasm: WasmAccess>(
             buf: *const u8,
             len: usize,
@@ -470,6 +501,7 @@ pub mod non_atomic {
             Err(wasip1::ERRNO_NOSYS)
         }
 
+        #[cfg(not(feature = "multi_memory"))]
         fn ewrite_direct<Wasm: WasmAccess>(
             buf: *const u8,
             len: usize,
@@ -581,6 +613,8 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
         let buf_len = iovs.buf_len;
         let buf_ptr = iovs.buf;
 
+        println!("Writing {} bytes to fd {}", buf_len, fd);
+
         match state.fd_write_raw::<Wasm>(fd, buf_ptr, buf_len) {
             Ok(nwritten) => {
                 writed += nwritten;
@@ -589,9 +623,9 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
                 return e;
             }
         }
-
-        writed += buf_len;
     }
+
+    println!("Total bytes written: {}", writed);
 
     Wasm::store_le(nwritten, writed);
     return wasip1::ERRNO_SUCCESS;
