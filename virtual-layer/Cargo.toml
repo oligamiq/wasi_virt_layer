@@ -5,6 +5,7 @@ edition = "2024"
 
 [features]
 default = ["alloc"]
+multi_memory = ["alloc"]
 alloc = []
 
 [dependencies]

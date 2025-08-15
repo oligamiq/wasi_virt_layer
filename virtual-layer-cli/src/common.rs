@@ -529,8 +529,8 @@ impl Wasip1Op {
                             body.return_();
                         }
                         Wasip1OpKind::MemoryTrap { .. } => {
-                            body.i32_const(0)
-                                .i32_const(0)
+                            body.local_get(arg_locals[0])
+                                .i32_const(0) // fake value
                                 .store(
                                     wasm_mem,
                                     ir::StoreKind::I32 { atomic: false },
@@ -539,6 +539,7 @@ impl Wasip1Op {
                                         offset: 0,
                                     },
                                 )
+                                .i32_const(0) // fake return value
                                 .return_();
                         }
                         Wasip1OpKind::Skip => {

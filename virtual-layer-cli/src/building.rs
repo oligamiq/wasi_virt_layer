@@ -298,6 +298,7 @@ pub fn get_building_crate(
 pub fn optimize_wasm(
     wasm_path: &camino::Utf8PathBuf,
     add_args: &[&str],
+    require_update: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut before_path = wasm_path.clone();
 
@@ -330,9 +331,11 @@ pub fn optimize_wasm(
 
         if before_size <= after_size {
             if first {
-                std::fs::remove_file(&output_path)?;
-                std::fs::copy(&before_path, &output_path)?;
-                before_path = output_path.clone();
+                if !require_update {
+                    std::fs::remove_file(&output_path)?;
+                    std::fs::copy(&before_path, &output_path)?;
+                    before_path = output_path.clone();
+                }
             } else {
                 // remove
                 std::fs::remove_file(&output_path)?;

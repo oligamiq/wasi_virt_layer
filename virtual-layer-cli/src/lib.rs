@@ -4,6 +4,8 @@ use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
+use crate::rewrite::change_target_memory_type;
+
 pub mod adjust;
 pub mod args;
 pub mod building;
@@ -38,6 +40,10 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     };
     let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package);
 
+    if let Some(target_memory_type) = parsed_args.target_memory_type {
+        change_target_memory_type(&cargo_metadata, &building_crate, target_memory_type)?;
+    }
+
     println!("Compiling {}", building_crate.name);
 
     let ret = building::build_vfs(
@@ -48,14 +54,15 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     .wrap_err_with(|| eyre::eyre!("Failed to build VFS"))?;
 
     println!("Optimizing VfS Wasm...");
-    let ret = building::optimize_wasm(&ret, &[])
+    let ret = building::optimize_wasm(&ret, &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Adjusting VFS Wasm...");
-    let ret = adjust_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
+    let (ret, target_memory_type) =
+        adjust_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
 
     println!("Optimizing VFS Wasm...");
-    let ret = building::optimize_wasm(&ret, &[])
+    let ret = building::optimize_wasm(&ret, &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Generated VFS: {ret}");
@@ -77,7 +84,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .wrap_err_with(|| eyre::eyre!("Failed to find Wasm file {old_wasm}"))?;
             println!("Optimizing target Wasm [{name}]...");
             tmp_files.push(wasm.to_string());
-            let wasm = building::optimize_wasm(&wasm.into(), &[])
+            let wasm = building::optimize_wasm(&wasm.into(), &[], false)
                 .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
             tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
@@ -99,7 +106,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(output.clone());
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&output.clone().into(), &[])
+    let ret = building::optimize_wasm(&output.clone().into(), &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
     tmp_files.push(ret.to_string());
 
@@ -111,10 +118,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     println!("Generating single memory Merged Wasm...");
     let single_memory = camino::Utf8PathBuf::from(ret.clone()).with_extension("single_memory.wasm");
     std::fs::copy(&ret, &single_memory).expect("Failed to rename file");
-    let single_memory = building::optimize_wasm(&single_memory, &["--multi-memory-lowering"])?;
+    let single_memory =
+        building::optimize_wasm(&single_memory, &["--multi-memory-lowering"], true)?;
 
     println!("Optimizing Merged Wasm...");
-    let multi_memory = building::optimize_wasm(&ret, &[])
+    let multi_memory = building::optimize_wasm(&ret, &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
     tmp_files.push(multi_memory.to_string());
 
@@ -151,9 +159,13 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         if std::fs::metadata(&file_name).is_ok() {
             std::fs::remove_file(&file_name).expect("Failed to remove existing file");
         }
-        std::fs::write(&file_name, &data).expect("Failed to write file");
         if name.ends_with(".core.wasm") {
+            let file_name =
+                camino::Utf8PathBuf::from(file_name).with_extension("multi_memory.wasm");
+            std::fs::write(&file_name, &data).expect("Failed to write file");
             core_wasm = Some(file_name);
+        } else {
+            std::fs::write(&file_name, &data).expect("Failed to write file");
         }
     }
 
@@ -164,7 +176,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let mut core_wasm_single_memory = None;
     for (name, data) in transpiled_single_memory.files.iter() {
         let file_name = format!("{}/{name}", parsed_args.out_dir);
-        let file_name = camino::Utf8PathBuf::from(file_name).with_extension("single_memory.wasm");
 
         if name.ends_with(".core.wasm") {
             std::fs::write(&file_name, &data).expect("Failed to write file");
@@ -183,11 +194,12 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .as_ref()
         .ok_or_else(|| eyre::eyre!("Failed to find core wasm single memory"))?;
 
-    let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[])
+    let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm"))?;
 
-    let core_wasm_single_memory_opt = building::optimize_wasm(&core_wasm_single_memory.into(), &[])
-        .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm single memory"))?;
+    let core_wasm_single_memory_opt =
+        building::optimize_wasm(&core_wasm_single_memory.into(), &[], false)
+            .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm single memory"))?;
 
     std::fs::remove_file(&core_wasm).expect("Failed to remove existing file");
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");

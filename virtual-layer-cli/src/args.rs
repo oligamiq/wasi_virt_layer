@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use clap::{Parser, command};
 use eyre::Context as _;
 
-use crate::util::ResultUtil as _;
+use crate::{rewrite::TargetMemoryType, util::ResultUtil as _};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -19,6 +19,10 @@ pub struct Args {
     /// Output directory for the generated files
     #[arg(long, default_value = "./dist")]
     pub out_dir: String,
+
+    /// Target memory type
+    #[arg(short, long)]
+    pub target_memory_type: Option<TargetMemoryType>,
 
     /// Disable transpile to JS, you can use jco to transpile wasm to js.
     #[arg(long, default_value = "false")]

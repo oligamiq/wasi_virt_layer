@@ -27,7 +27,9 @@ macro_rules! import_wasm {
                 );
 
                 #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name _memory_trap>]();
+                pub fn [<__wasip1_vfs_ $name _memory_trap>](
+                    _ptr: isize,
+                ) -> isize;
 
                 #[unsafe(no_mangle)]
                 pub fn [<__wasip1_vfs_ $name _memory_director>](ptr: isize) -> isize;
@@ -50,8 +52,12 @@ macro_rules! import_wasm {
 
             #[cfg(target_arch = "wasm32")]
             #[unsafe(no_mangle)]
-            unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_wrap>]() {
-                unsafe { [<__wasip1_vfs_ $name _memory_trap>]() };
+            unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_wrap>](
+                _ptr: isize,
+            ) -> isize {
+                unsafe { [<__wasip1_vfs_ $name _memory_trap>](
+                    _ptr,
+                ) }
             }
 
             impl $crate::memory::WasmAccess for $name {
@@ -115,27 +121,7 @@ macro_rules! import_wasm {
                     }
                 }
 
-                #[inline(always)]
-                fn memory_director<T>(ptr: *const T) -> *const T {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    unimplemented!("this is not supported on this architecture");
-
-                    #[cfg(target_arch = "wasm32")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_director>](
-                        ptr as isize
-                    ) as *const T }
-                }
-
-                #[inline(always)]
-                fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
-                    #[cfg(not(target_arch = "wasm32"))]
-                    unimplemented!("this is not supported on this architecture");
-
-                    #[cfg(target_arch = "wasm32")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_director>](
-                        ptr as isize
-                    ) as *mut T }
-                }
+                $crate::memory_director!($name);
 
                 #[inline(always)]
                 fn main()
@@ -170,6 +156,53 @@ macro_rules! import_wasm {
         }
     };
 }
+
+#[cfg(not(feature = "multi_memory"))]
+#[macro_export]
+macro_rules! memory_director {
+    ($name:ident) => {
+        $crate::__private::paste::paste! {
+            #[inline(always)]
+            fn memory_director<T>(ptr: *const T) -> *const T {
+                #[cfg(not(target_arch = "wasm32"))]
+                unimplemented!("this is not supported on this architecture");
+
+                #[cfg(target_arch = "wasm32")]
+                unsafe { [<__wasip1_vfs_ $name _memory_director>](
+                    ptr as isize,
+                ) as *const T }
+            }
+
+            #[inline(always)]
+            fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
+                #[cfg(not(target_arch = "wasm32"))]
+                unimplemented!("this is not supported on this architecture");
+
+                #[cfg(target_arch = "wasm32")]
+                unsafe { [<__wasip1_vfs_ $name _memory_director>](
+                    ptr as isize,
+                ) as *mut T }
+            }
+        }
+    };
+}
+
+#[cfg(feature = "multi_memory")]
+macro_rules! memory_director {
+    ($_:ident) => {};
+}
+
+#[unsafe(no_mangle)]
+#[cfg(target_arch = "wasm32")]
+#[cfg(feature = "multi_memory")]
+#[doc(hidden)]
+unsafe extern "C" fn __wasip1_vfs_flag_vfs_multi_memory() {}
+
+#[unsafe(no_mangle)]
+#[cfg(target_arch = "wasm32")]
+#[cfg(not(feature = "multi_memory"))]
+#[doc(hidden)]
+unsafe extern "C" fn __wasip1_vfs_flag_vfs_single_memory() {}
 
 #[unsafe(no_mangle)]
 #[cfg(target_arch = "wasm32")]
@@ -275,7 +308,10 @@ pub trait WasmAccess {
         vec
     }
 
+    #[cfg(not(feature = "multi_memory"))]
     fn memory_director<T>(ptr: *const T) -> *const T;
+
+    #[cfg(not(feature = "multi_memory"))]
     fn memory_director_mut<T>(ptr: *mut T) -> *mut T;
 
     /// wrapping wasm's _start function

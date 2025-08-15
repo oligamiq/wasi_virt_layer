@@ -1,8 +1,10 @@
 use std::fs;
 
 use camino::Utf8PathBuf;
+use cargo_metadata::{Metadata, Package};
 use eyre::Context as _;
 use strum::VariantNames;
+use toml_edit::{DocumentMut, Item};
 
 use crate::{
     common::Wasip1SnapshotPreview1Func,
@@ -12,7 +14,7 @@ use crate::{
 /// wasip1 import to adjust to wit
 /// block vfs-wasm's environ_sizes_get etc
 /// embedding __wasip1_vfs_flag_{name}_memory
-pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
+pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, TargetMemoryType)> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
@@ -76,6 +78,20 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
 
     module.create_global_anchor("vfs")?;
 
+    let target_memory_type = module
+        .exports
+        .iter()
+        .find(|e| e.name == "__wasip1_vfs_flag_vfs_multi_memory")
+        .map(|_| Ok(TargetMemoryType::Multi))
+        .unwrap_or(
+            module
+                .exports
+                .iter()
+                .find(|e| e.name == "__wasip1_vfs_flag_vfs_single_memory")
+                .map(|_| Ok(TargetMemoryType::Single))
+                .unwrap_or(Err(eyre::eyre!("No target memory type found"))),
+        )?;
+
     let new_path = path.with_extension("adjusted.wasm");
 
     if fs::metadata(&new_path).is_ok() {
@@ -86,5 +102,117 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
 
-    Ok(new_path)
+    Ok((new_path, target_memory_type))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display)]
+pub enum TargetMemoryType {
+    #[strum(ascii_case_insensitive)]
+    Single,
+    #[strum(ascii_case_insensitive)]
+    Multi,
+}
+
+pub fn change_target_memory_type(
+    metadata: &Metadata,
+    building_crate: &Package,
+    target_memory_type: TargetMemoryType,
+) -> eyre::Result<()> {
+    let manifest_path = building_crate.manifest_path.clone();
+
+    let file_data = fs::read_to_string(&manifest_path)
+        .wrap_err_with(|| eyre::eyre!("Failed to read manifest file"))?;
+    let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
+
+    const CRATE: &'static str = "wasip1-virtual-layer";
+
+    let crate_setting = &mut doc["dependencies"][CRATE];
+
+    let set_table = |table: &mut Item| -> eyre::Result<()> {
+        if target_memory_type == TargetMemoryType::Multi {
+            if matches!(table.get("features"), None) {
+                table["features"] = toml_edit::value(toml_edit::Array::new());
+            }
+            if table["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter_map(|s| s.as_str())
+                .any(|s| s == "multi_memory")
+            {
+                return Ok(());
+            }
+            table["features"]
+                .as_array_mut()
+                .unwrap()
+                .push("multi_memory");
+        }
+
+        if target_memory_type == TargetMemoryType::Single {
+            if matches!(table.get("features"), None) {
+                return Ok(());
+            }
+            if let Some(i) = {
+                table["features"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, s)| s.as_str().map(|s| (i, s)))
+                    .find(|(_, s)| *s == "multi_memory")
+                    .map(|(i, _)| i)
+            } {
+                table["features"].as_array_mut().unwrap().remove(i);
+                if table["features"].as_array().unwrap().is_empty() {
+                    table["features"] = Item::None;
+                }
+            }
+        }
+
+        Ok(())
+    };
+
+    match crate_setting {
+        Item::Table(table) => match &mut table["workspace"] {
+            v if v.as_bool().unwrap_or(false) => {
+                let manifest_path = metadata.workspace_root.join("Cargo.toml");
+
+                let file_data = fs::read_to_string(&manifest_path)
+                    .wrap_err_with(|| eyre::eyre!("Failed to read workspace manifest file"))?;
+                let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
+
+                let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
+
+                let table = match crate_setting {
+                    Item::Table(_) | Item::Value(_) => crate_setting,
+                    _ => {
+                        eyre::bail!(
+                            "Cannot find crate {CRATE} on root Cargo.toml so cannot change target memory type"
+                        );
+                    }
+                };
+
+                set_table(table)?;
+
+                std::fs::write(&manifest_path, doc.to_string())
+                    .wrap_err_with(|| eyre::eyre!("Failed to write workspace manifest file"))?;
+
+                Ok(())
+            }
+            Item::Value(_) => {
+                set_table(crate_setting)?;
+
+                std::fs::write(&manifest_path, doc.to_string())
+                    .wrap_err_with(|| eyre::eyre!("Failed to write manifest file"))?;
+
+                Ok(())
+            }
+            _ => {
+                eyre::bail!("Cannot find crate {CRATE} so cannot change target memory type");
+            }
+        },
+        _ => {
+            eyre::bail!(r#"Failed to find crate "{CRATE}" so cannot change target memory type"#);
+        }
+    }
 }

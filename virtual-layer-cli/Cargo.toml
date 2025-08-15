@@ -23,6 +23,7 @@ wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
 wit-component = "0.236.0"
 walrus-simple-interpreter = "0.2.0"
 strum = { version = "0.27.2", features = ["derive"] }
+toml_edit = "0.23.3"
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
