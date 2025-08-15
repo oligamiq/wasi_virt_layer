@@ -78,19 +78,21 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, TargetMemor
 
     module.create_global_anchor("vfs")?;
 
-    let target_memory_type = module
+    let (target_memory_type, eid) = module
         .exports
         .iter()
         .find(|e| e.name == "__wasip1_vfs_flag_vfs_multi_memory")
-        .map(|_| Ok(TargetMemoryType::Multi))
+        .map(|e| Ok((TargetMemoryType::Multi, e.id())))
         .unwrap_or(
             module
                 .exports
                 .iter()
                 .find(|e| e.name == "__wasip1_vfs_flag_vfs_single_memory")
-                .map(|_| Ok(TargetMemoryType::Single))
+                .map(|e| Ok((TargetMemoryType::Single, e.id())))
                 .unwrap_or(Err(eyre::eyre!("No target memory type found"))),
         )?;
+
+    module.exports.delete(eid);
 
     let new_path = path.with_extension("adjusted.wasm");
 
