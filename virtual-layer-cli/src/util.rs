@@ -35,7 +35,11 @@ pub(crate) trait WalrusUtilModule {
     /// and remove anchor
     fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId>;
 
-    fn create_memory_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
+    fn create_memory_anchor(
+        &mut self,
+        name: impl AsRef<str>,
+        memory_hint: Option<usize>,
+    ) -> eyre::Result<()>;
 
     fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>>;
 
@@ -173,7 +177,11 @@ impl WalrusUtilModule for walrus::Module {
         }
     }
 
-    fn create_memory_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()> {
+    fn create_memory_anchor(
+        &mut self,
+        name: impl AsRef<str>,
+        memory_hint: Option<usize>,
+    ) -> eyre::Result<()> {
         let name = name.as_ref();
 
         let memories = self
@@ -189,7 +197,7 @@ impl WalrusUtilModule for walrus::Module {
         // After calling environ_sizes_get,
         // identify the memory using the memory referenced
         // by the code trying to read the pointer
-        let memory_id = if memories.len() > 0 {
+        let memory_id = if memories.len() > 1 && memory_hint.is_none() {
             // environ_sizes_get
             let import_id = self
                 .imports
@@ -210,6 +218,7 @@ impl WalrusUtilModule for walrus::Module {
                 let mut interpreter = walrus_simple_interpreter::Interpreter::new(self)
                     .to_eyre()
                     .wrap_err_with(|| eyre::eyre!("Failed to create interpreter"))?;
+
                 interpreter.set_interrupt_handler_mem(move |_, _, _, (id, address, _, ty)| {
 
                     if matches!(ty, walrus_simple_interpreter::MemoryAccessType::Load) {
@@ -272,6 +281,15 @@ impl WalrusUtilModule for walrus::Module {
             } else {
                 return Err(eyre::eyre!("Memory not found"));
             }
+        } else if let Some(memory_hint) = memory_hint {
+            if memory_hint >= memories.len() {
+                return Err(eyre::eyre!(
+                    "Memory hint {} is out of bounds for memories: {:?}",
+                    memory_hint,
+                    memories
+                ));
+            }
+            memories[memory_hint]
         } else {
             memories[0]
         };

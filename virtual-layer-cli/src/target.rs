@@ -8,7 +8,10 @@ use crate::{
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule},
 };
 
-pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
+pub fn adjust_target_wasm(
+    path: &Utf8PathBuf,
+    memory_hint: Option<usize>,
+) -> eyre::Result<Utf8PathBuf> {
     let name = path
         .get_file_main_name()
         .unwrap_or_else(|| panic!("Failed to get file name from {path}"));
@@ -17,7 +20,7 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf) -> eyre::Result<Utf8PathBuf> {
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
 
-    module.create_memory_anchor(&name)?;
+    module.create_memory_anchor(&name, memory_hint)?;
 
     module
         .create_global_anchor(&name)

@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
-use eyre::Context as _;
+use eyre::{Context as _, ContextCompat};
 
 use crate::{
     rewrite::TargetMemoryType,
@@ -21,6 +21,12 @@ pub fn director(
         camino::Utf8PathBuf::from_path_buf(p.as_ref().to_owned())
             .map_err(|_| eyre::eyre!("Invalid path: {}", p.as_ref().display()))
     });
+
+    let module_mem_id = module
+        .get_memory_id()
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to get memory ID"))?;
+
     for wasm in wasm {
         let wasm = wasm?;
 
@@ -35,20 +41,20 @@ pub fn director(
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("Failed to get export function"))?;
 
-        let trap_id = match &module.funcs.get(trap_id).kind {
-            walrus::FunctionKind::Local(local_function) => {
-                let start_block = local_function.entry_block();
-                let block = local_function.block(start_block);
-                let (instr, _) = block.instrs[1].clone();
-                match instr {
-                    walrus::ir::Instr::Call(walrus::ir::Call { func }) => func,
-                    _ => {
-                        eyre::bail!("Unexpected instruction in trap function: {instr:?}");
-                    }
-                }
-            }
-            _ => panic!("Unexpected function kind"),
-        };
+        // let trap_id = match &module.funcs.get(trap_id).kind {
+        //     walrus::FunctionKind::Local(local_function) => {
+        //         let start_block = local_function.entry_block();
+        //         let block = local_function.block(start_block);
+        //         let (instr, _) = block.instrs[1].clone();
+        //         match instr {
+        //             walrus::ir::Instr::Call(walrus::ir::Call { func }) => func,
+        //             _ => {
+        //                 eyre::bail!("Unexpected instruction in trap function: {instr:?}");
+        //             }
+        //         }
+        //     }
+        //     _ => panic!("Unexpected function kind"),
+        // };
 
         // example multi memory trap function
         //   (func (;233;) (type 3) (param i32) (result i32)
@@ -74,19 +80,29 @@ pub fn director(
             _ => panic!("Unexpected function kind"),
         };
         // Remove the fake value instruction
-        let (store_index, (store_info, _)) = trap_body
+        let (store_index, store_info) = trap_body
             .iter()
             .enumerate()
-            .find(|(_, (instr, _))| {
-                matches!(
-                    instr,
-                    walrus::ir::Instr::Store(walrus::ir::Store {
-                        kind: walrus::ir::StoreKind::I32 { atomic: false },
-                        ..
-                    })
-                )
+            .find_map(|(i, (instr, _))| {
+                if let walrus::ir::Instr::Store(walrus::ir::Store {
+                    kind: walrus::ir::StoreKind::I32_8 { atomic: false },
+                    memory,
+                    arg,
+                }) = instr
+                {
+                    if *memory != module_mem_id {
+                        return Some(Err(eyre::eyre!(
+                            "Unexpected memory ID: expected {:?}, got {:?}",
+                            module_mem_id,
+                            *memory
+                        )));
+                    }
+                    Some(Ok((i, arg.to_owned())))
+                } else {
+                    None
+                }
             })
-            .expect("Failed to find store instruction");
+            .wrap_err_with(|| eyre::eyre!("Failed to find store instruction"))??;
         trap_body.remove(store_index + 1);
         trap_body.remove(store_index);
         trap_body.remove(store_index - 1);
@@ -103,6 +119,12 @@ pub fn director(
         module
             .replace_imported_func(fid, |(builder, local_id)| {
                 let mut func_body = builder.func_body();
+                func_body
+                    .local_get(local_id[0])
+                    .call(trap_id)
+                    .i32_const(store_info.offset as i32)
+                    .binop(walrus::ir::BinaryOp::I32Add)
+                    .return_();
             })
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;

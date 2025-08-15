@@ -334,8 +334,8 @@ pub fn optimize_wasm(
                 if !require_update {
                     std::fs::remove_file(&output_path)?;
                     std::fs::copy(&before_path, &output_path)?;
-                    before_path = output_path.clone();
                 }
+                before_path = output_path.clone();
             } else {
                 // remove
                 std::fs::remove_file(&output_path)?;

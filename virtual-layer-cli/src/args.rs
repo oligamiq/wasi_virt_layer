@@ -12,6 +12,12 @@ pub struct Args {
     /// Path to the wasip1 wasm file
     pub wasm: Vec<Utf8PathBuf>,
 
+    /// Memory hints for the wasm files.
+    /// If the target Wasm file fails to detect the memory used
+    /// when handling the wasip1 instruction, you can use this to specify it.
+    #[arg(long)]
+    pub wasm_memory_hint: Vec<usize>,
+
     /// Path to the Cargo.toml file
     #[arg(long)]
     pub manifest_path: Option<String>,

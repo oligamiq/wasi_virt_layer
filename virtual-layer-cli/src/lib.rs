@@ -77,7 +77,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let (wasm_paths, wasm_names) = parsed_args
         .wasm
         .iter()
-        .map(|old_wasm| {
+        .zip(
+            parsed_args
+                .wasm_memory_hint
+                .iter()
+                .map(|h| Some(*h))
+                .chain(std::iter::repeat(None)),
+        )
+        .map(|(old_wasm, memory_hint)| {
             let name = old_wasm.get_file_main_name().unwrap();
             let wasm = format!("{}/{}", parsed_args.out_dir, old_wasm.file_name().unwrap());
             std::fs::copy(old_wasm, &wasm)
@@ -88,7 +95,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
             tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
-            let wasm = target::adjust_target_wasm(&wasm)
+            let wasm = target::adjust_target_wasm(&wasm, memory_hint)
                 .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
             tmp_files.push(wasm.to_string());
             Ok((wasm, name))
@@ -171,7 +178,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
     for tmp_file in tmp_files {
-        std::fs::remove_file(tmp_file).expect("Failed to remove tmp file");
+        std::fs::remove_file(&tmp_file)
+            .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
     }
 
     std::fs::OpenOptions::new()

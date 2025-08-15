@@ -533,7 +533,7 @@ impl Wasip1Op {
                                 .i32_const(0) // fake value
                                 .store(
                                     wasm_mem,
-                                    ir::StoreKind::I32 { atomic: false },
+                                    ir::StoreKind::I32_8 { atomic: false },
                                     ir::MemArg {
                                         align: 0,
                                         offset: 0,
