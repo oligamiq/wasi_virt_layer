@@ -91,15 +91,15 @@ mod fs {
     use super::test_wasm_opt;
     use wasip1_virtual_layer::{
         export_fs,
-        wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalLFS, WasiConstFile, Wasip1VFS},
+        wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalLFS, WasiConstFile, Wasip1ConstVFS},
     };
 
     use crate::FilesTy;
 
     type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, 9, DefaultStdIO>;
 
-    static mut VIRTUAL_FILE_SYSTEM: Wasip1VFS<LFS, usize, 1, 9> =
-        Wasip1VFS::new(VFSConstNormalLFS::new());
+    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, 9> =
+        Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
     export_fs!(@const, {
         #[allow(static_mut_refs)]

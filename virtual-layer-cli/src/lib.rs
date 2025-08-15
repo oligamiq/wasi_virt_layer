@@ -4,7 +4,7 @@ use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
-use crate::rewrite::change_target_memory_type;
+use crate::rewrite::{TargetMemoryType, change_target_memory_type};
 
 pub mod adjust;
 pub mod args;
@@ -115,30 +115,28 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
     tmp_files.push(ret.to_string());
 
-    println!("Generating single memory Merged Wasm...");
-    let single_memory = camino::Utf8PathBuf::from(ret.clone()).with_extension("single_memory.wasm");
-    std::fs::copy(&ret, &single_memory).expect("Failed to rename file");
-    let single_memory =
-        building::optimize_wasm(&single_memory, &["--multi-memory-lowering"], true)?;
+    let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
+        println!("Generating single memory Merged Wasm...");
+        let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true)?;
+        tmp_files.push(ret.to_string());
+        ret
+    } else {
+        ret
+    };
 
     println!("Optimizing Merged Wasm...");
-    let multi_memory = building::optimize_wasm(&ret, &[], false)
+    let ret = building::optimize_wasm(&ret, &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
-    tmp_files.push(multi_memory.to_string());
+    tmp_files.push(ret.to_string());
 
-    println!("Directing process single memory Merged Wasm...");
-    let single_memory = director::director(&single_memory, &wasm_paths, true)?;
-
-    println!("Directing process multi memory Merged Wasm...");
-    let multi_memory = director::director(&multi_memory, &wasm_paths, false)?;
+    println!("Directing process {target_memory_type} memory Merged Wasm...");
+    let ret = director::director(&ret, &wasm_paths, target_memory_type)?;
+    tmp_files.push(ret.to_string());
 
     println!("Translating Wasm to Component...");
-    let component = building::wasm_to_component(&multi_memory, &wasm_names)
+    let component = building::wasm_to_component(&ret, &wasm_names)
         .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
     tmp_files.push(component.to_string());
-
-    let component_single_memory = building::wasm_to_component(&single_memory, &wasm_names)
-        .wrap_err_with(|| eyre::eyre!("Failed to translate single memory Wasm to Component"))?;
 
     println!("Translating Component to JS...");
     let binary =
@@ -147,12 +145,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .transpile_to_js(&binary, &building_crate.name)
         .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))?;
 
-    let binary_single_memory = std::fs::read(&component_single_memory)
-        .wrap_err_with(|| eyre::eyre!("Failed to read component single memory"))?;
-    let transpiled_single_memory = parsed_args
-        .transpile_to_js(&binary_single_memory, &building_crate.name)
-        .wrap_err_with(|| eyre::eyre!("Failed to transpile single memory to JS"))?;
-
     let mut core_wasm = None;
     for (name, data) in transpiled.files.iter() {
         let file_name = format!("{}/{name}", parsed_args.out_dir);
@@ -160,8 +152,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             std::fs::remove_file(&file_name).expect("Failed to remove existing file");
         }
         if name.ends_with(".core.wasm") {
-            let file_name =
-                camino::Utf8PathBuf::from(file_name).with_extension("multi_memory.wasm");
+            let file_name = camino::Utf8PathBuf::from(file_name);
             std::fs::write(&file_name, &data).expect("Failed to write file");
             core_wasm = Some(file_name);
         } else {
@@ -173,40 +164,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .as_ref()
         .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
-    let mut core_wasm_single_memory = None;
-    for (name, data) in transpiled_single_memory.files.iter() {
-        let file_name = format!("{}/{name}", parsed_args.out_dir);
-
-        if name.ends_with(".core.wasm") {
-            std::fs::write(&file_name, &data).expect("Failed to write file");
-            core_wasm_single_memory = Some(file_name);
-        } else if std::fs::metadata(&file_name).is_ok() {
-            let file = std::fs::read(&file_name).unwrap();
-            if &file != data {
-                panic!(
-                    "File {file_name} is different single memory component and normal memory component"
-                );
-            }
-        }
-    }
-
-    let core_wasm_single_memory = core_wasm_single_memory
-        .as_ref()
-        .ok_or_else(|| eyre::eyre!("Failed to find core wasm single memory"))?;
-
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm"))?;
 
-    let core_wasm_single_memory_opt =
-        building::optimize_wasm(&core_wasm_single_memory.into(), &[], false)
-            .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm single memory"))?;
-
     std::fs::remove_file(&core_wasm).expect("Failed to remove existing file");
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
-
-    std::fs::remove_file(&core_wasm_single_memory).expect("Failed to remove existing file");
-    std::fs::rename(&core_wasm_single_memory_opt, &core_wasm_single_memory)
-        .expect("Failed to rename file");
 
     for tmp_file in tmp_files {
         std::fs::remove_file(tmp_file).expect("Failed to remove tmp file");

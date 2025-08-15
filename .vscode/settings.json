@@ -16,6 +16,7 @@
         "Fdflags",
         "Filestat",
         "funcs",
+        "heapless",
         "instrs",
         "iovs",
         "lookupflags",
@@ -28,6 +29,7 @@
         "sched",
         "Uninit",
         "wasi",
+        "Wasip",
         "wasip1"
     ]
 }

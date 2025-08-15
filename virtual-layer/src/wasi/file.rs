@@ -11,38 +11,31 @@ pub mod non_atomic {
 
     /// small posix like virtual file system
     /// but inode has some metadata
-    pub struct Wasip1VFS<
-        LFS: Wasip1LFS<Inode = Inode> + Sync,
-        Inode,
-        const N: usize,
-        const FLAT_LEN: usize,
-    > {
+    pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> {
         lfs: LFS,
-        map: heapless::Vec<Inode, FLAT_LEN>,
+        map: heapless::Vec<LFS::Inode, FLAT_LEN>,
     }
 
-    impl<LFS: Wasip1LFS<Inode = Inode> + Sync, Inode, const N: usize, const FLAT_LEN: usize>
-        Wasip1VFS<LFS, Inode, N, FLAT_LEN>
-    {
+    impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN> {
         pub const fn new(lfs: LFS) -> Self {
             let map = heapless::Vec::new();
             Self { lfs, map }
         }
 
         #[inline]
-        pub fn get_inode(&self, fd: Fd) -> Option<&Inode> {
+        pub fn get_inode(&self, fd: Fd) -> Option<&LFS::Inode> {
             self.map.get(fd as usize)
         }
 
         #[inline]
-        pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&Inode, &mut LFS)> {
+        pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&LFS::Inode, &mut LFS)> {
             let inode = self.map.get(fd as usize)?;
             Some((inode, &mut self.lfs))
         }
     }
 
-    impl<LFS: Wasip1LFS<Inode = Inode> + Sync, Inode, const N: usize, const FLAT_LEN: usize>
-        Wasip1FileSystem for Wasip1VFS<LFS, Inode, N, FLAT_LEN>
+    impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
+        for Wasip1ConstVFS<LFS, FLAT_LEN>
     {
         fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno> {
             todo!()

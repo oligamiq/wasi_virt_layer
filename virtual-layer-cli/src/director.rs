@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
 use eyre::Context as _;
@@ -108,7 +108,18 @@ pub fn director(
             .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
     }
 
-    Ok(path.clone())
+    let new_path = path.with_extension("directed.wasm");
+
+    if fs::metadata(&new_path).is_ok() {
+        fs::remove_file(&new_path).expect("Failed to remove existing file");
+    }
+
+    module
+        .emit_wasm_file(new_path.clone())
+        .to_eyre()
+        .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
+
+    Ok(new_path)
 }
 
 pub fn director_single(path: &Utf8PathBuf, wasm: impl AsRef<Path>) -> eyre::Result<Utf8PathBuf> {
