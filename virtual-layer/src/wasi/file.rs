@@ -7,6 +7,8 @@ use crate::memory::WasmAccess;
 
 #[cfg(not(target_feature = "atomics"))]
 pub mod non_atomic {
+    use std::arch::naked_asm;
+
     use wasip1::*;
 
     /// small posix like virtual file system
@@ -37,10 +39,6 @@ pub mod non_atomic {
     impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
         for Wasip1ConstVFS<LFS, FLAT_LEN>
     {
-        fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno> {
-            todo!()
-        }
-
         fn fd_write_raw<Wasm: WasmAccess>(
             &mut self,
             fd: Fd,
@@ -61,6 +59,23 @@ pub mod non_atomic {
                     lfs.fd_write_raw::<Wasm>(inode, data, len)
                 }
             }
+        }
+
+        fn fd_readdir_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            buf: *mut u8,
+            buf_len: usize,
+            cookie: Dircookie,
+        ) -> Result<(Size, Dircookie), wasip1::Errno> {
+            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+            // check is this a directory
+            if !lfs.is_dir(inode) {
+                return Err(wasip1::ERRNO_NOTDIR);
+            }
+
+            lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)
         }
 
         fn path_open(
@@ -99,6 +114,16 @@ pub mod non_atomic {
             data: *const u8,
             data_len: usize,
         ) -> Result<Size, wasip1::Errno>;
+
+        fn is_dir(&self, inode: &Self::Inode) -> bool;
+
+        fn fd_readdir_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            buf: *mut u8,
+            buf_len: usize,
+            cookie: Dircookie,
+        ) -> Result<(Size, Dircookie), wasip1::Errno>;
     }
 
     pub struct VFSConstNormalLFS<
@@ -129,6 +154,15 @@ pub mod non_atomic {
         pub fn update_access_time(&mut self, inode: &usize, atime: usize) {
             let add_info = &mut self.add_info[*inode];
             add_info.atime = atime;
+        }
+
+        #[inline]
+        pub fn is_dir(&self, inode: &usize) -> bool {
+            let (_, file_or_dir) = ConstRoot::FILES[*inode];
+            match file_or_dir {
+                VFSConstNormalInode::Dir(..) => true,
+                VFSConstNormalInode::File(..) => false,
+            }
         }
     }
 
@@ -184,6 +218,72 @@ pub mod non_atomic {
                 Wasm::memcpy_to(&mut buf, data);
                 StdIo::write(&buf)
             }
+        }
+
+        fn is_dir(&self, inode: &Self::Inode) -> bool {
+            self.is_dir(inode)
+        }
+
+        fn fd_readdir_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            buf: *mut u8,
+            buf_len: usize,
+            cookie: Dircookie,
+        ) -> Result<(Size, Dircookie), wasip1::Errno> {
+            let (_, dir) = ROOT::FILES[*inode];
+            let (start, end) = match dir {
+                VFSConstNormalInode::Dir(range) => range,
+                _ => unreachable!(),
+            };
+
+            let index = start + cookie as usize;
+            if index >= end {
+                return Ok((0, cookie)); // No more entries
+            }
+
+            let (name, file_or_dir) = ROOT::FILES[index];
+
+            let next_cookie = cookie + 1;
+
+            let entry = wasip1::Dirent {
+                d_next: next_cookie,
+                d_ino: index as _,
+                d_namlen: name.len() as _,
+                d_type: match file_or_dir {
+                    VFSConstNormalInode::File(..) => wasip1::FILETYPE_REGULAR_FILE,
+                    VFSConstNormalInode::Dir(..) => wasip1::FILETYPE_DIRECTORY,
+                },
+            };
+            let entry_buf = unsafe {
+                core::slice::from_raw_parts(
+                    &entry as *const _ as *const u8,
+                    core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
+                )
+            };
+
+            Wasm::memcpy(buf, entry_buf);
+
+            if buf_len < core::mem::size_of::<wasip1::Dirent>() {
+                return Ok((buf_len, cookie));
+            }
+
+            let name_bytes = unsafe {
+                core::slice::from_raw_parts(
+                    name.as_ptr(),
+                    core::cmp::min(name.len(), buf_len - core::mem::size_of::<wasip1::Dirent>()),
+                )
+            };
+
+            Wasm::memcpy(
+                unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
+                name_bytes,
+            );
+
+            Ok((
+                core::mem::size_of::<wasip1::Dirent>() + name_bytes.len(),
+                next_cookie,
+            ))
         }
     }
 
@@ -574,14 +674,20 @@ pub mod non_atomic {
 }
 
 pub trait Wasip1FileSystem {
-    fn fd_write(&mut self, fd: Fd, data: &[u8]) -> Result<Size, wasip1::Errno>;
-
     fn fd_write_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
         data: *const u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_readdir_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+    ) -> Result<(Size, Dircookie), wasip1::Errno>;
 
     fn path_open(
         &mut self,
@@ -627,6 +733,38 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
     return wasip1::ERRNO_SUCCESS;
 }
 
+#[inline]
+pub fn fd_readdir_inner<Wasm: WasmAccess>(
+    state: &mut impl Wasip1FileSystem,
+    fd: Fd,
+    mut buf: *mut u8,
+    mut buf_len: usize,
+    mut cookie: Dircookie,
+    nread: *mut Size,
+) -> Errno {
+    let mut read = 0;
+
+    loop {
+        match state.fd_readdir_raw::<Wasm>(fd, buf, buf_len, cookie) {
+            Ok((n, next_cookie)) => {
+                if n == 0 {
+                    break; // No more entries
+                }
+                read += n;
+                buf = unsafe { buf.add(n) };
+                buf_len -= n;
+                cookie = next_cookie;
+            }
+            Err(e) => {
+                return e;
+            }
+        }
+    }
+
+    Wasm::store_le(nread, read);
+    return wasip1::ERRNO_SUCCESS;
+}
+
 // #[inline]
 // pub fn path_open_inner<Wasm: WasmAccess>(
 //     state: &mut impl Wasip1FileSystem,
@@ -656,6 +794,19 @@ macro_rules! export_fs {
             ) -> $crate::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::fd_write_inner::<$wasm>(state, fd, iovs_ptr, iovs_len, nwritten)
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_readdir>](
+                fd: $crate::wasip1::Fd,
+                buf: *mut u8,
+                buf_len: usize,
+                cookie: $crate::wasip1::Dircookie,
+                nread: *mut $crate::wasip1::Size,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::fd_readdir_inner::<$wasm>(state, fd, buf, buf_len, cookie, nread)
             }
 
             // #[unsafe(no_mangle)]

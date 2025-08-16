@@ -1657,6 +1657,7 @@ dependencies = [
  "paste",
  "wasi",
  "wit-bindgen",
+ "zerocopy",
 ]
 
 [[package]]
