@@ -11,14 +11,27 @@ pub mod non_atomic {
 
     /// small posix like virtual file system
     /// but inode has some metadata
-    pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> {
+    pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize>
+    where
+        LFS::Inode: Copy,
+    {
         lfs: LFS,
-        map: heapless::Vec<Option<(LFS::Inode, usize)>, FLAT_LEN>,
+        map: [Option<(LFS::Inode, usize)>; FLAT_LEN],
     }
 
-    impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN> {
+    impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN>
+    where
+        LFS::Inode: Copy,
+    {
         pub const fn new(lfs: LFS) -> Self {
-            let map = heapless::Vec::new();
+            let mut map = [const { None }; FLAT_LEN];
+
+            use const_for::const_for;
+
+            const_for!(i in 0..LFS::PRE_OPEN.len() => {
+                map[i] = Some((LFS::PRE_OPEN[i], i));
+            });
+
             Self { lfs, map }
         }
 
@@ -126,6 +139,8 @@ pub mod non_atomic {
 
     impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
         for Wasip1ConstVFS<LFS, FLAT_LEN>
+    where
+        LFS::Inode: Copy,
     {
         fn fd_write_raw<Wasm: WasmAccess>(
             &mut self,
@@ -193,7 +208,8 @@ pub mod non_atomic {
 
     /// small posix like local file system
     pub trait Wasip1LFS {
-        type Inode;
+        type Inode: 'static;
+        const PRE_OPEN: &'static [Self::Inode];
 
         fn fd_write_raw<Wasm: WasmAccess>(
             &mut self,
@@ -331,6 +347,7 @@ pub mod non_atomic {
     > Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
     {
         type Inode = usize;
+        const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
 
         fn fd_write_raw<Wasm: WasmAccess>(
             &mut self,
@@ -480,7 +497,7 @@ pub mod non_atomic {
     #[derive(ConstStruct, Debug)]
     pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
         pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
-        pub pre_open: &'static [(&'static str, (usize, usize), Option<usize>)],
+        pub pre_open: &'static [usize],
     }
 
     impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
@@ -489,7 +506,7 @@ pub mod non_atomic {
         pub const fn new(
             files: (
                 [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
-                &'static [(&'static str, (usize, usize), Option<usize>)],
+                &'static [usize],
             ),
         ) -> Self {
             Self {
@@ -653,6 +670,18 @@ pub mod non_atomic {
                     None
                 }
 
+                const fn get_self<const N: usize>(
+                    fake_files: [&'static str; N],
+                    name: &'static str,
+                ) -> usize {
+                    const_for!(i in 0..N => {
+                        if eq_str(name, fake_files[i]) {
+                            return i;
+                        }
+                    });
+                    unreachable!()
+                }
+
                 const EMPTY_ARR: [&'static str; COUNT] = {
                     let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
 
@@ -682,20 +711,11 @@ pub mod non_atomic {
                     count
                 };
 
-                const PRE_OPEN: [(&'static str, (usize, usize), Option<usize>); PRE_OPEN_COUNT] = {
+                const PRE_OPEN: [usize; PRE_OPEN_COUNT] = {
                     let mut static_array = $crate::binary_map::StaticArrayBuilder::new();
 
                     $(
-                        static_array.push(
-                            (
-                                $dir_name,
-                                get_child_range_inner(
-                                    EMPTY_ARR,
-                                    $dir_name,
-                                ),
-                                None
-                            )
-                        );
+                        static_array.push(get_self(EMPTY_ARR, $dir_name));
                     )*
 
                     static_array.build()
