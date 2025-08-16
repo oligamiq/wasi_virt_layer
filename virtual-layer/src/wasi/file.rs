@@ -13,7 +13,7 @@ pub mod non_atomic {
     /// but inode has some metadata
     pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> {
         lfs: LFS,
-        map: heapless::Vec<(LFS::Inode, usize), FLAT_LEN>,
+        map: heapless::Vec<Option<(LFS::Inode, usize)>, FLAT_LEN>,
     }
 
     impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN> {
@@ -24,12 +24,12 @@ pub mod non_atomic {
 
         #[inline]
         pub fn get_inode(&self, fd: Fd) -> Option<&LFS::Inode> {
-            self.map.get(fd as usize).map(|(inode, _)| inode)
+            self.map.get(fd as usize)?.as_ref().map(|(inode, _)| inode)
         }
 
         #[inline]
         pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&LFS::Inode, &mut LFS)> {
-            let (inode, _) = self.map.get(fd as usize)?;
+            let (inode, _) = self.map.get(fd as usize)?.as_ref()?;
             Some((inode, &mut self.lfs))
         }
 
@@ -459,20 +459,12 @@ pub mod non_atomic {
 
     #[derive(Copy, Clone, Debug)]
     pub struct VFSConstNormalAddInfo {
-        cursor: usize,
         atime: usize,
     }
 
     impl VFSConstNormalAddInfo {
         pub const fn new() -> Self {
-            Self {
-                cursor: 0,
-                atime: 0,
-            }
-        }
-
-        pub const fn with_cursor(cursor: usize) -> Self {
-            Self { cursor, atime: 0 }
+            Self { atime: 0 }
         }
     }
 
@@ -488,13 +480,22 @@ pub mod non_atomic {
     #[derive(ConstStruct, Debug)]
     pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
         pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
+        pub pre_open: &'static [(&'static str, (usize, usize), Option<usize>)],
     }
 
     impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
         VFSConstNormalFiles<File, FLAT_LEN>
     {
-        pub const fn new(files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN]) -> Self {
-            Self { files }
+        pub const fn new(
+            files: (
+                [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
+                &'static [(&'static str, (usize, usize), Option<usize>)],
+            ),
+        ) -> Self {
+            Self {
+                files: files.0,
+                pre_open: files.1,
+            }
         }
     }
 
@@ -526,7 +527,7 @@ pub mod non_atomic {
     macro_rules! ConstFiles {
         (
             [
-                $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
+                $(($dir_name:expr, $file_or_dir:tt)),* $(,)?
             ] $(,)?
         ) => {
             $crate::wasi::file::non_atomic::VFSConstNormalFiles::new({
@@ -618,6 +619,13 @@ pub mod non_atomic {
                     name: &'static str,
                     _: &$crate::binary_map::StaticArrayBuilder<S, N>,
                 ) -> (usize, usize) {
+                    get_child_range_inner(fake_files, name)
+                }
+
+                const fn get_child_range_inner<const N: usize>(
+                    fake_files: [&'static str; N],
+                    name: &'static str,
+                ) -> (usize, usize) {
                     let mut first_index = None;
                     const_for!(i in 0..N => {
                         if first_index.is_none() && is_parent(fake_files[i], name) {
@@ -645,11 +653,11 @@ pub mod non_atomic {
                     None
                 }
 
-                let empty_arr = {
+                const EMPTY_ARR: [&'static str; COUNT] = {
                     let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
 
                     $(
-                        $crate::ConstFiles!(@empty, empty_arr, [$file_or_dir_name], $file_or_dir);
+                        $crate::ConstFiles!(@empty, empty_arr, [$dir_name], $file_or_dir);
                     )*
 
                     empty_arr.build()
@@ -659,13 +667,41 @@ pub mod non_atomic {
                     $crate::ConstFiles!(
                         @next,
                         static_array,
-                        [empty_arr],
-                        [$file_or_dir_name],
+                        [EMPTY_ARR],
+                        [$dir_name],
                         $file_or_dir
                     );
                 )*
 
-                static_array.build()
+                const PRE_OPEN_COUNT: usize = {
+                    let mut count = 0;
+
+                    $(
+                        $crate::ConstFiles!(@pre_open_counter, count, $file_or_dir);
+                    )*
+                    count
+                };
+
+                const PRE_OPEN: [(&'static str, (usize, usize), Option<usize>); PRE_OPEN_COUNT] = {
+                    let mut static_array = $crate::binary_map::StaticArrayBuilder::new();
+
+                    $(
+                        static_array.push(
+                            (
+                                $dir_name,
+                                get_child_range_inner(
+                                    EMPTY_ARR,
+                                    $dir_name,
+                                ),
+                                None
+                            )
+                        );
+                    )*
+
+                    static_array.build()
+                };
+
+                (static_array.build(), &PRE_OPEN)
             })
         };
 
@@ -679,6 +715,10 @@ pub mod non_atomic {
         };
 
         (@counter, $count:ident, $file:tt) => {
+            $count += 1;
+        };
+
+        (@pre_open_counter, $count:ident, $file:tt) => {
             $count += 1;
         };
 
