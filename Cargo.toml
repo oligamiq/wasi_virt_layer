@@ -22,4 +22,4 @@ homepage = ""
 readme = "README.md"
 
 [workspace.dependencies]
-wasip1-virtual-layer = { path = "virtual-layer", default-features = false , features = ["multi_memory"] }
+wasip1-virtual-layer = { path = "virtual-layer", default-features = false }
