@@ -25,11 +25,14 @@ pub fn director(path: &Utf8PathBuf, wasm: &[impl AsRef<Path>]) -> eyre::Result<U
 
         let wasm_name = wasm.get_file_main_name().unwrap();
 
+        let trap_export_name = format!("__wasip1_vfs_{wasm_name}_memory_trap_wrap");
         let trap_id = module
             .exports
-            .get_func(&format!("__wasip1_vfs_{wasm_name}_memory_trap_wrap"))
+            .get_func(&trap_export_name)
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("Failed to get export function"))?;
+
+        module.exports.remove(&trap_export_name).unwrap();
 
         let trap_body = match &mut module.funcs.get_mut(trap_id).kind {
             walrus::FunctionKind::Local(local_function) => {
@@ -67,27 +70,23 @@ pub fn director(path: &Utf8PathBuf, wasm: &[impl AsRef<Path>]) -> eyre::Result<U
         trap_body.remove(store_index);
         trap_body.remove(store_index - 1);
 
-        let fid = module
-            .imports
-            .get_func(
-                "wasip1-vfs",
-                &format!("__wasip1_vfs_{wasm_name}_memory_director"),
-            )
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to get import function"))?;
-
-        module
-            .replace_imported_func(fid, |(builder, local_id)| {
-                let mut func_body = builder.func_body();
-                func_body
-                    .local_get(local_id[0])
-                    .call(trap_id)
-                    .i32_const(store_info.offset as i32)
-                    .binop(walrus::ir::BinaryOp::I32Add)
-                    .return_();
-            })
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
+        if let Ok(fid) = module.imports.get_func(
+            "wasip1-vfs",
+            &format!("__wasip1_vfs_{wasm_name}_memory_director"),
+        ) {
+            module
+                .replace_imported_func(fid, |(builder, local_id)| {
+                    let mut func_body = builder.func_body();
+                    func_body
+                        .local_get(local_id[0])
+                        .call(trap_id)
+                        .i32_const(store_info.offset as i32)
+                        .binop(walrus::ir::BinaryOp::I32Add)
+                        .return_();
+                })
+                .to_eyre()
+                .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
+        }
     }
 
     let new_path = path.with_extension("directed.wasm");
