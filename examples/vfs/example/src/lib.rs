@@ -64,8 +64,11 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
 export_env!(@block, @static, &mut VIRTUAL_ENV.lock(), test_wasm_opt);
 
 #[const_struct]
-const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 9> = ConstFiles!([
-    ("/", { WasiConstFile::new("This is root") }),
+const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
+    (
+        "/root",
+        [("root.txt", { WasiConstFile::new("This is root") }),]
+    ),
     (
         ".",
         [
@@ -97,9 +100,9 @@ mod fs {
 
     use crate::FilesTy;
 
-    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, 9, DefaultStdIO>;
+    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, 10, DefaultStdIO>;
 
-    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, 9> =
+    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, 10> =
         Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
     export_fs!(@const, {

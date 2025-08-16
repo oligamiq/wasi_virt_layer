@@ -232,9 +232,34 @@ pub mod non_atomic {
             }
         }
 
-        pub fn get_inode_for_path(&self, inode: &usize, path: &str) -> Option<usize> {
-            // let path =
-            std::path::Path::new(path).components().next();
+        pub fn get_inode_for_path<Wasm: WasmAccess>(
+            &self,
+            inode: &usize,
+            path_ptr: *const u8,
+            path_len: usize,
+        ) -> Option<usize> {
+            let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+
+            let path_parts = path.components();
+
+            let mut current_inode = *inode;
+
+            for part in path_parts {
+                // Resolve each part of the path
+                match part {
+                    WasmPathComponent::RootDir => unreachable!(),
+                    WasmPathComponent::CurDir => {
+                        // Stay in the current directory
+                    }
+                    WasmPathComponent::ParentDir => {
+                        // current_inode = self.parent_inode(current_inode);
+                    }
+                    WasmPathComponent::Normal(wasm_array_access) => {
+                        // let name = wasm_array_access.to_str().ok()?;
+                        // current_inode = self.find_child_inode(current_inode, name)?;
+                    }
+                }
+            }
 
             todo!()
         }
@@ -386,7 +411,11 @@ pub mod non_atomic {
 
     use const_struct::ConstStruct;
 
-    use crate::{memory::WasmAccess, transporter::Wasip1Transporter, wasi::file::Wasip1FileSystem};
+    use crate::{
+        memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
+        transporter::Wasip1Transporter,
+        wasi::file::Wasip1FileSystem,
+    };
 
     /// A constant file system root that can be used in a WASI component.
     #[derive(ConstStruct, Debug)]
@@ -404,7 +433,8 @@ pub mod non_atomic {
 
     #[derive(Clone, Copy, Debug)]
     pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
-        File(File),
+        /// (file, parent)
+        File((File, usize)),
         /// (first index..last index)
         Dir((usize, usize)),
     }
@@ -446,55 +476,87 @@ pub mod non_atomic {
 
                 asserter(&static_array);
 
-                const fn vfs_const_macro_fn<S: 'static + Copy, const N: usize>(
+                use $crate::__private::const_for;
+
+                const fn eq_str(a: &str, b: &str) -> bool {
+                    let a_bytes = a.as_bytes();
+                    let b_bytes = b.as_bytes();
+
+                    if a_bytes.len() != b_bytes.len() {
+                        return false;
+                    }
+
+                    const_for!(i in 0..a_bytes.len() => {
+                        if a_bytes[i] != b_bytes[i] {
+                            return false;
+                        }
+                    });
+
+                    true
+                }
+
+                /// if b is a parent of a
+                const fn is_parent(a: &str, b: &str) -> bool {
+                    let a_bytes = a.as_bytes();
+                    let b_bytes = b.as_bytes();
+
+                    if a_bytes.len() < b_bytes.len() {
+                        return false;
+                    }
+
+                    const_for!(i in 0..b_bytes.len() => {
+                        if a_bytes[i] != b_bytes[i] {
+                            return false;
+                        }
+                    });
+
+                    let mut i = b_bytes.len();
+                    while i < a_bytes.len() && a_bytes[i] == b"/"[0] {
+                        i += 1;
+                    }
+                    if i == a_bytes.len() {
+                        return false;
+                    }
+                    if i == b_bytes.len() {
+                        return false;
+                    }
+
+                    const_for!(n in i..a_bytes.len() => {
+                        if a_bytes[n] == b"/"[0] {
+                            return false;
+                        }
+                    });
+
+                    true
+                }
+
+                const fn get_child_range<S: 'static + Copy, const N: usize>(
                     fake_files: [&'static str; N],
                     name: &'static str,
                     _: &$crate::binary_map::StaticArrayBuilder<S, N>,
                 ) -> (usize, usize) {
-                    use $crate::__private::const_for;
-
-                    const fn eq_str(a: &str, b: &str) -> bool {
-                        let a_bytes = a.as_bytes();
-                        let b_bytes = b.as_bytes();
-
-                        if a_bytes.len() != b_bytes.len() {
-                            return false;
-                        }
-
-                        const_for!(i in 0..a_bytes.len() => {
-                            if a_bytes[i] != b_bytes[i] {
-                                return false;
-                            }
-                        });
-
-                        true
-                    }
-
-                    const fn starts_with_str(a: &str, b: &str) -> bool {
-                        let a_bytes = a.as_bytes();
-                        let b_bytes = b.as_bytes();
-
-                        if a_bytes.len() < b_bytes.len() {
-                            return false;
-                        }
-
-                        const_for!(i in 0..b_bytes.len() => {
-                            if a_bytes[i] != b_bytes[i] {
-                                return false;
-                            }
-                        });
-
-                        true
-                    }
-
                     let mut first_index = None;
                     const_for!(i in 0..N => {
-                        if first_index.is_none() && starts_with_str(fake_files[i], name) {
+                        if first_index.is_none() && is_parent(fake_files[i], name) {
                             first_index = Some(i);
                         }
 
                         if eq_str(fake_files[i], name) {
                             return (first_index.unwrap(), i);
+                        }
+                    });
+
+                    unreachable!()
+                }
+
+                const fn get_parent<S: 'static + Copy, const N: usize>(
+                    fake_files: [&'static str; N],
+                    name: &'static str,
+                    _: &$crate::binary_map::StaticArrayBuilder<S, N>,
+                ) -> usize {
+                    const_for!(i in 0..N => {
+                        if is_parent(name, fake_files[i]) {
+                            return i;
                         }
                     });
 
@@ -560,7 +622,7 @@ pub mod non_atomic {
             $static_array.push((
                 $name,
                 $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
-                    vfs_const_macro_fn(
+                    get_child_range(
                         $empty,
                         $name,
                         &$static_array
@@ -572,7 +634,7 @@ pub mod non_atomic {
         (@next, $static_array:ident, [$empty:expr], [$name:expr], $file:expr) => {
             $static_array.push((
                 $name,
-                $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file)
+                $crate::wasi::file::non_atomic::VFSConstNormalInode::File(($file, get_parent($empty, $name, &$static_array)))
             ));
         };
     }
