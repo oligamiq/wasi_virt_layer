@@ -265,6 +265,11 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wa
     pub fn iter(&self) -> WasmArrayAccessIterator<T, Wasm> {
         WasmArrayAccessIterator::new(self.ptr, self.len)
     }
+
+    #[inline(always)]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
 }
 
 impl<'a, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccess> PartialEq

@@ -8,11 +8,11 @@ fn main() {
         .collect::<Vec<_>>();
     println!("Environ: {:?}", envs);
 
-    // for file in walkdir::WalkDir::new("/")
-    //     .into_iter()
-    //     .filter_map(Result::ok)
-    //     .filter(|e| e.file_type().is_file())
-    // {
-    //     println!("File: {}", file.path().display());
-    // }
+    for file in walkdir::WalkDir::new("/")
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_file())
+    {
+        println!("File: {}", file.path().display());
+    }
 }

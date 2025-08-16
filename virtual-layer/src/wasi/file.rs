@@ -13,7 +13,7 @@ pub mod non_atomic {
     /// but inode has some metadata
     pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> {
         lfs: LFS,
-        map: heapless::Vec<LFS::Inode, FLAT_LEN>,
+        map: heapless::Vec<(LFS::Inode, usize), FLAT_LEN>,
     }
 
     impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN> {
@@ -24,12 +24,12 @@ pub mod non_atomic {
 
         #[inline]
         pub fn get_inode(&self, fd: Fd) -> Option<&LFS::Inode> {
-            self.map.get(fd as usize)
+            self.map.get(fd as usize).map(|(inode, _)| inode)
         }
 
         #[inline]
         pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&LFS::Inode, &mut LFS)> {
-            let inode = self.map.get(fd as usize)?;
+            let (inode, _) = self.map.get(fd as usize)?;
             Some((inode, &mut self.lfs))
         }
 
@@ -92,8 +92,36 @@ pub mod non_atomic {
         ) -> Result<wasip1::Filestat, wasip1::Errno> {
             let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
 
-            lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)
+            let status = lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)?;
+
+            Ok(wasip1::Filestat {
+                dev: 0, // no device
+                ino: status.ino,
+                filetype: status.filetype,
+                nlink: status.nlink,
+                size: status.size,
+                atim: status.atim,
+                mtim: status.mtim,
+                ctim: status.ctim,
+            })
         }
+    }
+
+    pub struct FilestatWithoutDevice {
+        /// File serial number.
+        pub ino: Inode,
+        /// File type.
+        pub filetype: Filetype,
+        /// Number of hard links to the file.
+        pub nlink: Linkcount,
+        /// For regular files, the file size in bytes. For symbolic links, the length in bytes of the pathname contained in the symbolic link.
+        pub size: Filesize,
+        /// Last data access timestamp.
+        pub atim: Timestamp,
+        /// Last data modification timestamp.
+        pub mtim: Timestamp,
+        /// Last file status change timestamp.
+        pub ctim: Timestamp,
     }
 
     impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
@@ -190,7 +218,7 @@ pub mod non_atomic {
             flags: wasip1::Lookupflags,
             path_ptr: *const u8,
             path_len: usize,
-        ) -> Result<wasip1::Filestat, wasip1::Errno>;
+        ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
     }
 
     pub struct VFSConstNormalLFS<
@@ -218,17 +246,26 @@ pub mod non_atomic {
         }
 
         #[inline]
-        pub fn update_access_time(&mut self, inode: &usize, atime: usize) {
+        pub const fn update_access_time(&mut self, inode: &usize, atime: usize) {
             let add_info = &mut self.add_info[*inode];
             add_info.atime = atime;
         }
 
         #[inline]
-        pub fn is_dir(&self, inode: &usize) -> bool {
+        pub const fn is_dir(&self, inode: &usize) -> bool {
             let (_, file_or_dir) = ConstRoot::FILES[*inode];
             match file_or_dir {
                 VFSConstNormalInode::Dir(..) => true,
                 VFSConstNormalInode::File(..) => false,
+            }
+        }
+
+        #[inline]
+        pub const fn parent_inode(&self, inode: &usize) -> Option<usize> {
+            let (_, file_or_dir) = ConstRoot::FILES[*inode];
+            match file_or_dir {
+                VFSConstNormalInode::Dir(_, parent, ..) => parent,
+                VFSConstNormalInode::File(_, parent, ..) => Some(parent),
             }
         }
 
@@ -252,16 +289,37 @@ pub mod non_atomic {
                         // Stay in the current directory
                     }
                     WasmPathComponent::ParentDir => {
-                        // current_inode = self.parent_inode(current_inode);
+                        current_inode = self.parent_inode(&current_inode)?;
                     }
                     WasmPathComponent::Normal(wasm_array_access) => {
-                        // let name = wasm_array_access.to_str().ok()?;
-                        // current_inode = self.find_child_inode(current_inode, name)?;
+                        let (start, end) = match ConstRoot::FILES[current_inode] {
+                            (_, VFSConstNormalInode::Dir(range, ..)) => range,
+                            _ => return None, // Not a directory
+                        };
+
+                        if let Some(i) =
+                            ConstRoot::FILES[start..end].iter().position(|(name, _)| {
+                                name.len() == wasm_array_access.len()
+                                    && name
+                                        .as_bytes()
+                                        .iter()
+                                        .zip(wasm_array_access.iter())
+                                        .all(|(a, b)| *a == b)
+                            })
+                        {
+                            current_inode = start + i;
+                        } else {
+                            return None; // Not found
+                        }
                     }
                 }
             }
 
-            todo!()
+            Some(current_inode)
+        }
+
+        fn access_time(&self, inode: &usize) -> wasip1::Timestamp {
+            self.add_info[*inode].atime as wasip1::Timestamp
         }
     }
 
@@ -326,7 +384,7 @@ pub mod non_atomic {
         ) -> Result<(Size, Dircookie), wasip1::Errno> {
             let (_, dir) = ROOT::FILES[*inode];
             let (start, end) = match dir {
-                VFSConstNormalInode::Dir(range) => range,
+                VFSConstNormalInode::Dir(range, ..) => range,
                 _ => unreachable!(),
             };
 
@@ -343,10 +401,7 @@ pub mod non_atomic {
                 d_next: next_cookie,
                 d_ino: index as _,
                 d_namlen: name.len() as _,
-                d_type: match file_or_dir {
-                    VFSConstNormalInode::File(..) => wasip1::FILETYPE_REGULAR_FILE,
-                    VFSConstNormalInode::Dir(..) => wasip1::FILETYPE_DIRECTORY,
-                },
+                d_type: file_or_dir.filetype(),
             };
             let entry_buf = unsafe {
                 core::slice::from_raw_parts(
@@ -382,11 +437,23 @@ pub mod non_atomic {
         fn path_filestat_get_raw<Wasm: WasmAccess>(
             &mut self,
             inode: &Self::Inode,
-            flags: wasip1::Lookupflags,
+            _: wasip1::Lookupflags,
             path_ptr: *const u8,
             path_len: usize,
-        ) -> Result<wasip1::Filestat, wasip1::Errno> {
-            todo!();
+        ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
+            let inode = self
+                .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
+                .ok_or(wasip1::ERRNO_NOENT)?;
+
+            Ok(FilestatWithoutDevice {
+                ino: inode as _,
+                filetype: ROOT::FILES[inode].1.filetype(),
+                nlink: 1,
+                size: ROOT::FILES[inode].1.size() as _,
+                atim: self.access_time(&inode),
+                mtim: 0,
+                ctim: 0,
+            })
         }
     }
 
@@ -433,10 +500,26 @@ pub mod non_atomic {
 
     #[derive(Clone, Copy, Debug)]
     pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
-        /// (file, parent)
-        File((File, usize)),
-        /// (first index..last index)
-        Dir((usize, usize)),
+        /// file, parent
+        File(File, usize),
+        /// (first index..last index), parent
+        Dir((usize, usize), Option<usize>),
+    }
+
+    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
+        pub const fn filetype(&self) -> wasip1::Filetype {
+            match self {
+                Self::File(..) => wasip1::FILETYPE_REGULAR_FILE,
+                Self::Dir(..) => wasip1::FILETYPE_DIRECTORY,
+            }
+        }
+
+        pub fn size(&self) -> usize {
+            match self {
+                Self::File(file, _) => file.size(),
+                Self::Dir(..) => core::mem::size_of::<((usize, usize), Option<usize>)>(), // directory size is just the size of the inode
+            }
+        }
     }
 
     #[macro_export]
@@ -553,14 +636,13 @@ pub mod non_atomic {
                     fake_files: [&'static str; N],
                     name: &'static str,
                     _: &$crate::binary_map::StaticArrayBuilder<S, N>,
-                ) -> usize {
+                ) -> Option<usize> {
                     const_for!(i in 0..N => {
                         if is_parent(name, fake_files[i]) {
-                            return i;
+                            return Some(i);
                         }
                     });
-
-                    unreachable!()
+                    None
                 }
 
                 let empty_arr = {
@@ -626,7 +708,8 @@ pub mod non_atomic {
                         $empty,
                         $name,
                         &$static_array
-                    )
+                    ),
+                    get_parent($empty, $name, &$static_array)
                 )
             ));
         };
@@ -634,7 +717,7 @@ pub mod non_atomic {
         (@next, $static_array:ident, [$empty:expr], [$name:expr], $file:expr) => {
             $static_array.push((
                 $name,
-                $crate::wasi::file::non_atomic::VFSConstNormalInode::File(($file, get_parent($empty, $name, &$static_array)))
+                $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file, get_parent($empty, $name, &$static_array).unwrap())
             ));
         };
     }
@@ -681,6 +764,10 @@ pub mod non_atomic {
 
         #[inline(always)]
         fn len(&self) -> usize {
+            self.file.len()
+        }
+
+        fn size(&self) -> usize {
             self.file.len()
         }
     }
@@ -768,6 +855,8 @@ pub mod non_atomic {
             fs_rights_base: wasip1::Rights,
             fd_flags: wasip1::Fdflags,
         ) -> Result<(), wasip1::Errno>;
+
+        fn size(&self) -> usize;
 
         fn len(&self) -> usize;
 
