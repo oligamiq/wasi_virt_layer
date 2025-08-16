@@ -38,13 +38,16 @@ pub mod non_atomic {
 
         #[inline]
         pub fn get_inode(&self, fd: Fd) -> Option<&LFS::Inode> {
-            self.map.get(fd as usize)?.as_ref().map(|(inode, _)| inode)
+            self.map
+                .get(fd as usize - 3)?
+                .as_ref()
+                .map(|(inode, _)| inode)
         }
 
         #[inline]
         pub fn remove_inode(&mut self, fd: Fd) -> Option<LFS::Inode> {
             self.map
-                .get_mut(fd as usize)?
+                .get_mut(fd as usize - 3)?
                 .take()
                 .map(|(inode, _)| inode)
         }
@@ -54,7 +57,7 @@ pub mod non_atomic {
             for (i, slot) in self.map.iter_mut().enumerate() {
                 if slot.is_none() {
                     *slot = Some((inode, 0));
-                    return i as Fd;
+                    return (i + 3) as Fd;
                 }
             }
             unreachable!();
@@ -62,7 +65,7 @@ pub mod non_atomic {
 
         #[inline]
         pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&LFS::Inode, &mut LFS)> {
-            let (inode, _) = self.map.get(fd as usize)?.as_ref()?;
+            let (inode, _) = self.map.get(fd as usize - 3)?.as_ref()?;
             Some((inode, &mut self.lfs))
         }
 
