@@ -198,28 +198,30 @@ impl WalrusUtilModule for walrus::Module {
         // identify the memory using the memory referenced
         // by the code trying to read the pointer
         let memory_id = if memories.len() > 1 && memory_hint.is_none() {
-            // environ_sizes_get
-            let import_id = self
-                .imports
-                .get_func("wasi_snapshot_preview1", "environ_sizes_get")
-                .to_eyre()
-                .wrap_err_with(|| eyre::eyre!("Failed to get environ_sizes_get"))?;
-
-            let using_funcs = self.get_using_func(import_id)?;
-
-            let ret_mem_id = std::sync::Arc::new(std::sync::Mutex::new(None));
-
-            for (fid, _, _) in using_funcs {
-                let arg_ptr = std::sync::Arc::new(std::sync::Mutex::new(Option::<Vec<u32>>::None));
-                let arg_ptr_c = arg_ptr.clone();
-
-                let ret_mem_id_c = ret_mem_id.clone();
-
-                let mut interpreter = walrus_simple_interpreter::Interpreter::new(self)
+            let gen_memory_id = || -> eyre::Result<MemoryId> {
+                // environ_sizes_get
+                let import_id = self
+                    .imports
+                    .get_func("wasi_snapshot_preview1", "environ_sizes_get")
                     .to_eyre()
-                    .wrap_err_with(|| eyre::eyre!("Failed to create interpreter"))?;
+                    .wrap_err_with(|| eyre::eyre!("Failed to get environ_sizes_get"))?;
 
-                interpreter.set_interrupt_handler_mem(move |_, _, _, (id, address, _, ty)| {
+                let using_funcs = self.get_using_func(import_id)?;
+
+                let ret_mem_id = std::sync::Arc::new(std::sync::Mutex::new(None));
+
+                for (fid, _, _) in using_funcs {
+                    let arg_ptr =
+                        std::sync::Arc::new(std::sync::Mutex::new(Option::<Vec<u32>>::None));
+                    let arg_ptr_c = arg_ptr.clone();
+
+                    let ret_mem_id_c = ret_mem_id.clone();
+
+                    let mut interpreter = walrus_simple_interpreter::Interpreter::new(self)
+                        .to_eyre()
+                        .wrap_err_with(|| eyre::eyre!("Failed to create interpreter"))?;
+
+                    interpreter.set_interrupt_handler_mem(move |_, _, _, (id, address, _, ty)| {
 
                     if matches!(ty, walrus_simple_interpreter::MemoryAccessType::Load) {
                         if let Some(v) = arg_ptr_c.lock().unwrap().as_ref() {
@@ -240,47 +242,51 @@ impl WalrusUtilModule for walrus::Module {
                     Ok(())
                 });
 
-                let memories = memories.clone();
+                    let memories = memories.clone();
 
-                interpreter.add_function("environ_sizes_get", move |interpreter, args| {
-                    let args = args
+                    interpreter.add_function("environ_sizes_get", move |interpreter, args| {
+                        let args = args
+                            .iter()
+                            .map(|arg| {
+                                if let ir::Value::I32(arg) = arg {
+                                    Ok(*arg as u32)
+                                } else {
+                                    Err(anyhow::anyhow!("Invalid argument type"))
+                                }
+                            })
+                            .collect::<Result<Vec<_>, _>>()?;
+                        interpreter.mem_set_i32(memories[0], args[0], 0)?;
+                        interpreter.mem_set_i32(memories[0], args[1], 0)?;
+
+                        arg_ptr.lock().unwrap().replace(args);
+
+                        Ok(vec![ir::Value::I32(0)])
+                    });
+
+                    let args = self
+                        .types
+                        .get(self.funcs.get(fid).ty())
+                        .params()
                         .iter()
-                        .map(|arg| {
-                            if let ir::Value::I32(arg) = arg {
-                                Ok(*arg as u32)
-                            } else {
-                                Err(anyhow::anyhow!("Invalid argument type"))
-                            }
-                        })
-                        .collect::<Result<Vec<_>, _>>()?;
-                    interpreter.mem_set_i32(memories[0], args[0], 0)?;
-                    interpreter.mem_set_i32(memories[0], args[1], 0)?;
-
-                    arg_ptr.lock().unwrap().replace(args);
-
-                    Ok(vec![ir::Value::I32(0)])
-                });
-
-                let args = self
-                    .types
-                    .get(self.funcs.get(fid).ty())
-                    .params()
-                    .iter()
-                    .map(|ty| ty.normal())
-                    .collect::<eyre::Result<Vec<_>>>()
-                    .wrap_err_with(|| eyre::eyre!("Failed to get function args"))?;
-                if let Err(e) = interpreter.call(fid, self, &args).to_eyre() {
-                    if ret_mem_id.lock().unwrap().is_none() {
-                        eprintln!("Error: {e}");
+                        .map(|ty| ty.normal())
+                        .collect::<eyre::Result<Vec<_>>>()
+                        .wrap_err_with(|| eyre::eyre!("Failed to get function args"))?;
+                    if let Err(e) = interpreter.call(fid, self, &args).to_eyre() {
+                        if ret_mem_id.lock().unwrap().is_none() {
+                            eprintln!("Error: {e}");
+                        }
                     }
                 }
-            }
 
-            if let Some(mem_id) = ret_mem_id.lock().unwrap().as_ref() {
-                *mem_id
-            } else {
-                return Err(eyre::eyre!("Memory not found"));
-            }
+                if let Some(mem_id) = ret_mem_id.lock().unwrap().as_ref() {
+                    Ok(*mem_id)
+                } else {
+                    return Err(eyre::eyre!("Memory not found"));
+                }
+            };
+            gen_memory_id().wrap_err_with(|| {
+                eyre::eyre!("Failed to detect memory id. You can use memory hint.")
+            })?
         } else if let Some(memory_hint) = memory_hint {
             if memory_hint >= memories.len() {
                 return Err(eyre::eyre!(

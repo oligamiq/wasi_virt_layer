@@ -3,10 +3,7 @@ use std::{fs, path::Path};
 use camino::Utf8PathBuf;
 use eyre::{Context as _, ContextCompat};
 
-use crate::{
-    rewrite::TargetMemoryType,
-    util::{CaminoUtilModule as _, ResultUtil as _},
-};
+use crate::util::{CaminoUtilModule as _, ResultUtil as _};
 
 pub fn director(path: &Utf8PathBuf, wasm: &[impl AsRef<Path>]) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)

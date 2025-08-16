@@ -51,23 +51,17 @@
 [module="start", function="start"] return 
 [WASI main]
 [module="main", function="main"] call 
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048344, iovs-len=1, written-ptr=1048300
-[WASI stdout] Writing 14 bytes to fd 1
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048552, iovs-len=1, written-ptr=1048508
+[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048568, iovs-len=1, written-ptr=1048556
 [WASI stdout] Hello, world!
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048344, iovs-len=1, written-ptr=1048300
-[WASI stdout] Total bytes written: 14
 [module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
 [module="main", function="main"] return 
-[module="world", function="world"] call 
 [WASI root.world()]
+[module="world", function="world"] call 
 [module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048376, iovs-len=1, written-ptr=1048332
 [WASI stdout] Hello, world!
+[WASI root.addEnv("RUST_BACKTRACE=1")
 [module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
 [module="world", function="world"] return 
-[WASI root.addEnv("RUST_BACKTRACE=1")
 [module="add-env", function="add-env"] call env=RUST_BACKTRACE=1
 [module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048360, iovs-len=1, written-ptr=1048316
 [WASI stdout] Adding env: RUST_BACKTRACE=1
@@ -75,7 +69,7 @@
 [module="add-env", function="add-env"] return 
 [WASI root.getEnvs()
 [module="get-envs", function="get-envs"] call 
-[module="get-envs", function="get-envs"] return result=1063440
+[module="get-envs", function="get-envs"] return result=1063344
 [
   "RUST_MIN_STACK=16777216",
   "HOME=~/",
@@ -85,13 +79,7 @@
 [WASI main]
 rust have virtual env layer so envs are no changed
 [module="main", function="main"] call 
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048344, iovs-len=1, written-ptr=1048300
-[WASI stdout] Writing 14 bytes to fd 1
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048552, iovs-len=1, written-ptr=1048508
+[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048568, iovs-len=1, written-ptr=1048556
 [WASI stdout] Hello, world!
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
-[module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] call fd=1, iovs-ptr=1048344, iovs-len=1, written-ptr=1048300
-[WASI stdout] Total bytes written: 14
 [module="[static]wasip1.fd-write-import", function="[static]wasip1.fd-write-import"] return result=0
 [module="main", function="main"] return 

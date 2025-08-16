@@ -607,17 +607,15 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
 ) -> Errno {
     let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-    let mut writed = 0;
+    let mut written = 0;
 
     for iovs in iovs_vec {
         let buf_len = iovs.buf_len;
         let buf_ptr = iovs.buf;
 
-        println!("Writing {} bytes to fd {}", buf_len, fd);
-
         match state.fd_write_raw::<Wasm>(fd, buf_ptr, buf_len) {
             Ok(nwritten) => {
-                writed += nwritten;
+                written += nwritten;
             }
             Err(e) => {
                 return e;
@@ -625,9 +623,7 @@ pub fn fd_write_inner<Wasm: WasmAccess>(
         }
     }
 
-    println!("Total bytes written: {}", writed);
-
-    Wasm::store_le(nwritten, writed);
+    Wasm::store_le(nwritten, written);
     return wasip1::ERRNO_SUCCESS;
 }
 
