@@ -16,6 +16,7 @@ pub mod non_atomic {
         LFS::Inode: Copy,
     {
         lfs: LFS,
+        // (inode, cursor)
         map: [Option<(LFS::Inode, usize)>; FLAT_LEN],
     }
 
@@ -38,6 +39,25 @@ pub mod non_atomic {
         #[inline]
         pub fn get_inode(&self, fd: Fd) -> Option<&LFS::Inode> {
             self.map.get(fd as usize)?.as_ref().map(|(inode, _)| inode)
+        }
+
+        #[inline]
+        pub fn remove_inode(&mut self, fd: Fd) -> Option<LFS::Inode> {
+            self.map
+                .get_mut(fd as usize)?
+                .take()
+                .map(|(inode, _)| inode)
+        }
+
+        #[inline]
+        pub fn push_inode(&mut self, inode: LFS::Inode) -> Fd {
+            for (i, slot) in self.map.iter_mut().enumerate() {
+                if slot.is_none() {
+                    *slot = Some((inode, 0));
+                    return i as Fd;
+                }
+            }
+            unreachable!();
         }
 
         #[inline]
@@ -118,6 +138,65 @@ pub mod non_atomic {
                 ctim: status.ctim,
             })
         }
+
+        pub(crate) fn fd_prestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+        ) -> Result<wasip1::Prestat, wasip1::Errno> {
+            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+            let prestat = lfs.fd_prestat_get_raw::<Wasm>(inode)?;
+
+            Ok(prestat)
+        }
+
+        pub(crate) fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            dir_path_ptr: *mut u8,
+            dir_path_len: usize,
+        ) -> Result<(), wasip1::Errno> {
+            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+            lfs.fd_prestat_dir_name_raw::<Wasm>(inode, dir_path_ptr, dir_path_len)
+        }
+
+        pub(crate) fn fd_close_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+        ) -> Result<(), wasip1::Errno> {
+            if self.remove_inode(fd).is_none() {
+                return Err(wasip1::ERRNO_BADF);
+            }
+            Ok(())
+        }
+
+        pub(crate) fn path_open_raw<Wasm: WasmAccess>(
+            &mut self,
+            dir_fd: Fd,
+            dir_flags: wasip1::Fdflags,
+            path_ptr: *const u8,
+            path_len: usize,
+            o_flags: wasip1::Oflags,
+            fs_rights_base: wasip1::Rights,
+            fs_rights_inheriting: wasip1::Rights,
+            fd_flags: wasip1::Fdflags,
+        ) -> Result<Fd, wasip1::Errno> {
+            let (inode, lfs) = self.get_inode_and_lfs(dir_fd).ok_or(wasip1::ERRNO_BADF)?;
+
+            let new_inode = lfs.path_open_raw::<Wasm>(
+                inode,
+                dir_flags,
+                path_ptr,
+                path_len,
+                o_flags,
+                fs_rights_base,
+                fs_rights_inheriting,
+                fd_flags,
+            )?;
+
+            Ok(self.push_inode(new_inode))
+        }
     }
 
     pub struct FilestatWithoutDevice {
@@ -192,17 +271,67 @@ pub mod non_atomic {
             }
         }
 
-        fn path_open(
+        fn fd_prestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            prestat_ptr: *mut wasip1::Prestat,
+        ) -> wasip1::Errno {
+            match self.fd_prestat_get_raw::<Wasm>(fd) {
+                Ok(prestat) => {
+                    Wasm::store_le(prestat_ptr, prestat);
+                    wasip1::ERRNO_SUCCESS
+                }
+                Err(e) => e,
+            }
+        }
+
+        fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            dir_path_ptr: *mut u8,
+            dir_path_len: usize,
+        ) -> wasip1::Errno {
+            match self.fd_prestat_dir_name_raw::<Wasm>(fd, dir_path_ptr, dir_path_len) {
+                Ok(()) => wasip1::ERRNO_SUCCESS,
+                Err(e) => e,
+            }
+        }
+
+        fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno {
+            match self.fd_close_raw::<Wasm>(fd) {
+                Ok(()) => wasip1::ERRNO_SUCCESS,
+                Err(e) => e,
+            }
+        }
+
+        fn path_open_raw<Wasm: WasmAccess>(
             &mut self,
             dir_fd: Fd,
             dir_flags: wasip1::Fdflags,
-            path: &str,
+            path_ptr: *const u8,
+            path_len: usize,
             o_flags: wasip1::Oflags,
             fs_rights_base: wasip1::Rights,
             fs_rights_inheriting: wasip1::Rights,
             fd_flags: wasip1::Fdflags,
-        ) -> Result<Fd, wasip1::Errno> {
-            todo!()
+            fd_ret: *mut wasip1::Fd,
+        ) -> wasip1::Errno {
+            match self.path_open_raw::<Wasm>(
+                dir_fd,
+                dir_flags,
+                path_ptr,
+                path_len,
+                o_flags,
+                fs_rights_base,
+                fs_rights_inheriting,
+                fd_flags,
+            ) {
+                Ok(fd) => {
+                    Wasm::store_le(fd_ret, fd);
+                    wasip1::ERRNO_SUCCESS
+                }
+                Err(e) => e,
+            }
         }
     }
 
@@ -235,6 +364,30 @@ pub mod non_atomic {
             path_ptr: *const u8,
             path_len: usize,
         ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
+        fn fd_prestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+        ) -> Result<wasip1::Prestat, wasip1::Errno>;
+
+        fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            dir_path_ptr: *mut u8,
+            dir_path_len: usize,
+        ) -> Result<(), wasip1::Errno>;
+
+        fn path_open_raw<Wasm: WasmAccess>(
+            &mut self,
+            dir_ino: &Self::Inode,
+            dir_flags: wasip1::Fdflags,
+            path_ptr: *const u8,
+            path_len: usize,
+            o_flags: wasip1::Oflags,
+            fs_rights_base: wasip1::Rights,
+            fs_rights_inheriting: wasip1::Rights,
+            fd_flags: wasip1::Fdflags,
+        ) -> Result<Self::Inode, wasip1::Errno>;
     }
 
     pub struct VFSConstNormalLFS<
@@ -364,7 +517,7 @@ pub mod non_atomic {
                     }
                     #[cfg(feature = "multi_memory")]
                     {
-                        let mut buf = Vec::with_capacity(len);
+                        let mut buf = alloc::vec::Vec::with_capacity(len);
                         unsafe { buf.set_len(len) };
                         Wasm::memcpy_to(&mut buf, data);
                         StdIo::write(&buf)
@@ -378,13 +531,13 @@ pub mod non_atomic {
                     }
                     #[cfg(feature = "multi_memory")]
                     {
-                        let mut buf = Vec::with_capacity(len);
+                        let mut buf = alloc::vec::Vec::with_capacity(len);
                         unsafe { buf.set_len(len) };
                         Wasm::memcpy_to(&mut buf, data);
                         StdIo::write(&buf)
                     }
                 }
-                _ => Err(wasip1::ERRNO_ROFS),
+                _ => Err(wasip1::ERRNO_PERM),
             }
         }
 
@@ -471,6 +624,87 @@ pub mod non_atomic {
                 mtim: 0,
                 ctim: 0,
             })
+        }
+
+        fn fd_prestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+        ) -> Result<wasip1::Prestat, wasip1::Errno> {
+            if !Self::PRE_OPEN.contains(inode) {
+                return Err(wasip1::ERRNO_BADF);
+            }
+
+            let (name, _) = ROOT::FILES[*inode];
+
+            Ok(wasip1::Prestat {
+                tag: 0, // prestat is enum but variant is only 0
+                // union type but we only have one variant
+                u: wasip1::PrestatU {
+                    dir: wasip1::PrestatDir {
+                        pr_name_len: name.len() as _,
+                    },
+                },
+            })
+        }
+
+        fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            dir_path_ptr: *mut u8,
+            dir_path_len: usize,
+        ) -> Result<(), wasip1::Errno> {
+            if !Self::PRE_OPEN.contains(inode) {
+                return Err(wasip1::ERRNO_BADF);
+            }
+
+            let (name, _) = ROOT::FILES[*inode];
+
+            Wasm::memcpy(
+                dir_path_ptr,
+                &name.as_bytes()[..core::cmp::min(name.len(), dir_path_len)],
+            );
+
+            Ok(())
+        }
+
+        fn path_open_raw<Wasm: WasmAccess>(
+            &mut self,
+            dir_inode: &Self::Inode,
+            _: wasip1::Fdflags,
+            path_ptr: *const u8,
+            path_len: usize,
+            o_flags: wasip1::Oflags,
+            fs_rights_base: wasip1::Rights,
+            _: wasip1::Rights,
+            _: wasip1::Fdflags,
+        ) -> Result<Self::Inode, wasip1::Errno> {
+            if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
+                if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
+                    return Err(wasip1::ERRNO_EXIST);
+                }
+
+                if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY
+                    && !self.is_dir(&inode)
+                {
+                    return Err(wasip1::ERRNO_NOTDIR);
+                }
+
+                if fs_rights_base & wasip1::RIGHTS_FD_WRITE == wasip1::RIGHTS_FD_WRITE {
+                    return Err(wasip1::ERRNO_PERM);
+                }
+
+                if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
+                    return Err(wasip1::ERRNO_PERM);
+                }
+
+                Ok(inode)
+            } else {
+                if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
+                    return Err(wasip1::ERRNO_PERM);
+                }
+
+                Err(wasip1::ERRNO_NOENT)
+            }
         }
     }
 
@@ -805,23 +1039,6 @@ pub mod non_atomic {
     }
 
     impl<File: WasiConstPrimitiveFile> Wasip1FileTrait for WasiConstFile<File> {
-        fn path_open(
-            &self,
-            o_flags: wasip1::Oflags,
-            fs_rights_base: wasip1::Rights,
-            _fd_flags: wasip1::Fdflags,
-        ) -> Result<(), wasip1::Errno> {
-            if fs_rights_base & wasip1::RIGHTS_FD_WRITE == wasip1::RIGHTS_FD_WRITE {
-                return Err(wasip1::ERRNO_ROFS);
-            }
-
-            if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
-                return Err(wasip1::ERRNO_ROFS);
-            }
-
-            Ok(())
-        }
-
         #[inline(always)]
         fn len(&self) -> usize {
             self.file.len()
@@ -909,13 +1126,6 @@ pub mod non_atomic {
     }
 
     pub trait Wasip1FileTrait {
-        fn path_open(
-            &self,
-            o_flags: wasip1::Oflags,
-            fs_rights_base: wasip1::Rights,
-            fd_flags: wasip1::Fdflags,
-        ) -> Result<(), wasip1::Errno>;
-
         fn size(&self) -> usize;
 
         fn len(&self) -> usize;
@@ -937,7 +1147,7 @@ pub mod non_atomic {
 
                 for i in 0..iovs_len {
                     let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
-                    let mut buf = vec![0u8; iov.buf_len];
+                    let mut buf = alloc::vec![0u8; iov.buf_len];
                     let read = self.read(&mut buf)?;
                     if read == 0 {
                         break; // EOF
@@ -991,16 +1201,33 @@ pub trait Wasip1FileSystem {
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
-    fn path_open(
+    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        prestat: *mut wasip1::Prestat,
+    ) -> wasip1::Errno;
+
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> wasip1::Errno;
+
+    fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno;
+
+    fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
         dir_fd: Fd,
         dir_flags: wasip1::Fdflags,
-        path: &str,
+        path_ptr: *const u8,
+        path_len: usize,
         o_flags: wasip1::Oflags,
         fs_rights_base: wasip1::Rights,
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
-    ) -> Result<Fd, wasip1::Errno>;
+        fd_ret: *mut wasip1::Fd,
+    ) -> wasip1::Errno;
 }
 
 use wasip1::*;
@@ -1062,21 +1289,52 @@ macro_rules! export_fs {
                 $crate::wasi::file::Wasip1FileSystem::path_filestat_get_raw::<$wasm>(state, fd, flags, path_ptr, path_len, filestat)
             }
 
-            // #[unsafe(no_mangle)]
-            // #[cfg(target_arch = "wasm32")]
-            // pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_open>](
-            //     fd: $crate::wasip1::Fd,
-            //     dir_flags: $crate::wasip1::Fdflags,
-            //     path_ptr: *const u8,
-            //     path_len: usize,
-            //     o_flags: $crate::wasip1::Oflags,
-            //     fs_rights_base: $crate::wasip1::Rights,
-            //     fs_rights_inheriting: $crate::wasip1::Rights,
-            //     fd_flags: $crate::wasip1::Fdflags,
-            //     fd_ret: *mut $crate::wasip1::Fd,
-            // ) -> $crate::wasip1::Errno {
+            #[cfg(target_arch = "wasm32")]
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_prestat_get>](
+                fd: $crate::wasip1::Fd,
+                prestat: *mut $crate::wasip1::Prestat,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::fd_prestat_get_raw::<$wasm>(state, fd, prestat)
+            }
 
-            // }
+            #[cfg(target_arch = "wasm32")]
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_prestat_dir_name>](
+                fd: $crate::wasip1::Fd,
+                dir_path_ptr: *mut u8,
+                dir_path_len: usize,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::fd_prestat_dir_name_raw::<$wasm>(state, fd, dir_path_ptr, dir_path_len)
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_close>](
+                fd: $crate::wasip1::Fd,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::fd_close_raw::<$wasm>(state, fd)
+            }
+
+            #[unsafe(no_mangle)]
+            #[cfg(target_arch = "wasm32")]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_open>](
+                fd: $crate::wasip1::Fd,
+                dir_flags: $crate::wasip1::Fdflags,
+                path_ptr: *const u8,
+                path_len: usize,
+                o_flags: $crate::wasip1::Oflags,
+                fs_rights_base: $crate::wasip1::Rights,
+                fs_rights_inheriting: $crate::wasip1::Rights,
+                fd_flags: $crate::wasip1::Fdflags,
+                fd_ret: *mut $crate::wasip1::Fd,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::path_open_raw::<$wasm>(state, fd, dir_flags, path_ptr, path_len, o_flags, fs_rights_base, fs_rights_inheriting, fd_flags, fd_ret)
+            }
         }
     };
 }
