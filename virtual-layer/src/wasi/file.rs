@@ -82,6 +82,18 @@ pub mod non_atomic {
 
             Ok(written)
         }
+
+        pub(crate) fn path_filestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            flags: wasip1::Lookupflags,
+            path_ptr: *const u8,
+            path_len: usize,
+        ) -> Result<wasip1::Filestat, wasip1::Errno> {
+            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+            lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)
+        }
     }
 
     impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
@@ -114,6 +126,23 @@ pub mod non_atomic {
             match self.fd_readdir_raw::<Wasm>(fd, buf, buf_len, cookie) {
                 Ok(n) => {
                     Wasm::store_le(nread, n);
+                    wasip1::ERRNO_SUCCESS
+                }
+                Err(e) => e,
+            }
+        }
+
+        fn path_filestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            fd: Fd,
+            flags: wasip1::Lookupflags,
+            path_ptr: *const u8,
+            path_len: usize,
+            filestat_ptr: *mut wasip1::Filestat,
+        ) -> wasip1::Errno {
+            match self.path_filestat_get_raw::<Wasm>(fd, flags, path_ptr, path_len) {
+                Ok(filestat) => {
+                    Wasm::store_le(filestat_ptr, filestat);
                     wasip1::ERRNO_SUCCESS
                 }
                 Err(e) => e,
@@ -154,6 +183,14 @@ pub mod non_atomic {
             buf_len: usize,
             cookie: Dircookie,
         ) -> Result<(Size, Dircookie), wasip1::Errno>;
+
+        fn path_filestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            flags: wasip1::Lookupflags,
+            path_ptr: *const u8,
+            path_len: usize,
+        ) -> Result<wasip1::Filestat, wasip1::Errno>;
     }
 
     pub struct VFSConstNormalLFS<
@@ -193,6 +230,13 @@ pub mod non_atomic {
                 VFSConstNormalInode::Dir(..) => true,
                 VFSConstNormalInode::File(..) => false,
             }
+        }
+
+        pub fn get_inode_for_path(&self, inode: &usize, path: &str) -> Option<usize> {
+            // let path =
+            std::path::Path::new(path).components().next();
+
+            todo!()
         }
     }
 
@@ -308,6 +352,16 @@ pub mod non_atomic {
                 core::mem::size_of::<wasip1::Dirent>() + name_bytes.len(),
                 next_cookie,
             ))
+        }
+
+        fn path_filestat_get_raw<Wasm: WasmAccess>(
+            &mut self,
+            inode: &Self::Inode,
+            flags: wasip1::Lookupflags,
+            path_ptr: *const u8,
+            path_len: usize,
+        ) -> Result<wasip1::Filestat, wasip1::Errno> {
+            todo!();
         }
     }
 
@@ -717,6 +771,15 @@ pub trait Wasip1FileSystem {
         nread: *mut Size,
     ) -> wasip1::Errno;
 
+    fn path_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        filestat: *mut wasip1::Filestat,
+    ) -> wasip1::Errno;
+
     fn path_open(
         &mut self,
         dir_fd: Fd,
@@ -773,6 +836,19 @@ macro_rules! export_fs {
             ) -> $crate::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_readdir_raw::<$wasm>(state, fd, buf, buf_len, cookie, nread)
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            #[unsafe(no_mangle)]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_filestat_get>](
+                fd: $crate::wasip1::Fd,
+                flags: $crate::wasip1::Lookupflags,
+                path_ptr: *const u8,
+                path_len: usize,
+                filestat: *mut $crate::wasip1::Filestat,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::path_filestat_get_raw::<$wasm>(state, fd, flags, path_ptr, path_len, filestat)
             }
 
             // #[unsafe(no_mangle)]

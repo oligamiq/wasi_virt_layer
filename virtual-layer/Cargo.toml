@@ -18,6 +18,7 @@ paste = "1.0.15"
 dashmap = "6.1.0"
 heapless = "0.8.0"
 zerocopy = "0.8.26"
+camino = "1.1.11"
 
 # [dev-dependencies]
 # wasi preview1 latest
