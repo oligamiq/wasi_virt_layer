@@ -4,9 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [features]
-default = ["alloc"]
+default = ["alloc", "std"]
 multi_memory = ["alloc"]
 alloc = []
+std = []
 
 [dependencies]
 wit-bindgen = { version = "0.43.0", default-features = false }

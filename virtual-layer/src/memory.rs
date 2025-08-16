@@ -302,7 +302,7 @@ impl<T: core::fmt::Debug, Wasm: WasmAccess> Iterator for WasmArrayAccessIterator
 }
 
 #[cfg(feature = "alloc")]
-use std::vec::Vec;
+use alloc::vec::Vec;
 
 pub trait WasmAccess {
     /// Copies data from the source pointer to the offset.

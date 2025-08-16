@@ -7,8 +7,6 @@ use crate::memory::WasmAccess;
 
 #[cfg(not(target_feature = "atomics"))]
 pub mod non_atomic {
-    use std::arch::naked_asm;
-
     use wasip1::*;
 
     /// small posix like virtual file system
