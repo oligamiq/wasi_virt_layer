@@ -22,4 +22,6 @@ homepage = ""
 readme = "README.md"
 
 [workspace.dependencies]
-wasip1-virtual-layer = { path = "virtual-layer", default-features = false }
+wasip1-virtual-layer = { path = "virtual-layer", default-features = false, features = [
+    "std",
+] }

@@ -103,20 +103,46 @@ pub mod non_atomic {
             iovs_ptr: *const Ciovec,
             iovs_len: usize,
         ) -> Result<Size, wasip1::Errno> {
-            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+            match fd {
+                0 => return Err(wasip1::ERRNO_BADF),
+                1 | 2 => {
+                    // stdout
+                    let lfs = &mut self.lfs;
 
-            let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-            let mut written = 0;
+                    let mut written = 0;
 
-            for iovs in iovs_vec {
-                let buf_len = iovs.buf_len;
-                let buf_ptr = iovs.buf;
+                    for iovs in iovs_vec {
+                        let buf_len = iovs.buf_len;
+                        let buf_ptr = iovs.buf;
 
-                written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
+                        match fd {
+                            1 => written += lfs.fd_write_stdout_raw::<Wasm>(buf_ptr, buf_len)?,
+                            2 => written += lfs.fd_write_stderr_raw::<Wasm>(buf_ptr, buf_len)?,
+                            _ => unreachable!(),
+                        }
+                    }
+
+                    Ok(written)
+                }
+                fd => {
+                    let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+
+                    let mut written = 0;
+
+                    for iovs in iovs_vec {
+                        let buf_len = iovs.buf_len;
+                        let buf_ptr = iovs.buf;
+
+                        written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
+                    }
+
+                    Ok(written)
+                }
             }
-
-            Ok(written)
         }
 
         pub(crate) fn path_filestat_get_raw<Wasm: WasmAccess>(
@@ -350,6 +376,18 @@ pub mod non_atomic {
             data_len: usize,
         ) -> Result<Size, wasip1::Errno>;
 
+        fn fd_write_stdout_raw<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            data_len: usize,
+        ) -> Result<Size, wasip1::Errno>;
+
+        fn fd_write_stderr_raw<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            data_len: usize,
+        ) -> Result<Size, wasip1::Errno>;
+
         fn is_dir(&self, inode: &Self::Inode) -> bool;
 
         fn fd_readdir_raw<Wasm: WasmAccess>(
@@ -507,40 +545,46 @@ pub mod non_atomic {
 
         fn fd_write_raw<Wasm: WasmAccess>(
             &mut self,
-            fd: &Self::Inode,
-            data: *const u8,
-            len: usize,
+            _: &Self::Inode,
+            _: *const u8,
+            _: usize,
         ) -> Result<Size, wasip1::Errno> {
-            match fd {
-                1 => {
-                    // stdout
-                    #[cfg(not(feature = "multi_memory"))]
-                    {
-                        StdIo::write_direct::<Wasm>(data, len)
-                    }
-                    #[cfg(feature = "multi_memory")]
-                    {
-                        let mut buf = alloc::vec::Vec::with_capacity(len);
-                        unsafe { buf.set_len(len) };
-                        Wasm::memcpy_to(&mut buf, data);
-                        StdIo::write(&buf)
-                    }
-                }
-                2 => {
-                    // stderr
-                    #[cfg(not(feature = "multi_memory"))]
-                    {
-                        StdIo::write_direct::<Wasm>(data, len)
-                    }
-                    #[cfg(feature = "multi_memory")]
-                    {
-                        let mut buf = alloc::vec::Vec::with_capacity(len);
-                        unsafe { buf.set_len(len) };
-                        Wasm::memcpy_to(&mut buf, data);
-                        StdIo::write(&buf)
-                    }
-                }
-                _ => Err(wasip1::ERRNO_PERM),
+            Err(wasip1::ERRNO_PERM)
+        }
+
+        fn fd_write_stdout_raw<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            data_len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            #[cfg(not(feature = "multi_memory"))]
+            {
+                StdIo::write_direct::<Wasm>(data, data_len)
+            }
+            #[cfg(feature = "multi_memory")]
+            {
+                let mut buf = alloc::vec::Vec::with_capacity(data_len);
+                unsafe { buf.set_len(data_len) };
+                Wasm::memcpy_to(&mut buf, data);
+                StdIo::write(&buf)
+            }
+        }
+
+        fn fd_write_stderr_raw<Wasm: WasmAccess>(
+            &mut self,
+            data: *const u8,
+            data_len: usize,
+        ) -> Result<Size, wasip1::Errno> {
+            #[cfg(not(feature = "multi_memory"))]
+            {
+                StdIo::write_direct::<Wasm>(data, data_len)
+            }
+            #[cfg(feature = "multi_memory")]
+            {
+                let mut buf = alloc::vec::Vec::with_capacity(data_len);
+                unsafe { buf.set_len(data_len) };
+                Wasm::memcpy_to(&mut buf, data);
+                StdIo::write(&buf)
             }
         }
 
@@ -1081,11 +1125,19 @@ pub mod non_atomic {
     }
 
     pub trait StdIO {
+        /// This function is called when the alloc feature is ON
+        /// and write_direct is not implemented.
+        /// If you are not familiar with Wasm memory, etc.,
+        /// it is better to use this.
         #[allow(unused_variables)]
         fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
             Err(wasip1::ERRNO_NOSYS)
         }
 
+        /// This function is called,
+        /// but if the write function is implemented
+        /// and the alloc feature is ON,
+        /// this function is automatically implemented.
         #[cfg(not(feature = "multi_memory"))]
         #[allow(unused_variables)]
         fn write_direct<Wasm: WasmAccess>(
@@ -1104,11 +1156,19 @@ pub mod non_atomic {
             }
         }
 
+        /// This function is called when the alloc feature is ON
+        /// and ewrite_direct is not implemented.
+        /// If you are not familiar with Wasm memory, etc.,
+        /// it is better to use this.
         #[allow(unused_variables)]
         fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
             Err(wasip1::ERRNO_NOSYS)
         }
 
+        /// This function is called,
+        /// but if the ewrite function is implemented
+        /// and the alloc feature is ON,
+        /// this function is automatically implemented.
         #[cfg(not(feature = "multi_memory"))]
         #[allow(unused_variables)]
         fn ewrite_direct<Wasm: WasmAccess>(
