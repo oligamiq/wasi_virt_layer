@@ -30,6 +30,9 @@ fn main() {
         .filter(|e| e.file_type().is_file())
     {
         println!("Current File: {}", file.path().display());
-        println!("File content: {:?}", std::fs::read(file.path()));
+        println!(
+            "File content: {:?}",
+            std::fs::read_to_string(file.path()).unwrap()
+        );
     }
 }

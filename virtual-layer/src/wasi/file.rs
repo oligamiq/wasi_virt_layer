@@ -236,11 +236,123 @@ where
         lfs.fd_prestat_dir_name_raw::<Wasm>(inode, dir_path_ptr, dir_path_len)
     }
 
+    pub(crate) fn fd_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+    ) -> Result<wasip1::Filestat, wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+        let filestat = lfs.fd_filestat_get_raw::<Wasm>(inode)?;
+
+        Ok(wasip1::Filestat {
+            dev: 0, // no device
+            ino: filestat.ino,
+            filetype: filestat.filetype,
+            nlink: filestat.nlink,
+            size: filestat.size,
+            atim: filestat.atim,
+            mtim: filestat.mtim,
+            ctim: filestat.ctim,
+        })
+    }
+
     pub(crate) fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> Result<(), wasip1::Errno> {
         if self.remove_inode(fd).is_none() {
             return Err(wasip1::ERRNO_BADF);
         }
         Ok(())
+    }
+
+    pub(crate) fn get_cursor(&mut self, fd: Fd) -> Result<usize, wasip1::Errno> {
+        #[cfg(feature = "threads")]
+        {
+            self.map
+                .get(fd as usize - 3)
+                .ok_or(wasip1::ERRNO_BADF)?
+                .read()
+                .map(|(_, cursor)| cursor)
+                .ok_or(wasip1::ERRNO_BADF)
+        }
+
+        #[cfg(not(feature = "threads"))]
+        {
+            self.map
+                .get(fd as usize - 3)
+                .ok_or(wasip1::ERRNO_BADF)?
+                .map(|(_, cursor)| cursor)
+                .ok_or(wasip1::ERRNO_BADF)
+        }
+    }
+
+    pub(crate) fn set_cursor(&mut self, fd: Fd, cursor: usize) -> Result<(), wasip1::Errno> {
+        #[cfg(feature = "threads")]
+        {
+            self.map
+                .get(fd as usize - 3)
+                .ok_or(wasip1::ERRNO_BADF)?
+                .write()
+                .as_mut()
+                .map(|(_, cur)| *cur = cursor)
+                .ok_or(wasip1::ERRNO_BADF)
+        }
+
+        #[cfg(not(feature = "threads"))]
+        {
+            self.map
+                .get(fd as usize - 3)
+                .ok_or(wasip1::ERRNO_BADF)?
+                .as_mut()
+                .map(|(_, cur)| *cur = cursor)
+                .ok_or(wasip1::ERRNO_BADF)
+        }
+    }
+
+    pub(crate) fn fd_read_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        match fd {
+            0 => {
+                let lfs = &mut self.lfs;
+
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+
+                let mut read = 0;
+
+                for iovs in iovs_vec {
+                    read += lfs.fd_read_stdin_raw::<Wasm>(iovs.buf as *mut _, iovs.buf_len)?;
+                }
+
+                Ok(read)
+            }
+            1 | 2 => return Err(wasip1::ERRNO_BADF),
+            fd => {
+                let mut cursor = self.get_cursor(fd)?;
+
+                let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+                if lfs.is_dir(inode) {
+                    return Err(wasip1::ERRNO_ISDIR);
+                }
+
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+
+                let mut read = 0;
+
+                for iovs in iovs_vec {
+                    let nread =
+                        lfs.fd_pread_raw::<Wasm>(inode, iovs.buf as *mut _, iovs.buf_len, cursor)?;
+                    read += nread;
+                    cursor += nread;
+                }
+
+                self.set_cursor(fd, cursor)?;
+
+                Ok(read)
+            }
+        }
     }
 
     pub(crate) fn path_open_raw<Wasm: WasmAccess>(
@@ -376,6 +488,36 @@ where
         }
     }
 
+    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        filestat_ptr: *mut wasip1::Filestat,
+    ) -> wasip1::Errno {
+        match self.fd_filestat_get_raw::<Wasm>(fd) {
+            Ok(filestat) => {
+                Wasm::store_le(filestat_ptr, filestat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
+
+    fn fd_read_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+        nread: *mut Size,
+    ) -> wasip1::Errno {
+        match self.fd_read_raw::<Wasm>(fd, iovs_ptr, iovs_len) {
+            Ok(n) => {
+                Wasm::store_le(nread, n);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
+
     fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
         dir_fd: Fd,
@@ -460,6 +602,25 @@ pub trait Wasip1LFS {
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno>;
+
+    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
+    fn fd_pread_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_read_stdin_raw<Wasm: WasmAccess>(
+        &mut self,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
 
     fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
@@ -571,6 +732,18 @@ impl<
 
     fn access_time(&self, inode: usize) -> wasip1::Timestamp {
         self.add_info[inode].atime as wasip1::Timestamp
+    }
+
+    fn filestat_from_inode(&self, inode: usize) -> FilestatWithoutDevice {
+        FilestatWithoutDevice {
+            ino: inode as _,
+            filetype: ConstRoot::FILES[inode].1.filetype(),
+            nlink: 1,
+            size: ConstRoot::FILES[inode].1.size() as _,
+            atim: self.access_time(inode),
+            mtim: 0,
+            ctim: 0,
+        }
     }
 }
 
@@ -769,15 +942,7 @@ impl<
             .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
-        Ok(FilestatWithoutDevice {
-            ino: inode as _,
-            filetype: ROOT::FILES[inode].1.filetype(),
-            nlink: 1,
-            size: ROOT::FILES[inode].1.size() as _,
-            atim: self.access_time(inode),
-            mtim: 0,
-            ctim: 0,
-        })
+        Ok(self.filestat_from_inode(inode))
     }
 
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
@@ -819,6 +984,56 @@ impl<
         );
 
         Ok(())
+    }
+
+    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
+        Ok(self.filestat_from_inode(inode))
+    }
+
+    fn fd_pread_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        let (_, file_or_dir) = ROOT::FILES[inode];
+
+        if let VFSConstNormalInode::File(file, _) = file_or_dir {
+            if offset >= file.size() {
+                return Ok(0); // No data to read
+            }
+
+            let buf_len = core::cmp::min(buf_len, file.size() - offset);
+            let nread = file.pread_raw::<Wasm>(buf, buf_len, offset)?;
+
+            Ok(nread)
+        } else {
+            unreachable!();
+        }
+    }
+
+    fn fd_read_stdin_raw<Wasm: WasmAccess>(
+        &mut self,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::read_direct::<Wasm>(buf, buf_len)
+        }
+
+        #[cfg(feature = "multi_memory")]
+        {
+            let mut buf_vec = alloc::vec::Vec::with_capacity(buf_len);
+            unsafe { buf_vec.set_len(buf_len) };
+            let read = StdIo::read(&mut buf_vec);
+            Wasm::memcpy_from(buf, &buf_vec);
+            Ok(read)
+        }
     }
 
     fn path_open_raw<Wasm: WasmAccess>(
@@ -1254,6 +1469,12 @@ impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {
 
 pub trait WasiConstPrimitiveFile {
     fn len(&self) -> usize;
+    fn pread_raw<Wasm: WasmAccess>(
+        &self,
+        buf_ptr: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<usize, wasip1::Errno>;
 }
 
 impl<'a> WasiConstPrimitiveFile for &'a str {
@@ -1261,22 +1482,47 @@ impl<'a> WasiConstPrimitiveFile for &'a str {
     fn len(&self) -> usize {
         <Self as core::ops::Deref>::deref(self).len()
     }
+
+    #[inline(always)]
+    fn pread_raw<Wasm: WasmAccess>(
+        &self,
+        buf_ptr: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<usize, wasip1::Errno> {
+        let buf_len = core::cmp::min(buf_len, self.len() - offset);
+        Wasm::memcpy(buf_ptr, &self.as_bytes()[offset..offset + buf_len]);
+        Ok(buf_len)
+    }
 }
 
 impl<File: WasiConstPrimitiveFile> Wasip1FileTrait for WasiConstFile<File> {
-    #[inline(always)]
-    fn len(&self) -> usize {
+    fn size(&self) -> usize {
         self.file.len()
     }
 
-    fn size(&self) -> usize {
-        self.file.len()
+    fn pread_raw<Wasm: WasmAccess>(
+        &self,
+        buf_ptr: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<usize, wasip1::Errno> {
+        self.file.pread_raw::<Wasm>(buf_ptr, buf_len, offset)
     }
 }
 
 pub struct DefaultStdIO;
 
 impl StdIO for DefaultStdIO {
+    fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::read_from_stdin(buf)
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn read_direct<Wasm: WasmAccess>(buf: *mut u8, len: usize) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::read_from_stdin_direct::<Wasm>(buf, len)
+    }
+
     fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stdout(buf)
     }
@@ -1297,6 +1543,33 @@ impl StdIO for DefaultStdIO {
 }
 
 pub trait StdIO {
+    #[allow(unused_variables)]
+    fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_NOSYS)
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
+    fn read_direct<Wasm: WasmAccess>(buf: *mut u8, len: usize) -> Result<Size, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            let mut buffer = {
+                let mut vec = alloc::vec::Vec::with_capacity(len);
+                unsafe { vec.set_len(len) };
+                vec
+            };
+            Self::read(&mut buffer)?;
+            Wasm::memcpy(buf, &buffer);
+            Ok(buffer.len())
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
+        }
+    }
+
     /// This function is called when the alloc feature is ON
     /// and write_direct is not implemented.
     /// If you are not familiar with Wasm memory, etc.,
@@ -1357,35 +1630,32 @@ pub trait StdIO {
 pub trait Wasip1FileTrait {
     fn size(&self) -> usize;
 
-    fn len(&self) -> usize;
-
     /// Reads data from the file into the provided buffer.
     /// Returns the number of bytes read.
-    /// This function is called by the `fd_read` function.
-    /// Implementing this function directly is more efficient,
-    /// but it is recommended to implement `fn read`!
-    #[cfg_attr(not(feature = "alloc"), allow(unused_variables))]
-    fn read_iovs<Wasm: WasmAccess>(
+    #[allow(unused_variables)]
+    fn pread(&self, buf: &mut [u8], offset: usize) -> Result<usize, wasip1::Errno> {
+        return Err(wasip1::ERRNO_NOSYS);
+    }
+
+    /// This function is called,
+    /// but if the read function is implemented
+    /// and the alloc feature is ON,
+    /// this function is automatically implemented.
+    #[allow(unused_variables)]
+    fn pread_raw<Wasm: WasmAccess>(
         &self,
-        iovs: *const wasip1::Ciovec,
-        iovs_len: usize,
+        buf_ptr: *mut u8,
+        buf_len: usize,
+        offset: usize,
     ) -> Result<usize, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            let mut total_read = 0;
+            let mut array = alloc::vec::Vec::with_capacity(buf_len);
+            unsafe { array.set_len(buf_len) };
+            let nread = self.pread(&mut array, offset)?;
+            Wasm::memcpy(buf_ptr, &array[..nread]);
 
-            for i in 0..iovs_len {
-                let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
-                let mut buf = alloc::vec![0u8; iov.buf_len];
-                let read = self.read(&mut buf)?;
-                if read == 0 {
-                    break; // EOF
-                }
-                total_read += read;
-                Wasm::memcpy(iov.buf as *mut _, &buf[..read]);
-            }
-
-            Ok(total_read)
+            Ok(nread)
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -1393,12 +1663,6 @@ pub trait Wasip1FileTrait {
             // Stub implementation for non-std environments
             Err(wasip1::ERRNO_NOSYS)
         }
-    }
-
-    /// Reads data from the file into the provided buffer.
-    /// Returns the number of bytes read.
-    fn read(&self, _buf: &mut [u8]) -> Result<usize, wasip1::Errno> {
-        return Err(wasip1::ERRNO_NOSYS);
     }
 }
 
@@ -1443,6 +1707,20 @@ pub trait Wasip1FileSystem {
     ) -> wasip1::Errno;
 
     fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno;
+
+    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        filestat: *mut wasip1::Filestat,
+    ) -> wasip1::Errno;
+
+    fn fd_read_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+        nread: *mut Size,
+    ) -> wasip1::Errno;
 
     fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
@@ -1545,6 +1823,28 @@ macro_rules! export_fs {
             ) -> $crate::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::path_open_raw::<$wasm>(state, fd, dir_flags, path_ptr, path_len, o_flags, fs_rights_base, fs_rights_inheriting, fd_flags, fd_ret)
+            }
+
+            #[unsafe(no_mangle)]
+            #[cfg(target_arch = "wasm32")]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_read>](
+                fd: $crate::wasip1::Fd,
+                iovs_ptr: *const $crate::wasip1::Ciovec,
+                iovs_len: usize,
+                nread_ret: *mut $crate::wasip1::Size,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::fd_read_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nread_ret)
+            }
+
+            #[unsafe(no_mangle)]
+            #[cfg(target_arch = "wasm32")]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_filestat_get>](
+                fd: $crate::wasip1::Fd,
+                filestat: *mut $crate::wasip1::Filestat,
+            ) -> $crate::wasip1::Errno {
+                let state = $state;
+                $crate::wasi::file::Wasip1FileSystem::fd_filestat_get_raw::<$wasm>(state, fd, filestat)
             }
         }
     };

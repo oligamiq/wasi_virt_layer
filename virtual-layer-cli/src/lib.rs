@@ -50,12 +50,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     }
 
     if let Some(threads) = parsed_args.threads {
-        adjust_target_feature(
-            &cargo_metadata,
-            &building_crate,
-            threads,
-            "threads",
-        )?;
+        adjust_target_feature(&cargo_metadata, &building_crate, threads, "threads")?;
     }
 
     println!("Compiling {}", building_crate.name);

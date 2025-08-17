@@ -322,6 +322,56 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator for WasmArrayAccessI
     }
 }
 
+pub struct WasmArrayAccessMutIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
+    ptr: *mut T,
+    len: usize,
+    __marker: core::marker::PhantomData<Wasm>,
+}
+
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIterator<T, Wasm> {
+    pub fn new(ptr: *mut T, len: usize) -> Self {
+        Self {
+            ptr,
+            len,
+            __marker: core::marker::PhantomData,
+        }
+    }
+}
+
+pub struct WasmArrayAccessMutIteratorComponent<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
+    ptr: *mut T,
+    __marker: core::marker::PhantomData<Wasm>,
+}
+
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIteratorComponent<T, Wasm> {
+    pub fn new(ptr: *mut T) -> Self {
+        Self {
+            ptr,
+            __marker: core::marker::PhantomData,
+        }
+    }
+
+    pub fn set(&self, value: T) {
+        unsafe { core::ptr::write(self.ptr, value) };
+    }
+}
+
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
+    for WasmArrayAccessMutIterator<T, Wasm>
+{
+    type Item = WasmArrayAccessMutIteratorComponent<T, Wasm>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            return None;
+        }
+        let component = WasmArrayAccessMutIteratorComponent::new(self.ptr);
+        self.ptr = unsafe { self.ptr.add(1) };
+        self.len -= 1;
+        Some(component)
+    }
+}
+
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 

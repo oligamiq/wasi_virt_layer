@@ -28,6 +28,7 @@
         "funcs",
         "heapless",
         "instrs",
+        "iovec",
         "iovs",
         "Linkcount",
         "lookupflags",
