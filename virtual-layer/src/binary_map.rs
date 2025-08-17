@@ -184,6 +184,7 @@ pub(crate) const fn split_tuples_to_arrays<T: Copy, U: Copy, const N: usize>(
 }
 
 /// This is very slow so use it only on const fn
+#[derive(Debug, Clone, Copy)]
 pub struct StaticArrayBuilder<T: Copy, const N: usize> {
     data: [Option<T>; N],
     len: usize,
@@ -210,7 +211,14 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
     pub const fn remove(&mut self, index: usize) -> Option<T> {
         if index < N {
             let old_value = self.data[index];
-            self.data[index] = None;
+
+            use const_for::const_for;
+
+            const_for!(i in index..(self.len - 1) => {
+                self.data[i] = self.data[i + 1];
+            });
+            self.data[self.len - 1] = None;
+
             self.len -= 1;
             old_value
         } else {
@@ -257,6 +265,8 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         const_for!(i in 0..N => {
             if let Some(value) = self.data[i] {
                 array[i] = value;
+            } else {
+                panic!("StaticArrayBuilder is not full, cannot build array");
             }
         });
 

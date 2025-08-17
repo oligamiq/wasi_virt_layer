@@ -599,7 +599,7 @@ pub mod non_atomic {
             buf_len: usize,
             cookie: Dircookie,
         ) -> Result<(Size, Dircookie), wasip1::Errno> {
-            let (_, dir) = ROOT::FILES[*inode];
+            let (dir_name, dir) = ROOT::FILES[*inode];
             let (start, end) = match dir {
                 VFSConstNormalInode::Dir(range, ..) => range,
                 _ => unreachable!(),
@@ -617,7 +617,7 @@ pub mod non_atomic {
             let entry = wasip1::Dirent {
                 d_next: next_cookie,
                 d_ino: index as _,
-                d_namlen: name.len() as _,
+                d_namlen: (name.len() - dir_name.len() - 1) as _,
                 d_type: file_or_dir.filetype(),
             };
             let entry_buf = unsafe {
@@ -633,10 +633,19 @@ pub mod non_atomic {
                 return Ok((buf_len, cookie));
             }
 
+            let parent_len = if let Some(parent) = file_or_dir.parent() {
+                ROOT::FILES[parent].0.len() + 1 // +1 for '/'
+            } else {
+                0
+            };
+
             let name_bytes = unsafe {
                 core::slice::from_raw_parts(
-                    name.as_ptr(),
-                    core::cmp::min(name.len(), buf_len - core::mem::size_of::<wasip1::Dirent>()),
+                    name.as_ptr().add(parent_len),
+                    core::cmp::min(
+                        name.len() - parent_len,
+                        buf_len - core::mem::size_of::<wasip1::Dirent>(),
+                    ),
                 )
             };
 
@@ -725,6 +734,11 @@ pub mod non_atomic {
             _: wasip1::Rights,
             _: wasip1::Fdflags,
         ) -> Result<Self::Inode, wasip1::Errno> {
+            println!(
+                "path_open_raw: dir_inode: {:?}, path_ptr: {:?}, path_len: {}, o_flags: {:?}, fs_rights_base: {:?}",
+                dir_inode, path_ptr, path_len, o_flags, fs_rights_base
+            );
+
             if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
                 if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
                     return Err(wasip1::ERRNO_EXIST);
@@ -817,6 +831,13 @@ pub mod non_atomic {
             match self {
                 Self::File(file, _) => file.size(),
                 Self::Dir(..) => core::mem::size_of::<((usize, usize), Option<usize>)>(), // directory size is just the size of the inode
+            }
+        }
+
+        pub fn parent(&self) -> Option<usize> {
+            match self {
+                Self::File(_, parent) => Some(*parent),
+                Self::Dir(_, parent) => *parent,
             }
         }
     }
@@ -925,17 +946,17 @@ pub mod non_atomic {
                     name: &'static str,
                 ) -> (usize, usize) {
                     let mut first_index = None;
+                    let mut last_index = None;
                     const_for!(i in 0..N => {
-                        if first_index.is_none() && is_parent(fake_files[i], name) {
-                            first_index = Some(i);
-                        }
-
-                        if eq_str(fake_files[i], name) {
-                            return (first_index.unwrap(), i);
+                        if is_parent(fake_files[i], name) {
+                            if first_index.is_none() {
+                                first_index = Some(i);
+                            }
+                            last_index = Some(i);
                         }
                     });
 
-                    unreachable!()
+                    (first_index.unwrap(), last_index.unwrap() + 1)
                 }
 
                 const fn get_parent<S: 'static + Copy, const N: usize>(
@@ -963,19 +984,69 @@ pub mod non_atomic {
                     unreachable!()
                 }
 
+                const fn depth(
+                    name: &'static str,
+                ) -> usize {
+                    let mut depth = 0;
+                    let mut i = 0;
+                    while (i < name.len()) {
+                        if name.as_bytes()[i] == b'/' {
+                            depth += 1;
+                        }
+                        i += 1;
+                        while (i < name.len() && name.as_bytes()[i] == b'/') {
+                            i += 1;
+                        }
+                    }
+                    depth
+                }
+
+                const fn custom_sort<T: Copy, const N: usize>(
+                    mut files: $crate::binary_map::StaticArrayBuilder<(usize, T), N>,
+                ) -> [T; N] {
+                    let mut sorted = $crate::binary_map::StaticArrayBuilder::<_, N>::new();
+
+                    while (files.len() > 0) {
+                        let mut depth = None;
+                        let mut index = None;
+                        const_for!(i in 0..files.len() => {
+                            let file = files.get(i).unwrap();
+
+                            if let Some(d) = depth {
+                                if file.0 < d {
+                                    depth = Some(file.0);
+                                    index = Some((i, file.1));
+                                }
+                            } else {
+                                depth = Some(file.0);
+                                index = Some((i, file.1));
+                            }
+                        });
+                        if let Some(index) = index {
+                            sorted.push(index.1);
+                            files.remove(index.0);
+                        }
+                    }
+
+                    sorted.build()
+                }
+
                 const EMPTY_ARR: [&'static str; COUNT] = {
                     let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
 
                     $(
-                        $crate::ConstFiles!(@empty, empty_arr, [$dir_name], $file_or_dir);
+                        $crate::ConstFiles!(@empty, 0, empty_arr, [$dir_name], $file_or_dir);
                     )*
 
-                    empty_arr.build()
+                    let _ = empty_arr.build();
+
+                    custom_sort(empty_arr)
                 };
 
                 $(
                     $crate::ConstFiles!(
                         @next,
+                        0,
                         static_array,
                         [EMPTY_ARR],
                         [$dir_name],
@@ -1002,7 +1073,7 @@ pub mod non_atomic {
                     static_array.build()
                 };
 
-                (static_array.build(), &PRE_OPEN)
+                (custom_sort(static_array), &PRE_OPEN)
             })
         };
 
@@ -1023,26 +1094,26 @@ pub mod non_atomic {
             $count += 1;
         };
 
-        (@empty, $empty_arr:ident, [$parent_name:expr], [
+        (@empty, $depth:expr, $empty_arr:ident, [$parent_name:expr], [
             $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
         ]) => {
             $(
-                $crate::ConstFiles!(@empty, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
+                $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
             )*
-            $empty_arr.push($parent_name);
+            $empty_arr.push(($depth, $parent_name));
         };
 
-        (@empty, $empty_arr:ident, [$name:expr], $file:tt) => {
-            $empty_arr.push($name);
+        (@empty, $depth:expr, $empty_arr:ident, [$name:expr], $file:tt) => {
+            $empty_arr.push(($depth, $name));
         };
 
-        (@next, $static_array:ident, [$empty:expr], [$name:expr], [
+        (@next, $depth:expr, $static_array:ident, [$empty:expr], [$name:expr], [
             $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
         ]) => {
             $(
-                $crate::ConstFiles!(@next, $static_array, [$empty], [concat!($name, "/", $file_or_dir_name)], $file_or_dir);
+                $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($name, "/", $file_or_dir_name)], $file_or_dir);
             )*
-            $static_array.push((
+            $static_array.push(($depth, (
                 $name,
                 $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
                     get_child_range(
@@ -1052,14 +1123,15 @@ pub mod non_atomic {
                     ),
                     get_parent($empty, $name, &$static_array)
                 )
-            ));
+            )));
         };
 
-        (@next, $static_array:ident, [$empty:expr], [$name:expr], $file:expr) => {
+        (@next, $depth:expr, $static_array:ident, [$empty:expr], [$name:expr], $file:tt) => {
             $static_array.push((
-                $name,
+                $depth,
+                ($name,
                 $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file, get_parent($empty, $name, &$static_array).unwrap())
-            ));
+            )));
         };
     }
 
@@ -1409,11 +1481,48 @@ mod tests {
         wasi::file::non_atomic::{VFSConstNormalFiles, WasiConstFile},
     };
 
+    use const_for::const_for;
+
+    const fn is_parent(a: &str, b: &str) -> bool {
+        let a_bytes = a.as_bytes();
+        let b_bytes = b.as_bytes();
+
+        if a_bytes.len() < b_bytes.len() {
+            return false;
+        }
+
+        const_for!(i in 0..b_bytes.len() => {
+            if a_bytes[i] != b_bytes[i] {
+                return false;
+            }
+        });
+
+        let mut i = b_bytes.len();
+        while i < a_bytes.len() && a_bytes[i] == b"/"[0] {
+            i += 1;
+        }
+        if i == a_bytes.len() {
+            return false;
+        }
+        if i == b_bytes.len() {
+            return false;
+        }
+
+        const_for!(n in i..a_bytes.len() => {
+            if a_bytes[n] == b"/"[0] {
+                return false;
+            }
+        });
+
+        true
+    }
+
     /// If not using `--release`, compilation will fail with: link error
     /// cargo test -r --package wasip1-virtual-layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
     #[test]
     fn test_file_flat_iterate() {
-        const _: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
+        #[allow(dead_code)]
+        const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
             (
                 "/root",
                 [("root.txt", { WasiConstFile::new("This is root") })]
@@ -1439,5 +1548,17 @@ mod tests {
                 ]
             )
         ]);
+
+        #[cfg(feature = "std")]
+        println!("Files: {:#?}", FILES);
+
+        assert!(is_parent("/root/root.txt", "/root"));
+        assert!(is_parent("./hey", "."));
+        assert!(is_parent("./hello", "."));
+        assert!(is_parent("~/home", "~"));
+        assert!(is_parent("~/user", "~"));
+        assert!(is_parent("./hello/world", "./hello"));
+        assert!(is_parent("./hello/everyone", "./hello"));
+        assert!(!is_parent("./hello/world", "."));
     }
 }
