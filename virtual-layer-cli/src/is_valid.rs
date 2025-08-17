@@ -111,6 +111,7 @@ impl Wasip1SnapshotPreview1Exporter {
         FdPrestatDirName,
         FdFilestatGet,
         FdRead,
+        FdFdstatGet,
         FdPread,
         FdFilestatSetSize,
         FdFilestatSetTimes,

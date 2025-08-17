@@ -23,6 +23,7 @@ pub enum Wasip1SnapshotPreview1Func {
     FdDatasync,
     FdFdstatSetFlags,
     FdFdstatSetRights,
+    FdFdstatGet,
     FdWrite,
     FdPwrite,
     FdReaddir,
