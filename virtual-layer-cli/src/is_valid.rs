@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use eyre::{Context as _, ContextCompat};
+use strum::EnumMessage;
 
 use crate::{common::Wasip1SnapshotPreview1Func, util::ResultUtil as _};
 
@@ -43,8 +44,9 @@ pub fn is_valid_wasm_for_component(
         .map(|(name, variants)| {
             // println!("Extra imports remain. You must use the `{name}!` macro exporter to export these functions.");
             log::error!(
-                "Extra imports remain. You must use the `{name}!` macro exporter to export these functions: {}",
-                variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ")
+                "Extra imports remain. You must use the `{name}!` macro exporter to export these functions: {}{}",
+                variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "),
+                format!("\nExtra message: {}", name.get_message().unwrap_or(""))
             );
         })
         .count()
@@ -59,31 +61,94 @@ pub fn is_valid_wasm_for_component(
 }
 
 #[derive(
-    strum::EnumString, strum::EnumIter, Clone, Copy, Debug, PartialEq, Eq, strum::Display, Hash,
+    strum::EnumString,
+    strum::EnumIter,
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    strum::Display,
+    Hash,
+    strum::EnumMessage,
 )]
 #[strum(serialize_all = "snake_case")]
 pub enum Wasip1SnapshotPreview1Exporter {
+    ExportArgs,
     ExportEnv,
+    #[strum(
+        message = "Export Fs is complex and difficult so you should see the documentation for more details."
+    )]
     ExportFs,
+    #[strum(message = "Export Socks but this is not implemented")]
+    ExportSocks,
+    #[strum(message = "Export Clock but this is not implemented")]
+    ExportClock,
+    #[strum(message = "Export Random but this is not implemented")]
+    ExportRandom,
+    #[strum(message = "Export Process is default so this message should not be shown")]
+    ExportProcess,
+    #[strum(message = "Export Sched but this is not implemented")]
+    ExportSched,
+    #[strum(message = "Export Poll but this is not implemented")]
+    ExportPoll,
 }
 
 use Wasip1SnapshotPreview1Func::*;
 impl Wasip1SnapshotPreview1Exporter {
     const EXPORT_ENV: &'static [Wasip1SnapshotPreview1Func] = &[EnvironSizesGet, EnvironGet];
     const EXPORT_FS: &'static [Wasip1SnapshotPreview1Func] = &[
+        FdAdvise,
+        FdAllocate,
+        FdDatasync,
+        FdFdstatSetFlags,
+        FdFdstatSetRights,
         FdWrite,
+        FdPwrite,
         FdReaddir,
-        PathFilestatGet,
-        PathOpen,
         FdClose,
         FdPrestatGet,
         FdPrestatDirName,
+        FdFilestatGet,
+        FdRead,
+        FdPread,
+        FdFilestatSetSize,
+        FdFilestatSetTimes,
+        FdRenumber,
+        FdSeek,
+        FdSync,
+        FdTell,
+        PathCreateDirectory,
+        PathFilestatGet,
+        PathFilestatSetTimes,
+        PathLink,
+        PathReadlink,
+        PathRemoveDirectory,
+        PathRename,
+        PathOpen,
+        PathSymlink,
+        PathUnlinkFile,
     ];
+    const EXPORT_ARGS: &'static [Wasip1SnapshotPreview1Func] = &[ArgsGet, ArgsSizesGet];
+    const EXPORT_SOCKS: &'static [Wasip1SnapshotPreview1Func] =
+        &[SockAccept, SockRecv, SockSend, SockShutdown];
+    const EXPORT_CLOCK: &'static [Wasip1SnapshotPreview1Func] = &[ClockTimeGet, ClockResGet];
+    const EXPORT_RANDOM: &'static [Wasip1SnapshotPreview1Func] = &[RandomGet];
+    const EXPORT_PROCESS: &'static [Wasip1SnapshotPreview1Func] = &[ProcExit];
+    const EXPORT_SCHED: &'static [Wasip1SnapshotPreview1Func] = &[SchedYield];
+    const EXPORT_POLL: &'static [Wasip1SnapshotPreview1Func] = &[PollOneoff];
 
     pub const fn variants(self) -> &'static [Wasip1SnapshotPreview1Func] {
         match self {
             Wasip1SnapshotPreview1Exporter::ExportEnv => Self::EXPORT_ENV,
             Wasip1SnapshotPreview1Exporter::ExportFs => Self::EXPORT_FS,
+            Wasip1SnapshotPreview1Exporter::ExportArgs => Self::EXPORT_ARGS,
+            Wasip1SnapshotPreview1Exporter::ExportSocks => Self::EXPORT_SOCKS,
+            Wasip1SnapshotPreview1Exporter::ExportClock => Self::EXPORT_CLOCK,
+            Wasip1SnapshotPreview1Exporter::ExportRandom => Self::EXPORT_RANDOM,
+            Wasip1SnapshotPreview1Exporter::ExportProcess => Self::EXPORT_PROCESS,
+            Wasip1SnapshotPreview1Exporter::ExportSched => Self::EXPORT_SCHED,
+            Wasip1SnapshotPreview1Exporter::ExportPoll => Self::EXPORT_POLL,
         }
     }
 

@@ -3,6 +3,9 @@
         "${workspaceFolder}/Cargo.toml",
     ],
     "rust-analyzer.cargo.target": "wasm32-wasip1",
+    // "rust-analyzer.cargo.features": [
+    //     "threads"
+    // ],
     "cSpell.words": [
         "atim",
         "BADF",
@@ -19,6 +22,7 @@
         "ewrite",
         "Exitcode",
         "Fdflags",
+        "fdstat",
         "Filesize",
         "Filestat",
         "funcs",
@@ -38,7 +42,11 @@
         "nread",
         "nwritten",
         "Oflags",
+        "oneoff",
+        "Pread",
         "Prestat",
+        "pwrite",
+        "readlink",
         "sched",
         "TRUNC",
         "Uninit",
