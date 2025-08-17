@@ -4,7 +4,7 @@ use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
-use crate::rewrite::{TargetMemoryType, change_target_memory_type};
+use crate::rewrite::{TargetMemoryType, adjust_target_feature};
 
 pub mod adjust;
 pub mod args;
@@ -41,7 +41,21 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package);
 
     if let Some(target_memory_type) = parsed_args.target_memory_type {
-        change_target_memory_type(&cargo_metadata, &building_crate, target_memory_type)?;
+        adjust_target_feature(
+            &cargo_metadata,
+            &building_crate,
+            target_memory_type == TargetMemoryType::Multi,
+            "multi_memory",
+        )?;
+    }
+
+    if let Some(threads) = parsed_args.threads {
+        adjust_target_feature(
+            &cargo_metadata,
+            &building_crate,
+            threads,
+            "threads",
+        )?;
     }
 
     println!("Compiling {}", building_crate.name);

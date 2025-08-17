@@ -27,6 +27,7 @@ pub struct Args {
     pub out_dir: String,
 
     /// Target memory type
+    /// Change crate feature flags based on the target memory type
     #[arg(short, long)]
     pub target_memory_type: Option<TargetMemoryType>,
 
@@ -42,14 +43,18 @@ pub struct Args {
     #[command(flatten)]
     pub transpile_opts: TranspileOpts,
 
-    // -p, --package
     /// Package name to build
     #[arg(short, long)]
     pub package: Option<String>,
 
+    /// If wasm run on multiple threads, enable thread support
+    /// This will change the crate feature flags to enable multi-threading.
+    #[arg(long)]
+    pub threads: Option<bool>,
+
     /// threads pool size
     #[arg(long)]
-    pub threads: Option<usize>,
+    pub threads_pool_size: Option<usize>,
 }
 
 impl Args {
@@ -64,7 +69,7 @@ impl Args {
             unimplemented!("target to only self file is not supported yet");
         }
 
-        if parsed.threads.is_some() {
+        if parsed.threads_pool_size.is_some() {
             unimplemented!("threads pool is not supported yet");
         }
 

@@ -115,11 +115,14 @@ pub enum TargetMemoryType {
     Multi,
 }
 
-pub fn change_target_memory_type(
+pub fn adjust_target_feature(
     metadata: &Metadata,
     building_crate: &Package,
-    target_memory_type: TargetMemoryType,
+    on: bool,
+    feature: impl AsRef<str>,
 ) -> eyre::Result<()> {
+    let feature = feature.as_ref();
+
     let manifest_path = building_crate.manifest_path.clone();
 
     let file_data = fs::read_to_string(&manifest_path)
@@ -130,111 +133,60 @@ pub fn change_target_memory_type(
 
     let crate_setting = &mut doc["dependencies"][CRATE];
 
-    let set_table = |table: &mut Item| -> eyre::Result<()> {
-        if target_memory_type == TargetMemoryType::Multi {
-            if matches!(table.get("features"), None) {
-                table["features"] = toml_edit::value(toml_edit::Array::new());
-            }
-            if table["features"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .filter_map(|s| s.as_str())
-                .any(|s| s == "multi_memory")
-            {
-                return Ok(());
-            }
-            table["features"]
-                .as_array_mut()
-                .unwrap()
-                .push("multi_memory");
-        }
-
-        if target_memory_type == TargetMemoryType::Single {
-            if matches!(table.get("features"), None) {
-                return Ok(());
-            }
-            if let Some(i) = {
-                table["features"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, s)| s.as_str().map(|s| (i, s)))
-                    .find(|(_, s)| *s == "multi_memory")
-                    .map(|(i, _)| i)
-            } {
-                table["features"].as_array_mut().unwrap().remove(i);
-                if table["features"].as_array().unwrap().is_empty() {
-                    table["features"] = Item::None;
-                }
-            }
-        }
-
-        Ok(())
-    };
-
-    enum FeatureMultiMemory {
+    enum HasFeature {
         Disabled,
         EnabledOnNormal,
         EnabledOnWorkspace,
     }
 
-    fn has_feature(item: &Item, feature: &str) -> bool {
-        match item {
-            Item::Table(table) => table["features"]
-                .as_array()
-                .map(|arr| arr.iter().any(|s| s.as_str() == Some(feature)))
-                .unwrap_or(false),
-            _ => false,
-        }
-    }
-
     // check normal crate setting
-    let has_feature_multi_memory = if has_feature(crate_setting, "multi_memory") {
-        FeatureMultiMemory::EnabledOnNormal
+    let crate_has_feature = if has_feature(crate_setting, feature) {
+        HasFeature::EnabledOnNormal
     } else {
-        FeatureMultiMemory::Disabled
+        HasFeature::Disabled
     };
     // check workspace
-    let has_feature_multi_memory =
-        if matches!(has_feature_multi_memory, FeatureMultiMemory::Disabled) {
-            match &crate_setting["workspace"] {
-                v if v.as_bool().unwrap_or(false) => {
-                    let manifest_path = metadata.workspace_root.join("Cargo.toml");
+    let crate_has_feature = if matches!(crate_has_feature, HasFeature::Disabled) {
+        match &crate_setting["workspace"] {
+            v if v.as_bool().unwrap_or(false) => {
+                let manifest_path = metadata.workspace_root.join("Cargo.toml");
 
-                    let file_data = fs::read_to_string(&manifest_path)
-                        .wrap_err_with(|| eyre::eyre!("Failed to read workspace manifest file"))?;
-                    let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
+                let file_data = fs::read_to_string(&manifest_path)
+                    .wrap_err_with(|| eyre::eyre!("Failed to read workspace manifest file"))?;
+                let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
 
-                    let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
+                let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
 
-                    if has_feature(crate_setting, "multi_memory") {
-                        FeatureMultiMemory::EnabledOnWorkspace
-                    } else {
-                        FeatureMultiMemory::Disabled
-                    }
+                if has_feature(crate_setting, feature) {
+                    HasFeature::EnabledOnWorkspace
+                } else {
+                    HasFeature::Disabled
                 }
-                _ => FeatureMultiMemory::Disabled,
             }
-        } else {
-            has_feature_multi_memory
-        };
+            _ => HasFeature::Disabled,
+        }
+    } else {
+        crate_has_feature
+    };
 
-    match (has_feature_multi_memory, target_memory_type) {
-        (FeatureMultiMemory::Disabled, TargetMemoryType::Multi) => {
-            set_table(crate_setting)?;
+    match (crate_has_feature, on) {
+        (HasFeature::Disabled, true) => {
+            set_table(crate_setting, feature, on)?;
             std::fs::write(&manifest_path, doc.to_string())
                 .wrap_err_with(|| eyre::eyre!("Failed to write manifest file"))?;
             Ok(())
         }
-        (FeatureMultiMemory::EnabledOnNormal, TargetMemoryType::Single) => {
-            set_table(crate_setting)?;
+        (HasFeature::EnabledOnNormal, false) => {
+            set_table(crate_setting, feature, on)?;
             std::fs::write(&manifest_path, doc.to_string())
                 .wrap_err_with(|| eyre::eyre!("Failed to write manifest file"))?;
             Ok(())
         }
-        (FeatureMultiMemory::EnabledOnWorkspace, TargetMemoryType::Single) => {
+        (HasFeature::EnabledOnWorkspace, false) => {
+            log::warn!(
+                "Feature `{feature}` is enabled on workspace, so changing it may affect other crates."
+            );
+
             let manifest_path = metadata.workspace_root.join("Cargo.toml");
 
             let file_data = fs::read_to_string(&manifest_path)
@@ -243,59 +195,62 @@ pub fn change_target_memory_type(
 
             let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
 
-            set_table(crate_setting)?;
+            set_table(crate_setting, feature, on)?;
 
             std::fs::write(&manifest_path, doc.to_string())
                 .wrap_err_with(|| eyre::eyre!("Failed to write workspace manifest file"))?;
 
             Ok(())
         }
-        (FeatureMultiMemory::EnabledOnWorkspace, TargetMemoryType::Multi) => Ok(()),
-        (FeatureMultiMemory::EnabledOnNormal, TargetMemoryType::Multi) => Ok(()),
-        (FeatureMultiMemory::Disabled, TargetMemoryType::Single) => Ok(()),
+        _ => Ok(()),
+    }
+}
+
+fn has_feature(item: &Item, feature: &str) -> bool {
+    match item {
+        Item::Table(table) => table["features"]
+            .as_array()
+            .map(|arr| arr.iter().any(|s| s.as_str() == Some(feature)))
+            .unwrap_or(false),
+        _ => false,
+    }
+}
+
+fn set_table(table: &mut Item, feature: &str, on: bool) -> eyre::Result<()> {
+    if on {
+        if matches!(table.get("features"), None) {
+            table["features"] = toml_edit::value(toml_edit::Array::new());
+        }
+        if table["features"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|s| s.as_str())
+            .any(|s| s == feature)
+        {
+            return Ok(());
+        }
+        table["features"].as_array_mut().unwrap().push(feature);
+    } else {
+        if matches!(table.get("features"), None) {
+            return Ok(());
+        }
+        if let Some(i) = {
+            table["features"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .enumerate()
+                .filter_map(|(i, s)| s.as_str().map(|s| (i, s)))
+                .find(|(_, s)| *s == feature)
+                .map(|(i, _)| i)
+        } {
+            table["features"].as_array_mut().unwrap().remove(i);
+            if table["features"].as_array().unwrap().is_empty() {
+                table["features"] = Item::None;
+            }
+        }
     }
 
-    // match crate_setting {
-    //     Item::Table(table) => match &mut table["workspace"] {
-    //         v if v.as_bool().unwrap_or(false) => {
-    //             let manifest_path = metadata.workspace_root.join("Cargo.toml");
-
-    //             let file_data = fs::read_to_string(&manifest_path)
-    //                 .wrap_err_with(|| eyre::eyre!("Failed to read workspace manifest file"))?;
-    //             let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
-
-    //             let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
-
-    //             let table = match crate_setting {
-    //                 Item::Table(_) | Item::Value(_) => crate_setting,
-    //                 _ => {
-    //                     eyre::bail!(
-    //                         "Cannot find crate {CRATE} on root Cargo.toml so cannot change target memory type"
-    //                     );
-    //                 }
-    //             };
-
-    //             set_table(table)?;
-
-    //             std::fs::write(&manifest_path, doc.to_string())
-    //                 .wrap_err_with(|| eyre::eyre!("Failed to write workspace manifest file"))?;
-
-    //             Ok(())
-    //         }
-    //         Item::Value(_) => {
-    //             set_table(crate_setting)?;
-
-    //             std::fs::write(&manifest_path, doc.to_string())
-    //                 .wrap_err_with(|| eyre::eyre!("Failed to write manifest file"))?;
-
-    //             Ok(())
-    //         }
-    //         _ => {
-    //             eyre::bail!("Cannot find crate {CRATE} so cannot change target memory type");
-    //         }
-    //     },
-    //     _ => {
-    //         eyre::bail!(r#"Failed to find crate "{CRATE}" so cannot change target memory type"#);
-    //     }
-    // }
+    Ok(())
 }
