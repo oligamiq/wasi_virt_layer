@@ -88,7 +88,6 @@ pub mod non_atomic {
             loop {
                 let (n, next_cookie) = lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)?;
                 if n == 0 {
-                    println!("End of directory reached");
                     return Ok(read);
                 }
                 read += n;
@@ -214,11 +213,6 @@ pub mod non_atomic {
         ) -> Result<Fd, wasip1::Errno> {
             let (inode, lfs) = self.get_inode_and_lfs(dir_fd).ok_or(wasip1::ERRNO_BADF)?;
 
-            println!(
-                "Opening path: {:?}",
-                core::str::from_utf8(&Wasm::get_array(path_ptr, path_len)).unwrap()
-            );
-
             let new_inode = lfs.path_open_raw::<Wasm>(
                 inode,
                 dir_flags,
@@ -229,8 +223,6 @@ pub mod non_atomic {
                 fs_rights_inheriting,
                 fd_flags,
             )?;
-
-            println!("New inode created");
 
             Ok(self.push_inode(new_inode))
         }
@@ -681,8 +673,7 @@ pub mod non_atomic {
 
             let next_cookie = cookie + 1;
 
-            let parent_len = dir_name.len() + 1;
-            let name_len = name.len() - parent_len;
+            let name_len = name.len();
 
             let entry = wasip1::Dirent {
                 d_next: if (next_cookie as usize) < end {
@@ -710,7 +701,7 @@ pub mod non_atomic {
 
             let name_bytes = unsafe {
                 core::slice::from_raw_parts(
-                    name.as_ptr().add(parent_len),
+                    name.as_ptr(),
                     core::cmp::min(name_len, buf_len - core::mem::size_of::<wasip1::Dirent>()),
                 )
             };
@@ -800,14 +791,7 @@ pub mod non_atomic {
             _: wasip1::Rights,
             _: wasip1::Fdflags,
         ) -> Result<Self::Inode, wasip1::Errno> {
-            println!(
-                "path_open_raw: dir_inode: {:?}, path_ptr: {:?}, path_len: {}, o_flags: {:?}, fs_rights_base: {:?}",
-                dir_inode, path_ptr, path_len, o_flags, fs_rights_base
-            );
-
             if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
-                println!("Found inode: {:?}", inode);
-
                 if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
                     return Err(wasip1::ERRNO_EXIST);
                 }
@@ -1118,6 +1102,7 @@ pub mod non_atomic {
                         static_array,
                         [EMPTY_ARR],
                         [$dir_name],
+                        [$dir_name],
                         $file_or_dir
                     );
                 )*
@@ -1141,7 +1126,18 @@ pub mod non_atomic {
                     static_array.build()
                 };
 
-                (custom_sort(static_array), &PRE_OPEN)
+                let static_array = custom_sort(static_array);
+
+                let mut file_array = $crate::binary_map::StaticArrayBuilder::new();
+                const_for!(i in 0..static_array.len() => {
+                    let (_, name, file_or_dir) = static_array[i];
+                    file_array.push((
+                        name,
+                        file_or_dir
+                    ));
+                });
+
+                (file_array.build(), &PRE_OPEN)
             })
         };
 
@@ -1175,30 +1171,33 @@ pub mod non_atomic {
             $empty_arr.push(($depth, $name));
         };
 
-        (@next, $depth:expr, $static_array:ident, [$empty:expr], [$name:expr], [
+        (@next, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr], [
             $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
         ]) => {
             $(
-                $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($name, "/", $file_or_dir_name)], $file_or_dir);
+                $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($parent_path, "/", $file_or_dir_name)], [$file_or_dir_name], $file_or_dir);
             )*
             $static_array.push(($depth, (
+                $parent_path,
                 $name,
                 $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
                     get_child_range(
                         $empty,
-                        $name,
+                        $parent_path,
                         &$static_array
                     ),
-                    get_parent($empty, $name, &$static_array)
+                    get_parent($empty, $parent_path, &$static_array)
                 )
             )));
         };
 
-        (@next, $depth:expr, $static_array:ident, [$empty:expr], [$name:expr], $file:tt) => {
+        (@next, $depth:expr, $static_array:ident, [$empty:expr], [$path:expr], [$name:expr], $file:tt) => {
             $static_array.push((
                 $depth,
-                ($name,
-                $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file, get_parent($empty, $name, &$static_array).unwrap())
+                (
+                    $path,
+                    $name,
+                $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file, get_parent($empty, $path, &$static_array).unwrap())
             )));
         };
     }
