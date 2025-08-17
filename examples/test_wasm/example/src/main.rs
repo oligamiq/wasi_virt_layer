@@ -29,21 +29,7 @@ fn main() {
     for file in walkdir::WalkDir::new(".")
         .into_iter()
         .filter_map(Result::ok)
-    // .filter(|e| e.file_type().is_file())
-    // .flat_map(|e| {
-    //     if e.file_type().is_file() {
-    //         Box::new(core::iter::once(e)) as Box<dyn Iterator<Item = DirEntry>>
-    //     } else if e.file_type().is_dir() {
-    //         Box::new(
-    //             walkdir::WalkDir::new(e.path().join(e.file_name()))
-    //                 .into_iter()
-    //                 .filter_map(Result::ok)
-    //                 .filter(|e| e.file_type().is_file()),
-    //         ) as Box<dyn Iterator<Item = DirEntry>>
-    //     } else {
-    //         Box::new(core::iter::empty()) as Box<dyn Iterator<Item = DirEntry>>
-    //     }
-    // })
+        .filter(|e| e.file_type().is_file())
     {
         println!("Current File: {}", file.path().display());
     }

@@ -599,7 +599,7 @@ pub mod non_atomic {
             buf_len: usize,
             cookie: Dircookie,
         ) -> Result<(Size, Dircookie), wasip1::Errno> {
-            let (dir_name, dir) = ROOT::FILES[*inode];
+            let (_, dir) = ROOT::FILES[*inode];
 
             // . (current directory)
             if cookie == 0 {
