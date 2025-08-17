@@ -47,7 +47,7 @@ pub struct Args {
     #[arg(short, long)]
     pub package: Option<String>,
 
-    /// threads
+    /// threads pool size
     #[arg(long)]
     pub threads: Option<usize>,
 }
@@ -62,6 +62,10 @@ impl Args {
         let parsed = Args::parse_from(args);
         if parsed.wasm.is_empty() {
             unimplemented!("target to only self file is not supported yet");
+        }
+
+        if parsed.threads.is_some() {
+            unimplemented!("threads pool is not supported yet");
         }
 
         parsed

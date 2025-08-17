@@ -1,5 +1,3 @@
-use walkdir::DirEntry;
-
 // cargo b -r --target wasm32-wasip1 -p test_wasm
 // wasm-opt target/wasm32-wasip1/release/test_wasm.wasm -o examples/test_wasm/example/test_wasm_opt.wasm -Oz
 fn main() {

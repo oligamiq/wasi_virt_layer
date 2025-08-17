@@ -5,903 +5,942 @@ use crate::memory::WasmAccess;
 
 // no implementing dcache
 
-#[cfg(not(target_feature = "atomics"))]
-pub mod non_atomic {
-    use wasip1::*;
+#[cfg(feature = "threads")]
+use parking_lot::RwLock;
+use wasip1::*;
 
-    /// small posix like virtual file system
-    /// but inode has some metadata
-    pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize>
-    where
-        LFS::Inode: Copy,
-    {
-        lfs: LFS,
-        // (inode, cursor)
-        map: [Option<(LFS::Inode, usize)>; FLAT_LEN],
+/// small posix like virtual file system
+/// but inode has some metadata
+pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize>
+where
+    LFS::Inode: Copy,
+{
+    lfs: LFS,
+    // (inode, cursor)
+    #[cfg(feature = "threads")]
+    map: [RwLock<Option<(LFS::Inode, usize)>>; FLAT_LEN],
+    #[cfg(not(feature = "threads"))]
+    map: [Option<(LFS::Inode, usize)>; FLAT_LEN],
+}
+
+impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN>
+where
+    LFS::Inode: Copy,
+{
+    #[cfg(feature = "threads")]
+    pub const fn new(lfs: LFS) -> Self {
+        let mut map: [RwLock<Option<(LFS::Inode, usize)>>; FLAT_LEN] =
+            [const { RwLock::new(None) }; FLAT_LEN];
+
+        use const_for::const_for;
+
+        const_for!(i in 0..LFS::PRE_OPEN.len() => {
+            map[i] = RwLock::new(Some((LFS::PRE_OPEN[i], i)));
+        });
+
+        Self { lfs, map }
     }
 
-    impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN>
-    where
-        LFS::Inode: Copy,
-    {
-        pub const fn new(lfs: LFS) -> Self {
-            let mut map = [const { None }; FLAT_LEN];
+    #[cfg(not(feature = "threads"))]
+    pub const fn new(lfs: LFS) -> Self {
+        let map: [Option<(LFS::Inode, usize)>; FLAT_LEN] = [const { None }; FLAT_LEN];
 
-            use const_for::const_for;
+        Self { lfs, map }
+    }
 
-            const_for!(i in 0..LFS::PRE_OPEN.len() => {
-                map[i] = Some((LFS::PRE_OPEN[i], i));
-            });
-
-            Self { lfs, map }
-        }
-
-        #[inline]
-        pub fn get_inode(&self, fd: Fd) -> Option<&LFS::Inode> {
+    #[inline]
+    pub fn get_inode(&self, fd: Fd) -> Option<LFS::Inode> {
+        #[cfg(feature = "threads")]
+        {
             self.map
                 .get(fd as usize - 3)?
-                .as_ref()
+                .read()
                 .map(|(inode, _)| inode)
         }
 
-        #[inline]
-        pub fn remove_inode(&mut self, fd: Fd) -> Option<LFS::Inode> {
+        #[cfg(not(feature = "threads"))]
+        {
+            self.map.get(fd as usize - 3)?.map(|(inode, _)| inode)
+        }
+    }
+
+    #[inline]
+    pub fn remove_inode(&mut self, fd: Fd) -> Option<LFS::Inode> {
+        #[cfg(feature = "threads")]
+        {
+            self.map
+                .get_mut(fd as usize - 3)?
+                .write()
+                .take()
+                .map(|(inode, _)| inode)
+        }
+
+        #[cfg(not(feature = "threads"))]
+        {
             self.map
                 .get_mut(fd as usize - 3)?
                 .take()
                 .map(|(inode, _)| inode)
         }
+    }
 
-        #[inline]
-        pub fn push_inode(&mut self, inode: LFS::Inode) -> Fd {
+    #[inline]
+    pub fn push_inode(&mut self, inode: LFS::Inode) -> Fd {
+        #[cfg(feature = "threads")]
+        {
+            for (i, slot) in self.map.iter_mut().enumerate() {
+                let mut slot = slot.write();
+                if slot.is_none() {
+                    *slot = Some((inode, 0));
+                    return (i + 3) as Fd;
+                }
+            }
+        }
+
+        #[cfg(not(feature = "threads"))]
+        {
             for (i, slot) in self.map.iter_mut().enumerate() {
                 if slot.is_none() {
                     *slot = Some((inode, 0));
                     return (i + 3) as Fd;
                 }
             }
-            unreachable!();
         }
 
-        #[inline]
-        pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(&LFS::Inode, &mut LFS)> {
-            let (inode, _) = self.map.get(fd as usize - 3)?.as_ref()?;
-            Some((inode, &mut self.lfs))
+        unreachable!();
+    }
+
+    #[inline]
+    pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(LFS::Inode, &mut LFS)> {
+        self.get_inode(fd).map(|inode| (inode, &mut self.lfs))
+    }
+
+    pub(crate) fn fd_readdir_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        mut buf: *mut u8,
+        mut buf_len: usize,
+        mut cookie: Dircookie,
+    ) -> Result<Size, wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+        // check is this a directory
+        if !lfs.is_dir(inode) {
+            return Err(wasip1::ERRNO_NOTDIR);
         }
 
-        pub(crate) fn fd_readdir_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            mut buf: *mut u8,
-            mut buf_len: usize,
-            mut cookie: Dircookie,
-        ) -> Result<Size, wasip1::Errno> {
-            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+        let mut read = 0;
 
-            // check is this a directory
-            if !lfs.is_dir(inode) {
-                return Err(wasip1::ERRNO_NOTDIR);
+        loop {
+            let (n, next_cookie) = lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)?;
+            if n == 0 {
+                return Ok(read);
             }
-
-            let mut read = 0;
-
-            loop {
-                let (n, next_cookie) = lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)?;
-                if n == 0 {
-                    return Ok(read);
-                }
-                read += n;
-                buf = unsafe { buf.add(n) };
-                buf_len -= n;
-                cookie = next_cookie;
-            }
+            read += n;
+            buf = unsafe { buf.add(n) };
+            buf_len -= n;
+            cookie = next_cookie;
         }
+    }
 
-        pub(crate) fn fd_write_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            iovs_ptr: *const Ciovec,
-            iovs_len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            match fd {
-                0 => return Err(wasip1::ERRNO_BADF),
-                1 | 2 => {
-                    // stdout
-                    let lfs = &mut self.lfs;
+    pub(crate) fn fd_write_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        match fd {
+            0 => return Err(wasip1::ERRNO_BADF),
+            1 | 2 => {
+                // stdout
+                let lfs = &mut self.lfs;
 
-                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-                    let mut written = 0;
+                let mut written = 0;
 
-                    for iovs in iovs_vec {
-                        let buf_len = iovs.buf_len;
-                        let buf_ptr = iovs.buf;
+                for iovs in iovs_vec {
+                    let buf_len = iovs.buf_len;
+                    let buf_ptr = iovs.buf;
 
-                        match fd {
-                            1 => written += lfs.fd_write_stdout_raw::<Wasm>(buf_ptr, buf_len)?,
-                            2 => written += lfs.fd_write_stderr_raw::<Wasm>(buf_ptr, buf_len)?,
-                            _ => unreachable!(),
-                        }
+                    match fd {
+                        1 => written += lfs.fd_write_stdout_raw::<Wasm>(buf_ptr, buf_len)?,
+                        2 => written += lfs.fd_write_stderr_raw::<Wasm>(buf_ptr, buf_len)?,
+                        _ => unreachable!(),
                     }
-
-                    Ok(written)
                 }
-                fd => {
-                    let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
 
-                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                Ok(written)
+            }
+            fd => {
+                let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
 
-                    let mut written = 0;
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-                    for iovs in iovs_vec {
-                        let buf_len = iovs.buf_len;
-                        let buf_ptr = iovs.buf;
+                let mut written = 0;
 
-                        written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
-                    }
+                for iovs in iovs_vec {
+                    let buf_len = iovs.buf_len;
+                    let buf_ptr = iovs.buf;
 
-                    Ok(written)
+                    written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
                 }
-            }
-        }
 
-        pub(crate) fn path_filestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            flags: wasip1::Lookupflags,
-            path_ptr: *const u8,
-            path_len: usize,
-        ) -> Result<wasip1::Filestat, wasip1::Errno> {
-            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
-
-            let status = lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)?;
-
-            Ok(wasip1::Filestat {
-                dev: 0, // no device
-                ino: status.ino,
-                filetype: status.filetype,
-                nlink: status.nlink,
-                size: status.size,
-                atim: status.atim,
-                mtim: status.mtim,
-                ctim: status.ctim,
-            })
-        }
-
-        pub(crate) fn fd_prestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-        ) -> Result<wasip1::Prestat, wasip1::Errno> {
-            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
-
-            let prestat = lfs.fd_prestat_get_raw::<Wasm>(inode)?;
-
-            Ok(prestat)
-        }
-
-        pub(crate) fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            dir_path_ptr: *mut u8,
-            dir_path_len: usize,
-        ) -> Result<(), wasip1::Errno> {
-            let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
-
-            lfs.fd_prestat_dir_name_raw::<Wasm>(inode, dir_path_ptr, dir_path_len)
-        }
-
-        pub(crate) fn fd_close_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-        ) -> Result<(), wasip1::Errno> {
-            if self.remove_inode(fd).is_none() {
-                return Err(wasip1::ERRNO_BADF);
-            }
-            Ok(())
-        }
-
-        pub(crate) fn path_open_raw<Wasm: WasmAccess>(
-            &mut self,
-            dir_fd: Fd,
-            dir_flags: wasip1::Fdflags,
-            path_ptr: *const u8,
-            path_len: usize,
-            o_flags: wasip1::Oflags,
-            fs_rights_base: wasip1::Rights,
-            fs_rights_inheriting: wasip1::Rights,
-            fd_flags: wasip1::Fdflags,
-        ) -> Result<Fd, wasip1::Errno> {
-            let (inode, lfs) = self.get_inode_and_lfs(dir_fd).ok_or(wasip1::ERRNO_BADF)?;
-
-            let new_inode = lfs.path_open_raw::<Wasm>(
-                inode,
-                dir_flags,
-                path_ptr,
-                path_len,
-                o_flags,
-                fs_rights_base,
-                fs_rights_inheriting,
-                fd_flags,
-            )?;
-
-            Ok(self.push_inode(new_inode))
-        }
-    }
-
-    pub struct FilestatWithoutDevice {
-        /// File serial number.
-        pub ino: Inode,
-        /// File type.
-        pub filetype: Filetype,
-        /// Number of hard links to the file.
-        pub nlink: Linkcount,
-        /// For regular files, the file size in bytes. For symbolic links, the length in bytes of the pathname contained in the symbolic link.
-        pub size: Filesize,
-        /// Last data access timestamp.
-        pub atim: Timestamp,
-        /// Last data modification timestamp.
-        pub mtim: Timestamp,
-        /// Last file status change timestamp.
-        pub ctim: Timestamp,
-    }
-
-    impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
-        for Wasip1ConstVFS<LFS, FLAT_LEN>
-    where
-        LFS::Inode: Copy,
-    {
-        fn fd_write_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            iovs_ptr: *const Ciovec,
-            iovs_len: usize,
-            nwritten: *mut Size,
-        ) -> wasip1::Errno {
-            match self.fd_write_raw::<Wasm>(fd, iovs_ptr, iovs_len) {
-                Ok(n) => {
-                    Wasm::store_le(nwritten, n);
-                    wasip1::ERRNO_SUCCESS
-                }
-                Err(e) => e,
-            }
-        }
-
-        fn fd_readdir_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            buf: *mut u8,
-            buf_len: usize,
-            cookie: Dircookie,
-            nread: *mut Size,
-        ) -> wasip1::Errno {
-            match self.fd_readdir_raw::<Wasm>(fd, buf, buf_len, cookie) {
-                Ok(n) => {
-                    Wasm::store_le(nread, n);
-                    wasip1::ERRNO_SUCCESS
-                }
-                Err(e) => e,
-            }
-        }
-
-        fn path_filestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            flags: wasip1::Lookupflags,
-            path_ptr: *const u8,
-            path_len: usize,
-            filestat_ptr: *mut wasip1::Filestat,
-        ) -> wasip1::Errno {
-            match self.path_filestat_get_raw::<Wasm>(fd, flags, path_ptr, path_len) {
-                Ok(filestat) => {
-                    Wasm::store_le(filestat_ptr, filestat);
-                    wasip1::ERRNO_SUCCESS
-                }
-                Err(e) => e,
-            }
-        }
-
-        fn fd_prestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            prestat_ptr: *mut wasip1::Prestat,
-        ) -> wasip1::Errno {
-            match self.fd_prestat_get_raw::<Wasm>(fd) {
-                Ok(prestat) => {
-                    Wasm::store_le(prestat_ptr, prestat);
-                    wasip1::ERRNO_SUCCESS
-                }
-                Err(e) => e,
-            }
-        }
-
-        fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-            &mut self,
-            fd: Fd,
-            dir_path_ptr: *mut u8,
-            dir_path_len: usize,
-        ) -> wasip1::Errno {
-            match self.fd_prestat_dir_name_raw::<Wasm>(fd, dir_path_ptr, dir_path_len) {
-                Ok(()) => wasip1::ERRNO_SUCCESS,
-                Err(e) => e,
-            }
-        }
-
-        fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno {
-            match self.fd_close_raw::<Wasm>(fd) {
-                Ok(()) => wasip1::ERRNO_SUCCESS,
-                Err(e) => e,
-            }
-        }
-
-        fn path_open_raw<Wasm: WasmAccess>(
-            &mut self,
-            dir_fd: Fd,
-            dir_flags: wasip1::Fdflags,
-            path_ptr: *const u8,
-            path_len: usize,
-            o_flags: wasip1::Oflags,
-            fs_rights_base: wasip1::Rights,
-            fs_rights_inheriting: wasip1::Rights,
-            fd_flags: wasip1::Fdflags,
-            fd_ret: *mut wasip1::Fd,
-        ) -> wasip1::Errno {
-            match self.path_open_raw::<Wasm>(
-                dir_fd,
-                dir_flags,
-                path_ptr,
-                path_len,
-                o_flags,
-                fs_rights_base,
-                fs_rights_inheriting,
-                fd_flags,
-            ) {
-                Ok(fd) => {
-                    Wasm::store_le(fd_ret, fd);
-                    wasip1::ERRNO_SUCCESS
-                }
-                Err(e) => e,
+                Ok(written)
             }
         }
     }
 
-    /// small posix like local file system
-    pub trait Wasip1LFS {
-        type Inode: 'static;
-        const PRE_OPEN: &'static [Self::Inode];
+    pub(crate) fn path_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<wasip1::Filestat, wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
 
-        fn fd_write_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            data: *const u8,
-            data_len: usize,
-        ) -> Result<Size, wasip1::Errno>;
+        let status = lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)?;
 
-        fn fd_write_stdout_raw<Wasm: WasmAccess>(
-            &mut self,
-            data: *const u8,
-            data_len: usize,
-        ) -> Result<Size, wasip1::Errno>;
-
-        fn fd_write_stderr_raw<Wasm: WasmAccess>(
-            &mut self,
-            data: *const u8,
-            data_len: usize,
-        ) -> Result<Size, wasip1::Errno>;
-
-        fn is_dir(&self, inode: &Self::Inode) -> bool;
-
-        fn fd_readdir_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            buf: *mut u8,
-            buf_len: usize,
-            cookie: Dircookie,
-        ) -> Result<(Size, Dircookie), wasip1::Errno>;
-
-        fn path_filestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            flags: wasip1::Lookupflags,
-            path_ptr: *const u8,
-            path_len: usize,
-        ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
-
-        fn fd_prestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-        ) -> Result<wasip1::Prestat, wasip1::Errno>;
-
-        fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            dir_path_ptr: *mut u8,
-            dir_path_len: usize,
-        ) -> Result<(), wasip1::Errno>;
-
-        fn path_open_raw<Wasm: WasmAccess>(
-            &mut self,
-            dir_ino: &Self::Inode,
-            dir_flags: wasip1::Fdflags,
-            path_ptr: *const u8,
-            path_len: usize,
-            o_flags: wasip1::Oflags,
-            fs_rights_base: wasip1::Rights,
-            fs_rights_inheriting: wasip1::Rights,
-            fd_flags: wasip1::Fdflags,
-        ) -> Result<Self::Inode, wasip1::Errno>;
+        Ok(wasip1::Filestat {
+            dev: 0, // no device
+            ino: status.ino,
+            filetype: status.filetype,
+            nlink: status.nlink,
+            size: status.size,
+            atim: status.atim,
+            mtim: status.mtim,
+            ctim: status.ctim,
+        })
     }
 
-    pub struct VFSConstNormalLFS<
-        ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
-        File: Wasip1FileTrait + 'static + Copy,
-        const FLAT_LEN: usize,
-        StdIo: StdIO + 'static,
-    > {
-        add_info: [VFSConstNormalAddInfo; FLAT_LEN],
-        __marker: core::marker::PhantomData<(ConstRoot, File, StdIo)>,
+    pub(crate) fn fd_prestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+    ) -> Result<wasip1::Prestat, wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+        let prestat = lfs.fd_prestat_get_raw::<Wasm>(inode)?;
+
+        Ok(prestat)
     }
 
-    impl<
-        ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
-        File: Wasip1FileTrait + 'static + Copy,
-        const FLAT_LEN: usize,
-        StdIo: StdIO + 'static,
-    > VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo>
-    {
-        pub const fn new() -> Self {
-            Self {
-                add_info: [VFSConstNormalAddInfo::new(); FLAT_LEN],
-                __marker: core::marker::PhantomData,
+    pub(crate) fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+        lfs.fd_prestat_dir_name_raw::<Wasm>(inode, dir_path_ptr, dir_path_len)
+    }
+
+    pub(crate) fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> Result<(), wasip1::Errno> {
+        if self.remove_inode(fd).is_none() {
+            return Err(wasip1::ERRNO_BADF);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn path_open_raw<Wasm: WasmAccess>(
+        &mut self,
+        dir_fd: Fd,
+        dir_flags: wasip1::Fdflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        o_flags: wasip1::Oflags,
+        fs_rights_base: wasip1::Rights,
+        fs_rights_inheriting: wasip1::Rights,
+        fd_flags: wasip1::Fdflags,
+    ) -> Result<Fd, wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(dir_fd).ok_or(wasip1::ERRNO_BADF)?;
+
+        let new_inode = lfs.path_open_raw::<Wasm>(
+            inode,
+            dir_flags,
+            path_ptr,
+            path_len,
+            o_flags,
+            fs_rights_base,
+            fs_rights_inheriting,
+            fd_flags,
+        )?;
+
+        Ok(self.push_inode(new_inode))
+    }
+}
+
+pub struct FilestatWithoutDevice {
+    /// File serial number.
+    pub ino: Inode,
+    /// File type.
+    pub filetype: Filetype,
+    /// Number of hard links to the file.
+    pub nlink: Linkcount,
+    /// For regular files, the file size in bytes. For symbolic links, the length in bytes of the pathname contained in the symbolic link.
+    pub size: Filesize,
+    /// Last data access timestamp.
+    pub atim: Timestamp,
+    /// Last data modification timestamp.
+    pub mtim: Timestamp,
+    /// Last file status change timestamp.
+    pub ctim: Timestamp,
+}
+
+impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
+    for Wasip1ConstVFS<LFS, FLAT_LEN>
+where
+    LFS::Inode: Copy,
+{
+    fn fd_write_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+        nwritten: *mut Size,
+    ) -> wasip1::Errno {
+        match self.fd_write_raw::<Wasm>(fd, iovs_ptr, iovs_len) {
+            Ok(n) => {
+                Wasm::store_le(nwritten, n);
+                wasip1::ERRNO_SUCCESS
             }
+            Err(e) => e,
         }
+    }
 
-        #[inline]
-        pub const fn update_access_time(&mut self, inode: &usize, atime: usize) {
-            let add_info = &mut self.add_info[*inode];
-            add_info.atime = atime;
-        }
-
-        #[inline]
-        pub const fn is_dir(&self, inode: &usize) -> bool {
-            let (_, file_or_dir) = ConstRoot::FILES[*inode];
-            match file_or_dir {
-                VFSConstNormalInode::Dir(..) => true,
-                VFSConstNormalInode::File(..) => false,
+    fn fd_readdir_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+        nread: *mut Size,
+    ) -> wasip1::Errno {
+        match self.fd_readdir_raw::<Wasm>(fd, buf, buf_len, cookie) {
+            Ok(n) => {
+                Wasm::store_le(nread, n);
+                wasip1::ERRNO_SUCCESS
             }
+            Err(e) => e,
         }
+    }
 
-        #[inline]
-        pub const fn parent_inode(&self, inode: &usize) -> Option<usize> {
-            let (_, file_or_dir) = ConstRoot::FILES[*inode];
-            match file_or_dir {
-                VFSConstNormalInode::Dir(_, parent, ..) => parent,
-                VFSConstNormalInode::File(_, parent, ..) => Some(parent),
+    fn path_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        filestat_ptr: *mut wasip1::Filestat,
+    ) -> wasip1::Errno {
+        match self.path_filestat_get_raw::<Wasm>(fd, flags, path_ptr, path_len) {
+            Ok(filestat) => {
+                Wasm::store_le(filestat_ptr, filestat);
+                wasip1::ERRNO_SUCCESS
             }
+            Err(e) => e,
         }
+    }
 
-        pub fn get_inode_for_path<Wasm: WasmAccess>(
-            &self,
-            inode: &usize,
-            path_ptr: *const u8,
-            path_len: usize,
-        ) -> Option<usize> {
-            let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        prestat_ptr: *mut wasip1::Prestat,
+    ) -> wasip1::Errno {
+        match self.fd_prestat_get_raw::<Wasm>(fd) {
+            Ok(prestat) => {
+                Wasm::store_le(prestat_ptr, prestat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
 
-            let path_parts = path.components();
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> wasip1::Errno {
+        match self.fd_prestat_dir_name_raw::<Wasm>(fd, dir_path_ptr, dir_path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
 
-            let mut current_inode = *inode;
+    fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno {
+        match self.fd_close_raw::<Wasm>(fd) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
 
-            for part in path_parts {
-                // Resolve each part of the path
-                match part {
-                    WasmPathComponent::RootDir => unreachable!(),
-                    WasmPathComponent::CurDir => {
-                        // Stay in the current directory
-                    }
-                    WasmPathComponent::ParentDir => {
-                        current_inode = self.parent_inode(&current_inode)?;
-                    }
-                    WasmPathComponent::Normal(wasm_array_access) => {
-                        let (start, end) = match ConstRoot::FILES[current_inode] {
-                            (_, VFSConstNormalInode::Dir(range, ..)) => range,
-                            _ => return None, // Not a directory
-                        };
+    fn path_open_raw<Wasm: WasmAccess>(
+        &mut self,
+        dir_fd: Fd,
+        dir_flags: wasip1::Fdflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        o_flags: wasip1::Oflags,
+        fs_rights_base: wasip1::Rights,
+        fs_rights_inheriting: wasip1::Rights,
+        fd_flags: wasip1::Fdflags,
+        fd_ret: *mut wasip1::Fd,
+    ) -> wasip1::Errno {
+        match self.path_open_raw::<Wasm>(
+            dir_fd,
+            dir_flags,
+            path_ptr,
+            path_len,
+            o_flags,
+            fs_rights_base,
+            fs_rights_inheriting,
+            fd_flags,
+        ) {
+            Ok(fd) => {
+                Wasm::store_le(fd_ret, fd);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
+}
 
-                        if let Some(i) =
-                            ConstRoot::FILES[start..end].iter().position(|(name, _)| {
-                                name.len() == wasm_array_access.len()
-                                    && name
-                                        .as_bytes()
-                                        .iter()
-                                        .zip(wasm_array_access.iter())
-                                        .all(|(a, b)| *a == b)
-                            })
-                        {
-                            current_inode = start + i;
-                        } else {
-                            return None; // Not found
-                        }
+/// small posix like local file system
+pub trait Wasip1LFS {
+    type Inode: 'static;
+    const PRE_OPEN: &'static [Self::Inode];
+
+    fn fd_write_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_write_stdout_raw<Wasm: WasmAccess>(
+        &mut self,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_write_stderr_raw<Wasm: WasmAccess>(
+        &mut self,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn is_dir(&self, inode: Self::Inode) -> bool;
+
+    fn fd_readdir_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+    ) -> Result<(Size, Dircookie), wasip1::Errno>;
+
+    fn path_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
+    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+    ) -> Result<wasip1::Prestat, wasip1::Errno>;
+
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_open_raw<Wasm: WasmAccess>(
+        &mut self,
+        dir_ino: Self::Inode,
+        dir_flags: wasip1::Fdflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        o_flags: wasip1::Oflags,
+        fs_rights_base: wasip1::Rights,
+        fs_rights_inheriting: wasip1::Rights,
+        fd_flags: wasip1::Fdflags,
+    ) -> Result<Self::Inode, wasip1::Errno>;
+}
+
+pub struct VFSConstNormalLFS<
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+> {
+    add_info: [VFSConstNormalAddInfo; FLAT_LEN],
+    __marker: core::marker::PhantomData<(ConstRoot, File, StdIo)>,
+}
+
+impl<
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+> VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo>
+{
+    pub const fn new() -> Self {
+        Self {
+            add_info: [VFSConstNormalAddInfo::new(); FLAT_LEN],
+            __marker: core::marker::PhantomData,
+        }
+    }
+
+    #[inline]
+    pub const fn update_access_time(&mut self, inode: usize, atime: usize) {
+        let add_info = &mut self.add_info[inode];
+        add_info.atime = atime;
+    }
+
+    #[inline]
+    pub const fn is_dir(&self, inode: usize) -> bool {
+        let (_, file_or_dir) = ConstRoot::FILES[inode];
+        match file_or_dir {
+            VFSConstNormalInode::Dir(..) => true,
+            VFSConstNormalInode::File(..) => false,
+        }
+    }
+
+    #[inline]
+    pub const fn parent_inode(&self, inode: usize) -> Option<usize> {
+        let (_, file_or_dir) = ConstRoot::FILES[inode];
+        match file_or_dir {
+            VFSConstNormalInode::Dir(_, parent, ..) => parent,
+            VFSConstNormalInode::File(_, parent, ..) => Some(parent),
+        }
+    }
+
+    pub fn get_inode_for_path<Wasm: WasmAccess>(
+        &self,
+        inode: usize,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Option<usize> {
+        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+
+        let path_parts = path.components();
+
+        let mut current_inode = inode;
+
+        for part in path_parts {
+            // Resolve each part of the path
+            match part {
+                WasmPathComponent::RootDir => unreachable!(),
+                WasmPathComponent::CurDir => {
+                    // Stay in the current directory
+                }
+                WasmPathComponent::ParentDir => {
+                    current_inode = self.parent_inode(current_inode)?;
+                }
+                WasmPathComponent::Normal(wasm_array_access) => {
+                    let (start, end) = match ConstRoot::FILES[current_inode] {
+                        (_, VFSConstNormalInode::Dir(range, ..)) => range,
+                        _ => return None, // Not a directory
+                    };
+
+                    if let Some(i) = ConstRoot::FILES[start..end].iter().position(|(name, _)| {
+                        name.len() == wasm_array_access.len()
+                            && name
+                                .as_bytes()
+                                .iter()
+                                .zip(wasm_array_access.iter())
+                                .all(|(a, b)| *a == b)
+                    }) {
+                        current_inode = start + i;
+                    } else {
+                        return None; // Not found
                     }
                 }
             }
-
-            Some(current_inode)
         }
 
-        fn access_time(&self, inode: &usize) -> wasip1::Timestamp {
-            self.add_info[*inode].atime as wasip1::Timestamp
+        Some(current_inode)
+    }
+
+    fn access_time(&self, inode: usize) -> wasip1::Timestamp {
+        self.add_info[inode].atime as wasip1::Timestamp
+    }
+}
+
+impl<
+    ROOT: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+> Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
+{
+    type Inode = usize;
+    const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
+
+    fn fd_write_raw<Wasm: WasmAccess>(
+        &mut self,
+        _: Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn fd_write_stdout_raw<Wasm: WasmAccess>(
+        &mut self,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::write_direct::<Wasm>(data, data_len)
+        }
+        #[cfg(feature = "multi_memory")]
+        {
+            let mut buf = alloc::vec::Vec::with_capacity(data_len);
+            unsafe { buf.set_len(data_len) };
+            Wasm::memcpy_to(&mut buf, data);
+            StdIo::write(&buf)
         }
     }
 
-    impl<
-        ROOT: VFSConstNormalFilesTy<File, FLAT_LEN>,
-        File: Wasip1FileTrait + 'static + Copy,
-        const FLAT_LEN: usize,
-        StdIo: StdIO + 'static,
-    > Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
-    {
-        type Inode = usize;
-        const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
-
-        fn fd_write_raw<Wasm: WasmAccess>(
-            &mut self,
-            _: &Self::Inode,
-            _: *const u8,
-            _: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            Err(wasip1::ERRNO_PERM)
+    fn fd_write_stderr_raw<Wasm: WasmAccess>(
+        &mut self,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::write_direct::<Wasm>(data, data_len)
         }
-
-        fn fd_write_stdout_raw<Wasm: WasmAccess>(
-            &mut self,
-            data: *const u8,
-            data_len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            #[cfg(not(feature = "multi_memory"))]
-            {
-                StdIo::write_direct::<Wasm>(data, data_len)
-            }
-            #[cfg(feature = "multi_memory")]
-            {
-                let mut buf = alloc::vec::Vec::with_capacity(data_len);
-                unsafe { buf.set_len(data_len) };
-                Wasm::memcpy_to(&mut buf, data);
-                StdIo::write(&buf)
-            }
+        #[cfg(feature = "multi_memory")]
+        {
+            let mut buf = alloc::vec::Vec::with_capacity(data_len);
+            unsafe { buf.set_len(data_len) };
+            Wasm::memcpy_to(&mut buf, data);
+            StdIo::write(&buf)
         }
+    }
 
-        fn fd_write_stderr_raw<Wasm: WasmAccess>(
-            &mut self,
-            data: *const u8,
-            data_len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            #[cfg(not(feature = "multi_memory"))]
-            {
-                StdIo::write_direct::<Wasm>(data, data_len)
-            }
-            #[cfg(feature = "multi_memory")]
-            {
-                let mut buf = alloc::vec::Vec::with_capacity(data_len);
-                unsafe { buf.set_len(data_len) };
-                Wasm::memcpy_to(&mut buf, data);
-                StdIo::write(&buf)
-            }
-        }
+    fn is_dir(&self, inode: Self::Inode) -> bool {
+        self.is_dir(inode)
+    }
 
-        fn is_dir(&self, inode: &Self::Inode) -> bool {
-            self.is_dir(inode)
-        }
+    fn fd_readdir_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+    ) -> Result<(Size, Dircookie), wasip1::Errno> {
+        let (_, dir) = ROOT::FILES[inode];
 
-        fn fd_readdir_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            buf: *mut u8,
-            buf_len: usize,
-            cookie: Dircookie,
-        ) -> Result<(Size, Dircookie), wasip1::Errno> {
-            let (_, dir) = ROOT::FILES[*inode];
-
-            // . (current directory)
-            if cookie == 0 {
-                let next_cookie = if dir.parent().is_some() { 1 } else { 2 };
-                let entry = wasip1::Dirent {
-                    d_next: next_cookie,
-                    d_ino: *inode as _,
-                    d_namlen: 1,
-                    d_type: dir.filetype(),
-                };
-                let entry_buf = unsafe {
-                    core::slice::from_raw_parts(
-                        &entry as *const _ as *const u8,
-                        core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
-                    )
-                };
-                Wasm::memcpy(buf, entry_buf);
-
-                if buf_len < core::mem::size_of::<wasip1::Dirent>() {
-                    return Ok((buf_len, cookie));
-                }
-
-                Wasm::memcpy(
-                    unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
-                    b".",
-                );
-
-                return Ok((core::mem::size_of::<wasip1::Dirent>() + 1, next_cookie));
-            }
-
-            // .. (parent directory)
-            if cookie == 1 {
-                let parent = dir.parent().unwrap();
-                let entry = wasip1::Dirent {
-                    d_next: 2,
-                    d_ino: parent as _,
-                    d_namlen: 2,
-                    d_type: ROOT::FILES[parent].1.filetype(),
-                };
-                let entry_buf = unsafe {
-                    core::slice::from_raw_parts(
-                        &entry as *const _ as *const u8,
-                        core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
-                    )
-                };
-                Wasm::memcpy(buf, entry_buf);
-
-                if buf_len < core::mem::size_of::<wasip1::Dirent>() {
-                    return Ok((buf_len, cookie));
-                }
-
-                Wasm::memcpy(
-                    unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
-                    b"..",
-                );
-
-                return Ok((core::mem::size_of::<wasip1::Dirent>() + 2, 2));
-            }
-
-            let (start, end) = match dir {
-                VFSConstNormalInode::Dir(range, ..) => range,
-                _ => unreachable!(),
-            };
-
-            let index = start + cookie as usize - 2;
-            if index >= end {
-                return Ok((0, cookie)); // No more entries
-            }
-
-            let (name, file_or_dir) = ROOT::FILES[index];
-
-            let next_cookie = cookie + 1;
-
-            let name_len = name.len();
-
+        // . (current directory)
+        if cookie == 0 {
+            let next_cookie = if dir.parent().is_some() { 1 } else { 2 };
             let entry = wasip1::Dirent {
-                d_next: if (next_cookie as usize) < end {
-                    next_cookie
-                } else {
-                    0
-                },
-                d_ino: index as _,
-                d_namlen: name_len as _,
-                d_type: file_or_dir.filetype(),
+                d_next: next_cookie,
+                d_ino: inode as _,
+                d_namlen: 1,
+                d_type: dir.filetype(),
             };
-
             let entry_buf = unsafe {
                 core::slice::from_raw_parts(
                     &entry as *const _ as *const u8,
                     core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
                 )
             };
-
             Wasm::memcpy(buf, entry_buf);
 
             if buf_len < core::mem::size_of::<wasip1::Dirent>() {
                 return Ok((buf_len, cookie));
             }
 
-            let name_bytes = unsafe {
+            Wasm::memcpy(
+                unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
+                b".",
+            );
+
+            return Ok((core::mem::size_of::<wasip1::Dirent>() + 1, next_cookie));
+        }
+
+        // .. (parent directory)
+        if cookie == 1 {
+            let parent = dir.parent().unwrap();
+            let entry = wasip1::Dirent {
+                d_next: 2,
+                d_ino: parent as _,
+                d_namlen: 2,
+                d_type: ROOT::FILES[parent].1.filetype(),
+            };
+            let entry_buf = unsafe {
                 core::slice::from_raw_parts(
-                    name.as_ptr(),
-                    core::cmp::min(name_len, buf_len - core::mem::size_of::<wasip1::Dirent>()),
+                    &entry as *const _ as *const u8,
+                    core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
                 )
             };
+            Wasm::memcpy(buf, entry_buf);
+
+            if buf_len < core::mem::size_of::<wasip1::Dirent>() {
+                return Ok((buf_len, cookie));
+            }
 
             Wasm::memcpy(
                 unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
-                name_bytes,
+                b"..",
             );
 
-            Ok((
-                core::mem::size_of::<wasip1::Dirent>() + name_bytes.len(),
-                next_cookie,
-            ))
+            return Ok((core::mem::size_of::<wasip1::Dirent>() + 2, 2));
         }
 
-        fn path_filestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            _: wasip1::Lookupflags,
-            path_ptr: *const u8,
-            path_len: usize,
-        ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-            let inode = self
-                .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
-                .ok_or(wasip1::ERRNO_NOENT)?;
+        let (start, end) = match dir {
+            VFSConstNormalInode::Dir(range, ..) => range,
+            _ => unreachable!(),
+        };
 
-            Ok(FilestatWithoutDevice {
-                ino: inode as _,
-                filetype: ROOT::FILES[inode].1.filetype(),
-                nlink: 1,
-                size: ROOT::FILES[inode].1.size() as _,
-                atim: self.access_time(&inode),
-                mtim: 0,
-                ctim: 0,
-            })
+        let index = start + cookie as usize - 2;
+        if index >= end {
+            return Ok((0, cookie)); // No more entries
         }
 
-        fn fd_prestat_get_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-        ) -> Result<wasip1::Prestat, wasip1::Errno> {
-            if !Self::PRE_OPEN.contains(inode) {
-                return Err(wasip1::ERRNO_BADF);
-            }
+        let (name, file_or_dir) = ROOT::FILES[index];
 
-            let (name, _) = ROOT::FILES[*inode];
+        let next_cookie = cookie + 1;
 
-            Ok(wasip1::Prestat {
-                tag: 0, // prestat is enum but variant is only 0
-                // union type but we only have one variant
-                u: wasip1::PrestatU {
-                    dir: wasip1::PrestatDir {
-                        pr_name_len: name.len() as _,
-                    },
-                },
-            })
-        }
+        let name_len = name.len();
 
-        fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-            &mut self,
-            inode: &Self::Inode,
-            dir_path_ptr: *mut u8,
-            dir_path_len: usize,
-        ) -> Result<(), wasip1::Errno> {
-            if !Self::PRE_OPEN.contains(inode) {
-                return Err(wasip1::ERRNO_BADF);
-            }
-
-            let (name, _) = ROOT::FILES[*inode];
-
-            Wasm::memcpy(
-                dir_path_ptr,
-                &name.as_bytes()[..core::cmp::min(name.len(), dir_path_len)],
-            );
-
-            Ok(())
-        }
-
-        fn path_open_raw<Wasm: WasmAccess>(
-            &mut self,
-            dir_inode: &Self::Inode,
-            _: wasip1::Fdflags,
-            path_ptr: *const u8,
-            path_len: usize,
-            o_flags: wasip1::Oflags,
-            fs_rights_base: wasip1::Rights,
-            _: wasip1::Rights,
-            _: wasip1::Fdflags,
-        ) -> Result<Self::Inode, wasip1::Errno> {
-            if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
-                if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
-                    return Err(wasip1::ERRNO_EXIST);
-                }
-
-                if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY
-                    && !self.is_dir(&inode)
-                {
-                    return Err(wasip1::ERRNO_NOTDIR);
-                }
-
-                if fs_rights_base & wasip1::RIGHTS_FD_WRITE == wasip1::RIGHTS_FD_WRITE {
-                    return Err(wasip1::ERRNO_PERM);
-                }
-
-                if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
-                    return Err(wasip1::ERRNO_PERM);
-                }
-
-                Ok(inode)
+        let entry = wasip1::Dirent {
+            d_next: if (next_cookie as usize) < end {
+                next_cookie
             } else {
-                if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
-                    return Err(wasip1::ERRNO_PERM);
-                }
+                0
+            },
+            d_ino: index as _,
+            d_namlen: name_len as _,
+            d_type: file_or_dir.filetype(),
+        };
 
-                Err(wasip1::ERRNO_NOENT)
+        let entry_buf = unsafe {
+            core::slice::from_raw_parts(
+                &entry as *const _ as *const u8,
+                core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
+            )
+        };
+
+        Wasm::memcpy(buf, entry_buf);
+
+        if buf_len < core::mem::size_of::<wasip1::Dirent>() {
+            return Ok((buf_len, cookie));
+        }
+
+        let name_bytes = unsafe {
+            core::slice::from_raw_parts(
+                name.as_ptr(),
+                core::cmp::min(name_len, buf_len - core::mem::size_of::<wasip1::Dirent>()),
+            )
+        };
+
+        Wasm::memcpy(
+            unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
+            name_bytes,
+        );
+
+        Ok((
+            core::mem::size_of::<wasip1::Dirent>() + name_bytes.len(),
+            next_cookie,
+        ))
+    }
+
+    fn path_filestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        _: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
+        let inode = self
+            .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        Ok(FilestatWithoutDevice {
+            ino: inode as _,
+            filetype: ROOT::FILES[inode].1.filetype(),
+            nlink: 1,
+            size: ROOT::FILES[inode].1.size() as _,
+            atim: self.access_time(inode),
+            mtim: 0,
+            ctim: 0,
+        })
+    }
+
+    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+    ) -> Result<wasip1::Prestat, wasip1::Errno> {
+        if !Self::PRE_OPEN.contains(&inode) {
+            return Err(wasip1::ERRNO_BADF);
+        }
+
+        let (name, _) = ROOT::FILES[inode];
+
+        Ok(wasip1::Prestat {
+            tag: 0, // prestat is enum but variant is only 0
+            // union type but we only have one variant
+            u: wasip1::PrestatU {
+                dir: wasip1::PrestatDir {
+                    pr_name_len: name.len() as _,
+                },
+            },
+        })
+    }
+
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+        &mut self,
+        inode: Self::Inode,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        if !Self::PRE_OPEN.contains(&inode) {
+            return Err(wasip1::ERRNO_BADF);
+        }
+
+        let (name, _) = ROOT::FILES[inode];
+
+        Wasm::memcpy(
+            dir_path_ptr,
+            &name.as_bytes()[..core::cmp::min(name.len(), dir_path_len)],
+        );
+
+        Ok(())
+    }
+
+    fn path_open_raw<Wasm: WasmAccess>(
+        &mut self,
+        dir_inode: Self::Inode,
+        _: wasip1::Fdflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        o_flags: wasip1::Oflags,
+        fs_rights_base: wasip1::Rights,
+        _: wasip1::Rights,
+        _: wasip1::Fdflags,
+    ) -> Result<Self::Inode, wasip1::Errno> {
+        if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
+            if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
+                return Err(wasip1::ERRNO_EXIST);
             }
-        }
-    }
 
-    #[derive(Copy, Clone, Debug)]
-    pub struct VFSConstNormalAddInfo {
-        atime: usize,
-    }
-
-    impl VFSConstNormalAddInfo {
-        pub const fn new() -> Self {
-            Self { atime: 0 }
-        }
-    }
-
-    use const_struct::ConstStruct;
-
-    use crate::{
-        memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
-        transporter::Wasip1Transporter,
-        wasi::file::Wasip1FileSystem,
-    };
-
-    /// A constant file system root that can be used in a WASI component.
-    #[derive(ConstStruct, Debug)]
-    pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
-        pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
-        pub pre_open: &'static [usize],
-    }
-
-    impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
-        VFSConstNormalFiles<File, FLAT_LEN>
-    {
-        pub const fn new(
-            files: (
-                [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
-                &'static [usize],
-            ),
-        ) -> Self {
-            Self {
-                files: files.0,
-                pre_open: files.1,
+            if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY && !self.is_dir(inode)
+            {
+                return Err(wasip1::ERRNO_NOTDIR);
             }
+
+            if fs_rights_base & wasip1::RIGHTS_FD_WRITE == wasip1::RIGHTS_FD_WRITE {
+                return Err(wasip1::ERRNO_PERM);
+            }
+
+            if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
+                return Err(wasip1::ERRNO_PERM);
+            }
+
+            Ok(inode)
+        } else {
+            if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
+                return Err(wasip1::ERRNO_PERM);
+            }
+
+            Err(wasip1::ERRNO_NOENT)
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct VFSConstNormalAddInfo {
+    atime: usize,
+}
+
+impl VFSConstNormalAddInfo {
+    pub const fn new() -> Self {
+        Self { atime: 0 }
+    }
+}
+
+use const_struct::ConstStruct;
+
+use crate::{
+    memory::{WasmPathAccess, WasmPathComponent},
+    transporter::Wasip1Transporter,
+};
+
+/// A constant file system root that can be used in a WASI component.
+#[derive(ConstStruct, Debug)]
+pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
+    pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
+    pub pre_open: &'static [usize],
+}
+
+impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
+    VFSConstNormalFiles<File, FLAT_LEN>
+{
+    pub const fn new(
+        files: (
+            [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
+            &'static [usize],
+        ),
+    ) -> Self {
+        Self {
+            files: files.0,
+            pre_open: files.1,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
+    /// file, parent
+    File(File, usize),
+    /// (first index..last index), parent
+    Dir((usize, usize), Option<usize>),
+}
+
+impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
+    pub const fn filetype(&self) -> wasip1::Filetype {
+        match self {
+            Self::File(..) => wasip1::FILETYPE_REGULAR_FILE,
+            Self::Dir(..) => wasip1::FILETYPE_DIRECTORY,
         }
     }
 
-    #[derive(Clone, Copy, Debug)]
-    pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
-        /// file, parent
-        File(File, usize),
-        /// (first index..last index), parent
-        Dir((usize, usize), Option<usize>),
-    }
-
-    impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
-        pub const fn filetype(&self) -> wasip1::Filetype {
-            match self {
-                Self::File(..) => wasip1::FILETYPE_REGULAR_FILE,
-                Self::Dir(..) => wasip1::FILETYPE_DIRECTORY,
-            }
-        }
-
-        pub fn size(&self) -> usize {
-            match self {
-                Self::File(file, _) => file.size(),
-                Self::Dir(..) => core::mem::size_of::<((usize, usize), Option<usize>)>(), // directory size is just the size of the inode
-            }
-        }
-
-        pub fn parent(&self) -> Option<usize> {
-            match self {
-                Self::File(_, parent) => Some(*parent),
-                Self::Dir(_, parent) => *parent,
-            }
+    pub fn size(&self) -> usize {
+        match self {
+            Self::File(file, _) => file.size(),
+            Self::Dir(..) => core::mem::size_of::<((usize, usize), Option<usize>)>(), // directory size is just the size of the inode
         }
     }
 
-    #[macro_export]
-    macro_rules! ConstFiles {
+    pub fn parent(&self) -> Option<usize> {
+        match self {
+            Self::File(_, parent) => Some(*parent),
+            Self::Dir(_, parent) => *parent,
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! ConstFiles {
         (
             [
                 $(($dir_name:expr, $file_or_dir:tt)),* $(,)?
             ] $(,)?
         ) => {
-            $crate::wasi::file::non_atomic::VFSConstNormalFiles::new({
+            $crate::wasi::file::VFSConstNormalFiles::new({
                 const COUNT: usize = {
                     let mut count = 0;
 
@@ -1180,7 +1219,7 @@ pub mod non_atomic {
             $static_array.push(($depth, (
                 $parent_path,
                 $name,
-                $crate::wasi::file::non_atomic::VFSConstNormalInode::Dir(
+                $crate::wasi::file::VFSConstNormalInode::Dir(
                     get_child_range(
                         $empty,
                         $parent_path,
@@ -1197,182 +1236,169 @@ pub mod non_atomic {
                 (
                     $path,
                     $name,
-                $crate::wasi::file::non_atomic::VFSConstNormalInode::File($file, get_parent($empty, $path, &$static_array).unwrap())
+                $crate::wasi::file::VFSConstNormalInode::File($file, get_parent($empty, $path, &$static_array).unwrap())
             )));
         };
     }
 
-    #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-    pub struct WasiConstFile<File: WasiConstPrimitiveFile> {
-        file: File,
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct WasiConstFile<File: WasiConstPrimitiveFile> {
+    file: File,
+}
+
+impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {
+    pub const fn new(file: File) -> Self {
+        Self { file }
+    }
+}
+
+pub trait WasiConstPrimitiveFile {
+    fn len(&self) -> usize;
+}
+
+impl<'a> WasiConstPrimitiveFile for &'a str {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        <Self as core::ops::Deref>::deref(self).len()
+    }
+}
+
+impl<File: WasiConstPrimitiveFile> Wasip1FileTrait for WasiConstFile<File> {
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.file.len()
     }
 
-    impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {
-        pub const fn new(file: File) -> Self {
-            Self { file }
-        }
+    fn size(&self) -> usize {
+        self.file.len()
+    }
+}
+
+pub struct DefaultStdIO;
+
+impl StdIO for DefaultStdIO {
+    fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::write_to_stdout(buf)
     }
 
-    pub trait WasiConstPrimitiveFile {
-        fn len(&self) -> usize;
+    #[cfg(not(feature = "multi_memory"))]
+    fn write_direct<Wasm: WasmAccess>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::write_to_stdout_direct::<Wasm>(buf, len)
     }
 
-    impl<'a> WasiConstPrimitiveFile for &'a str {
-        #[inline(always)]
-        fn len(&self) -> usize {
-            <Self as core::ops::Deref>::deref(self).len()
-        }
+    fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::write_to_stderr(buf)
     }
 
-    impl<File: WasiConstPrimitiveFile> Wasip1FileTrait for WasiConstFile<File> {
-        #[inline(always)]
-        fn len(&self) -> usize {
-            self.file.len()
-        }
+    #[cfg(not(feature = "multi_memory"))]
+    fn ewrite_direct<Wasm: WasmAccess>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::write_to_stderr_direct::<Wasm>(buf, len)
+    }
+}
 
-        fn size(&self) -> usize {
-            self.file.len()
-        }
+pub trait StdIO {
+    /// This function is called when the alloc feature is ON
+    /// and write_direct is not implemented.
+    /// If you are not familiar with Wasm memory, etc.,
+    /// it is better to use this.
+    #[allow(unused_variables)]
+    fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_NOSYS)
     }
 
-    pub struct DefaultStdIO;
-
-    impl StdIO for DefaultStdIO {
-        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            Wasip1Transporter::write_to_stdout(buf)
+    /// This function is called,
+    /// but if the write function is implemented
+    /// and the alloc feature is ON,
+    /// this function is automatically implemented.
+    #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
+    fn write_direct<Wasm: WasmAccess>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            Self::write(&Wasm::get_array(buf, len))
         }
 
-        #[cfg(not(feature = "multi_memory"))]
-        fn write_direct<Wasm: WasmAccess>(
-            buf: *const u8,
-            len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            Wasip1Transporter::write_to_stdout_direct::<Wasm>(buf, len)
-        }
-
-        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            Wasip1Transporter::write_to_stderr(buf)
-        }
-
-        #[cfg(not(feature = "multi_memory"))]
-        fn ewrite_direct<Wasm: WasmAccess>(
-            buf: *const u8,
-            len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            Wasip1Transporter::write_to_stderr_direct::<Wasm>(buf, len)
-        }
-    }
-
-    pub trait StdIO {
-        /// This function is called when the alloc feature is ON
-        /// and write_direct is not implemented.
-        /// If you are not familiar with Wasm memory, etc.,
-        /// it is better to use this.
-        #[allow(unused_variables)]
-        fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
             Err(wasip1::ERRNO_NOSYS)
         }
-
-        /// This function is called,
-        /// but if the write function is implemented
-        /// and the alloc feature is ON,
-        /// this function is automatically implemented.
-        #[cfg(not(feature = "multi_memory"))]
-        #[allow(unused_variables)]
-        fn write_direct<Wasm: WasmAccess>(
-            buf: *const u8,
-            len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            #[cfg(feature = "alloc")]
-            {
-                Self::write(&Wasm::get_array(buf, len))
-            }
-
-            #[cfg(not(feature = "alloc"))]
-            {
-                // Stub implementation for non-std environments
-                Err(wasip1::ERRNO_NOSYS)
-            }
-        }
-
-        /// This function is called when the alloc feature is ON
-        /// and ewrite_direct is not implemented.
-        /// If you are not familiar with Wasm memory, etc.,
-        /// it is better to use this.
-        #[allow(unused_variables)]
-        fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
-            Err(wasip1::ERRNO_NOSYS)
-        }
-
-        /// This function is called,
-        /// but if the ewrite function is implemented
-        /// and the alloc feature is ON,
-        /// this function is automatically implemented.
-        #[cfg(not(feature = "multi_memory"))]
-        #[allow(unused_variables)]
-        fn ewrite_direct<Wasm: WasmAccess>(
-            buf: *const u8,
-            len: usize,
-        ) -> Result<Size, wasip1::Errno> {
-            #[cfg(feature = "alloc")]
-            {
-                Self::ewrite(&Wasm::get_array(buf, len))
-            }
-
-            #[cfg(not(feature = "alloc"))]
-            {
-                // Stub implementation for non-std environments
-                Err(wasip1::ERRNO_NOSYS)
-            }
-        }
     }
 
-    pub trait Wasip1FileTrait {
-        fn size(&self) -> usize;
+    /// This function is called when the alloc feature is ON
+    /// and ewrite_direct is not implemented.
+    /// If you are not familiar with Wasm memory, etc.,
+    /// it is better to use this.
+    #[allow(unused_variables)]
+    fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_NOSYS)
+    }
 
-        fn len(&self) -> usize;
+    /// This function is called,
+    /// but if the ewrite function is implemented
+    /// and the alloc feature is ON,
+    /// this function is automatically implemented.
+    #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
+    fn ewrite_direct<Wasm: WasmAccess>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            Self::ewrite(&Wasm::get_array(buf, len))
+        }
 
-        /// Reads data from the file into the provided buffer.
-        /// Returns the number of bytes read.
-        /// This function is called by the `fd_read` function.
-        /// Implementing this function directly is more efficient,
-        /// but it is recommended to implement `fn read`!
-        #[cfg_attr(not(feature = "alloc"), allow(unused_variables))]
-        fn read_iovs<Wasm: WasmAccess>(
-            &self,
-            iovs: *const wasip1::Ciovec,
-            iovs_len: usize,
-        ) -> Result<usize, wasip1::Errno> {
-            #[cfg(feature = "alloc")]
-            {
-                let mut total_read = 0;
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
+        }
+    }
+}
 
-                for i in 0..iovs_len {
-                    let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
-                    let mut buf = alloc::vec![0u8; iov.buf_len];
-                    let read = self.read(&mut buf)?;
-                    if read == 0 {
-                        break; // EOF
-                    }
-                    total_read += read;
-                    Wasm::memcpy(iov.buf as *mut _, &buf[..read]);
+pub trait Wasip1FileTrait {
+    fn size(&self) -> usize;
+
+    fn len(&self) -> usize;
+
+    /// Reads data from the file into the provided buffer.
+    /// Returns the number of bytes read.
+    /// This function is called by the `fd_read` function.
+    /// Implementing this function directly is more efficient,
+    /// but it is recommended to implement `fn read`!
+    #[cfg_attr(not(feature = "alloc"), allow(unused_variables))]
+    fn read_iovs<Wasm: WasmAccess>(
+        &self,
+        iovs: *const wasip1::Ciovec,
+        iovs_len: usize,
+    ) -> Result<usize, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            let mut total_read = 0;
+
+            for i in 0..iovs_len {
+                let iov = unsafe { iovs.add(i).as_ref() }.ok_or(wasip1::ERRNO_FAULT)?;
+                let mut buf = alloc::vec![0u8; iov.buf_len];
+                let read = self.read(&mut buf)?;
+                if read == 0 {
+                    break; // EOF
                 }
-
-                Ok(total_read)
+                total_read += read;
+                Wasm::memcpy(iov.buf as *mut _, &buf[..read]);
             }
 
-            #[cfg(not(feature = "alloc"))]
-            {
-                // Stub implementation for non-std environments
-                Err(wasip1::ERRNO_NOSYS)
-            }
+            Ok(total_read)
         }
 
-        /// Reads data from the file into the provided buffer.
-        /// Returns the number of bytes read.
-        fn read(&self, _buf: &mut [u8]) -> Result<usize, wasip1::Errno> {
-            return Err(wasip1::ERRNO_NOSYS);
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
         }
+    }
+
+    /// Reads data from the file into the provided buffer.
+    /// Returns the number of bytes read.
+    fn read(&self, _buf: &mut [u8]) -> Result<usize, wasip1::Errno> {
+        return Err(wasip1::ERRNO_NOSYS);
     }
 }
 
@@ -1431,23 +1457,6 @@ pub trait Wasip1FileSystem {
         fd_ret: *mut wasip1::Fd,
     ) -> wasip1::Errno;
 }
-
-use wasip1::*;
-
-// #[inline]
-// pub fn path_open_inner<Wasm: WasmAccess>(
-//     state: &mut impl Wasip1FileSystem,
-//     dir_fd: Fd,
-//     dir_flags: Fdflags,
-//     path_ptr: *const u8,
-//     path_len: usize,
-//     o_flags: Oflags,
-//     fs_rights_base: Rights,
-//     fs_rights_inheriting: Rights,
-//     fd_flags: Fdflags,
-//     fd_ret: *mut Fd,
-// ) -> Errno {
-// }
 
 #[macro_export]
 macro_rules! export_fs {
@@ -1545,7 +1554,7 @@ macro_rules! export_fs {
 mod tests {
     use crate::{
         ConstFiles,
-        wasi::file::non_atomic::{VFSConstNormalFiles, WasiConstFile},
+        wasi::file::{VFSConstNormalFiles, WasiConstFile},
     };
 
     use const_for::const_for;

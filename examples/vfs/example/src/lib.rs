@@ -5,7 +5,7 @@ use wasip1_virtual_layer::{
     ConstFiles,
     memory::WasmAccess,
     prelude::*,
-    wasi::file::non_atomic::{VFSConstNormalFiles, WasiConstFile},
+    wasi::file::{VFSConstNormalFiles, WasiConstFile},
 };
 
 wit_bindgen::generate!({
@@ -95,7 +95,7 @@ mod fs {
     use super::test_wasm_opt;
     use wasip1_virtual_layer::{
         export_fs,
-        wasi::file::non_atomic::{DefaultStdIO, VFSConstNormalLFS, WasiConstFile, Wasip1ConstVFS},
+        wasi::file::{DefaultStdIO, VFSConstNormalLFS, WasiConstFile, Wasip1ConstVFS},
     };
 
     use crate::FilesTy;
