@@ -346,7 +346,7 @@ pub trait WasmAccess: Copy {
     }
 
     /// utility internal
-    #[cfg(feature = "alloc")]
+    #[cfg(any(feature = "alloc", feature = "std"))]
     fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> Vec<T>
     where
         Self: Sized,

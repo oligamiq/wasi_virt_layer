@@ -88,6 +88,7 @@ pub mod non_atomic {
             loop {
                 let (n, next_cookie) = lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)?;
                 if n == 0 {
+                    println!("End of directory reached");
                     return Ok(read);
                 }
                 read += n;
@@ -213,6 +214,11 @@ pub mod non_atomic {
         ) -> Result<Fd, wasip1::Errno> {
             let (inode, lfs) = self.get_inode_and_lfs(dir_fd).ok_or(wasip1::ERRNO_BADF)?;
 
+            println!(
+                "Opening path: {:?}",
+                core::str::from_utf8(&Wasm::get_array(path_ptr, path_len)).unwrap()
+            );
+
             let new_inode = lfs.path_open_raw::<Wasm>(
                 inode,
                 dir_flags,
@@ -223,6 +229,8 @@ pub mod non_atomic {
                 fs_rights_inheriting,
                 fd_flags,
             )?;
+
+            println!("New inode created");
 
             Ok(self.push_inode(new_inode))
         }
@@ -600,12 +608,71 @@ pub mod non_atomic {
             cookie: Dircookie,
         ) -> Result<(Size, Dircookie), wasip1::Errno> {
             let (dir_name, dir) = ROOT::FILES[*inode];
+
+            // . (current directory)
+            if cookie == 0 {
+                let next_cookie = if dir.parent().is_some() { 1 } else { 2 };
+                let entry = wasip1::Dirent {
+                    d_next: next_cookie,
+                    d_ino: *inode as _,
+                    d_namlen: 1,
+                    d_type: dir.filetype(),
+                };
+                let entry_buf = unsafe {
+                    core::slice::from_raw_parts(
+                        &entry as *const _ as *const u8,
+                        core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
+                    )
+                };
+                Wasm::memcpy(buf, entry_buf);
+
+                if buf_len < core::mem::size_of::<wasip1::Dirent>() {
+                    return Ok((buf_len, cookie));
+                }
+
+                Wasm::memcpy(
+                    unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
+                    b".",
+                );
+
+                return Ok((core::mem::size_of::<wasip1::Dirent>() + 1, next_cookie));
+            }
+
+            // .. (parent directory)
+            if cookie == 1 {
+                let parent = dir.parent().unwrap();
+                let entry = wasip1::Dirent {
+                    d_next: 2,
+                    d_ino: parent as _,
+                    d_namlen: 2,
+                    d_type: ROOT::FILES[parent].1.filetype(),
+                };
+                let entry_buf = unsafe {
+                    core::slice::from_raw_parts(
+                        &entry as *const _ as *const u8,
+                        core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
+                    )
+                };
+                Wasm::memcpy(buf, entry_buf);
+
+                if buf_len < core::mem::size_of::<wasip1::Dirent>() {
+                    return Ok((buf_len, cookie));
+                }
+
+                Wasm::memcpy(
+                    unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
+                    b"..",
+                );
+
+                return Ok((core::mem::size_of::<wasip1::Dirent>() + 2, 2));
+            }
+
             let (start, end) = match dir {
                 VFSConstNormalInode::Dir(range, ..) => range,
                 _ => unreachable!(),
             };
 
-            let index = start + cookie as usize;
+            let index = start + cookie as usize - 2;
             if index >= end {
                 return Ok((0, cookie)); // No more entries
             }
@@ -614,12 +681,20 @@ pub mod non_atomic {
 
             let next_cookie = cookie + 1;
 
+            let parent_len = dir_name.len() + 1;
+            let name_len = name.len() - parent_len;
+
             let entry = wasip1::Dirent {
-                d_next: next_cookie,
+                d_next: if (next_cookie as usize) < end {
+                    next_cookie
+                } else {
+                    0
+                },
                 d_ino: index as _,
-                d_namlen: (name.len() - dir_name.len() - 1) as _,
+                d_namlen: name_len as _,
                 d_type: file_or_dir.filetype(),
             };
+
             let entry_buf = unsafe {
                 core::slice::from_raw_parts(
                     &entry as *const _ as *const u8,
@@ -633,19 +708,10 @@ pub mod non_atomic {
                 return Ok((buf_len, cookie));
             }
 
-            let parent_len = if let Some(parent) = file_or_dir.parent() {
-                ROOT::FILES[parent].0.len() + 1 // +1 for '/'
-            } else {
-                0
-            };
-
             let name_bytes = unsafe {
                 core::slice::from_raw_parts(
                     name.as_ptr().add(parent_len),
-                    core::cmp::min(
-                        name.len() - parent_len,
-                        buf_len - core::mem::size_of::<wasip1::Dirent>(),
-                    ),
+                    core::cmp::min(name_len, buf_len - core::mem::size_of::<wasip1::Dirent>()),
                 )
             };
 
@@ -740,6 +806,8 @@ pub mod non_atomic {
             );
 
             if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
+                println!("Found inode: {:?}", inode);
+
                 if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
                     return Err(wasip1::ERRNO_EXIST);
                 }

@@ -10,26 +10,26 @@ fn main() {
         .collect::<Vec<_>>();
     println!("Environ: {:?}", envs);
 
-    for file in walkdir::WalkDir::new("/root")
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-    {
-        println!("Root File: {}", file.path().display());
-    }
+    // for file in walkdir::WalkDir::new("/root")
+    //     .into_iter()
+    //     .filter_map(Result::ok)
+    //     .filter(|e| e.file_type().is_file())
+    // {
+    //     println!("Root File: {}", file.path().display());
+    // }
 
-    for file in walkdir::WalkDir::new("~")
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
-    {
-        println!("User File: {}", file.path().display());
-    }
+    // for file in walkdir::WalkDir::new("~")
+    //     .into_iter()
+    //     .filter_map(Result::ok)
+    //     .filter(|e| e.file_type().is_file())
+    // {
+    //     println!("User File: {}", file.path().display());
+    // }
 
     for file in walkdir::WalkDir::new(".")
         .into_iter()
         .filter_map(Result::ok)
-        .filter(|e| e.file_type().is_file())
+    // .filter(|e| e.file_type().is_file())
     // .flat_map(|e| {
     //     if e.file_type().is_file() {
     //         Box::new(core::iter::once(e)) as Box<dyn Iterator<Item = DirEntry>>
