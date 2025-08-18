@@ -29,7 +29,7 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, TargetMemor
         })
     {
         return Err(eyre::eyre!(
-            r#"This wasm file is not use "wasip1-virtual-layer" crate, you need to add it to your dependencies"#
+            r#"This wasm file is not use "wasip1-virtual-layer" crate, you need to add it to your dependencies and use wasip1_virtual_layer;"#
         ));
     }
 
