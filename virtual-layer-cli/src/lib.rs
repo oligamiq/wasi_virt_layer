@@ -67,8 +67,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 
     println!("Adjusting VFS Wasm...");
-    let (ret, target_memory_type) =
-        adjust_wasm(&ret).wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
+    let (ret, target_memory_type) = adjust_wasm(&ret, &parsed_args.wasm)
+        .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
 
     println!("Optimizing VFS Wasm...");
     let ret = building::optimize_wasm(&ret, &[], false)

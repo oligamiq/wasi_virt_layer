@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, Package};
@@ -8,13 +8,16 @@ use toml_edit::{DocumentMut, Item};
 
 use crate::{
     common::Wasip1SnapshotPreview1Func,
-    util::{ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
 };
 
 /// wasip1 import to adjust to wit
 /// block vfs-wasm's environ_sizes_get etc
 /// embedding __wasip1_vfs_flag_{name}_memory
-pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, TargetMemoryType)> {
+pub fn adjust_wasm(
+    path: &Utf8PathBuf,
+    wasm: &[impl AsRef<Path>],
+) -> eyre::Result<(Utf8PathBuf, TargetMemoryType)> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
@@ -31,6 +34,21 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, TargetMemor
         return Err(eyre::eyre!(
             r#"This wasm file is not use "wasip1-virtual-layer" crate, you need to add it to your dependencies and use wasip1_virtual_layer;"#
         ));
+    }
+
+    // check use import_wasm!
+    for wasm in wasm {
+        let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
+
+        if !module
+            .exports
+            .iter()
+            .any(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_wrap"))
+        {
+            return Err(eyre::eyre!(
+                "Failed to get __start_wrap export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
+            ));
+        }
     }
 
     for name in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS.iter() {

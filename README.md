@@ -1,12 +1,13 @@
 # TODO!
 - Support non-binary Wasm modules
 - Enable specifying multiple Wasm modules
-- Allow omitting Wasm file specifications
+- Allow omitting Wasm file specifications ?
 - support flush sync to file system
-- rm export func by glob
-- Wasm export/import definitions callable from VFS side
 - adjust test_run.ts to use VFS
 - Fake global allocator and center allocator and merge with vfs
+- Access Time Trait
+- Multiple lfs file system (VFS)
+- Static file system
 
 # run example
 ```bash

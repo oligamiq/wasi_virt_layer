@@ -66,7 +66,6 @@ pub fn build_vfs(
                 args.push("--manifest-path");
                 args.push(&manifest_path);
             }
-            println!("Running command: {:?}", args);
             args
         })
         .stdout(std::process::Stdio::piped())
