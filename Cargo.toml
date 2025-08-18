@@ -5,6 +5,7 @@ members = [
     "virtual-layer",
     "examples/vfs/example",
     "examples/test_wasm/example",
+    "examples/vfs/rustc_vfs",
 ]
 default-members = ["virtual-layer-cli"]
 
@@ -14,7 +15,7 @@ version = "0.1.0"
 edition = "2024"
 description = ""
 license = "MIT/Apache-2.0"
-rust-version = "1.80.0"
+rust-version = "1.89.0"
 keywords = []
 repository = ""
 documentation = ""

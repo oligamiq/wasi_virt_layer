@@ -1,6 +1,6 @@
 use std::io::Write as _;
 
-use eyre::{Context, ContextCompat};
+use eyre::Context;
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
@@ -38,7 +38,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         }
         metadata_command.exec().unwrap()
     };
-    let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package);
+    let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package)?;
 
     if let Some(target_memory_type) = parsed_args.target_memory_type {
         adjust_target_feature(
@@ -60,9 +60,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         &parsed_args.package,
         building_crate.clone(),
     )
-    .wrap_err_with(|| eyre::eyre!("Failed to build VFS"))?;
+    .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {}", building_crate.name))?;
 
-    println!("Optimizing VfS Wasm...");
+    println!("Optimizing VFS Wasm...");
     let ret = building::optimize_wasm(&ret, &[], false)
         .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
 

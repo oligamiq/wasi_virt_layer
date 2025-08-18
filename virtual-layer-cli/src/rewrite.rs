@@ -19,6 +19,20 @@ pub fn adjust_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, TargetMemor
         .to_eyre()
         .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
 
+    if !<Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
+        .iter()
+        .any(|name| {
+            module
+                .exports
+                .iter()
+                .any(|e| e.name == format!("{name}_import_wrap"))
+        })
+    {
+        return Err(eyre::eyre!(
+            r#"This wasm file is not use "wasip1-virtual-layer" crate, you need to add it to your dependencies"#
+        ));
+    }
+
     for name in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS.iter() {
         let component_name = format!("[static]wasip1.{}-import", name.replace("_", "-"));
 
@@ -132,6 +146,10 @@ pub fn adjust_target_feature(
     const CRATE: &'static str = "wasip1-virtual-layer";
 
     let crate_setting = &mut doc["dependencies"][CRATE];
+
+    if matches!(crate_setting, Item::None) {
+        return Err(eyre::eyre!("Crate `{CRATE}` not found in dependencies"));
+    }
 
     enum HasFeature {
         Disabled,

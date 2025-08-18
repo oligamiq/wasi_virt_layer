@@ -4,7 +4,7 @@ use std::{
     sync::{LazyLock, mpsc::Receiver},
 };
 
-use eyre::Context as _;
+use eyre::{Context as _, ContextCompat};
 
 use crate::{down_color, is_valid, util::ResultUtil as _};
 
@@ -44,7 +44,7 @@ pub fn build_vfs(
     manifest_path: Option<String>,
     package: &Option<String>,
     building_crate: cargo_metadata::Package,
-) -> Option<camino::Utf8PathBuf> {
+) -> eyre::Result<camino::Utf8PathBuf> {
     let mut ret = None;
 
     let mut command = std::process::Command::new("cargo")
@@ -66,18 +66,29 @@ pub fn build_vfs(
                 args.push("--manifest-path");
                 args.push(&manifest_path);
             }
+            println!("Running command: {:?}", args);
             args
         })
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
-        .unwrap();
+        .wrap_err("Failed to spawn cargo build process")?;
 
     // Capture the output
-    let reader = std::io::BufReader::new(command.stdout.take().unwrap());
+    let reader = std::io::BufReader::new(
+        command
+            .stdout
+            .take()
+            .wrap_err_with(|| eyre::eyre!("Failed to capture stdout"))?,
+    );
 
     // Compiling etc.
-    let err_reader = std::io::BufReader::new(command.stderr.take().unwrap());
+    let err_reader = std::io::BufReader::new(
+        command
+            .stderr
+            .take()
+            .wrap_err_with(|| eyre::eyre!("Failed to capture stderr"))?,
+    );
 
     let mut before_len = 0;
     let term = console::Term::stdout();
@@ -87,18 +98,26 @@ pub fn build_vfs(
     let (msg_sender, msg_receiver) = std::sync::mpsc::channel();
     let (parse_sender, parse_receiver) = std::sync::mpsc::channel();
 
-    let msg_thread = std::thread::spawn(move || {
+    let msg_thread = std::thread::spawn(move || -> Result<(), eyre::Report> {
         for line in CustomReadIterator::new(err_reader, ['\n', '\r']) {
-            msg_sender.send(line).unwrap();
+            msg_sender
+                .send(line)
+                .wrap_err_with(|| eyre::eyre!("Failed to send error message"))?;
         }
+
+        Ok(())
     });
 
-    let parse_thread = std::thread::spawn(move || {
+    let parse_thread = std::thread::spawn(move || -> Result<(), eyre::Report> {
         for message in cargo_metadata::Message::parse_stream(reader) {
-            let message = message.unwrap();
+            let message = message.wrap_err("Failed to parse cargo metadata message")?;
 
-            parse_sender.send(message).unwrap();
+            parse_sender
+                .send(message)
+                .wrap_err("Failed to send parse message")?;
         }
+
+        Ok(())
     });
 
     let mut before_msgs: Vec<String> = Vec::new();
@@ -109,11 +128,11 @@ pub fn build_vfs(
         before_msgs: &mut Vec<String>,
         before_len: &mut usize,
         term: &console::Term,
-    ) {
+    ) -> Result<(), eyre::Report> {
         let mut is_change = false;
         'inner: loop {
             if let Some(line) = msg_receiver.try_recv().ok() {
-                fn check_finish_or_compiling(line: &str) -> bool {
+                fn check_finish_or_compiling(line: &str) -> eyre::Result<bool> {
                     static NON_ANSI: LazyLock<regex::Regex> =
                         LazyLock::new(|| regex::Regex::new(r"\x1b\[[0-9;]*m").unwrap());
 
@@ -123,17 +142,17 @@ pub fn build_vfs(
                         let index = line
                             .find("Finished")
                             .or_else(|| line.find("Compiling"))
-                            .unwrap();
+                            .wrap_err("Failed to find 'Finished' or 'Compiling' in line")?;
 
                         let line = &line[..index];
 
-                        line.as_bytes().iter().all(|&b| b == b' ')
+                        Ok(line.as_bytes().iter().all(|&b| b == b' '))
                     } else {
-                        return false;
+                        return Ok(false);
                     }
                 }
 
-                if check_finish_or_compiling(&line) {
+                if check_finish_or_compiling(&line)? {
                     // Skip lines with carriage return
                     if line.contains("\r") {
                         last_lines.pop_back();
@@ -154,20 +173,23 @@ pub fn build_vfs(
         }
 
         if is_change || !before_msgs.is_empty() {
-            term.clear_last_lines(*before_len).unwrap();
+            term.clear_last_lines(*before_len)
+                .wrap_err("Failed to clear last lines")?;
 
             for msg in before_msgs.iter() {
-                term.write_line(msg).unwrap();
+                term.write_line(msg).wrap_err("Failed to write message")?;
             }
             before_msgs.clear();
 
             *before_len = last_lines.len();
             for line in last_lines.iter() {
                 term.write_line(&down_color::reduce_saturation(line, 0.5))
-                    .unwrap();
+                    .wrap_err("Failed to write line")?;
             }
-            term.flush().unwrap();
+            term.flush().wrap_err("Failed to flush terminal")?;
         }
+
+        Ok(())
     }
 
     let finished = 'outer: loop {
@@ -177,7 +199,7 @@ pub fn build_vfs(
             &mut before_msgs,
             &mut before_len,
             &term,
-        );
+        )?;
 
         'inner: loop {
             if let Some(message) = parse_receiver.try_recv().ok() {
@@ -225,9 +247,17 @@ pub fn build_vfs(
         std::thread::sleep(std::time::Duration::from_millis(100));
     };
 
-    msg_thread.join().unwrap();
-    parse_thread.join().unwrap();
-    command.wait().unwrap();
+    msg_thread
+        .join()
+        .map_err(|e| eyre::eyre!("Failed to join message thread: {:?}", e))?
+        .wrap_err("Message thread failed")?;
+    parse_thread
+        .join()
+        .map_err(|e| eyre::eyre!("Failed to join parse thread: {:?}", e))?
+        .wrap_err("Parse thread failed")?;
+    command
+        .wait()
+        .map_err(|e| eyre::eyre!("Failed to wait for command: {:?}", e))?;
 
     process_msg(
         &msg_receiver,
@@ -235,7 +265,7 @@ pub fn build_vfs(
         &mut before_msgs,
         &mut before_len,
         &term,
-    );
+    )?;
 
     print!("\x1b[39m");
 
@@ -245,13 +275,18 @@ pub fn build_vfs(
         println!("Build failed!");
     }
 
-    ret
+    Ok(ret.wrap_err(
+        r#"Failed to find Wasm file on build artifact. If you set `
+[lib]
+crate-type = ["cdylib"]
+` on Cargo.toml."#,
+    )?)
 }
 
 pub fn get_building_crate(
     metadata: &cargo_metadata::Metadata,
     package: &Option<String>,
-) -> cargo_metadata::Package {
+) -> color_eyre::Result<cargo_metadata::Package> {
     let building_crate = {
         let packages = metadata.packages.clone();
 
@@ -290,9 +325,9 @@ pub fn get_building_crate(
     }
     .into_iter()
     .next()
-    .unwrap();
+    .wrap_err("Failed to find building crate")?;
 
-    building_crate
+    Ok(building_crate)
 }
 
 pub fn optimize_wasm(
@@ -307,7 +342,8 @@ pub fn optimize_wasm(
     loop {
         let output_path = before_path.with_extension("opt.wasm");
         if output_path.exists() {
-            std::fs::remove_file(&output_path)?;
+            std::fs::remove_file(&output_path)
+                .wrap_err("Failed to remove existing optimized WASM file")?;
         }
 
         let command = std::process::Command::new("wasm-opt")
@@ -316,29 +352,38 @@ pub fn optimize_wasm(
             .args(["--output", output_path.as_str()])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .wrap_err("Failed to spawn wasm-opt process")?;
 
-        let output = command.wait_with_output()?;
+        let output = command
+            .wait_with_output()
+            .wrap_err("Failed to wait for wasm-opt process")?;
 
         if !output.status.success() {
             let err = String::from_utf8_lossy(&output.stderr);
-            println!("err: {err}");
-            Err(eyre::eyre!("wasm-opt failed."))?;
+            eyre::bail!("wasm-opt failed: {err}");
         }
 
-        let before_size = std::fs::metadata(&before_path)?.len();
-        let after_size = std::fs::metadata(&output_path)?.len();
+        let before_size = std::fs::metadata(&before_path)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
+        let after_size = std::fs::metadata(&output_path)
+            .map(|meta| meta.len())
+            .unwrap_or(0);
 
         if before_size <= after_size {
             if first {
                 if !require_update {
-                    std::fs::remove_file(&output_path)?;
-                    std::fs::copy(&before_path, &output_path)?;
+                    std::fs::remove_file(&output_path)
+                        .wrap_err("Failed to remove existing optimized WASM file")?;
+                    std::fs::copy(&before_path, &output_path)
+                        .wrap_err("Failed to copy original WASM file")?;
                 }
                 before_path = output_path.clone();
             } else {
                 // remove
-                std::fs::remove_file(&output_path)?;
+                std::fs::remove_file(&output_path)
+                    .wrap_err("Failed to remove optimized WASM file")?;
             }
 
             break;
