@@ -6,21 +6,21 @@ description = "CLI for the wasip1_vfs crate"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-anyhow = "1.0.98"
-camino = "1.1.10"
-cargo_metadata = "0.21.0"
-clap = { version = "4.5.41", features = ["derive"] }
+anyhow = "1.0.99"
+camino = "1.1.11"
+cargo_metadata = "0.22.0"
+clap = { version = "4.5.45", features = ["derive"] }
 color-eyre = { version = "0.6.5", default-features = false }
-console = "0.15.11"
+console = "0.16.0"
 env_logger = "0.11.8"
 eyre = { version = "0.6.12", default-features = false }
 js-component-bindgen = "1.11.0"
 log = "0.4.27"
 regex = "1.11.1"
-serde_json = "1.0.141"
+serde_json = "1.0.142"
 walrus = "0.23.3"
 wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
-wit-component = "0.236.0"
+wit-component = "0.236.1"
 walrus-simple-interpreter = "0.2.3"
 strum = { version = "0.27.2", features = ["derive"] }
 toml_edit = "0.23.3"

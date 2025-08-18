@@ -5,7 +5,7 @@ use wasip1_virtual_layer::{
     ConstFiles,
     memory::WasmAccess,
     prelude::*,
-    wasi::file::constant::{VFSConstNormalFiles, WasiConstFile},
+    wasi::file::constant::lfs_raw::{VFSConstNormalFiles, WasiConstFile},
 };
 
 wit_bindgen::generate!({
@@ -63,8 +63,10 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
 
 export_env!(@block, @static, &mut VIRTUAL_ENV.lock(), test_wasm_opt);
 
+const FILE_COUNT: usize = 10;
+
 #[const_struct]
-const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
+const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
     (
         "/root",
         [("root.txt", { WasiConstFile::new("This is root") }),]
@@ -92,20 +94,18 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!(
 ]);
 
 mod fs {
-    use super::test_wasm_opt;
+    use super::*;
     use wasip1_virtual_layer::{
         export_fs,
         wasi::file::{
-            constant::{VFSConstNormalLFS, WasiConstFile, Wasip1ConstVFS},
+            constant::{lfs::VFSConstNormalLFS, vfs::Wasip1ConstVFS},
             stdio::DefaultStdIO,
         },
     };
 
-    use crate::FilesTy;
+    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
-    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, 10, DefaultStdIO>;
-
-    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, 10> =
+    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
         Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
     export_fs!(@const, {
