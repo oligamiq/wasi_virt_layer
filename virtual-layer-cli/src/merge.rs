@@ -47,10 +47,11 @@ pub fn merge(
     merge_cmd
         .arg("--output")
         .arg(output.as_ref())
-        .arg("--rename-export-conflicts")
-        .arg("--enable-multimemory");
+        // .arg("--rename-export-conflicts")
+        .arg("--enable-multimemory")
+        .arg("--enable-threads");
 
-    merge_cmd
+    let result = merge_cmd
         .spawn()
         .map_err(|e| match e.kind() {
             std::io::ErrorKind::NotFound => eyre::eyre!(
@@ -60,6 +61,10 @@ pub fn merge(
         })?
         .wait()
         .expect("Failed to wait for wasm-merge command");
+
+    if !result.success() {
+        return Err(eyre::eyre!("wasm-merge command failed"));
+    }
 
     let mut module = walrus::Module::from_file(output.as_ref())
         .to_eyre()

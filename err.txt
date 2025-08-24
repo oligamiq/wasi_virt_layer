@@ -1,0 +1,10 @@
+   Compiling wasip1_vfs-cli v0.1.0 (C:\Users\nziq5\Documents\projects\wasip1_bindgen\virtual-layer-cli)
+    Finished `release` profile [optimized] target(s) in 1m 04s
+     Running `target\release\wasip1_vfs-cli.exe -p rustc_vfs virtual-layer-cli/rustc_opt.wasm -t single --no-tracing --threads true`
+Error: 
+   0: wasm-opt failed: Assertion failed: memory->shared == isShared, file D:\a\binaryen\binaryen\src\passes\MultiMemoryLowering.cpp, line 441
+      
+
+Backtrace omitted. Run with RUST_BACKTRACE=1 environment variable to display it.
+Run with RUST_BACKTRACE=full to include source snippets.
+error: process didn't exit successfully: `target\release\wasip1_vfs-cli.exe -p rustc_vfs virtual-layer-cli/rustc_opt.wasm -t single --no-tracing --threads true` (exit code: 1)

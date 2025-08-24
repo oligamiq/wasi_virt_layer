@@ -1,5 +1,5 @@
 [package]
-name = "rustc_vfs"
+name = "threads_vfs"
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
@@ -15,6 +15,7 @@ readme.workspace = true
 [dependencies]
 wit-bindgen = "0.43.0"
 const_struct = "0.6.2"
+parking_lot = "0.12.3"
 
 [dependencies.wasip1-virtual-layer]
 workspace = true

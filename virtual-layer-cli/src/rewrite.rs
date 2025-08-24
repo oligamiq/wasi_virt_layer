@@ -49,6 +49,9 @@ pub fn adjust_wasm(
                 "Failed to get __start_wrap export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
             ));
         }
+
+        // let memory = module.memories
+        println!("memories: {:?}", module.memories);
     }
 
     for name in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS.iter() {

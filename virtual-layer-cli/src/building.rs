@@ -2,6 +2,7 @@ use std::{
     collections::VecDeque,
     io::{BufRead, Write as _},
     sync::{LazyLock, mpsc::Receiver},
+    thread,
 };
 
 use eyre::{Context as _, ContextCompat};
@@ -44,6 +45,7 @@ pub fn build_vfs(
     manifest_path: Option<String>,
     package: &Option<String>,
     building_crate: cargo_metadata::Package,
+    threads: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut ret = None;
 
@@ -52,7 +54,11 @@ pub fn build_vfs(
             let mut args = vec![
                 "build",
                 "--target",
-                "wasm32-wasip1",
+                if threads {
+                    "wasm32-wasip1-threads"
+                } else {
+                    "wasm32-wasip1"
+                },
                 "--release",
                 "--message-format=json-render-diagnostics",
                 "--color",
@@ -233,6 +239,12 @@ pub fn build_vfs(
                     cargo_metadata::Message::BuildFinished(finished) => {
                         // Handle the build finished message
                         // println!("Build Finished: {:?}", finished);
+
+                        if !finished.success {
+                            return Err(eyre::eyre!(
+                                "Build failed with errors. Check the output above."
+                            ));
+                        }
 
                         break 'outer finished;
                     }

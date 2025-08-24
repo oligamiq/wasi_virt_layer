@@ -1,5 +1,5 @@
 [package]
-name = "rustc_vfs"
+name = "test_threads"
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
@@ -13,12 +13,3 @@ homepage.workspace = true
 readme.workspace = true
 
 [dependencies]
-wit-bindgen = "0.43.0"
-const_struct = "0.6.2"
-
-[dependencies.wasip1-virtual-layer]
-workspace = true
-features = ["std", "threads"]
-
-[lib]
-crate-type = ["cdylib"]

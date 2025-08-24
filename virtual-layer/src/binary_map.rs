@@ -257,6 +257,10 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    pub const fn check_len(&self) -> bool {
+        self.len == N
+    }
+
     pub const fn build(self) -> [T; N] {
         use const_for::const_for;
 
@@ -267,6 +271,24 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
                 array[i] = value;
             } else {
                 panic!("StaticArrayBuilder is not full, cannot build array");
+            }
+        });
+
+        array
+    }
+
+    pub const fn build_with_is_check(self, is_full: bool) -> [T; N] {
+        use const_for::const_for;
+
+        let first = self.data.first().unwrap().unwrap();
+        let mut array = [first; N];
+        const_for!(i in 0..N => {
+            if let Some(value) = self.data[i] {
+                array[i] = value;
+            } else {
+                if is_full {
+                    panic!("StaticArrayBuilder is not full, cannot build array");
+                }
             }
         });
 

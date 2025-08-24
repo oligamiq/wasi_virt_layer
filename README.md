@@ -1,7 +1,8 @@
 # TODO!
 - Support non-binary Wasm modules
 - Enable specifying multiple Wasm modules
-- Allow omitting Wasm file specifications ?
+- Support self binary
+- Allow paths to Cargo.toml instead of paths to wasm
 - support flush sync to file system
 - adjust test_run.ts to use VFS
 - Fake global allocator and center allocator and merge with vfs
@@ -21,4 +22,3 @@ cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
 # non goal
 
 # goal
-

@@ -85,13 +85,11 @@ macro_rules! ConstFiles {
             }
 
             const fn asserter<S: 'static + Copy, const N: usize>(
-                _: &$crate::binary_map::StaticArrayBuilder<S, N>,
+                _: &[S; N],
             ) {
                 #[allow(path_statements)]
                 CheckEqNumberOfFilesAndDirs::<COUNT, N>::number_of_files_and_dirs_equals_FLAT_LEN_so_you_must_set_VFSConstNormalFiles_num;
             }
-
-            asserter(&static_array);
 
             use $crate::__private::const_for;
 
@@ -198,23 +196,6 @@ macro_rules! ConstFiles {
                 unreachable!()
             }
 
-            const fn depth(
-                name: &'static str,
-            ) -> usize {
-                let mut depth = 0;
-                let mut i = 0;
-                while (i < name.len()) {
-                    if name.as_bytes()[i] == b'/' {
-                        depth += 1;
-                    }
-                    i += 1;
-                    while (i < name.len() && name.as_bytes()[i] == b'/') {
-                        i += 1;
-                    }
-                }
-                depth
-            }
-
             const fn custom_sort<T: Copy, const N: usize>(
                 mut files: $crate::binary_map::StaticArrayBuilder<(usize, T), N>,
             ) -> [T; N] {
@@ -299,7 +280,11 @@ macro_rules! ConstFiles {
                 ));
             });
 
-            (file_array.build(), &PRE_OPEN)
+            let static_array = file_array.build_with_is_check(file_array.check_len());
+
+            let _ = asserter(&static_array);
+
+            (static_array, &PRE_OPEN)
         })
     };
 
