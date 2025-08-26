@@ -59,7 +59,7 @@ macro_rules! export_env {
     (@inner, @const, $ty:ty, $wasm:ty) => {
         $crate::paste::paste! {
             #[unsafe(no_mangle)]
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
                 environ_count: *mut $crate::wasip1::Size,
                 environ_buf_size: *mut $crate::wasip1::Size,
@@ -67,7 +67,7 @@ macro_rules! export_env {
                 $crate::wasi::env::environ_sizes_get_const_inner::<$ty, $wasm>(environ_count, environ_buf_size)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
                 environ: *mut *const u8,
@@ -80,7 +80,7 @@ macro_rules! export_env {
 
     (@inner, @static, $state:expr, $wasm:ty) => {
         $crate::__private::paste::paste! {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
                 environ_count: *mut $crate::wasip1::Size,
@@ -90,7 +90,7 @@ macro_rules! export_env {
                 $crate::wasi::env::environ_sizes_get_inner::<$wasm>(state, environ_count, environ_buf_size)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
                 environ: *mut *const u8,
@@ -103,7 +103,7 @@ macro_rules! export_env {
     };
 
     (@block_inner) => {
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(target_os = "wasi")]
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn __wasip1_vfs_environ_sizes_get(
             environ_count: *mut $crate::wasip1::Size,
@@ -114,7 +114,7 @@ macro_rules! export_env {
             $crate::wasip1::ERRNO_SUCCESS
         }
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(target_os = "wasi")]
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn __wasip1_vfs_environ_get(
             environ: *mut *const u8,

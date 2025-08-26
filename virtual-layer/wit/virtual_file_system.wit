@@ -90,4 +90,9 @@ world virtual-file-system {
     sock-send-import: static func(fd: s32, sender-ptr: s32, sender-len: s32, si-flags: s16, nwritten-ptr: s32) -> s32;
     sock-shutdown-import: static func(fd: s32, how: s8) -> s32;
   }
+  resource wasip1-threads {
+    thread-spawn-import: static func(
+      start-arg: s32
+    ) -> s32;
+  }
 }

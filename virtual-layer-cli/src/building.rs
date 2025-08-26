@@ -2,7 +2,6 @@ use std::{
     collections::VecDeque,
     io::{BufRead, Write as _},
     sync::{LazyLock, mpsc::Receiver},
-    thread,
 };
 
 use eyre::{Context as _, ContextCompat};

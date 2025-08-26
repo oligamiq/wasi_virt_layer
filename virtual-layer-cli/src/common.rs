@@ -58,6 +58,14 @@ pub enum Wasip1SnapshotPreview1Func {
     SockShutdown,
 }
 
+#[derive(
+    strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum Wasip1SnapshotPreview1ThreadsFunc {
+    ThreadSpawn,
+}
+
 pub struct Wasip1Op {
     fid: FunctionId,
     pub kind: Wasip1OpKind,

@@ -4,10 +4,10 @@ use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, Package};
 use eyre::Context as _;
 use strum::VariantNames;
-use toml_edit::{DocumentMut, Item};
+use toml_edit::{Document, DocumentMut, Item};
 
 use crate::{
-    common::Wasip1SnapshotPreview1Func,
+    common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
 };
 
@@ -24,6 +24,7 @@ pub fn adjust_wasm(
 
     if !<Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
         .iter()
+        .chain(<Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS)
         .any(|name| {
             module
                 .exports
@@ -54,13 +55,22 @@ pub fn adjust_wasm(
         println!("memories: {:?}", module.memories);
     }
 
-    for name in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS.iter() {
-        let component_name = format!("[static]wasip1.{}-import", name.replace("_", "-"));
+    for (name, namespace) in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
+        .iter()
+        .zip(core::iter::repeat("wasip1"))
+        .chain(
+            <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
+                .iter()
+                .zip(core::iter::repeat("wasip1-threads")),
+        )
+    {
+        let component_name = format!("[static]{namespace}.{}-import", name.replace("_", "-"));
 
         module
             .exports
             .remove(format!("{name}_import_wrap"))
-            .expect(format!("{name} not found").as_str());
+            .to_eyre()
+            .wrap_err(format!("{name}_import_wrap not found"))?;
 
         module
             .imports
@@ -68,7 +78,7 @@ pub fn adjust_wasm(
             .map(|import| {
                 import.module = "archived".to_string();
             })
-            .ok_or_else(|| eyre::eyre!("{name} import not found"))?;
+            .ok_or_else(|| eyre::eyre!("{component_name} import not found"))?;
 
         module
             .imports
@@ -150,6 +160,27 @@ pub enum TargetMemoryType {
     Multi,
 }
 
+const CRATE: &'static str = "wasip1-virtual-layer";
+
+pub fn get_target_feature(
+    building_crate: &Package,
+    feature: impl AsRef<str>,
+) -> eyre::Result<bool> {
+    let manifest_path = building_crate.manifest_path.clone();
+
+    let file_data = fs::read_to_string(&manifest_path)
+        .wrap_err_with(|| eyre::eyre!("Failed to read manifest file"))?;
+    let doc = Document::parse(&file_data).expect("invalid doc");
+
+    let crate_setting = &doc["dependencies"][CRATE];
+
+    if matches!(crate_setting, Item::None) {
+        return Err(eyre::eyre!("Crate `{CRATE}` not found in dependencies"));
+    }
+
+    Ok(has_feature(crate_setting, feature.as_ref()))
+}
+
 pub fn adjust_target_feature(
     metadata: &Metadata,
     building_crate: &Package,
@@ -163,8 +194,6 @@ pub fn adjust_target_feature(
     let file_data = fs::read_to_string(&manifest_path)
         .wrap_err_with(|| eyre::eyre!("Failed to read manifest file"))?;
     let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
-
-    const CRATE: &'static str = "wasip1-virtual-layer";
 
     let crate_setting = &mut doc["dependencies"][CRATE];
 

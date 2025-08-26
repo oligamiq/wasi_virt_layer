@@ -225,7 +225,7 @@ pub trait Wasip1FileSystem {
 macro_rules! export_fs {
     (@const, $state:expr, $wasm:ty) => {
         $crate::__private::paste::paste! {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_write>](
                 fd: $crate::wasip1::Fd,
@@ -237,7 +237,7 @@ macro_rules! export_fs {
                 $crate::wasi::file::Wasip1FileSystem::fd_write_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nwritten)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_readdir>](
                 fd: $crate::wasip1::Fd,
@@ -250,7 +250,7 @@ macro_rules! export_fs {
                 $crate::wasi::file::Wasip1FileSystem::fd_readdir_raw::<$wasm>(state, fd, buf, buf_len, cookie, nread)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_filestat_get>](
                 fd: $crate::wasip1::Fd,
@@ -263,7 +263,7 @@ macro_rules! export_fs {
                 $crate::wasi::file::Wasip1FileSystem::path_filestat_get_raw::<$wasm>(state, fd, flags, path_ptr, path_len, filestat)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_prestat_get>](
                 fd: $crate::wasip1::Fd,
@@ -273,7 +273,7 @@ macro_rules! export_fs {
                 $crate::wasi::file::Wasip1FileSystem::fd_prestat_get_raw::<$wasm>(state, fd, prestat)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_prestat_dir_name>](
                 fd: $crate::wasip1::Fd,
@@ -284,7 +284,7 @@ macro_rules! export_fs {
                 $crate::wasi::file::Wasip1FileSystem::fd_prestat_dir_name_raw::<$wasm>(state, fd, dir_path_ptr, dir_path_len)
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_close>](
                 fd: $crate::wasip1::Fd,
@@ -294,7 +294,7 @@ macro_rules! export_fs {
             }
 
             #[unsafe(no_mangle)]
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_open>](
                 fd: $crate::wasip1::Fd,
                 dir_flags: $crate::wasip1::Fdflags,
@@ -311,7 +311,7 @@ macro_rules! export_fs {
             }
 
             #[unsafe(no_mangle)]
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_read>](
                 fd: $crate::wasip1::Fd,
                 iovs_ptr: *const $crate::wasip1::Ciovec,
@@ -323,7 +323,7 @@ macro_rules! export_fs {
             }
 
             #[unsafe(no_mangle)]
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_filestat_get>](
                 fd: $crate::wasip1::Fd,
                 filestat: *mut $crate::wasip1::Filestat,

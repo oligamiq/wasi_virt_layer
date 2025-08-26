@@ -4,7 +4,7 @@ use eyre::Context;
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
-use crate::rewrite::{TargetMemoryType, adjust_target_feature};
+use crate::rewrite::{TargetMemoryType, adjust_target_feature, get_target_feature};
 
 pub mod adjust;
 pub mod args;
@@ -53,13 +53,17 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         adjust_target_feature(&cargo_metadata, &building_crate, threads, "threads")?;
     }
 
+    let threads = parsed_args
+        .threads
+        .unwrap_or(get_target_feature(&building_crate, "threads")?);
+
     println!("Compiling {}", building_crate.name);
 
     let ret = building::build_vfs(
         manifest_path.clone(),
         &parsed_args.package,
         building_crate.clone(),
-        parsed_args.threads.unwrap_or(false),
+        threads,
     )
     .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {}", building_crate.name))?;
 

@@ -9,7 +9,7 @@ macro_rules! import_wasm {
             struct $name;
 
             #[doc(hidden)]
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[link(wasm_import_module = "wasip1-vfs")]
             unsafe extern "C" {
                 /// https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Memory/Copy
@@ -37,7 +37,7 @@ macro_rules! import_wasm {
                 pub fn [<__wasip1_vfs_ $name _reset>]();
             }
 
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             unsafe extern "C" fn [<__wasip1_vfs_ $name __start_wrap>]() {
                 unsafe { [<__wasip1_vfs_ $name __start>]() };
@@ -49,10 +49,10 @@ macro_rules! import_wasm {
                 #[inline(always)]
                 fn memcpy<T>(offset: *mut T, data: &[T])
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
                         offset as *mut u8,
                         data.as_ptr() as *const u8,
@@ -63,10 +63,10 @@ macro_rules! import_wasm {
                 #[inline(always)]
                 fn memcpy_to<T>(offset: &mut [T], src: *const T)
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name _memory_copy_to>](
                         offset.as_mut_ptr() as *mut u8,
                         src as *const u8,
@@ -77,10 +77,10 @@ macro_rules! import_wasm {
                 #[inline(always)]
                 fn store_le<T>(offset: *mut T, value: T)
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
                         offset as *mut u8,
                         &value as *const T as *const u8,
@@ -91,10 +91,10 @@ macro_rules! import_wasm {
                 #[inline(always)]
                 fn load_le<T: core::fmt::Debug>(offset: *const T) -> T
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe {
                         let mut value = core::mem::MaybeUninit::uninit();
                         [<__wasip1_vfs_ $name _memory_copy_to>](
@@ -111,30 +111,30 @@ macro_rules! import_wasm {
                 #[inline(always)]
                 fn main()
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name ___main_void>]() };
                 }
 
                 #[inline(always)]
                 fn reset()
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name _reset>]() };
                 }
 
                 #[inline(always)]
                 fn _start()
                 {
-                    #[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
-                    #[cfg(target_arch = "wasm32")]
+                    #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name __start>]() };
                 }
             }
@@ -149,10 +149,10 @@ macro_rules! __memory_director_wasm_access {
         $crate::__private::paste::paste! {
             #[inline(always)]
             fn memory_director<T>(ptr: *const T) -> *const T {
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
-                #[cfg(target_arch = "wasm32")]
+                #[cfg(target_os = "wasi")]
                 unsafe { [<__wasip1_vfs_ $name _memory_director>](
                     ptr as isize,
                 ) as *const T }
@@ -160,10 +160,10 @@ macro_rules! __memory_director_wasm_access {
 
             #[inline(always)]
             fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
-                #[cfg(not(target_arch = "wasm32"))]
+                #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
-                #[cfg(target_arch = "wasm32")]
+                #[cfg(target_os = "wasi")]
                 unsafe { [<__wasip1_vfs_ $name _memory_director>](
                     ptr as isize,
                 ) as *mut T }
@@ -183,7 +183,7 @@ macro_rules! __memory_director_wasm_access {
 macro_rules! __memory_director_import_etc {
     ($name:ident) => {
         $crate::__private::paste::paste! {
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_wrap>](
                 _ptr: isize,
@@ -194,7 +194,7 @@ macro_rules! __memory_director_import_etc {
             }
 
             #[doc(hidden)]
-            #[cfg(target_arch = "wasm32")]
+            #[cfg(target_os = "wasi")]
             #[link(wasm_import_module = "wasip1-vfs")]
             unsafe extern "C" {
                 #[unsafe(no_mangle)]
@@ -216,19 +216,19 @@ macro_rules! __memory_director_import_etc {
 }
 
 #[unsafe(no_mangle)]
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_os = "wasi")]
 #[cfg(feature = "multi_memory")]
 #[doc(hidden)]
 unsafe extern "C" fn __wasip1_vfs_flag_vfs_multi_memory() {}
 
 #[unsafe(no_mangle)]
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_os = "wasi")]
 #[cfg(not(feature = "multi_memory"))]
 #[doc(hidden)]
 unsafe extern "C" fn __wasip1_vfs_flag_vfs_single_memory() {}
 
 #[unsafe(no_mangle)]
-#[cfg(target_arch = "wasm32")]
+#[cfg(target_os = "wasi")]
 #[doc(hidden)]
 unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };

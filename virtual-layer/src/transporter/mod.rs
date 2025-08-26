@@ -70,10 +70,10 @@ impl Wasip1Transporter {
     }
 
     pub fn process_abort(rval: wasip1::Exitcode) {
-        #[cfg(not(target_arch = "wasm32"))]
+        #[cfg(not(target_os = "wasi"))]
         unimplemented!("this is not supported on this architecture");
 
-        #[cfg(target_arch = "wasm32")]
+        #[cfg(target_os = "wasi")]
         {
             // This is a no-op in wasm, as wasm does not support unwinding.
             // If you need to handle unwinding, you should use a different mechanism.
