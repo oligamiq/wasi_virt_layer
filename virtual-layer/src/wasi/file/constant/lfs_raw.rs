@@ -288,13 +288,46 @@ macro_rules! ConstFiles {
         })
     };
 
+    // failed catch this code
+    // [
+    //     ("hey", WasiConstFile::new("Hey!")),
+    //     (
+    //         "hello",
+    //         [
+    //             ("world", WasiConstFile::new("Hello, world!")),
+    //             ("everyone", WasiConstFile::new("Hello, everyone!")),
+    //             ("every", WasiConstFile::new("Hello, every!"))
+    //         ]
+    //     )
+    // ]
     (@counter, $count:ident, [
-        $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
+        $( ($file_or_dir_name:expr, $file_or_dir:tt) ),* $(,)?
     ]) => {
         $(
             $crate::ConstFiles!(@counter, $count, $file_or_dir);
         )*
         $count += 1;
+    };
+
+    (@counter, $count:ident, [
+        $( $all:tt ),* $(,)?
+    ]) => {
+        $(
+            $crate::ConstFiles!(@counter2, $count, $all);
+        )*
+        $count += 1;
+    };
+
+    (@counter2, $count:ident,
+        ($file_or_dir_name:tt, $file_or_dir:tt)
+    ) => {
+        $crate::ConstFiles!(@counter, $count, $file_or_dir);
+    };
+
+    (@counter2, $count:ident,
+        ($file_or_dir_name:tt, $file_or_dir:stmt)
+    ) => {
+        $crate::ConstFiles!(@counter, $count, { $file_or_dir });
     };
 
     (@counter, $count:ident, $file:tt) => {
@@ -312,6 +345,28 @@ macro_rules! ConstFiles {
             $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
         )*
         $empty_arr.push(($depth, $parent_name));
+    };
+
+    (@empty, $depth:expr, $empty_arr:ident, [$parent_name:expr], [
+        $($all:tt),* $(,)?
+    ]) => {
+        $(
+            $crate::ConstFiles!(@empty2, $depth, $empty_arr, [$parent_name], $all);
+        )*
+        $empty_arr.push(($depth, $parent_name));
+    };
+
+    (@empty2, $depth:expr, $empty_arr:ident, [$parent_name:expr],
+        ($file_or_dir_name:tt, $file_or_dir:tt)
+    ) => {
+        $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
+    };
+
+    // `ident`, `block`, `stmt`, `expr`, `pat`, `ty`, `lifetime`, `literal`, `path`, `meta`, `tt`, `item` and `vis`
+    (@empty2, $depth:expr, $empty_arr:ident, [$parent_name:expr],
+        ($file_or_dir_name:tt, $file_or_dir:stmt)
+    ) => {
+        $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], { $file_or_dir });
     };
 
     (@empty, $depth:expr, $empty_arr:ident, [$name:expr], $file:tt) => {
@@ -336,6 +391,38 @@ macro_rules! ConstFiles {
                 get_parent($empty, $parent_path, &$static_array)
             )
         )));
+    };
+
+    (@next, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr], [
+        $($all:tt),* $(,)?
+    ]) => {
+        $(
+            $crate::ConstFiles!(@next2, $depth, $static_array, [$empty], [$parent_path], [$name], $all);
+        )*
+        $static_array.push(($depth, (
+            $parent_path,
+            $name,
+            $crate::wasi::file::constant::lfs_raw::VFSConstNormalInode::Dir(
+                get_child_range(
+                    $empty,
+                    $parent_path,
+                    &$static_array
+                ),
+                get_parent($empty, $parent_path, &$static_array)
+            )
+        )));
+    };
+
+    (@next2, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr],
+        ($file_or_dir_name:tt, $file_or_dir:tt)
+    ) => {
+        $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($parent_path, "/", $file_or_dir_name)], [$file_or_dir_name], $file_or_dir);
+    };
+
+    (@next2, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr],
+        ($file_or_dir_name:tt, $file_or_dir:stmt)
+    ) => {
+        $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($parent_path, "/", $file_or_dir_name)], [$file_or_dir_name], { $file_or_dir });
     };
 
     (@next, $depth:expr, $static_array:ident, [$empty:expr], [$path:expr], [$name:expr], $file:tt) => {
@@ -417,19 +504,16 @@ mod tests {
     fn test_file_flat_iterate() {
         #[allow(dead_code)]
         const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
-            (
-                "/root",
-                [("root.txt", { WasiConstFile::new("This is root") })]
-            ),
+            ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
             (
                 ".",
                 [
-                    ("hey", { WasiConstFile::new("Hey!") }),
+                    ("hey", WasiConstFile::new("Hey!")),
                     (
                         "hello",
                         [
-                            ("world", { WasiConstFile::new("Hello, world!") }),
-                            ("everyone", { WasiConstFile::new("Hello, everyone!") }),
+                            ("world", WasiConstFile::new("Hello, world!")),
+                            ("everyone", WasiConstFile::new("Hello, everyone!")),
                         ]
                     )
                 ]
@@ -437,8 +521,8 @@ mod tests {
             (
                 "~",
                 [
-                    ("home", { WasiConstFile::new("This is home") }),
-                    ("user", { WasiConstFile::new("This is user") }),
+                    ("home", WasiConstFile::new("This is home")),
+                    ("user", WasiConstFile::new("This is user")),
                 ]
             )
         ]);

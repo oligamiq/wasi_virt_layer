@@ -67,19 +67,16 @@ const FILE_COUNT: usize = 10;
 
 #[const_struct]
 const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
-    (
-        "/root",
-        [("root.txt", { WasiConstFile::new("This is root") }),]
-    ),
+    ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
     (
         ".",
         [
-            ("hey", { WasiConstFile::new("Hey!") }),
+            ("hey", WasiConstFile::new("Hey!")),
             (
                 "hello",
                 [
-                    ("world", { WasiConstFile::new("Hello, world!") }),
-                    ("everyone", { WasiConstFile::new("Hello, everyone!") }),
+                    ("world", WasiConstFile::new("Hello, world!")),
+                    ("everyone", WasiConstFile::new("Hello, everyone!")),
                 ]
             )
         ]
@@ -87,8 +84,8 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = 
     (
         "~",
         [
-            ("home", { WasiConstFile::new("This is home") }),
-            ("user", { WasiConstFile::new("This is user") }),
+            ("home", WasiConstFile::new("This is home")),
+            ("user", WasiConstFile::new("This is user")),
         ]
     )
 ]);

@@ -28,16 +28,16 @@ const FILE_COUNT: usize = 5;
 const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([(
     ".",
     [
-        ("hey", { WasiConstFile::new("Hey!") }),
+        ("hey", WasiConstFile::new("Hey!")),
         (
             "hello",
             [
-                ("world", { WasiConstFile::new("Hello, world!") }),
-                ("everyone", { WasiConstFile::new("Hello, everyone!") }),
+                ("world", WasiConstFile::new("Hello, world!")),
+                ("everyone", WasiConstFile::new("Hello, everyone!")),
             ]
         )
     ]
-),]);
+)]);
 
 mod fs {
     use super::*;
