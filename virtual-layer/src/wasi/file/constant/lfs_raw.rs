@@ -438,7 +438,7 @@ macro_rules! ConstFiles {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WasiConstFile<File: WasiConstPrimitiveFile> {
-    file: File,
+    pub file: File,
 }
 
 impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {

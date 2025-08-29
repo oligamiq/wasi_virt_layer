@@ -294,7 +294,7 @@ where
         #[cfg(not(feature = "threads"))]
         {
             self.map
-                .get(fd as usize - 3)
+                .get_mut(fd as usize - 3)
                 .ok_or(wasip1::ERRNO_BADF)?
                 .as_mut()
                 .map(|(_, cur)| *cur = cursor)

@@ -104,6 +104,12 @@ impl VFSExternalMemoryManager {
 
         let memory = module.memories.get_mut(self.vfs_memory_id);
         memory.initial = self.current_size as u64;
+        match (memory.maximum, memory.initial) {
+            (Some(max), init) if max < init => {
+                memory.maximum = Some(init);
+            }
+            _ => {}
+        }
 
         Ok(())
     }

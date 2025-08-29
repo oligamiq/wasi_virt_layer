@@ -20,6 +20,23 @@ import_wasm!(test_wasm_opt);
 impl Guest for Hello {
     fn world() {
         println!("Hello, world!");
+
+        type F = WasiConstFile<&'static str>;
+        const FILES2: VFSConstNormalFiles<F, 5> = ConstFiles!([(
+            ".",
+            [
+                ("hey", F::new("Hey!")),
+                (
+                    "hello",
+                    [
+                        ("world", F::new("Hello, world!")),
+                        ("everyone", F::new("Hello, everyone!")),
+                    ],
+                ),
+            ],
+        )]);
+
+        println!("Files: {FILES2:?}");
     }
     fn add_env(env: String) {
         let mut state = VIRTUAL_ENV.lock();
