@@ -34,9 +34,9 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = 
             [
                 ("world", WasiConstFile::new("Hello, world!")),
                 ("everyone", WasiConstFile::new("Hello, everyone!")),
-            ]
-        )
-    ]
+            ],
+        ),
+    ],
 )]);
 
 mod fs {

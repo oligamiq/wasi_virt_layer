@@ -60,7 +60,7 @@ impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
 macro_rules! ConstFiles {
     (
         [
-            $(($dir_name:expr, $file_or_dir:tt)),* $(,)?
+            $(($dir_name:expr, $file_or_dir:tt $(,)?)),* $(,)?
         ] $(,)?
     ) => {
         $crate::wasi::file::constant::lfs_raw::VFSConstNormalFiles::new({
@@ -301,8 +301,8 @@ macro_rules! ConstFiles {
     //     )
     // ]
     (@counter, $count:ident, [
-        $( ($file_or_dir_name:expr, $file_or_dir:tt) ),* $(,)?
-    ]) => {
+        $( ($file_or_dir_name:expr, $file_or_dir:tt) $(,)? ),* $(,)?
+    ] $(,)?) => {
         $(
             $crate::ConstFiles!(@counter, $count, $file_or_dir);
         )*
@@ -311,7 +311,7 @@ macro_rules! ConstFiles {
 
     (@counter, $count:ident, [
         $( $all:tt ),* $(,)?
-    ]) => {
+    ] $(,)?) => {
         $(
             $crate::ConstFiles!(@counter2, $count, $all);
         )*
@@ -319,13 +319,13 @@ macro_rules! ConstFiles {
     };
 
     (@counter2, $count:ident,
-        ($file_or_dir_name:tt, $file_or_dir:tt)
+        ($file_or_dir_name:tt, $file_or_dir:tt $(,)?)
     ) => {
         $crate::ConstFiles!(@counter, $count, $file_or_dir);
     };
 
     (@counter2, $count:ident,
-        ($file_or_dir_name:tt, $file_or_dir:stmt)
+        ($file_or_dir_name:tt, $file_or_dir:stmt $(,)?)
     ) => {
         $crate::ConstFiles!(@counter, $count, { $file_or_dir });
     };
@@ -339,8 +339,8 @@ macro_rules! ConstFiles {
     };
 
     (@empty, $depth:expr, $empty_arr:ident, [$parent_name:expr], [
-        $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
-    ]) => {
+        $(($file_or_dir_name:expr, $file_or_dir:tt $(,)?)),* $(,)?
+    ] $(,)?) => {
         $(
             $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
         )*
@@ -349,7 +349,7 @@ macro_rules! ConstFiles {
 
     (@empty, $depth:expr, $empty_arr:ident, [$parent_name:expr], [
         $($all:tt),* $(,)?
-    ]) => {
+    ] $(,)?) => {
         $(
             $crate::ConstFiles!(@empty2, $depth, $empty_arr, [$parent_name], $all);
         )*
@@ -357,14 +357,14 @@ macro_rules! ConstFiles {
     };
 
     (@empty2, $depth:expr, $empty_arr:ident, [$parent_name:expr],
-        ($file_or_dir_name:tt, $file_or_dir:tt)
+        ($file_or_dir_name:tt, $file_or_dir:tt $(,)?)
     ) => {
         $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], $file_or_dir);
     };
 
     // `ident`, `block`, `stmt`, `expr`, `pat`, `ty`, `lifetime`, `literal`, `path`, `meta`, `tt`, `item` and `vis`
     (@empty2, $depth:expr, $empty_arr:ident, [$parent_name:expr],
-        ($file_or_dir_name:tt, $file_or_dir:stmt)
+        ($file_or_dir_name:tt, $file_or_dir:stmt $(,)?)
     ) => {
         $crate::ConstFiles!(@empty, $depth + 1, $empty_arr, [concat!($parent_name, "/", $file_or_dir_name)], { $file_or_dir });
     };
@@ -374,8 +374,8 @@ macro_rules! ConstFiles {
     };
 
     (@next, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr], [
-        $(($file_or_dir_name:expr, $file_or_dir:tt)),* $(,)?
-    ]) => {
+        $(($file_or_dir_name:expr, $file_or_dir:tt $(,)?)),* $(,)?
+    ] $(,)?) => {
         $(
             $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($parent_path, "/", $file_or_dir_name)], [$file_or_dir_name], $file_or_dir);
         )*
@@ -395,7 +395,7 @@ macro_rules! ConstFiles {
 
     (@next, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr], [
         $($all:tt),* $(,)?
-    ]) => {
+    ] $(,)?) => {
         $(
             $crate::ConstFiles!(@next2, $depth, $static_array, [$empty], [$parent_path], [$name], $all);
         )*
@@ -414,13 +414,13 @@ macro_rules! ConstFiles {
     };
 
     (@next2, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr],
-        ($file_or_dir_name:tt, $file_or_dir:tt)
+        ($file_or_dir_name:tt, $file_or_dir:tt $(,)?)
     ) => {
         $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($parent_path, "/", $file_or_dir_name)], [$file_or_dir_name], $file_or_dir);
     };
 
     (@next2, $depth:expr, $static_array:ident, [$empty:expr], [$parent_path:expr], [$name:expr],
-        ($file_or_dir_name:tt, $file_or_dir:stmt)
+        ($file_or_dir_name:tt, $file_or_dir:stmt $(,)?)
     ) => {
         $crate::ConstFiles!(@next, $depth + 1, $static_array, [$empty], [concat!($parent_path, "/", $file_or_dir_name)], [$file_or_dir_name], { $file_or_dir });
     };
