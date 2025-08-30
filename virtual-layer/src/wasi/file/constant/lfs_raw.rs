@@ -301,6 +301,7 @@ macro_rules! ConstFiles {
     //         ]
     //     )
     // ]
+
     (@counter, $count:ident, [
         $( ($file_or_dir_name:expr, $file_or_dir:tt) $(,)? ),* $(,)?
     ] $(,)?) => {

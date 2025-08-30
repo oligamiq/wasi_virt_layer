@@ -18,10 +18,10 @@ pub mod prelude {
 }
 
 pub mod __private {
+    #[cfg(not(target_os = "wasi"))]
+    pub use super::wasip1;
     pub use const_for::const_for;
     pub use paste;
     #[cfg(target_os = "wasi")]
     pub use wasip1;
-    #[cfg(not(target_os = "wasi"))]
-    pub use super::wasip1;
 }

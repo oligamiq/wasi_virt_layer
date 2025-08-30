@@ -62,7 +62,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let ret = building::build_vfs(
         manifest_path.clone(),
         &parsed_args.package,
-        building_crate.clone(), 
+        building_crate.clone(),
         threads,
     )
     .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {}", building_crate.name))?;
