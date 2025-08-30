@@ -27,7 +27,7 @@ const FILE_COUNT: usize = 5;
 type F = WasiConstFile<&'static str>;
 type NormalFILES = VFSConstNormalFiles<F, { FILE_COUNT }>;
 
-// #[const_struct]
+#[const_struct]
 const FILES: NormalFILES = ConstFiles!([(
     ".",
     [

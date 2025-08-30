@@ -1,6 +1,7 @@
+use crate::__private::wasip1::*;
+#[cfg(target_os = "wasi")]
 use const_for::const_for;
 use const_struct::*;
-use wasip1::*;
 
 use crate::memory::WasmAccess;
 
@@ -57,13 +58,13 @@ use crate::memory::WasmAccess;
 #[macro_export]
 macro_rules! export_env {
     (@inner, @const, $ty:ty, $wasm:ty) => {
-        $crate::paste::paste! {
+        $crate::__private::paste::paste! {
             #[unsafe(no_mangle)]
             #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
-                environ_count: *mut $crate::wasip1::Size,
-                environ_buf_size: *mut $crate::wasip1::Size,
-            ) -> $crate::wasip1::Errno {
+                environ_count: *mut $crate::__private::wasip1::Size,
+                environ_buf_size: *mut $crate::__private::wasip1::Size,
+            ) -> $crate::__private::wasip1::Errno {
                 $crate::wasi::env::environ_sizes_get_const_inner::<$ty, $wasm>(environ_count, environ_buf_size)
             }
 
@@ -72,7 +73,7 @@ macro_rules! export_env {
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
                 environ: *mut *const u8,
                 environ_buf: *mut u8,
-            ) -> $crate::wasip1::Errno {
+            ) -> $crate::__private::wasip1::Errno {
                 $crate::wasi::env::environ_get_const_inner::<$ty, $wasm>(environ, environ_buf)
             }
         }
@@ -83,9 +84,9 @@ macro_rules! export_env {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
-                environ_count: *mut $crate::wasip1::Size,
-                environ_buf_size: *mut $crate::wasip1::Size,
-            ) -> $crate::wasip1::Errno {
+                environ_count: *mut $crate::__private::wasip1::Size,
+                environ_buf_size: *mut $crate::__private::wasip1::Size,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::env::environ_sizes_get_inner::<$wasm>(state, environ_count, environ_buf_size)
             }
@@ -95,7 +96,7 @@ macro_rules! export_env {
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
                 environ: *mut *const u8,
                 environ_buf: *mut u8,
-            ) -> $crate::wasip1::Errno {
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::env::environ_get_inner::<$wasm>(state, environ, environ_buf)
             }
@@ -106,12 +107,12 @@ macro_rules! export_env {
         #[cfg(target_os = "wasi")]
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn __wasip1_vfs_environ_sizes_get(
-            environ_count: *mut $crate::wasip1::Size,
-            environ_buf_size: *mut $crate::wasip1::Size,
-        ) -> $crate::wasip1::Errno {
+            environ_count: *mut $crate::__private::wasip1::Size,
+            environ_buf_size: *mut $crate::__private::wasip1::Size,
+        ) -> $crate::__private::wasip1::Errno {
             unsafe { *environ_count = 0 };
             unsafe { *environ_buf_size = 0 };
-            $crate::wasip1::ERRNO_SUCCESS
+            $crate::__private::wasip1::ERRNO_SUCCESS
         }
 
         #[cfg(target_os = "wasi")]
@@ -119,8 +120,8 @@ macro_rules! export_env {
         pub unsafe extern "C" fn __wasip1_vfs_environ_get(
             environ: *mut *const u8,
             environ_buf: *mut u8,
-        ) -> $crate::wasip1::Errno {
-            $crate::wasip1::ERRNO_SUCCESS
+        ) -> $crate::__private::wasip1::Errno {
+            $crate::__private::wasip1::ERRNO_SUCCESS
         }
     };
 
@@ -149,6 +150,7 @@ pub struct VirtualEnvConstState {
 }
 
 #[inline]
+#[cfg(target_os = "wasi")]
 pub fn environ_sizes_get_const_inner<
     T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
     Wasm: WasmAccess,
@@ -174,6 +176,7 @@ pub fn environ_sizes_get_const_inner<
 }
 
 #[inline]
+#[cfg(target_os = "wasi")]
 pub fn environ_get_const_inner<
     T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
     Wasm: WasmAccess,
@@ -251,6 +254,7 @@ impl<'a, T: core::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<
     }
 }
 
+#[cfg(target_os = "wasi")]
 pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
     state: &'a mut impl VirtualEnv<'a>,
     environ_count: *mut Size,
@@ -265,6 +269,7 @@ pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
 }
 
 #[inline]
+#[cfg(target_os = "wasi")]
 pub fn environ_get_inner<'a, Wasm: WasmAccess>(
     state: &'a mut impl VirtualEnv<'a>,
     environ: *mut *const u8,

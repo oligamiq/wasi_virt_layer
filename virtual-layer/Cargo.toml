@@ -7,12 +7,11 @@ edition = "2024"
 default = ["alloc", "std"]
 alloc = []
 multi_memory = ["alloc"]
-std = ["alloc"]
+std = ["alloc", "wasip1/std"]
 threads = ["alloc", "dep:parking_lot", "dep:dashmap"]
 
 [dependencies]
 wit-bindgen = { version = "0.44.0", default-features = false }
-wasip1 = { version = "0.11.1", default-features = false, package = "wasi" }
 const_struct = "0.6.2"
 const_for = "0.1.5"
 paste = "1.0.15"
@@ -25,3 +24,6 @@ parking_lot = { version = "0.12.4", optional = true }
 # [dev-dependencies]
 # wasi preview1 latest
 # wasmtime-wasi = "17.0.3"
+
+[target.'cfg(target_os = "wasi")'.dependencies]
+wasip1 = { version = "0.11.1", default-features = false, package = "wasi" }

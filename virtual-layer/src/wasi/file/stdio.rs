@@ -1,4 +1,5 @@
-use wasip1::Size;
+use crate::__private::wasip1;
+use crate::__private::wasip1::Size;
 
 use crate::memory::WasmAccess;
 use crate::transporter::Wasip1Transporter;

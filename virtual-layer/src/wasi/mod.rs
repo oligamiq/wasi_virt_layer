@@ -3,7 +3,7 @@
 pub mod env;
 pub mod file;
 
-use wasip1::*;
+use crate::__private::wasip1::*;
 
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn __wasip1_vfs_test_wasm_opt_proc_exit(rval: Exitcode) -> ! {

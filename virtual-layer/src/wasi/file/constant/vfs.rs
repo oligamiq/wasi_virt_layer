@@ -1,6 +1,7 @@
+use crate::__private::wasip1;
+use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
-use wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::{memory::WasmAccess, wasi::file::Wasip1LFS};
 

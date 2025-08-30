@@ -1,40 +1,69 @@
+use crate::__private::wasip1;
 use crate::memory::WasmAccess;
 
 pub struct Wasip1Transporter;
 
 impl Wasip1Transporter {
+    #[allow(unused_variables)]
     pub fn read_from_stdin(buf: &mut [u8]) -> Result<wasip1::Size, wasip1::Errno> {
-        let iovec_arr = [wasip1::Iovec {
-            buf: buf.as_mut_ptr() as *mut u8,
-            buf_len: buf.len(),
-        }];
+        #[cfg(target_os = "wasi")]
+        {
+            let iovec_arr = [wasip1::Iovec {
+                buf: buf.as_mut_ptr() as *mut u8,
+                buf_len: buf.len(),
+            }];
 
-        unsafe { wasip1::fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            unsafe { wasip1::fd_read(wasip1::FD_STDIN, &iovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
     }
 
     #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
     pub fn read_from_stdin_direct<Wasm: WasmAccess>(
         buf: *mut u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let iovec_arr = [wasip1::Iovec {
-            buf: Wasm::memory_director_mut(buf),
-            buf_len: len,
-        }];
+        #[cfg(target_os = "wasi")]
+        {
+            let iovec_arr = [wasip1::Iovec {
+                buf: Wasm::memory_director_mut(buf),
+                buf_len: len,
+            }];
 
-        unsafe { wasip1::fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            unsafe { wasip1::fd_read(wasip1::FD_STDIN, &iovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
     }
 
+    #[allow(unused_variables)]
     pub fn write_to_stdout(data: &[u8]) -> Result<wasip1::Size, wasip1::Errno> {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: data.as_ptr() as *const u8,
-            buf_len: data.len(),
-        }];
+        #[cfg(target_os = "wasi")]
+        {
+            let ciovec_arr = [wasip1::Ciovec {
+                buf: data.as_ptr() as *const u8,
+                buf_len: data.len(),
+            }];
 
-        unsafe { wasip1::fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            unsafe { wasip1::fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
     }
 
     #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
     pub fn write_to_stdout_direct<Wasm: WasmAccess>(
         buf: *const u8,
         len: usize,
@@ -44,31 +73,58 @@ impl Wasip1Transporter {
             buf_len: len,
         }];
 
-        unsafe { wasip1::fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+        #[cfg(target_os = "wasi")]
+        unsafe {
+            wasip1::fd_write(wasip1::FD_STDOUT, &ciovec_arr)
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
     }
 
+    #[allow(unused_variables)]
     pub fn write_to_stderr(data: &[u8]) -> Result<wasip1::Size, wasip1::Errno> {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: data.as_ptr() as *const u8,
-            buf_len: data.len(),
-        }];
+        #[cfg(target_os = "wasi")]
+        {
+            let ciovec_arr = [wasip1::Ciovec {
+                buf: data.as_ptr() as *const u8,
+                buf_len: data.len(),
+            }];
 
-        unsafe { wasip1::fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            unsafe { wasip1::fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
     }
 
     #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
     pub fn write_to_stderr_direct<Wasm: WasmAccess>(
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: Wasm::memory_director(buf),
-            buf_len: len,
-        }];
+        #[cfg(target_os = "wasi")]
+        {
+            let ciovec_arr = [wasip1::Ciovec {
+                buf: Wasm::memory_director(buf),
+                buf_len: len,
+            }];
 
-        unsafe { wasip1::fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            unsafe { wasip1::fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
     }
 
+    #[allow(unused_variables)]
     pub fn process_abort(rval: wasip1::Exitcode) {
         #[cfg(not(target_os = "wasi"))]
         unimplemented!("this is not supported on this architecture");

@@ -1,4 +1,5 @@
-use wasip1::Dircookie;
+use crate::__private::wasip1;
+use crate::__private::wasip1::Dircookie;
 
 use crate::{
     memory::WasmAccess,

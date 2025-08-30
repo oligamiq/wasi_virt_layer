@@ -1,3 +1,4 @@
+use crate::__private::wasip1;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{

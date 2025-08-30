@@ -1,3 +1,4 @@
+use crate::__private::wasip1;
 use const_struct::ConstStruct;
 
 use crate::{memory::WasmAccess, wasi::file::Wasip1FileTrait};

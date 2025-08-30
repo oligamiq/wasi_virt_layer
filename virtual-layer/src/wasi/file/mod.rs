@@ -4,10 +4,11 @@
 use crate::memory::WasmAccess;
 pub mod constant;
 pub mod stdio;
+use crate::__private::wasip1;
 
 // no implementing dcache
 
-use wasip1::*;
+use crate::__private::wasip1::*;
 
 pub struct FilestatWithoutDevice {
     /// File serial number.
@@ -228,11 +229,11 @@ macro_rules! export_fs {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_write>](
-                fd: $crate::wasip1::Fd,
-                iovs_ptr: *const $crate::wasip1::Ciovec,
+                fd: $crate::__private::wasip1::Fd,
+                iovs_ptr: *const $crate::__private::wasip1::Ciovec,
                 iovs_len: usize,
                 nwritten: *mut usize,
-            ) -> $crate::wasip1::Errno {
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_write_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nwritten)
             }
@@ -240,12 +241,12 @@ macro_rules! export_fs {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_readdir>](
-                fd: $crate::wasip1::Fd,
+                fd: $crate::__private::wasip1::Fd,
                 buf: *mut u8,
                 buf_len: usize,
-                cookie: $crate::wasip1::Dircookie,
-                nread: *mut $crate::wasip1::Size,
-            ) -> $crate::wasip1::Errno {
+                cookie: $crate::__private::wasip1::Dircookie,
+                nread: *mut $crate::__private::wasip1::Size,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_readdir_raw::<$wasm>(state, fd, buf, buf_len, cookie, nread)
             }
@@ -253,12 +254,12 @@ macro_rules! export_fs {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_filestat_get>](
-                fd: $crate::wasip1::Fd,
-                flags: $crate::wasip1::Lookupflags,
+                fd: $crate::__private::wasip1::Fd,
+                flags: $crate::__private::wasip1::Lookupflags,
                 path_ptr: *const u8,
                 path_len: usize,
-                filestat: *mut $crate::wasip1::Filestat,
-            ) -> $crate::wasip1::Errno {
+                filestat: *mut $crate::__private::wasip1::Filestat,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::path_filestat_get_raw::<$wasm>(state, fd, flags, path_ptr, path_len, filestat)
             }
@@ -266,9 +267,9 @@ macro_rules! export_fs {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_prestat_get>](
-                fd: $crate::wasip1::Fd,
-                prestat: *mut $crate::wasip1::Prestat,
-            ) -> $crate::wasip1::Errno {
+                fd: $crate::__private::wasip1::Fd,
+                prestat: *mut $crate::__private::wasip1::Prestat,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_prestat_get_raw::<$wasm>(state, fd, prestat)
             }
@@ -276,10 +277,10 @@ macro_rules! export_fs {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_prestat_dir_name>](
-                fd: $crate::wasip1::Fd,
+                fd: $crate::__private::wasip1::Fd,
                 dir_path_ptr: *mut u8,
                 dir_path_len: usize,
-            ) -> $crate::wasip1::Errno {
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_prestat_dir_name_raw::<$wasm>(state, fd, dir_path_ptr, dir_path_len)
             }
@@ -287,8 +288,8 @@ macro_rules! export_fs {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_close>](
-                fd: $crate::wasip1::Fd,
-            ) -> $crate::wasip1::Errno {
+                fd: $crate::__private::wasip1::Fd,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_close_raw::<$wasm>(state, fd)
             }
@@ -296,16 +297,16 @@ macro_rules! export_fs {
             #[unsafe(no_mangle)]
             #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_open>](
-                fd: $crate::wasip1::Fd,
-                dir_flags: $crate::wasip1::Fdflags,
+                fd: $crate::__private::wasip1::Fd,
+                dir_flags: $crate::__private::wasip1::Fdflags,
                 path_ptr: *const u8,
                 path_len: usize,
-                o_flags: $crate::wasip1::Oflags,
-                fs_rights_base: $crate::wasip1::Rights,
-                fs_rights_inheriting: $crate::wasip1::Rights,
-                fd_flags: $crate::wasip1::Fdflags,
-                fd_ret: *mut $crate::wasip1::Fd,
-            ) -> $crate::wasip1::Errno {
+                o_flags: $crate::__private::wasip1::Oflags,
+                fs_rights_base: $crate::__private::wasip1::Rights,
+                fs_rights_inheriting: $crate::__private::wasip1::Rights,
+                fd_flags: $crate::__private::wasip1::Fdflags,
+                fd_ret: *mut $crate::__private::wasip1::Fd,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::path_open_raw::<$wasm>(state, fd, dir_flags, path_ptr, path_len, o_flags, fs_rights_base, fs_rights_inheriting, fd_flags, fd_ret)
             }
@@ -313,11 +314,11 @@ macro_rules! export_fs {
             #[unsafe(no_mangle)]
             #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_read>](
-                fd: $crate::wasip1::Fd,
-                iovs_ptr: *const $crate::wasip1::Ciovec,
+                fd: $crate::__private::wasip1::Fd,
+                iovs_ptr: *const $crate::__private::wasip1::Ciovec,
                 iovs_len: usize,
-                nread_ret: *mut $crate::wasip1::Size,
-            ) -> $crate::wasip1::Errno {
+                nread_ret: *mut $crate::__private::wasip1::Size,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_read_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nread_ret)
             }
@@ -325,9 +326,9 @@ macro_rules! export_fs {
             #[unsafe(no_mangle)]
             #[cfg(target_os = "wasi")]
             pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_filestat_get>](
-                fd: $crate::wasip1::Fd,
-                filestat: *mut $crate::wasip1::Filestat,
-            ) -> $crate::wasip1::Errno {
+                fd: $crate::__private::wasip1::Fd,
+                filestat: *mut $crate::__private::wasip1::Filestat,
+            ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
                 $crate::wasi::file::Wasip1FileSystem::fd_filestat_get_raw::<$wasm>(state, fd, filestat)
             }

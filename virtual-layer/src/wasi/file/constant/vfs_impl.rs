@@ -1,4 +1,5 @@
-use wasip1::{Ciovec, Dircookie, Fd, Size};
+use crate::__private::wasip1;
+use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::{
     memory::WasmAccess,
