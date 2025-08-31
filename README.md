@@ -10,6 +10,7 @@
 - Multiple lfs file system (VFS)
 - Static file system
 - Resolve threads export conflict
+- Feature Access time etc traits
 
 # run example
 ```bash
