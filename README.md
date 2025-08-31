@@ -9,6 +9,7 @@
 - Access Time Trait
 - Multiple lfs file system (VFS)
 - Static file system
+- Resolve threads export conflict
 
 # run example
 ```bash

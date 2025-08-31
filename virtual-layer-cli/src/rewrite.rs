@@ -8,6 +8,7 @@ use toml_edit::{Document, DocumentMut, Item};
 
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
+    threads,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
 };
 
@@ -17,10 +18,11 @@ use crate::{
 pub fn adjust_wasm(
     path: &Utf8PathBuf,
     wasm: &[impl AsRef<Path>],
+    threads: bool,
 ) -> eyre::Result<(Utf8PathBuf, TargetMemoryType)> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
+        .wrap_err("Failed to load module")?;
 
     if !<Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
         .iter()
@@ -32,9 +34,13 @@ pub fn adjust_wasm(
                 .any(|e| e.name == format!("{name}_import_wrap"))
         })
     {
-        return Err(eyre::eyre!(
+        eyre::bail!(
             r#"This wasm file is not use "wasip1-virtual-layer" crate, you need to add it to your dependencies and use wasip1_virtual_layer;"#
-        ));
+        );
+    }
+
+    if threads {
+        threads::remove_unused_threads_function(&mut module)?;
     }
 
     // check use import_wasm!
@@ -46,9 +52,9 @@ pub fn adjust_wasm(
             .iter()
             .any(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_wrap"))
         {
-            return Err(eyre::eyre!(
+            eyre::bail!(
                 "Failed to get __start_wrap export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
-            ));
+            );
         }
 
         // let memory = module.memories
@@ -70,7 +76,7 @@ pub fn adjust_wasm(
             .exports
             .remove(format!("{name}_import_wrap"))
             .to_eyre()
-            .wrap_err(format!("{name}_import_wrap not found"))?;
+            .wrap_err_with(|| eyre::eyre!("{name}_import_wrap not found"))?;
 
         module
             .imports
@@ -94,9 +100,7 @@ pub fn adjust_wasm(
     let next_check = block_func(&mut module, "environ_sizes_get")?;
 
     if check != next_check {
-        return Err(eyre::eyre!(
-            "environ_get and environ_sizes_get are not the same"
-        ));
+        eyre::bail!("environ_get and environ_sizes_get are not the same");
     }
 
     fn block_func(module: &mut walrus::Module, func_name: impl AsRef<str>) -> eyre::Result<bool> {
@@ -147,7 +151,7 @@ pub fn adjust_wasm(
     module
         .emit_wasm_file(new_path.clone())
         .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
+        .wrap_err("Failed to emit wasm file")?;
 
     Ok((new_path, target_memory_type))
 }
@@ -168,14 +172,13 @@ pub fn get_target_feature(
 ) -> eyre::Result<bool> {
     let manifest_path = building_crate.manifest_path.clone();
 
-    let file_data = fs::read_to_string(&manifest_path)
-        .wrap_err_with(|| eyre::eyre!("Failed to read manifest file"))?;
+    let file_data = fs::read_to_string(&manifest_path).wrap_err("Failed to read manifest file")?;
     let doc = Document::parse(&file_data).expect("invalid doc");
 
     let crate_setting = &doc["dependencies"][CRATE];
 
     if matches!(crate_setting, Item::None) {
-        return Err(eyre::eyre!("Crate `{CRATE}` not found in dependencies"));
+        eyre::bail!("Crate `{CRATE}` not found in dependencies");
     }
 
     Ok(has_feature(crate_setting, feature.as_ref()))
@@ -191,14 +194,13 @@ pub fn adjust_target_feature(
 
     let manifest_path = building_crate.manifest_path.clone();
 
-    let file_data = fs::read_to_string(&manifest_path)
-        .wrap_err_with(|| eyre::eyre!("Failed to read manifest file"))?;
+    let file_data = fs::read_to_string(&manifest_path).wrap_err("Failed to read manifest file")?;
     let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
 
     let crate_setting = &mut doc["dependencies"][CRATE];
 
     if matches!(crate_setting, Item::None) {
-        return Err(eyre::eyre!("Crate `{CRATE}` not found in dependencies"));
+        eyre::bail!("Crate `{CRATE}` not found in dependencies");
     }
 
     enum HasFeature {
@@ -220,7 +222,7 @@ pub fn adjust_target_feature(
                 let manifest_path = metadata.workspace_root.join("Cargo.toml");
 
                 let file_data = fs::read_to_string(&manifest_path)
-                    .wrap_err_with(|| eyre::eyre!("Failed to read workspace manifest file"))?;
+                    .wrap_err("Failed to read workspace manifest file")?;
                 let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
 
                 let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
@@ -241,13 +243,13 @@ pub fn adjust_target_feature(
         (HasFeature::Disabled, true) => {
             set_table(crate_setting, feature, on)?;
             std::fs::write(&manifest_path, doc.to_string())
-                .wrap_err_with(|| eyre::eyre!("Failed to write manifest file"))?;
+                .wrap_err("Failed to write manifest file")?;
             Ok(())
         }
         (HasFeature::EnabledOnNormal, false) => {
             set_table(crate_setting, feature, on)?;
             std::fs::write(&manifest_path, doc.to_string())
-                .wrap_err_with(|| eyre::eyre!("Failed to write manifest file"))?;
+                .wrap_err("Failed to write manifest file")?;
             Ok(())
         }
         (HasFeature::EnabledOnWorkspace, false) => {
@@ -258,7 +260,7 @@ pub fn adjust_target_feature(
             let manifest_path = metadata.workspace_root.join("Cargo.toml");
 
             let file_data = fs::read_to_string(&manifest_path)
-                .wrap_err_with(|| eyre::eyre!("Failed to read workspace manifest file"))?;
+                .wrap_err("Failed to read workspace manifest file")?;
             let mut doc = file_data.parse::<DocumentMut>().expect("invalid doc");
 
             let crate_setting = &mut doc["workspace"]["dependencies"][CRATE];
@@ -266,7 +268,7 @@ pub fn adjust_target_feature(
             set_table(crate_setting, feature, on)?;
 
             std::fs::write(&manifest_path, doc.to_string())
-                .wrap_err_with(|| eyre::eyre!("Failed to write workspace manifest file"))?;
+                .wrap_err("Failed to write workspace manifest file")?;
 
             Ok(())
         }

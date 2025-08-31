@@ -18,6 +18,7 @@ pub mod merge;
 pub mod rewrite;
 pub mod target;
 pub mod test_run;
+pub mod threads;
 pub mod util;
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
@@ -68,16 +69,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {}", building_crate.name))?;
 
     println!("Optimizing VFS Wasm...");
-    let ret = building::optimize_wasm(&ret, &[], false)
-        .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
+    let ret = building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize Wasm")?;
 
     println!("Adjusting VFS Wasm...");
-    let (ret, target_memory_type) = adjust_wasm(&ret, &parsed_args.wasm)
-        .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
+    let (ret, target_memory_type) =
+        adjust_wasm(&ret, &parsed_args.wasm, threads).wrap_err("Failed to adjust Wasm")?;
 
     println!("Optimizing VFS Wasm...");
-    let ret = building::optimize_wasm(&ret, &[], false)
-        .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
+    let ret = building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize Wasm")?;
 
     println!("Generated VFS: {ret}");
 
@@ -106,11 +105,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             println!("Optimizing target Wasm [{name}]...");
             tmp_files.push(wasm.to_string());
             let wasm = building::optimize_wasm(&wasm.into(), &[], false)
-                .wrap_err_with(|| eyre::eyre!("Failed to optimize Wasm"))?;
+                .wrap_err("Failed to optimize Wasm")?;
             tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
-            let wasm = target::adjust_target_wasm(&wasm, memory_hint)
-                .wrap_err_with(|| eyre::eyre!("Failed to adjust Wasm"))?;
+            let wasm = target::adjust_target_wasm(&wasm, memory_hint, threads)
+                .wrap_err("Failed to adjust Wasm")?;
             tmp_files.push(wasm.to_string());
             Ok((wasm, name))
         })
@@ -122,18 +121,17 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
-    merge::merge(&ret, &wasm_paths, &output)
-        .wrap_err_with(|| eyre::eyre!("Failed to merge Wasm"))?;
+    merge::merge(&ret, &wasm_paths, &output).wrap_err("Failed to merge Wasm")?;
     tmp_files.push(output.clone());
 
     println!("Optimizing Merged Wasm...");
     let ret = building::optimize_wasm(&output.clone().into(), &[], false)
-        .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
+        .wrap_err("Failed to optimize merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths)
-        .wrap_err_with(|| eyre::eyre!("Failed to adjust merged Wasm"))?;
+    let ret =
+        adjust::adjust_merged_wasm(&ret, &wasm_paths).wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
@@ -146,8 +144,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     };
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&ret, &[], false)
-        .wrap_err_with(|| eyre::eyre!("Failed to optimize merged Wasm"))?;
+    let ret =
+        building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
@@ -161,15 +159,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret, &wasm_names)
-        .wrap_err_with(|| eyre::eyre!("Failed to translate Wasm to Component"))?;
+        .wrap_err("Failed to translate Wasm to Component")?;
     tmp_files.push(component.to_string());
 
     println!("Translating Component to JS...");
-    let binary =
-        std::fs::read(&component).wrap_err_with(|| eyre::eyre!("Failed to read component"))?;
+    let binary = std::fs::read(&component).wrap_err("Failed to read component")?;
     let transpiled = parsed_args
         .transpile_to_js(&binary, &building_crate.name)
-        .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS"))?;
+        .wrap_err("Failed to transpile to JS")?;
 
     let mut core_wasm = None;
     for (name, data) in transpiled.files.iter() {
@@ -191,7 +188,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
-        .wrap_err_with(|| eyre::eyre!("Failed to optimize core Wasm"))?;
+        .wrap_err("Failed to optimize core Wasm")?;
 
     std::fs::remove_file(&core_wasm).expect("Failed to remove existing file");
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");

@@ -5,12 +5,14 @@ use eyre::Context as _;
 
 use crate::{
     common::Wasip1SnapshotPreview1Func,
+    threads,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule},
 };
 
 pub fn adjust_target_wasm(
     path: &Utf8PathBuf,
     memory_hint: Option<usize>,
+    threads: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let name = path
         .get_file_main_name()
@@ -18,13 +20,17 @@ pub fn adjust_target_wasm(
 
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
+        .wrap_err("Failed to load module")?;
+
+    if threads {
+        threads::remove_unused_threads_function(&mut module)?;
+    }
 
     module.create_memory_anchor(&name, memory_hint)?;
 
     module
         .create_global_anchor(&name)
-        .wrap_err_with(|| eyre::eyre!("Failed to create global anchor"))?;
+        .wrap_err("Failed to create global anchor")?;
 
     let rewrite_exports = ["_start", "__main_void", "memory"];
 
