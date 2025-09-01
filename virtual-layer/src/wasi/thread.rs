@@ -18,17 +18,17 @@ impl ThreadRunner {
         ThreadRunner { main }
     }
 
-    fn apply<Wasm: WasmAccess>(&self) -> *mut Box<dyn FnOnce()> {
+    fn apply<Wasm: WasmAccess>(&self) -> ThreadRunnerResult {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "multi_memory")]
             {
-                self.main
+                ThreadRunnerResult::new(self.main)
             }
 
             #[cfg(not(feature = "multi_memory"))]
             {
-                Wasm::memory_director_mut(self.main)
+                ThreadRunnerResult::new(Wasm::memory_director_mut(self.main))
             }
         }
 
@@ -38,9 +38,19 @@ impl ThreadRunner {
         }
     }
 }
+#[repr(transparent)]
+pub struct ThreadRunnerResult {
+    main: *mut Box<dyn FnOnce()>,
+}
+
+impl ThreadRunnerResult {
+    fn new(main: *mut Box<dyn FnOnce()>) -> Self {
+        ThreadRunnerResult { main }
+    }
+}
 
 pub trait ThreadAccess {
-    fn to_correct_memory(&self, ptr: ThreadRunner) -> ThreadRunner;
+    fn to_correct_memory(&self, ptr: ThreadRunner) -> ThreadRunnerResult;
 }
 
 pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess, const N: usize> {
@@ -53,19 +63,35 @@ pub struct DirectThreadPool<const N: usize> {
 
 #[macro_export]
 macro_rules! export_thread {
-    ($($wasm:ty),*) => {
-        enum ThreadPool {
-            $(
-                $crate::export_thread!(@filter, $wasm),
-            )*
+    ($($wasm:tt),*) => {
+        $crate::__private::paste::paste! {
+            #[allow(non_camel_case_types)]
+            enum ThreadPool {
+                $(
+                    [<__ $wasm>],
+                )*
+            }
+
+            impl $crate::wasi::thread::ThreadAccess for ThreadPool {
+                fn to_correct_memory(&self, ptr: $crate::wasi::thread::ThreadRunner) -> $crate::wasi::thread::ThreadRunnerResult {
+                    #[cfg(target_os = "wasi")]
+                    {
+                        match self {
+                            ThreadPool::__wasm1 => {
+                                ThreadRunnerResult::new(ptr.main)
+                            },
+                            ThreadPool::__wasm2 => {
+                                ThreadRunnerResult::new(Wasm::memory_director_mut(ptr.main))
+                            },
+                        }
+                    }
+
+                    #[cfg(not(target_os = "wasi"))]
+                    {
+                        panic!("This function is only available on WASI");
+                    }
+                }
+            }
         }
-    };
-
-    (@filter, self) => {
-        __self,
-    };
-
-    (@filter, $other:ident) => {
-        $other,
     };
 }

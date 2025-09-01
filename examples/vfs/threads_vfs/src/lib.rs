@@ -42,6 +42,8 @@ const FILES: NormalFILES = ConstFiles!([(
     ],
 )]);
 
+export_thread!(self, test_threads);
+
 #[cfg(test)]
 mod tests {
     use super::*;
