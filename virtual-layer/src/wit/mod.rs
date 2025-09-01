@@ -13,7 +13,7 @@ pub mod virtual_file_system;
 // component.
 
 #[cfg(target_os = "wasi")]
-mod export {
+mod import {
     mod wasip1 {
         use super::super::virtual_file_system::*;
 
@@ -442,8 +442,30 @@ mod export {
         use super::super::virtual_file_system::*;
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn thread_spawn_import_wrap(start_arg: i32) -> i32 {
-            Wasip1Threads::thread_spawn_import(start_arg)
+        pub unsafe extern "C" fn thread_spawn_import_wrap(data_ptr: i32) -> i32 {
+            Wasip1Threads::thread_spawn_import(data_ptr)
         }
+    }
+}
+
+#[cfg(target_os = "wasi")]
+mod export {
+    mod wasip1_threads {
+        use super::super::virtual_file_system::*;
+
+        struct Exporter;
+
+        impl Guest for Exporter {
+            fn wasi_thread_start(thread_id: i32, data_ptr: i32) -> i32 {
+                #[link(wasm_import_module = "wasip1-vfs")]
+                unsafe extern "C" {
+                    pub fn __wasip1_vfs_wasi_thread_start(thread_id: i32, ptr: i32) -> i32;
+                }
+
+                unsafe { __wasip1_vfs_wasi_thread_start(thread_id, data_ptr) }
+            }
+        }
+
+        export!(Exporter);
     }
 }

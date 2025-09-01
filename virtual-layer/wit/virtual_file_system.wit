@@ -95,4 +95,5 @@ world virtual-file-system {
       start-arg: s32
     ) -> s32;
   }
+  export wasi-thread-start: func(thread-id: s32, data-ptr: s32) -> s32;
 }
