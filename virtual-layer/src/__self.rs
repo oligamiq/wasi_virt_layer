@@ -22,7 +22,7 @@ impl WasmAccess for __self {
     }
 
     #[cfg(feature = "threads")]
-    fn _wasi_thread_start(thread_id: isize, ptr: isize) -> isize {
+    fn _wasi_thread_start(thread_id: isize, ptr: isize) {
         todo!()
     }
 

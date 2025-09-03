@@ -24,9 +24,7 @@ pub mod prelude {
 
 #[cfg(feature = "threads")]
 pub mod thread {
-    pub use crate::wasi::thread::{
-        DirectThreadPool, ThreadAccess, ThreadRunner, ThreadRunnerResult,
-    };
+    pub use crate::wasi::thread::{DirectThreadPool, ThreadAccess, ThreadRunner, VirtualThread};
 }
 
 pub mod file {
@@ -52,6 +50,7 @@ pub mod __private {
 
     pub mod inner {
         pub mod env {
+            #[cfg(target_os = "wasi")]
             pub use crate::wasi::env::{
                 environ_get_const_inner, environ_get_inner, environ_sizes_get_const_inner,
                 environ_sizes_get_inner,
@@ -62,6 +61,10 @@ pub mod __private {
             pub use crate::wasi::file::constant::lfs_raw::{
                 VFSConstNormalFiles, VFSConstNormalInode, WasiConstPrimitiveFile,
             };
+        }
+
+        pub mod thread {
+            pub use crate::wasi::thread::ThreadRunnerBase;
         }
 
         pub use crate::wit::virtual_file_system;

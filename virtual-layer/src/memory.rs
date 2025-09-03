@@ -237,7 +237,7 @@ macro_rules! __threads_wasm_access {
     ($name:ident) => {
         $crate::__private::paste::paste! {
             #[inline(always)]
-            fn _wasi_thread_start(thread_id: isize, ptr: isize) -> isize {
+            fn _wasi_thread_start(thread_id: isize, ptr: isize) {
                 #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
@@ -270,7 +270,7 @@ macro_rules! __threads_import_etc {
                 pub fn [<__wasip1_vfs_ $name _wasi_thread_start>](
                     thread_id: isize,
                     ptr: isize,
-                ) -> isize;
+                );
             }
         }
     };
@@ -463,7 +463,7 @@ pub trait WasmAccess: Copy {
     }
 
     #[cfg(feature = "threads")]
-    fn _wasi_thread_start(thread_id: isize, ptr: isize) -> isize;
+    fn _wasi_thread_start(thread_id: isize, ptr: isize);
 
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director<T>(ptr: *const T) -> *const T;
@@ -740,7 +740,7 @@ impl WasmAccess for WasmAccessFaker {
     }
 
     #[cfg(feature = "threads")]
-    fn _wasi_thread_start(_: isize, _: isize) -> isize {
+    fn _wasi_thread_start(_: isize, _: isize) {
         unimplemented!("this is not supported on this faker");
     }
 

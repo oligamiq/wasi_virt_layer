@@ -1,5 +1,5 @@
 use const_struct::const_struct;
-use wasip1_virtual_layer::{file::*, prelude::*};
+use wasip1_virtual_layer::{file::*, prelude::*, thread::DirectThreadPool};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -42,7 +42,7 @@ const FILES: NormalFILES = ConstFiles!([(
     ],
 )]);
 
-export_thread!(self, test_threads);
+export_thread!(DirectThreadPool, self, test_threads);
 
 #[cfg(test)]
 mod tests {
@@ -50,7 +50,7 @@ mod tests {
 
     #[test]
     fn test_files() {
-        println!("Files: {:?}", FILES);
+        println!("Files: {:#?}", FILES);
     }
 }
 

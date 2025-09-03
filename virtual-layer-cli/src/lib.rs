@@ -31,6 +31,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let parsed_args = args::Args::new(args);
 
+    let out_dir = camino::Utf8PathBuf::from(&parsed_args.out_dir);
+
     let manifest_path = parsed_args.get_manifest_path();
     let cargo_metadata = {
         let mut metadata_command = cargo_metadata::MetadataCommand::new();
@@ -81,10 +83,10 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     println!("Generated VFS: {ret}");
 
     println!("Remove existing output directory...");
-    if std::fs::metadata(&parsed_args.out_dir).is_ok() {
-        std::fs::remove_dir_all(&parsed_args.out_dir).expect("Failed to remove existing directory");
+    if std::fs::metadata(&out_dir).is_ok() {
+        std::fs::remove_dir_all(&out_dir).expect("Failed to remove existing directory");
     }
-    std::fs::create_dir_all(&parsed_args.out_dir).expect("Failed to create output directory");
+    std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
     println!("Preparing target Wasm...");
     let (wasm_paths, wasm_names) = parsed_args
@@ -98,10 +100,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .chain(std::iter::repeat(None)),
         )
         .map(|(old_wasm, memory_hint)| {
-            let name = old_wasm.get_file_main_name().unwrap();
-            let wasm = format!("{}/{}", parsed_args.out_dir, old_wasm.file_name().unwrap());
+            let file_name = old_wasm.file_name().unwrap();
+            let wasm = format!("{out_dir}/{file_name}");
             std::fs::copy(old_wasm, &wasm)
                 .wrap_err_with(|| eyre::eyre!("Failed to find Wasm file {old_wasm}"))?;
+            let name = old_wasm.get_file_main_name().unwrap();
             println!("Optimizing target Wasm [{name}]...");
             tmp_files.push(wasm.to_string());
             let wasm = building::optimize_wasm(&wasm.into(), &[], false)
@@ -117,7 +120,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     println!("Merging Wasm...");
 
-    let output = format!("{}/merged.wasm", parsed_args.out_dir);
+    let output = format!("{out_dir}/merged.wasm");
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
@@ -169,7 +172,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err("Failed to transpile to JS")?;
 
     let mut core_wasm = None;
-    let out_dir = camino::Utf8PathBuf::from(&parsed_args.out_dir);
     for (name, data) in transpiled.files.iter() {
         let name = camino::Utf8PathBuf::from(name);
         let file_name = out_dir.join(&name);
@@ -222,7 +224,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     std::fs::OpenOptions::new()
         .write(true)
         .create(true)
-        .open(format!("{}/test_run.ts", parsed_args.out_dir))
+        .open(format!("{out_dir}/test_run.ts"))
         .expect("Failed to create file")
         .write_all(test_run::TEST_RUN.trim_start().as_bytes())
         .expect("Failed to write file");
