@@ -494,6 +494,9 @@ impl Normal<walrus::ir::Value> for walrus::ValType {
     }
 }
 
+pub const CORE_MODULE_ROOT: &str = "wasip1-vfs:host/virtual-file-system-wasip1-core";
+pub const THREADS_MODULE_ROOT: &str = "wasip1-vfs:host/virtual-file-system-wasip1-threads-import";
+
 #[cfg(test)]
 mod tests {
     use super::*;

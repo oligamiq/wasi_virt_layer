@@ -64,7 +64,7 @@ macro_rules! ConstFiles {
             $(($dir_name:expr, $file_or_dir:tt $(,)?)),* $(,)?
         ] $(,)?
     ) => {
-        $crate::wasi::file::constant::lfs_raw::VFSConstNormalFiles::new({
+        $crate::__private::inner::fs::VFSConstNormalFiles::new({
             const COUNT: usize = {
                 let mut count = 0;
 
@@ -75,7 +75,7 @@ macro_rules! ConstFiles {
                 count
             };
 
-            let mut static_array = $crate::binary_map::StaticArrayBuilder::new();
+            let mut static_array = $crate::__private::utils::StaticArrayBuilder::new();
 
             struct CheckEqNumberOfFilesAndDirs<const L: usize, const R: usize>;
 
@@ -149,7 +149,7 @@ macro_rules! ConstFiles {
             const fn get_child_range<S: 'static + Copy, const N: usize>(
                 fake_files: [&'static str; N],
                 name: &'static str,
-                _: &$crate::binary_map::StaticArrayBuilder<S, N>,
+                _: &$crate::__private::utils::StaticArrayBuilder<S, N>,
             ) -> (usize, usize) {
                 get_child_range_inner(fake_files, name)
             }
@@ -175,7 +175,7 @@ macro_rules! ConstFiles {
             const fn get_parent<S: 'static + Copy, const N: usize>(
                 fake_files: [&'static str; N],
                 name: &'static str,
-                _: &$crate::binary_map::StaticArrayBuilder<S, N>,
+                _: &$crate::__private::utils::StaticArrayBuilder<S, N>,
             ) -> Option<usize> {
                 const_for!(i in 0..N => {
                     if is_parent(name, fake_files[i]) {
@@ -198,9 +198,9 @@ macro_rules! ConstFiles {
             }
 
             const fn custom_sort<T: Copy, const N: usize>(
-                mut files: $crate::binary_map::StaticArrayBuilder<(usize, T), N>,
+                mut files: $crate::__private::utils::StaticArrayBuilder<(usize, T), N>,
             ) -> [T; N] {
-                let mut sorted = $crate::binary_map::StaticArrayBuilder::<_, N>::new();
+                let mut sorted = $crate::__private::utils::StaticArrayBuilder::<_, N>::new();
 
                 while (files.len() > 0) {
                     let mut depth = None;
@@ -228,7 +228,7 @@ macro_rules! ConstFiles {
             }
 
             const EMPTY_ARR: [&'static str; COUNT] = {
-                let mut empty_arr = $crate::binary_map::StaticArrayBuilder::new();
+                let mut empty_arr = $crate::__private::utils::StaticArrayBuilder::new();
 
                 $(
                     $crate::ConstFiles!(@empty, 0, empty_arr, [$dir_name], $file_or_dir);
@@ -261,7 +261,7 @@ macro_rules! ConstFiles {
             };
 
             const PRE_OPEN: [usize; PRE_OPEN_COUNT] = {
-                let mut static_array = $crate::binary_map::StaticArrayBuilder::new();
+                let mut static_array = $crate::__private::utils::StaticArrayBuilder::new();
 
                 $(
                     static_array.push(get_self(EMPTY_ARR, $dir_name));
@@ -272,7 +272,7 @@ macro_rules! ConstFiles {
 
             let static_array = custom_sort(static_array);
 
-            let mut file_array = $crate::binary_map::StaticArrayBuilder::new();
+            let mut file_array = $crate::__private::utils::StaticArrayBuilder::new();
             const_for!(i in 0..static_array.len() => {
                 let (_, name, file_or_dir) = static_array[i];
                 file_array.push((
@@ -404,7 +404,7 @@ macro_rules! ConstFiles {
         $static_array.push(($depth, (
             $parent_path,
             $name,
-            $crate::wasi::file::constant::lfs_raw::VFSConstNormalInode::Dir(
+            $crate::__private::inner::fs::VFSConstNormalInode::Dir(
                 get_child_range(
                     $empty,
                     $parent_path,
@@ -433,7 +433,7 @@ macro_rules! ConstFiles {
             (
                 $path,
                 $name,
-            $crate::wasi::file::constant::lfs_raw::VFSConstNormalInode::File($file, get_parent($empty, $path, &$static_array).unwrap())
+            $crate::__private::inner::fs::VFSConstNormalInode::File($file, get_parent($empty, $path, &$static_array).unwrap())
         )));
     };
 }

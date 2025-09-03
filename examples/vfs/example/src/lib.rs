@@ -1,12 +1,7 @@
 use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasip1_virtual_layer::{
-    ConstFiles,
-    memory::WasmAccess,
-    prelude::*,
-    wasi::file::constant::lfs_raw::{VFSConstNormalFiles, WasiConstFile},
-};
+use wasip1_virtual_layer::{file::*, prelude::*};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -52,7 +47,7 @@ impl Guest for Hello {
     fn main() {
         test_wasm_opt::reset();
         test_wasm_opt::_start();
-        test_wasm_opt::main();
+        test_wasm_opt::_main();
     }
 }
 
@@ -109,13 +104,6 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = 
 
 mod fs {
     use super::*;
-    use wasip1_virtual_layer::{
-        export_fs,
-        wasi::file::{
-            constant::{lfs::VFSConstNormalLFS, vfs::Wasip1ConstVFS},
-            stdio::DefaultStdIO,
-        },
-    };
 
     type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 

@@ -277,6 +277,7 @@ macro_rules! __threads_import_etc {
 }
 
 #[cfg(not(feature = "threads"))]
+#[macro_export]
 macro_rules! __threads_import_etc {
     ($name:ident) => {};
 }

@@ -9,7 +9,10 @@ use toml_edit::{Document, DocumentMut, Item};
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
     threads,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
+    util::{
+        CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT,
+        WalrusUtilImport, WalrusUtilModule,
+    },
 };
 
 /// wasip1 import to adjust to wit
@@ -61,13 +64,17 @@ pub fn adjust_wasm(
         println!("memories: {:?}", module.memories);
     }
 
-    for (name, namespace) in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
+    for (name, (namespace, root)) in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
         .iter()
-        .zip(core::iter::repeat("wasip1"))
+        .zip(core::iter::repeat(("wasip1", CORE_MODULE_ROOT)))
         .chain(
-            <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
-                .iter()
-                .zip(core::iter::repeat("wasip1-threads")),
+            (if threads {
+                <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
+            } else {
+                &[]
+            })
+            .iter()
+            .zip(core::iter::repeat(("wasip1-threads", THREADS_MODULE_ROOT))),
         )
     {
         let component_name = format!("[static]{namespace}.{}-import", name.replace("_", "-"));
@@ -80,7 +87,7 @@ pub fn adjust_wasm(
 
         module
             .imports
-            .find_mut("$root", &component_name)
+            .find_mut(root, &component_name)
             .map(|import| {
                 import.module = "archived".to_string();
             })
@@ -90,7 +97,7 @@ pub fn adjust_wasm(
             .imports
             .find_mut("wasi_snapshot_preview1", name)
             .map(|import| {
-                import.module = "$root".to_string();
+                import.module = root.to_string();
                 import.name = component_name;
             });
     }
@@ -104,7 +111,9 @@ pub fn adjust_wasm(
     }
 
     fn block_func(module: &mut walrus::Module, func_name: impl AsRef<str>) -> eyre::Result<bool> {
-        let export_func_name = format!("__wasip1_vfs_{}", func_name.as_ref());
+        let func_name = func_name.as_ref();
+        let export_func_name = format!("__wasip1_vfs_{func_name}");
+        let func_name = func_name.replace("_", "-");
 
         if matches!(
             module.exports.iter().find(|e| e.name == export_func_name),
@@ -113,11 +122,8 @@ pub fn adjust_wasm(
                 ..
             })
         ) {
-            let import_func_name = format!(
-                "[static]wasip1.{}-import",
-                func_name.as_ref().replace("_", "-")
-            );
-            module.connect_func("$root", import_func_name, export_func_name)?;
+            let import_func_name = format!("[static]wasip1.{func_name}-import");
+            module.connect_func(CORE_MODULE_ROOT, import_func_name, export_func_name)?;
 
             return Ok(true);
         } else {

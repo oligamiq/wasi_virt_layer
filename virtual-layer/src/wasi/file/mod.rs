@@ -235,7 +235,7 @@ macro_rules! export_fs {
                 nwritten: *mut usize,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_write_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nwritten)
+                $crate::file::Wasip1FileSystem::fd_write_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nwritten)
             }
 
             #[cfg(target_os = "wasi")]
@@ -248,7 +248,7 @@ macro_rules! export_fs {
                 nread: *mut $crate::__private::wasip1::Size,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_readdir_raw::<$wasm>(state, fd, buf, buf_len, cookie, nread)
+                $crate::file::Wasip1FileSystem::fd_readdir_raw::<$wasm>(state, fd, buf, buf_len, cookie, nread)
             }
 
             #[cfg(target_os = "wasi")]
@@ -261,7 +261,7 @@ macro_rules! export_fs {
                 filestat: *mut $crate::__private::wasip1::Filestat,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::path_filestat_get_raw::<$wasm>(state, fd, flags, path_ptr, path_len, filestat)
+                $crate::file::Wasip1FileSystem::path_filestat_get_raw::<$wasm>(state, fd, flags, path_ptr, path_len, filestat)
             }
 
             #[cfg(target_os = "wasi")]
@@ -271,7 +271,7 @@ macro_rules! export_fs {
                 prestat: *mut $crate::__private::wasip1::Prestat,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_prestat_get_raw::<$wasm>(state, fd, prestat)
+                $crate::file::Wasip1FileSystem::fd_prestat_get_raw::<$wasm>(state, fd, prestat)
             }
 
             #[cfg(target_os = "wasi")]
@@ -282,7 +282,7 @@ macro_rules! export_fs {
                 dir_path_len: usize,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_prestat_dir_name_raw::<$wasm>(state, fd, dir_path_ptr, dir_path_len)
+                $crate::file::Wasip1FileSystem::fd_prestat_dir_name_raw::<$wasm>(state, fd, dir_path_ptr, dir_path_len)
             }
 
             #[cfg(target_os = "wasi")]
@@ -291,7 +291,7 @@ macro_rules! export_fs {
                 fd: $crate::__private::wasip1::Fd,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_close_raw::<$wasm>(state, fd)
+                $crate::file::Wasip1FileSystem::fd_close_raw::<$wasm>(state, fd)
             }
 
             #[unsafe(no_mangle)]
@@ -308,7 +308,7 @@ macro_rules! export_fs {
                 fd_ret: *mut $crate::__private::wasip1::Fd,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::path_open_raw::<$wasm>(state, fd, dir_flags, path_ptr, path_len, o_flags, fs_rights_base, fs_rights_inheriting, fd_flags, fd_ret)
+                $crate::file::Wasip1FileSystem::path_open_raw::<$wasm>(state, fd, dir_flags, path_ptr, path_len, o_flags, fs_rights_base, fs_rights_inheriting, fd_flags, fd_ret)
             }
 
             #[unsafe(no_mangle)]
@@ -320,7 +320,7 @@ macro_rules! export_fs {
                 nread_ret: *mut $crate::__private::wasip1::Size,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_read_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nread_ret)
+                $crate::file::Wasip1FileSystem::fd_read_raw::<$wasm>(state, fd, iovs_ptr, iovs_len, nread_ret)
             }
 
             #[unsafe(no_mangle)]
@@ -330,7 +330,7 @@ macro_rules! export_fs {
                 filestat: *mut $crate::__private::wasip1::Filestat,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::file::Wasip1FileSystem::fd_filestat_get_raw::<$wasm>(state, fd, filestat)
+                $crate::file::Wasip1FileSystem::fd_filestat_get_raw::<$wasm>(state, fd, filestat)
             }
         }
     };

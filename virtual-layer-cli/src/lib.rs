@@ -1,6 +1,6 @@
 use std::io::Write as _;
 
-use eyre::Context;
+use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
@@ -169,17 +169,38 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err("Failed to transpile to JS")?;
 
     let mut core_wasm = None;
+    let out_dir = camino::Utf8PathBuf::from(&parsed_args.out_dir);
     for (name, data) in transpiled.files.iter() {
-        let file_name = format!("{}/{name}", parsed_args.out_dir);
+        let name = camino::Utf8PathBuf::from(name);
+        let file_name = out_dir.join(&name);
         if std::fs::metadata(&file_name).is_ok() {
-            std::fs::remove_file(&file_name).expect("Failed to remove existing file");
+            std::fs::remove_file(&file_name)
+                .wrap_err_with(|| eyre::eyre!("Failed to remove existing file: {file_name}"))?;
         }
-        if name.ends_with(".core.wasm") {
+        if name.as_str().ends_with(".core.wasm") {
             let file_name = camino::Utf8PathBuf::from(file_name);
-            std::fs::write(&file_name, &data).expect("Failed to write file");
+            std::fs::write(&file_name, &data)
+                .wrap_err_with(|| eyre::eyre!("Failed to write core wasm file: {file_name}"))?;
             core_wasm = Some(file_name);
         } else {
-            std::fs::write(&file_name, &data).expect("Failed to write file");
+            if let Some(parent) = name.parent() {
+                if !parent.as_str().is_empty() {
+                    let dir = name.ancestors().nth(1).wrap_err_with(|| {
+                        eyre::eyre!("Failed to get parent directory: {}", name)
+                    })?;
+                    let joined_dir = out_dir.join(dir);
+                    if !std::fs::metadata(&joined_dir).is_ok() {
+                        if dir.as_str() != "interfaces" {
+                            log::warn!("Creating directory: {joined_dir}");
+                        }
+                        std::fs::create_dir_all(&joined_dir).wrap_err_with(|| {
+                            eyre::eyre!("Failed to create directory: {joined_dir}")
+                        })?;
+                    }
+                }
+            }
+            std::fs::write(&file_name, &data)
+                .wrap_err_with(|| eyre::eyre!("Failed to write transpiled file: {file_name}"))?;
         }
     }
 

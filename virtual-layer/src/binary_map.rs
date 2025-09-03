@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[derive(Debug, Clone, Copy)]
 pub struct ConstBinaryMap<'a, K, V: Copy, const LEN: usize> {
     keys: [usize; LEN],

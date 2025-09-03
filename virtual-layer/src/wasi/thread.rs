@@ -18,7 +18,7 @@ impl ThreadRunner {
         ThreadRunner { main }
     }
 
-    fn apply<Wasm: WasmAccess>(&self) -> ThreadRunnerResult {
+    pub fn apply<Wasm: WasmAccess>(&self) -> ThreadRunnerResult {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "multi_memory")]
@@ -72,17 +72,16 @@ macro_rules! export_thread {
                 )*
             }
 
-            impl $crate::wasi::thread::ThreadAccess for ThreadPool {
-                fn to_correct_memory(&self, ptr: $crate::wasi::thread::ThreadRunner) -> $crate::wasi::thread::ThreadRunnerResult {
+            impl $crate::thread::ThreadAccess for ThreadPool {
+                fn to_correct_memory(&self, ptr: $crate::thread::ThreadRunner) -> $crate::thread::ThreadRunnerResult {
                     #[cfg(target_os = "wasi")]
                     {
                         match self {
-                            ThreadPool::__wasm1 => {
-                                ThreadRunnerResult::new(ptr.main)
-                            },
-                            ThreadPool::__wasm2 => {
-                                ThreadRunnerResult::new(Wasm::memory_director_mut(ptr.main))
-                            },
+                            $(
+                                [<__ $wasm>] => {
+                                    $crate::export_thread!(@filter, ptr, $wasm)
+                                }
+                            )*
                         }
                     }
 
@@ -93,5 +92,13 @@ macro_rules! export_thread {
                 }
             }
         }
+    };
+
+    (@filter, $ptr:ident, self) => {
+        $ptr.apply::<$crate::__private::__self>()
+    };
+
+    (@filter, $ptr:ident, $wasm:ident) => {
+        $ptr.apply::<$wasm>()
     };
 }

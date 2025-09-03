@@ -65,7 +65,7 @@ macro_rules! export_env {
                 environ_count: *mut $crate::__private::wasip1::Size,
                 environ_buf_size: *mut $crate::__private::wasip1::Size,
             ) -> $crate::__private::wasip1::Errno {
-                $crate::wasi::env::environ_sizes_get_const_inner::<$ty, $wasm>(environ_count, environ_buf_size)
+                $crate::__private::inner::env::environ_sizes_get_const_inner::<$ty, $wasm>(environ_count, environ_buf_size)
             }
 
             #[cfg(target_os = "wasi")]
@@ -74,7 +74,7 @@ macro_rules! export_env {
                 environ: *mut *const u8,
                 environ_buf: *mut u8,
             ) -> $crate::__private::wasip1::Errno {
-                $crate::wasi::env::environ_get_const_inner::<$ty, $wasm>(environ, environ_buf)
+                $crate::__private::inner::env::environ_get_const_inner::<$ty, $wasm>(environ, environ_buf)
             }
         }
     };
@@ -88,7 +88,7 @@ macro_rules! export_env {
                 environ_buf_size: *mut $crate::__private::wasip1::Size,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::env::environ_sizes_get_inner::<$wasm>(state, environ_count, environ_buf_size)
+                $crate::__private::inner::env::environ_sizes_get_inner::<$wasm>(state, environ_count, environ_buf_size)
             }
 
             #[cfg(target_os = "wasi")]
@@ -98,7 +98,7 @@ macro_rules! export_env {
                 environ_buf: *mut u8,
             ) -> $crate::__private::wasip1::Errno {
                 let state = $state;
-                $crate::wasi::env::environ_get_inner::<$wasm>(state, environ, environ_buf)
+                $crate::__private::inner::env::environ_get_inner::<$wasm>(state, environ, environ_buf)
             }
         }
     };

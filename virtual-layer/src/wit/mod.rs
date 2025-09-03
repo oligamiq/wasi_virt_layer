@@ -1,11 +1,11 @@
-// Use a procedural macro to generate bindings for the world we specified in
-// `host.wit`
-// wit_bindgen::generate!({
-//     // the name of the world in the `*.wit` input file
-//     world: "virtual-file-system",
-// });
-// cargo binstall wit-bindgen-cli -y
-// wit-bindgen rust wit
+#[allow(dead_code)]
+#[cfg(feature = "threads")]
+pub mod virtual_file_system_threads;
+#[cfg(feature = "threads")]
+pub use virtual_file_system_threads as virtual_file_system;
+
+#[allow(dead_code)]
+#[cfg(not(feature = "threads"))]
 pub mod virtual_file_system;
 
 // Define a custom type and implement the generated `Guest` trait for it which
@@ -15,7 +15,7 @@ pub mod virtual_file_system;
 #[cfg(target_os = "wasi")]
 mod import {
     mod wasip1 {
-        use super::super::virtual_file_system::*;
+        use super::super::virtual_file_system::wasip1_vfs::host::virtual_file_system_wasip1_core::*;
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn environ_sizes_get_import_wrap(
@@ -438,8 +438,9 @@ mod import {
 
     // This cfg can only nightly use
     // #[cfg(target_feature = "atomics")]
+    #[cfg(feature = "threads")]
     mod wasip1_threads {
-        use super::super::virtual_file_system::*;
+        use super::super::virtual_file_system_threads::wasip1_vfs::host::virtual_file_system_wasip1_threads_import::Wasip1Threads;
 
         #[unsafe(no_mangle)]
         pub unsafe extern "C" fn thread_spawn_import_wrap(data_ptr: i32) -> i32 {
@@ -450,7 +451,9 @@ mod import {
 
 #[cfg(target_os = "wasi")]
 mod export {
+    #[cfg(feature = "threads")]
     mod wasip1_threads {
+        use super::super::virtual_file_system_threads::exports::wasip1_vfs::host::virtual_file_system_wasip1_threads_export::Guest;
         use super::super::virtual_file_system::*;
 
         struct Exporter;
@@ -466,6 +469,6 @@ mod export {
             }
         }
 
-        export!(Exporter);
+        export!(Exporter with_types_in super::super::virtual_file_system_threads);
     }
 }

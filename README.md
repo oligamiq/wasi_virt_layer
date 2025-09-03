@@ -15,6 +15,7 @@
 # run example
 ```bash
 cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
+cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm -t single --no-tracing --threads false
 ```
 
 # cannot

@@ -1,0 +1,25 @@
+package wasip1-vfs:host;
+
+/* wit/virtual_file_system_threads.wit
+   wit is only kebab-case */
+/*
+wit-bindgen rust virtual-layer/wit --out-dir ./virtual-layer/src/wit/ -w virtual-file-system-threads
+*/
+
+interface virtual-file-system-wasip1-threads-import {
+  resource wasip1-threads {
+    thread-spawn-import: static func(
+      start-arg: s32
+    ) -> s32;
+  }
+}
+
+interface virtual-file-system-wasip1-threads-export {
+  wasi-thread-start: func(thread-id: s32, data-ptr: s32) -> s32;
+}
+
+world virtual-file-system-threads {
+  import virtual-file-system-wasip1-core;
+  import virtual-file-system-wasip1-threads-import;
+  export virtual-file-system-wasip1-threads-export;
+}

@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::__private::wasip1;
 use crate::memory::WasmAccess;
 

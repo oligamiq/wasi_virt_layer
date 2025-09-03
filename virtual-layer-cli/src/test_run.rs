@@ -109,9 +109,9 @@ console.log(imports);
 
 // @ts-ignore
 const root = await instantiate(undefined, {
-	wasip1: {
-        default: imports
-    },
+	"wasip1-vfs:host/virtual-file-system-wasip1-core": {
+        Wasip1: imports,
+    }
 }, async (module, imports) => {
     inst = await WebAssembly.instantiate(module, imports);
     return inst;
@@ -133,7 +133,4 @@ wasi.start({
         }
     },
 });
-
-
-
 "#;
