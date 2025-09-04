@@ -70,6 +70,26 @@ pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess, const N: usize> {
 
 pub struct DirectThreadPool;
 
+/// Spawn a new thread.
+/// If you call `std::thread::spawn` in ThreadPool, it will be looped.
+/// So, you should use `root_spawn` instead.
+pub fn root_spawn<F, T>(f: F) -> std::thread::JoinHandle<T>
+where
+    F: FnOnce() -> T,
+    F: Send + 'static,
+    T: Send + 'static,
+{
+    std::thread::spawn(f)
+}
+
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+extern "C" fn __wasip1_vfs_root_spawn_sign() {
+    root_spawn(move || {
+        unreachable!();
+    });
+}
+
 impl VirtualThread for DirectThreadPool {
     // new thread start function call by other wasm
     fn new_thread(
@@ -81,7 +101,7 @@ impl VirtualThread for DirectThreadPool {
 
         let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
 
-        std::thread::spawn(move || {
+        root_spawn(move || {
             accessor.call_wasi_thread_start(runner, NonZero::new(thread_id));
         });
 

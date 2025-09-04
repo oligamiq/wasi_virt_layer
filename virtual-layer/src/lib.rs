@@ -24,7 +24,9 @@ pub mod prelude {
 
 #[cfg(feature = "threads")]
 pub mod thread {
-    pub use crate::wasi::thread::{DirectThreadPool, ThreadAccess, ThreadRunner, VirtualThread};
+    pub use crate::wasi::thread::{
+        DirectThreadPool, ThreadAccess, ThreadRunner, VirtualThread, root_spawn,
+    };
 }
 
 pub mod file {
