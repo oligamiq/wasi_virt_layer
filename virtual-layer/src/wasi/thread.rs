@@ -23,10 +23,6 @@ pub struct ThreadRunnerBase {
 }
 
 impl ThreadRunnerBase {
-    const fn new(main: *mut Box<dyn FnOnce()>) -> Self {
-        ThreadRunnerBase { main }
-    }
-
     #[cfg(target_os = "wasi")]
     pub fn apply<Wasm: WasmAccess>(&self) -> ThreadRunner {
         #[cfg(feature = "multi_memory")]
