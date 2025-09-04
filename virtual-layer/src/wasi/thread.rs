@@ -196,10 +196,8 @@ macro_rules! export_thread {
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;
-                    // const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
-                    let accessor = ThreadAccessor::[<__ $wasm>];
-                    let data_ptr = accessor.to_correct_memory(data_ptr);
-                    match pool.new_thread(accessor, data_ptr) {
+                    const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
+                    match pool.new_thread(ACCESSOR, ACCESSOR.to_correct_memory(data_ptr)) {
                         Some(thread_id) => {
 
                             // Successfully created a new thread
