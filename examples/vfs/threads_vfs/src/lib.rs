@@ -42,7 +42,10 @@ const FILES: NormalFILES = ConstFiles!([(
     ],
 )]);
 
-export_thread!(DirectThreadPool, self, test_threads);
+mod thread {
+    use super::*;
+    export_thread!(DirectThreadPool, self, test_threads);
+}
 
 #[cfg(test)]
 mod tests {

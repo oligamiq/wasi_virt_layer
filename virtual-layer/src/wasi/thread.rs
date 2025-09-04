@@ -1,7 +1,6 @@
 use core::{
     num::NonZero,
-    ptr::NonNull,
-    sync::atomic::{AtomicU32, AtomicUsize, Ordering},
+    sync::atomic::{AtomicU32, Ordering},
 };
 
 #[cfg(target_os = "wasi")]
@@ -30,22 +29,14 @@ impl ThreadRunnerBase {
 
     #[cfg(target_os = "wasi")]
     pub fn apply<Wasm: WasmAccess>(&self) -> ThreadRunner {
-        #[cfg(target_os = "wasi")]
+        #[cfg(feature = "multi_memory")]
         {
-            #[cfg(feature = "multi_memory")]
-            {
-                ThreadRunner::new(self.main)
-            }
-
-            #[cfg(not(feature = "multi_memory"))]
-            {
-                ThreadRunner::new(Wasm::memory_director_mut(self.main))
-            }
+            ThreadRunner::new(self.main)
         }
 
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(not(feature = "multi_memory"))]
         {
-            panic!("This function is only available on WASI");
+            ThreadRunner::new(Wasm::memory_director_mut(self.main))
         }
     }
 }
@@ -67,9 +58,10 @@ impl ThreadRunner {
     }
 }
 
-pub trait ThreadAccess: Send + Sync + 'static {
+pub trait ThreadAccess: Send + 'static {
     fn to_correct_memory(&self, ptr: ThreadRunnerBase) -> ThreadRunner;
     fn call_wasi_thread_start(&self, ptr: ThreadRunner, thread_id: Option<NonZero<u32>>);
+    fn as_name(&self) -> &'static str;
 }
 
 pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess, const N: usize> {
@@ -115,7 +107,7 @@ macro_rules! export_thread {
                     {
                         match *self {
                             $(
-                                [<__ $wasm>] => {
+                                Self::[<__ $wasm>] => {
                                     $crate::export_thread!(@filter, ptr, $wasm)
                                 }
                             )*
@@ -133,19 +125,7 @@ macro_rules! export_thread {
                     {
                         match *self {
                             $(
-                                [<__ $wasm>] => {
-                                    #[doc(hidden)]
-                                    #[cfg(target_os = "wasi")]
-                                    #[link(wasm_import_module = "wasip1-vfs")]
-                                    unsafe extern "C" {
-                                        #[unsafe(no_mangle)]
-                                        pub fn [<__wasip1_vfs_ $wasm _wasi_thread_start>](
-                                            thread_id: i32,
-                                            ptr: i32,
-                                        );
-                                    }
-
-                                    #[cfg(target_os = "wasi")]
+                                Self::[<__ $wasm>] => {
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
                                             Some(id) => u32::from(id) as i32,
@@ -153,6 +133,8 @@ macro_rules! export_thread {
                                         },
                                         ptr.inner() as i32,
                                     ) }
+
+                                    todo!();
                                 }
                             )*
                         }
@@ -163,9 +145,28 @@ macro_rules! export_thread {
                         panic!("This function is only available on WASI");
                     }
                 }
+
+                fn as_name(&self) -> &'static str {
+                    match *self {
+                        $(
+                            [<__ $wasm>] => stringify!($wasm),
+                        )*
+                    }
+                }
             }
 
             $(
+                #[cfg(target_os = "wasi")]
+                #[doc(hidden)]
+                #[link(wasm_import_module = "wasip1-vfs")]
+                unsafe extern "C" {
+                    #[unsafe(no_mangle)]
+                    pub fn [<__wasip1_vfs_ $wasm _wasi_thread_start>](
+                        thread_id: i32,
+                        ptr: i32,
+                    );
+                }
+
                 #[cfg(target_os = "wasi")]
                 #[unsafe(no_mangle)]
                 unsafe extern "C" fn [<__wasip1_vfs_wasi_thread_start_ $wasm>](
@@ -175,8 +176,18 @@ macro_rules! export_thread {
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;
-                    const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
-                    pool.new_thread(ACCESSOR, ACCESSOR.to_correct_memory(data_ptr));
+                    // const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
+                    let accessor = ThreadAccessor::[<__ $wasm>];
+                    let data_ptr = accessor.to_correct_memory(data_ptr);
+                    match pool.new_thread(accessor, data_ptr) {
+                        Some(thread_id) => {
+
+                            // Successfully created a new thread
+                        },
+                        None => {
+                            panic!("Failed to create a new thread");
+                        }
+                    }
                 }
             )*
         }
