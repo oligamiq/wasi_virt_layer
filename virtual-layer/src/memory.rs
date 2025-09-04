@@ -45,8 +45,6 @@ macro_rules! import_wasm {
 
             $crate::__memory_director_import_etc!($name);
 
-            $crate::__threads_import_etc!($name);
-
             impl $crate::memory::WasmAccess for $name {
                 #[inline(always)]
                 fn memcpy<T>(offset: *mut T, data: &[T])
@@ -109,8 +107,6 @@ macro_rules! import_wasm {
                 }
 
                 $crate::__memory_director_wasm_access!($name);
-
-                $crate::__threads_wasm_access!($name);
 
                 #[inline(always)]
                 fn _main()
@@ -230,57 +226,6 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_multi_memory() {}
 #[cfg(not(feature = "multi_memory"))]
 #[doc(hidden)]
 unsafe extern "C" fn __wasip1_vfs_flag_vfs_single_memory() {}
-
-#[cfg(feature = "threads")]
-#[macro_export]
-macro_rules! __threads_wasm_access {
-    ($name:ident) => {
-        $crate::__private::paste::paste! {
-            #[inline(always)]
-            fn _wasi_thread_start(thread_id: isize, ptr: isize) {
-                #[cfg(not(target_os = "wasi"))]
-                unimplemented!("this is not supported on this architecture");
-
-                #[cfg(target_os = "wasi")]
-                unsafe { [<__wasip1_vfs_ $name _wasi_thread_start>](
-                    thread_id,
-                    ptr,
-                ) }
-            }
-        }
-    };
-}
-
-#[cfg(not(feature = "threads"))]
-#[macro_export]
-macro_rules! __threads_wasm_access {
-    ($name:ident) => {};
-}
-
-#[cfg(feature = "threads")]
-#[macro_export]
-macro_rules! __threads_import_etc {
-    ($name:ident) => {
-        $crate::__private::paste::paste! {
-            #[doc(hidden)]
-            #[cfg(target_os = "wasi")]
-            #[link(wasm_import_module = "wasip1-vfs")]
-            unsafe extern "C" {
-                #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name _wasi_thread_start>](
-                    thread_id: isize,
-                    ptr: isize,
-                );
-            }
-        }
-    };
-}
-
-#[cfg(not(feature = "threads"))]
-#[macro_export]
-macro_rules! __threads_import_etc {
-    ($name:ident) => {};
-}
 
 #[unsafe(no_mangle)]
 #[cfg(target_os = "wasi")]
@@ -461,9 +406,6 @@ pub trait WasmAccess: Copy {
         Self::memcpy_to(&mut vec, ptr);
         vec
     }
-
-    #[cfg(feature = "threads")]
-    fn _wasi_thread_start(thread_id: isize, ptr: isize);
 
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director<T>(ptr: *const T) -> *const T;
@@ -737,11 +679,6 @@ impl WasmAccess for WasmAccessFaker {
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
         ptr
-    }
-
-    #[cfg(feature = "threads")]
-    fn _wasi_thread_start(_: isize, _: isize) {
-        unimplemented!("this is not supported on this faker");
     }
 
     fn memcpy_to<T>(offset: &mut [T], src: *const T) {

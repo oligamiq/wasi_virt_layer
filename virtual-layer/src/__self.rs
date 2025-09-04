@@ -21,11 +21,6 @@ impl WasmAccess for __self {
         todo!()
     }
 
-    #[cfg(feature = "threads")]
-    fn _wasi_thread_start(thread_id: isize, ptr: isize) {
-        todo!()
-    }
-
     fn memory_director<T>(ptr: *const T) -> *const T {
         todo!()
     }
