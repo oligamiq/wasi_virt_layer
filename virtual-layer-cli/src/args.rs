@@ -51,10 +51,6 @@ pub struct Args {
     /// This will change the crate feature flags to enable multi-threading.
     #[arg(long)]
     pub threads: Option<bool>,
-
-    /// threads pool size
-    #[arg(long)]
-    pub threads_pool_size: Option<usize>,
 }
 
 impl Args {
@@ -67,10 +63,6 @@ impl Args {
         let parsed = Args::parse_from(args);
         if parsed.wasm.is_empty() {
             unimplemented!("target to only self file is not supported yet");
-        }
-
-        if parsed.threads_pool_size.is_some() {
-            unimplemented!("threads pool is not supported yet");
         }
 
         parsed
