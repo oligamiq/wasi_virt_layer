@@ -39,7 +39,7 @@ macro_rules! import_wasm {
 
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
-            unsafe extern "C" fn [<__wasip1_vfs_ $name __start_wrap>]() {
+            unsafe extern "C" fn [<__wasip1_vfs_ $name __start_anchor>]() {
                 unsafe { [<__wasip1_vfs_ $name __start>]() };
             }
 
@@ -185,7 +185,7 @@ macro_rules! __memory_director_import_etc {
         $crate::__private::paste::paste! {
             #[cfg(target_os = "wasi")]
             #[unsafe(no_mangle)]
-            unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_wrap>](
+            unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_anchor>](
                 _ptr: isize,
             ) -> isize {
                 unsafe { [<__wasip1_vfs_ $name _memory_trap>](

@@ -25,7 +25,7 @@ pub fn director(path: &Utf8PathBuf, wasm: &[impl AsRef<Path>]) -> eyre::Result<U
 
         let wasm_name = wasm.get_file_main_name().unwrap();
 
-        let trap_export_name = format!("__wasip1_vfs_{wasm_name}_memory_trap_wrap");
+        let trap_export_name = format!("__wasip1_vfs_{wasm_name}_memory_trap_anchor");
         let trap_id = module
             .exports
             .get_func(&trap_export_name)

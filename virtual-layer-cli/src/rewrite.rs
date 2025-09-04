@@ -34,7 +34,7 @@ pub fn adjust_wasm(
             module
                 .exports
                 .iter()
-                .any(|e| e.name == format!("{name}_import_wrap"))
+                .any(|e| e.name == format!("{name}_import_anchor"))
         })
     {
         eyre::bail!(
@@ -53,10 +53,10 @@ pub fn adjust_wasm(
         if !module
             .exports
             .iter()
-            .any(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_wrap"))
+            .any(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
         {
             eyre::bail!(
-                "Failed to get __start_wrap export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
+                "Failed to get __start_anchor export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
             );
         }
 
@@ -81,9 +81,9 @@ pub fn adjust_wasm(
 
         module
             .exports
-            .remove(format!("{name}_import_wrap"))
+            .remove(format!("{name}_import_anchor"))
             .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("{name}_import_wrap not found"))?;
+            .wrap_err_with(|| eyre::eyre!("{name}_import_anchor not found"))?;
 
         module
             .imports

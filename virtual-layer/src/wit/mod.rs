@@ -18,7 +18,7 @@ mod import {
         use super::super::virtual_file_system::wasip1_vfs::host::virtual_file_system_wasip1_core::*;
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn environ_sizes_get_import_wrap(
+        pub unsafe extern "C" fn environ_sizes_get_import_anchor(
             environ_count_ptr: i32,
             environ_size_ptr: i32,
         ) -> i32 {
@@ -26,7 +26,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn environ_get_import_wrap(
+        pub unsafe extern "C" fn environ_get_import_anchor(
             environ_ptr_ptr: i32,
             environ_buf_ptr: i32,
         ) -> i32 {
@@ -34,22 +34,22 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn proc_exit_import_wrap(code: i32) {
+        pub unsafe extern "C" fn proc_exit_import_anchor(code: i32) {
             Wasip1::proc_exit_import(code)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn random_get_import_wrap(buf_ptr: i32, buf_len: i32) -> i32 {
+        pub unsafe extern "C" fn random_get_import_anchor(buf_ptr: i32, buf_len: i32) -> i32 {
             Wasip1::random_get_import(buf_ptr, buf_len)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn sched_yield_import_wrap() -> i32 {
+        pub unsafe extern "C" fn sched_yield_import_anchor() -> i32 {
             Wasip1::sched_yield_import()
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn clock_time_get_import_wrap(
+        pub unsafe extern "C" fn clock_time_get_import_anchor(
             clock_id: i32,
             precision: i64,
             time_ptr: i32,
@@ -58,7 +58,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn clock_res_get_import_wrap(
+        pub unsafe extern "C" fn clock_res_get_import_anchor(
             clock_id: i32,
             resolution_ptr: i32,
         ) -> i32 {
@@ -66,7 +66,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_advise_import_wrap(
+        pub unsafe extern "C" fn fd_advise_import_anchor(
             fd: i32,
             offset: i64,
             len: i64,
@@ -76,27 +76,27 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_allocate_import_wrap(fd: i32, offset: i64, len: i64) -> i32 {
+        pub unsafe extern "C" fn fd_allocate_import_anchor(fd: i32, offset: i64, len: i64) -> i32 {
             Wasip1::fd_allocate_import(fd, offset, len)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_datasync_import_wrap(fd: i32) -> i32 {
+        pub unsafe extern "C" fn fd_datasync_import_anchor(fd: i32) -> i32 {
             Wasip1::fd_datasync_import(fd)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_fdstat_get_import_wrap(fd: i32, fdstat_ptr: i32) -> i32 {
+        pub unsafe extern "C" fn fd_fdstat_get_import_anchor(fd: i32, fdstat_ptr: i32) -> i32 {
             Wasip1::fd_fdstat_get_import(fd, fdstat_ptr)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_fdstat_set_flags_import_wrap(fd: i32, fdflags: i16) -> i32 {
+        pub unsafe extern "C" fn fd_fdstat_set_flags_import_anchor(fd: i32, fdflags: i16) -> i32 {
             Wasip1::fd_fdstat_set_flags_import(fd, fdflags)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_fdstat_set_rights_import_wrap(
+        pub unsafe extern "C" fn fd_fdstat_set_rights_import_anchor(
             fd: i32,
             fs_rights_base: i64,
             fs_rights_inheriting: i64,
@@ -105,7 +105,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_write_import_wrap(
+        pub unsafe extern "C" fn fd_write_import_anchor(
             fd: i32,
             iovs_ptr: i32,
             iovs_len: i32,
@@ -115,7 +115,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_pwrite_import_wrap(
+        pub unsafe extern "C" fn fd_pwrite_import_anchor(
             fd: i32,
             iovs_ptr: i32,
             iovs_len: i32,
@@ -126,7 +126,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_readdir_import_wrap(
+        pub unsafe extern "C" fn fd_readdir_import_anchor(
             fd: i32,
             buf_ptr: i32,
             buf_len: i32,
@@ -137,17 +137,17 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_close_import_wrap(fd: i32) -> i32 {
+        pub unsafe extern "C" fn fd_close_import_anchor(fd: i32) -> i32 {
             Wasip1::fd_close_import(fd)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_prestat_get_import_wrap(fd: i32, prestat_ptr: i32) -> i32 {
+        pub unsafe extern "C" fn fd_prestat_get_import_anchor(fd: i32, prestat_ptr: i32) -> i32 {
             Wasip1::fd_prestat_get_import(fd, prestat_ptr)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_prestat_dir_name_import_wrap(
+        pub unsafe extern "C" fn fd_prestat_dir_name_import_anchor(
             fd: i32,
             path_ptr: i32,
             path_len: i32,
@@ -156,12 +156,12 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_filestat_get_import_wrap(fd: i32, filestat_ptr: i32) -> i32 {
+        pub unsafe extern "C" fn fd_filestat_get_import_anchor(fd: i32, filestat_ptr: i32) -> i32 {
             Wasip1::fd_filestat_get_import(fd, filestat_ptr)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_read_import_wrap(
+        pub unsafe extern "C" fn fd_read_import_anchor(
             fd: i32,
             iovs_ptr: i32,
             iovs_len: i32,
@@ -171,7 +171,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_pread_import_wrap(
+        pub unsafe extern "C" fn fd_pread_import_anchor(
             fd: i32,
             iovs_ptr: i32,
             iovs_len: i32,
@@ -182,12 +182,12 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_filestat_set_size_import_wrap(fd: i32, size: i64) -> i32 {
+        pub unsafe extern "C" fn fd_filestat_set_size_import_anchor(fd: i32, size: i64) -> i32 {
             Wasip1::fd_filestat_set_size_import(fd, size)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_filestat_set_times_import_wrap(
+        pub unsafe extern "C" fn fd_filestat_set_times_import_anchor(
             fd: i32,
             atim: i64,
             mtim: i64,
@@ -197,12 +197,12 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_renumber_import_wrap(fd: i32, new_fd: i32) -> i32 {
+        pub unsafe extern "C" fn fd_renumber_import_anchor(fd: i32, new_fd: i32) -> i32 {
             Wasip1::fd_renumber_import(fd, new_fd)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_seek_import_wrap(
+        pub unsafe extern "C" fn fd_seek_import_anchor(
             fd: i32,
             offset: i64,
             whence: i8,
@@ -212,17 +212,17 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_sync_import_wrap(fd: i32) -> i32 {
+        pub unsafe extern "C" fn fd_sync_import_anchor(fd: i32) -> i32 {
             Wasip1::fd_sync_import(fd)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn fd_tell_import_wrap(fd: i32, offset_ptr: i32) -> i32 {
+        pub unsafe extern "C" fn fd_tell_import_anchor(fd: i32, offset_ptr: i32) -> i32 {
             Wasip1::fd_tell_import(fd, offset_ptr)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_create_directory_import_wrap(
+        pub unsafe extern "C" fn path_create_directory_import_anchor(
             fd: i32,
             path_ptr: i32,
             path_len: i32,
@@ -231,7 +231,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_filestat_get_import_wrap(
+        pub unsafe extern "C" fn path_filestat_get_import_anchor(
             fd: i32,
             lookupflags: i32,
             path_ptr: i32,
@@ -242,7 +242,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_filestat_set_times_import_wrap(
+        pub unsafe extern "C" fn path_filestat_set_times_import_anchor(
             fd: i32,
             lookupflags: i32,
             path_ptr: i32,
@@ -263,7 +263,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_link_import_wrap(
+        pub unsafe extern "C" fn path_link_import_anchor(
             old_fd: i32,
             old_flags: i32,
             old_path_ptr: i32,
@@ -284,7 +284,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_readlink_import_wrap(
+        pub unsafe extern "C" fn path_readlink_import_anchor(
             fd: i32,
             path_ptr: i32,
             path_len: i32,
@@ -296,7 +296,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_remove_directory_import_wrap(
+        pub unsafe extern "C" fn path_remove_directory_import_anchor(
             fd: i32,
             path_ptr: i32,
             path_len: i32,
@@ -305,7 +305,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_rename_import_wrap(
+        pub unsafe extern "C" fn path_rename_import_anchor(
             old_fd: i32,
             old_path_ptr: i32,
             old_path_len: i32,
@@ -324,7 +324,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_open_import_wrap(
+        pub unsafe extern "C" fn path_open_import_anchor(
             fd: i32,
             dirflags: i32,
             path_ptr: i32,
@@ -349,7 +349,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_symlink_import_wrap(
+        pub unsafe extern "C" fn path_symlink_import_anchor(
             old_path_ptr: i32,
             old_path_len: i32,
             fd: i32,
@@ -360,7 +360,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn path_unlink_file_import_wrap(
+        pub unsafe extern "C" fn path_unlink_file_import_anchor(
             fd: i32,
             path_ptr: i32,
             path_len: i32,
@@ -369,7 +369,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn poll_oneoff_import_wrap(
+        pub unsafe extern "C" fn poll_oneoff_import_anchor(
             subscriptions_ptr: i32,
             results_ptr: i32,
             n_subscriptions: i32,
@@ -379,12 +379,15 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn args_get_import_wrap(args_ptr_ptr: i32, args_buf_ptr: i32) -> i32 {
+        pub unsafe extern "C" fn args_get_import_anchor(
+            args_ptr_ptr: i32,
+            args_buf_ptr: i32,
+        ) -> i32 {
             Wasip1::args_get_import(args_ptr_ptr, args_buf_ptr)
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn args_sizes_get_import_wrap(
+        pub unsafe extern "C" fn args_sizes_get_import_anchor(
             args_count_ptr: i32,
             args_size_ptr: i32,
         ) -> i32 {
@@ -392,7 +395,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn sock_accept_import_wrap(
+        pub unsafe extern "C" fn sock_accept_import_anchor(
             fd: i32,
             flags: i16,
             new_sock_fd_ptr: i32,
@@ -401,7 +404,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn sock_recv_import_wrap(
+        pub unsafe extern "C" fn sock_recv_import_anchor(
             fd: i32,
             receiver_ptr: i32,
             receiver_len: i32,
@@ -420,7 +423,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn sock_send_import_wrap(
+        pub unsafe extern "C" fn sock_send_import_anchor(
             fd: i32,
             sender_ptr: i32,
             sender_len: i32,
@@ -431,7 +434,7 @@ mod import {
         }
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn sock_shutdown_import_wrap(fd: i32, how: i8) -> i32 {
+        pub unsafe extern "C" fn sock_shutdown_import_anchor(fd: i32, how: i8) -> i32 {
             Wasip1::sock_shutdown_import(fd, how)
         }
     }
@@ -443,7 +446,7 @@ mod import {
         use super::super::virtual_file_system_threads::wasip1_vfs::host::virtual_file_system_wasip1_threads_import::Wasip1Threads;
 
         #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn thread_spawn_import_wrap(data_ptr: i32) -> i32 {
+        pub unsafe extern "C" fn thread_spawn_import_anchor(data_ptr: i32) -> i32 {
             Wasip1Threads::thread_spawn_import(data_ptr)
         }
     }

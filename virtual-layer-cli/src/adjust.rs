@@ -114,11 +114,11 @@ pub fn adjust_merged_wasm(
         module
             .exports
             .iter_mut()
-            .find(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_wrap"))
+            .find(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
             .map(|export| {
                 export.name = format!("_{wasm_name}_start").into();
             })
-            .ok_or_else(|| eyre::eyre!("Failed to get __start_wrap export on {wasm_name}."))?;
+            .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
 
         // rm memory export
         module
