@@ -80,7 +80,7 @@ where
 
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
-extern "C" fn __wasip1_vfs_root_spawn_sign() {
+extern "C" fn __wasip1_vfs_root_spawn_anchor() {
     root_spawn(move || {
         unreachable!();
     });
@@ -187,7 +187,7 @@ macro_rules! export_thread {
                 #[unsafe(no_mangle)]
                 unsafe extern "C" fn [<__wasip1_vfs_wasi_thread_start_ $wasm>](
                     data_ptr: $crate::__private::inner::thread::ThreadRunnerBase,
-                ) {
+                ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
 
                     #[allow(unused_mut)]
@@ -195,8 +195,7 @@ macro_rules! export_thread {
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
                     match pool.new_thread(ACCESSOR, ACCESSOR.to_correct_memory(data_ptr)) {
                         Some(thread_id) => {
-
-                            // Successfully created a new thread
+                            return u32::from(thread_id) as i32;
                         },
                         None => {
                             panic!("Failed to create a new thread");

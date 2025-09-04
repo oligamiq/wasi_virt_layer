@@ -8,6 +8,7 @@ use toml_edit::{Document, DocumentMut, Item};
 
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
+    instrs::{InstrRead, InstrRewrite},
     threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT,
@@ -59,25 +60,17 @@ pub fn adjust_wasm(
                 "Failed to get __start_anchor export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
             );
         }
+    }
 
-        // let memory = module.memories
-        println!("memories: {:?}", module.memories);
+    fn gen_component_name(namespace: &str, name: &str) -> String {
+        format!("[static]{namespace}.{}-import", name.replace("_", "-"))
     }
 
     for (name, (namespace, root)) in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
         .iter()
         .zip(core::iter::repeat(("wasip1", CORE_MODULE_ROOT)))
-        .chain(
-            (if threads {
-                <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
-            } else {
-                &[]
-            })
-            .iter()
-            .zip(core::iter::repeat(("wasip1-threads", THREADS_MODULE_ROOT))),
-        )
     {
-        let component_name = format!("[static]{namespace}.{}-import", name.replace("_", "-"));
+        let component_name = gen_component_name(namespace, name);
 
         module
             .exports
@@ -100,6 +93,83 @@ pub fn adjust_wasm(
                 import.module = root.to_string();
                 import.name = component_name;
             });
+    }
+
+    // Relocate thread creation from root spawn to the outer layer
+    for (name, (namespace, root)) in <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
+        .iter()
+        .zip(core::iter::repeat(("wasip1-threads", THREADS_MODULE_ROOT)))
+    {
+        let component_name = gen_component_name(namespace, name);
+
+        module
+            .exports
+            .remove(format!("{name}_import_anchor"))
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("{name}_import_anchor not found"))?;
+
+        let import_root_thread_spawn_fn_id = module
+            .imports
+            .get_func(root, &component_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("{component_name} import not found"))?;
+
+        // rewrite call id in export.__wasip1_vfs_root_spawn_anchor
+        let anchor_fid = module
+            .exports
+            .get_func("__wasip1_vfs_root_spawn_anchor")
+            .to_eyre()
+            .wrap_err("__wasip1_vfs_root_spawn_anchor not found")?;
+
+        let fid = module
+            .imports
+            .get_func("wasi", "thread-spawn")
+            .to_eyre()
+            .wrap_err("wasi.thread-spawn import not found")?;
+
+        for child in module.find_children(anchor_fid)? {
+            let child = module.funcs.get_mut(child);
+            let func = match &mut child.kind {
+                walrus::FunctionKind::Local(imported_function) => imported_function,
+                _ => continue,
+            };
+            func.builder_mut()
+                .func_body()
+                .rewrite(|instr, _| {
+                    if let walrus::ir::Instr::Call(call) = instr {
+                        if call.func == fid {
+                            call.func = import_root_thread_spawn_fn_id;
+                        }
+                    }
+                })
+                .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
+        }
+
+        module
+            .exports
+            .remove("__wasip1_vfs_root_spawn_anchor")
+            .unwrap();
+    }
+
+    // threads
+    {
+        module
+            .connect_func(
+                "wasi",
+                "thread-spawn",
+                "__wasip1_vfs_wasi_thread_start_self",
+            )
+            .wrap_err("Failed to connect wasi.thread-spawn")?;
+
+        module
+            .connect_func(
+                "wasip1-vfs",
+                "__wasip1_vfs_wasi_thread_start_entry",
+                "wasi_thread_start",
+            )
+            .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
+
+        // let own_export = module.exports.find_mut("wasi_thread_start").unwrap();
     }
 
     // todo!(); separate block system from environ

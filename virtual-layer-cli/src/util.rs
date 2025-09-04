@@ -48,6 +48,9 @@ pub(crate) trait WalrusUtilModule {
     /// Return all functions that call functions in this fid
     fn get_using_func(&self, fid: FunctionId)
     -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>>;
+
+    /// Find children flat functions
+    fn find_children(&self, fid: FunctionId) -> eyre::Result<Vec<FunctionId>>;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -426,6 +429,27 @@ impl WalrusUtilModule for walrus::Module {
                 .map(|(a, (b, c))| (a, c, b))
             })
             .collect::<Vec<_>>())
+    }
+
+    fn find_children(&self, fid: FunctionId) -> eyre::Result<Vec<FunctionId>> {
+        let mut children = vec![];
+        let mut stack = vec![fid];
+        while let Some(fid) = stack.pop() {
+            match &self.funcs.get(fid).kind {
+                FunctionKind::Local(imported_function) => {
+                    imported_function.read(|instr, _place| {
+                        if let walrus::ir::Instr::Call(walrus::ir::Call { func }) = instr {
+                            if !children.contains(func) {
+                                children.push(*func);
+                                stack.push(*func);
+                            }
+                        }
+                    })?;
+                }
+                _ => {}
+            }
+        }
+        Ok(children)
     }
 }
 

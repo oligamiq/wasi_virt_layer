@@ -10,7 +10,7 @@ pub mod wasip1_vfs {
       #[doc(hidden)]
       static __FORCE_SECTION_REF: fn() =
       super::super::super::__link_custom_section_describing_imports;
-
+      
       use super::super::super::_rt;
 
       #[derive(Debug)]
@@ -37,7 +37,7 @@ pub mod wasip1_vfs {
           _rt::Resource::handle(&self.handle)
         }
       }
-
+      
 
       unsafe impl _rt::WasmResource for Wasip1{
         #[inline]
@@ -57,7 +57,7 @@ pub mod wasip1_vfs {
           }
         }
       }
-
+      
       impl Wasip1 {
         #[allow(unused_unsafe, clippy::all)]
         pub fn environ_sizes_get_import(environ_count_ptr: i32,environ_size_ptr: i32,) -> i32{
@@ -946,7 +946,7 @@ pub mod wasip1_vfs {
       #[doc(hidden)]
       static __FORCE_SECTION_REF: fn() =
       super::super::super::__link_custom_section_describing_imports;
-
+      
       use super::super::super::_rt;
 
       #[derive(Debug)]
@@ -973,7 +973,7 @@ pub mod wasip1_vfs {
           _rt::Resource::handle(&self.handle)
         }
       }
-
+      
 
       unsafe impl _rt::WasmResource for Wasip1Threads{
         #[inline]
@@ -993,7 +993,7 @@ pub mod wasip1_vfs {
           }
         }
       }
-
+      
       impl Wasip1Threads {
         #[allow(unused_unsafe, clippy::all)]
         pub fn thread_spawn_import(start_arg: i32,) -> i32{
@@ -1029,16 +1029,15 @@ pub mod exports {
         #[doc(hidden)]
         static __FORCE_SECTION_REF: fn() =
         super::super::super::super::__link_custom_section_describing_imports;
-
+        
         use super::super::super::super::_rt;
         #[doc(hidden)]
         #[allow(non_snake_case)]
-        pub unsafe fn _export_wasi_thread_start_cabi<T: Guest>(arg0: i32,arg1: i32,) -> i32 {#[cfg(target_arch="wasm32")]
-        _rt::run_ctors_once();let result0 = T::wasi_thread_start(arg0, arg1);
-        _rt::as_i32(result0)
+        pub unsafe fn _export_wasi_thread_start_cabi<T: Guest>(arg0: i32,arg1: i32,) {#[cfg(target_arch="wasm32")]
+        _rt::run_ctors_once();T::wasi_thread_start(arg0, arg1);
       }
       pub trait Guest {
-        fn wasi_thread_start(thread_id: i32,data_ptr: i32,) -> i32;
+        fn wasi_thread_start(thread_id: i32,data_ptr: i32,) -> ();
       }
       #[doc(hidden)]
 
@@ -1046,7 +1045,7 @@ pub mod exports {
         ($ty:ident with_types_in $($path_to_types:tt)*) => (const _: () = {
 
           #[unsafe(export_name = "wasip1-vfs:host/virtual-file-system-wasip1-threads-export#wasi-thread-start")]
-          unsafe extern "C" fn export_wasi_thread_start(arg0: i32,arg1: i32,) -> i32 {
+          unsafe extern "C" fn export_wasi_thread_start(arg0: i32,arg1: i32,) {
             unsafe { $($path_to_types)*::_export_wasi_thread_start_cabi::<$ty>(arg0, arg1) }
           }
         };);
@@ -1157,7 +1156,7 @@ mod _rt {
       }
     }
   }
-
+  
   pub fn as_i32<T: AsI32>(t: T) -> i32 {
     t.as_i32()
   }
@@ -1171,63 +1170,63 @@ mod _rt {
       (*self).as_i32()
     }
   }
-
+  
   impl AsI32 for i32 {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for u32 {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for i16 {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for u16 {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for i8 {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for u8 {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for char {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   impl AsI32 for usize {
     #[inline]
     fn as_i32(self) -> i32 {
       self as i32
     }
   }
-
+  
   pub fn as_i64<T: AsI64>(t: T) -> i64 {
     t.as_i64()
   }
@@ -1241,21 +1240,21 @@ mod _rt {
       (*self).as_i64()
     }
   }
-
+  
   impl AsI64 for i64 {
     #[inline]
     fn as_i64(self) -> i64 {
       self as i64
     }
   }
-
+  
   impl AsI64 for u64 {
     #[inline]
     fn as_i64(self) -> i64 {
       self as i64
     }
   }
-
+  
   #[cfg(target_arch = "wasm32")]
   pub fn run_ctors_once() {
     wit_bindgen::rt::run_ctors_once();
@@ -1357,11 +1356,11 @@ en-ptrz\0z\x04\0\x1f[static]wasip1.sock-send-import\x01(\x01@\x02\x02fdz\x03how~
 -file-system-wasip1-core\x05\0\x01B\x03\x04\0\x0ewasip1-threads\x03\x01\x01@\x01\
 \x09start-argz\0z\x04\0*[static]wasip1-threads.thread-spawn-import\x01\x01\x03\0\
 9wasip1-vfs:host/virtual-file-system-wasip1-threads-import\x05\x01\x01B\x02\x01@\
-\x02\x09thread-idz\x08data-ptrz\0z\x04\0\x11wasi-thread-start\x01\0\x04\09wasip1\
--vfs:host/virtual-file-system-wasip1-threads-export\x05\x02\x04\0+wasip1-vfs:hos\
-t/virtual-file-system-threads\x04\0\x0b!\x01\0\x1bvirtual-file-system-threads\x03\
-\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10wit-\
-bindgen-rust\x060.41.0";
+\x02\x09thread-idz\x08data-ptrz\x01\0\x04\0\x11wasi-thread-start\x01\0\x04\09was\
+ip1-vfs:host/virtual-file-system-wasip1-threads-export\x05\x02\x04\0+wasip1-vfs:\
+host/virtual-file-system-threads\x04\0\x0b!\x01\0\x1bvirtual-file-system-threads\
+\x03\0\0\0G\x09producers\x01\x0cprocessed-by\x02\x0dwit-component\x070.227.1\x10\
+wit-bindgen-rust\x060.41.0";
 
 #[inline(never)]
 #[doc(hidden)]

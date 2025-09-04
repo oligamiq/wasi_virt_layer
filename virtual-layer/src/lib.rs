@@ -65,6 +65,7 @@ pub mod __private {
             };
         }
 
+        #[cfg(feature = "threads")]
         pub mod thread {
             pub use crate::wasi::thread::ThreadRunnerBase;
         }
