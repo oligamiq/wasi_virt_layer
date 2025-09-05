@@ -2,6 +2,7 @@
 
 pub mod env;
 pub mod file;
+pub mod process;
 #[cfg(feature = "threads")]
 pub mod thread;
 

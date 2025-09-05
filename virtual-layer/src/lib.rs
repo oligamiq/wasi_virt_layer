@@ -41,6 +41,10 @@ pub mod file {
     };
 }
 
+pub mod process {
+    pub use crate::wasi::process::{DefaultProcess, ProcessExit};
+}
+
 pub mod __private {
     #[cfg(not(target_os = "wasi"))]
     pub use super::wasip1;
