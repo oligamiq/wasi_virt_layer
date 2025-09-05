@@ -21,10 +21,12 @@ impl WasmAccess for __self {
         todo!()
     }
 
+    #[cfg(not(feature = "multi_memory"))]
     fn memory_director<T>(ptr: *const T) -> *const T {
         todo!()
     }
 
+    #[cfg(not(feature = "multi_memory"))]
     fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
         todo!()
     }

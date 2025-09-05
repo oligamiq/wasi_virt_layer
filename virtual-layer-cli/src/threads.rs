@@ -1,9 +1,9 @@
 use std::fs;
 
 use camino::Utf8PathBuf;
-use eyre::{Context, ContextCompat};
+use eyre::Context;
 
-use crate::{rewrite::TargetMemoryType, util::ResultUtil};
+use crate::util::ResultUtil;
 
 pub fn remove_unused_threads_function(wasm: &mut walrus::Module) -> eyre::Result<()> {
     // if wasm doesn't have wasi.thread-spawn on import,
@@ -51,10 +51,7 @@ pub fn remove_unused_threads_function(wasm: &mut walrus::Module) -> eyre::Result
     Ok(())
 }
 
-pub fn adjust_core_wasm(
-    path: &Utf8PathBuf,
-    target_memory_type: TargetMemoryType,
-) -> eyre::Result<(Utf8PathBuf, Option<(u64, u64)>)> {
+pub fn adjust_core_wasm(path: &Utf8PathBuf) -> eyre::Result<(Utf8PathBuf, Vec<(u64, u64)>)> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
         .wrap_err("Failed to load module")?;
@@ -63,27 +60,26 @@ pub fn adjust_core_wasm(
         mem.shared = true;
     });
 
-    let mem_size = if matches!(target_memory_type, TargetMemoryType::Single) {
-        if module.memories.len() > 1 {
-            eyre::bail!("Why are there multiple memories in core wasm? This is unexpected.");
-        }
+    let mem_size = {
+        module
+            .memories
+            .iter_mut()
+            .enumerate()
+            .map(|(count, mem)| {
+                let id = module.imports.add(
+                    "env",
+                    &mem.name.clone().unwrap_or_else(|| match count {
+                        0 => "memory".to_string(),
+                        n => format!("memory{n}"),
+                    }),
+                    walrus::ImportKind::Memory(mem.id()),
+                );
 
-        let mem = module.memories.iter_mut().next().unwrap();
+                mem.import = Some(id);
 
-        let id = module.imports.add(
-            "env",
-            mem.name.as_ref().unwrap_or(&"memory".into()),
-            walrus::ImportKind::Memory(mem.id()),
-        );
-
-        mem.import = Some(id);
-
-        Some((
-            mem.initial,
-            mem.maximum.wrap_err("Failed to get memory maximum")?,
-        ))
-    } else {
-        None
+                (mem.initial, mem.maximum.unwrap_or(0))
+            })
+            .collect::<Vec<_>>()
     };
 
     let new_path = path.with_extension("adjusted.wasm");

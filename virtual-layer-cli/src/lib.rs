@@ -133,7 +133,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads, target_memory_type)
+    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads)
         .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
@@ -222,14 +222,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let (core_wasm_opt_adjusted, mem_size) = if threads {
         println!("Adjusting core Wasm...");
-        let core_wasm_opt_adjusted = threads::adjust_core_wasm(&core_wasm_opt, target_memory_type)
-            .wrap_err("Failed to adjust core Wasm")?;
+        let core_wasm_opt_adjusted =
+            threads::adjust_core_wasm(&core_wasm_opt).wrap_err("Failed to adjust core Wasm")?;
         tmp_files.push(core_wasm.to_string());
         tmp_files.push(core_wasm_opt.to_string());
         core_wasm_opt_adjusted
     } else {
         tmp_files.push(core_wasm.to_string());
-        (core_wasm_opt, None)
+        (core_wasm_opt, Vec::new())
     };
 
     for tmp_file in tmp_files {
@@ -250,10 +250,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                     .get_file_main_name()
                     .wrap_err("Failed to get core wasm main name")?;
                 if threads {
-                    test_run::thread::gen_threads_run(
-                        name,
-                        mem_size.wrap_err("Failed to get memory size")?,
-                    )
+                    test_run::thread::gen_threads_run(name, mem_size)
                 } else {
                     test_run::gen_test_run(name)
                 }

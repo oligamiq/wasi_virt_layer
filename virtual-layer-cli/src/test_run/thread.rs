@@ -1,8 +1,20 @@
-pub fn gen_threads_run(wasm_name: impl AsRef<str>, mem_size: (u64, u64)) -> String {
+pub fn gen_threads_run(wasm_name: impl AsRef<str>, mem_size: Vec<(u64, u64)>) -> String {
     let wasm_name = wasm_name.as_ref();
-    let (init, max) = mem_size;
 
     let core = super::common::core(wasm_name);
+
+    let mut memories = String::new();
+    for (i, (init, max)) in mem_size.iter().enumerate() {
+        let i = if i > 0 {
+            memories.push_str(",\n        ");
+            i.to_string()
+        } else {
+            "".to_string()
+        };
+        memories.push_str(&format!(
+            "memory{i}: new WebAssembly.Memory({{initial:{init}, maximum:{max}, shared:true}})"
+        ));
+    }
 
     format!(
         r#"
@@ -20,7 +32,7 @@ const root = await instantiate(undefined, {{
 }}, async (module, imports) => {{
     console.log("WebAssembly Module:", module);
     imports.env = {{
-        memory: new WebAssembly.Memory({{initial:{init}, maximum:{max}, shared:true}})
+        {memories}
     }};
     console.log("WebAssembly Imports:", imports);
     inst = await WebAssembly.instantiate(module, imports);

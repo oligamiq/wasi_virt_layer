@@ -296,8 +296,8 @@ impl<
         {
             let mut buf_vec = alloc::vec::Vec::with_capacity(buf_len);
             unsafe { buf_vec.set_len(buf_len) };
-            let read = StdIo::read(&mut buf_vec);
-            Wasm::memcpy_from(buf, &buf_vec);
+            let read = StdIo::read(&mut buf_vec)?;
+            Wasm::memcpy(buf, &buf_vec);
             Ok(read)
         }
     }

@@ -5,8 +5,7 @@ use eyre::{Context as _, ContextCompat};
 
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
-    instrs::{InstrRead, InstrRewrite},
-    rewrite::TargetMemoryType,
+    instrs::InstrRewrite,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
 
@@ -14,7 +13,6 @@ pub fn adjust_merged_wasm(
     path: &Utf8PathBuf,
     wasm_paths: &[impl AsRef<Path>],
     threads: bool,
-    target_memory_type: TargetMemoryType,
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
@@ -159,20 +157,18 @@ pub fn adjust_merged_wasm(
             .iter_mut()
             // .skip(1)
             .map(|mem| {
-                if matches!(target_memory_type, TargetMemoryType::Single) {
-                    let id = mem.id();
-                    let mem_id = module
-                        .imports
-                        .iter()
-                        .find_map(|import| match import.kind {
-                            walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
-                            _ => None,
-                        })
-                        .wrap_err("Failed to find memory import id")?;
+                let id = mem.id();
+                let mem_id = module
+                    .imports
+                    .iter()
+                    .find_map(|import| match import.kind {
+                        walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
+                        _ => None,
+                    })
+                    .wrap_err("Failed to find memory import id")?;
 
-                    module.imports.delete(mem_id);
-                    mem.import = None;
-                }
+                module.imports.delete(mem_id);
+                mem.import = None;
 
                 // Translating component requires WasmFeatures::Threads
                 // but we cannot enable it because it in other crates.
