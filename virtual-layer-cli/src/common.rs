@@ -368,6 +368,7 @@ impl Wasip1Op {
             }
             _ if name.starts_with("memory_trap") => Wasip1OpKind::MemoryTrap {},
             _ if name.starts_with("memory_director") => Wasip1OpKind::Skip {},
+            _ if name.starts_with("wasi_thread_start") => Wasip1OpKind::Skip {},
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 

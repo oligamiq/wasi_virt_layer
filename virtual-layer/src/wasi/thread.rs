@@ -185,7 +185,7 @@ macro_rules! export_thread {
 
                 #[cfg(target_os = "wasi")]
                 #[unsafe(no_mangle)]
-                unsafe extern "C" fn [<__wasip1_vfs_wasi_thread_start_ $wasm>](
+                unsafe extern "C" fn [<__wasip1_vfs_wasi_thread_spawn_ $wasm>](
                     data_ptr: $crate::__private::inner::thread::ThreadRunnerBase,
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};

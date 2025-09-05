@@ -7,6 +7,41 @@ use crate::instrs::InstrRead;
 
 pub(crate) trait WalrusUtilImport {
     fn find_mut(&mut self, module: impl AsRef<str>, name: impl AsRef<str>) -> Option<&mut Import>;
+    fn swap_import(
+        &mut self,
+        old_module: impl AsRef<str>,
+        old_name: impl AsRef<str>,
+        new_module: impl AsRef<str>,
+        new_name: impl AsRef<str>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        let old_module = old_module.as_ref();
+        let old_name = old_name.as_ref();
+        let new_module = new_module.as_ref();
+        let new_name = new_name.as_ref();
+
+        let old_import = self
+            .find_mut(old_module, old_name)
+            .ok_or_else(|| eyre::eyre!("Import {}.{} not found", old_module, old_name))?;
+
+        old_import.module = "archived".to_string();
+
+        self.find_mut(new_module, new_name).map(|import| {
+            import.module = old_module.to_string();
+            import.name = old_name.to_string();
+        });
+
+        let old_import = self
+            .find_mut("archived", old_name)
+            .ok_or_else(|| eyre::eyre!("Import archived.{} not found", old_name))?;
+
+        old_import.module = new_module.to_string();
+        old_import.name = new_name.to_string();
+
+        Ok(())
+    }
 }
 
 pub(crate) trait WalrusUtilModule {
@@ -104,7 +139,7 @@ impl WalrusUtilModule for walrus::Module {
     ) -> eyre::Result<()> {
         let fid = self
             .imports
-            .get_func(import_module, import_name.as_ref())
+            .get_func(import_module, &import_name)
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("import {} not found", import_name.as_ref()))?;
 

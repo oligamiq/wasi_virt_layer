@@ -133,8 +133,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret =
-        adjust::adjust_merged_wasm(&ret, &wasm_paths).wrap_err("Failed to adjust merged Wasm")?;
+    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads)
+        .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {

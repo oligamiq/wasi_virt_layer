@@ -1,7 +1,7 @@
 use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
-use eyre::Context as _;
+use eyre::{Context as _, ContextCompat};
 
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
@@ -11,6 +11,7 @@ use crate::{
 pub fn adjust_merged_wasm(
     path: &Utf8PathBuf,
     wasm_paths: &[impl AsRef<Path>],
+    threads: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
@@ -124,6 +125,51 @@ pub fn adjust_merged_wasm(
         module
             .exports
             .delete(module.exports.get_exported_memory(memory_id).unwrap().id());
+
+        // threads
+        if threads {
+            module
+                .connect_func(
+                    "wasip1-vfs",
+                    format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
+                    format!("__wasip1_vfs_wasi_thread_start_{wasm_name}"),
+                )
+                .wrap_err_with(|| {
+                    eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_start_{wasm_name}")
+                })?;
+
+            module
+                .connect_func(
+                    "wasi",
+                    format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
+                    format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
+                )
+                .wrap_err_with(|| {
+                    eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_spawn_{wasm_name}")
+                })?;
+
+            module
+                .memories
+                .iter_mut()
+                .skip(1)
+                .map(|mem| {
+                    let id = mem.id();
+                    let mem_id = module
+                        .imports
+                        .iter()
+                        .find_map(|import| match import.kind {
+                            walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
+                            _ => None,
+                        })
+                        .wrap_err("Failed to find memory import id")?;
+
+                    module.imports.delete(mem_id);
+                    mem.import = None;
+
+                    Ok(())
+                })
+                .collect::<eyre::Result<Vec<_>>>()?;
+        }
     }
 
     manager
