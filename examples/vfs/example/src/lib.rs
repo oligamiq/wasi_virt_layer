@@ -1,7 +1,7 @@
 use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasip1_virtual_layer::{file::*, prelude::*};
+use wasip1_virtual_layer::{export_process, file::*, prelude::*};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -52,6 +52,8 @@ impl Guest for Hello {
 }
 
 export!(Hello);
+
+export_process!(test_wasm_opt);
 
 struct VirtualEnvState {
     environ: Vec<String>,

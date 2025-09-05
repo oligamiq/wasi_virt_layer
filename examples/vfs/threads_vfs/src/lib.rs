@@ -1,5 +1,5 @@
 use const_struct::const_struct;
-use wasip1_virtual_layer::{file::*, prelude::*, thread::DirectThreadPool};
+use wasip1_virtual_layer::{export_process, file::*, prelude::*, thread::DirectThreadPool};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -11,10 +11,14 @@ struct Starter;
 impl Guest for Starter {
     fn init() -> () {}
 
-    fn start() -> () {
-        println!("Files: {:?}", FILES);
+    fn start() {
+        test_threads::_start();
+    }
 
-        todo!()
+    fn main() {
+        test_threads::reset();
+        test_threads::_start();
+        test_threads::_main();
     }
 }
 
@@ -42,10 +46,13 @@ const FILES: NormalFILES = ConstFiles!([(
     ],
 )]);
 
-mod thread {
-    use super::*;
-    export_thread!(DirectThreadPool, self, test_threads);
-}
+export_thread!(DirectThreadPool, self, test_threads);
+export_process!(test_threads);
+#[const_struct]
+const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
+    environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
+};
+export_env!(@block, @const, VirtualEnvTy, test_threads);
 
 #[cfg(test)]
 mod tests {

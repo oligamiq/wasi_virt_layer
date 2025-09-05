@@ -498,7 +498,7 @@ impl CaminoUtilModule for camino::Utf8Path {
         let file_name_poss = binding.iter().rev();
         let mut file_name = None;
         for name in file_name_poss {
-            if *name == "opt" || *name == "adjusted" || *name == "wasm" {
+            if *name == "opt" || *name == "adjusted" || *name == "wasm" || *name == "core" {
                 continue;
             }
             file_name = Some(name);

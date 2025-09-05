@@ -133,7 +133,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads)
+    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads, target_memory_type)
         .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
@@ -172,6 +172,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err("Failed to transpile to JS")?;
 
     let mut core_wasm = None;
+    let mut core_wasm_name = None;
     for (name, data) in transpiled.files.iter() {
         let name = camino::Utf8PathBuf::from(name);
         let file_name = out_dir.join(&name);
@@ -184,6 +185,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             std::fs::write(&file_name, &data)
                 .wrap_err_with(|| eyre::eyre!("Failed to write core wasm file: {file_name}"))?;
             core_wasm = Some(file_name);
+            core_wasm_name = Some(name);
         } else {
             if let Some(parent) = name.parent() {
                 if !parent.as_str().is_empty() {
@@ -210,23 +212,54 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .as_ref()
         .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
+    let core_wasm_name = core_wasm_name
+        .as_ref()
+        .ok_or_else(|| eyre::eyre!("Failed to find core wasm name"))?;
+
+    println!("Optimizing core Wasm...");
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
         .wrap_err("Failed to optimize core Wasm")?;
 
-    std::fs::remove_file(&core_wasm).expect("Failed to remove existing file");
-    std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
+    let (core_wasm_opt_adjusted, mem_size) = if threads {
+        println!("Adjusting core Wasm...");
+        let core_wasm_opt_adjusted = threads::adjust_core_wasm(&core_wasm_opt, target_memory_type)
+            .wrap_err("Failed to adjust core Wasm")?;
+        tmp_files.push(core_wasm.to_string());
+        tmp_files.push(core_wasm_opt.to_string());
+        core_wasm_opt_adjusted
+    } else {
+        tmp_files.push(core_wasm.to_string());
+        (core_wasm_opt, None)
+    };
 
     for tmp_file in tmp_files {
         std::fs::remove_file(&tmp_file)
             .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
     }
 
+    std::fs::rename(&core_wasm_opt_adjusted, &core_wasm).expect("Failed to rename file");
+
     std::fs::OpenOptions::new()
         .write(true)
         .create(true)
         .open(format!("{out_dir}/test_run.ts"))
         .expect("Failed to create file")
-        .write_all(test_run::TEST_RUN.trim_start().as_bytes())
+        .write_all(
+            {
+                let name = core_wasm_name
+                    .get_file_main_name()
+                    .wrap_err("Failed to get core wasm main name")?;
+                if threads {
+                    test_run::thread::gen_threads_run(
+                        name,
+                        mem_size.wrap_err("Failed to get memory size")?,
+                    )
+                } else {
+                    test_run::gen_test_run(name)
+                }
+            }
+            .as_bytes(),
+        )
         .expect("Failed to write file");
 
     Ok(())

@@ -5,6 +5,7 @@ use eyre::{Context as _, ContextCompat};
 
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
+    rewrite::TargetMemoryType,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
 
@@ -12,6 +13,7 @@ pub fn adjust_merged_wasm(
     path: &Utf8PathBuf,
     wasm_paths: &[impl AsRef<Path>],
     threads: bool,
+    target_memory_type: TargetMemoryType,
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
@@ -147,12 +149,16 @@ pub fn adjust_merged_wasm(
                 .wrap_err_with(|| {
                     eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_spawn_{wasm_name}")
                 })?;
+        }
+    }
 
-            module
-                .memories
-                .iter_mut()
-                .skip(1)
-                .map(|mem| {
+    if threads {
+        module
+            .memories
+            .iter_mut()
+            // .skip(1)
+            .map(|mem| {
+                if matches!(target_memory_type, TargetMemoryType::Single) {
                     let id = mem.id();
                     let mem_id = module
                         .imports
@@ -165,11 +171,16 @@ pub fn adjust_merged_wasm(
 
                     module.imports.delete(mem_id);
                     mem.import = None;
+                }
 
-                    Ok(())
-                })
-                .collect::<eyre::Result<Vec<_>>>()?;
-        }
+                // Translating component requires WasmFeatures::Threads
+                // but we cannot enable it because it in other crates.
+                // So, we set shared to false here temporarily.
+                mem.shared = false;
+
+                Ok(())
+            })
+            .collect::<eyre::Result<Vec<_>>>()?;
     }
 
     manager
@@ -190,6 +201,23 @@ pub fn adjust_merged_wasm(
             export.name = "memory".into();
         })
         .unwrap();
+
+    module
+        .exports
+        .iter()
+        .filter_map(|export| match export.item {
+            walrus::ExportItem::Function(fid) if export.name.starts_with("__wasip1_vfs_self_") => {
+                Some((export.id(), fid))
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>()
+        .iter()
+        .copied()
+        .for_each(|(id, fid)| {
+            module.funcs.delete(fid);
+            module.exports.delete(id);
+        });
 
     let new_path = path.with_extension("adjusted.wasm");
 

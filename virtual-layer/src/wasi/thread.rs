@@ -12,6 +12,19 @@ pub trait VirtualThread {
         accessor: impl ThreadAccess,
         runner: ThreadRunner,
     ) -> Option<NonZero<u32>>;
+
+    #[inline(always)]
+    fn sched_yield<Wasm: WasmAccess>(&mut self) -> wasip1::Errno {
+        #[cfg(target_os = "wasi")]
+        {
+            wasip1::ERRNO_SUCCESS
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            std::thread::yield_now();
+        }
+    }
 }
 
 /// ref ~/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust/library/std/src/sys/pal/wasi/thread.rs
@@ -202,14 +215,47 @@ macro_rules! export_thread {
                         }
                     }
                 }
+
+                $crate::export_thread!(@sched_yield, $pool, $wasm);
             )*
         }
     };
+
     (@filter, $ptr:ident, self) => {
         $ptr.apply::<$crate::__private::__self>()
     };
 
     (@filter, $ptr:ident, $wasm:ident) => {
         $ptr.apply::<$wasm>()
+    };
+
+    (@sched_yield, $pool:tt, self) => {
+        $crate::__private::paste::paste! {
+            #[unsafe(no_mangle)]
+            #[cfg(target_os = "wasi")]
+            pub unsafe extern "C" fn __wasip1_vfs_self_sched_yield(
+            ) -> $crate::__private::wasip1::Errno {
+                use $crate::thread::VirtualThread;
+
+                #[allow(unused_mut)]
+                let mut pool = $pool;
+                pool.sched_yield::<$crate::__private::__self>()
+            }
+        }
+    };
+
+    (@sched_yield, $pool:tt, $wasm:ident) => {
+        $crate::__private::paste::paste! {
+            #[unsafe(no_mangle)]
+            #[cfg(target_os = "wasi")]
+            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _sched_yield>](
+            ) -> $crate::__private::wasip1::Errno {
+                use $crate::thread::VirtualThread;
+
+                #[allow(unused_mut)]
+                let mut pool = $pool;
+                pool.sched_yield::<$wasm>()
+            }
+        }
     };
 }

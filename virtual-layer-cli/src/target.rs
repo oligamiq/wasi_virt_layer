@@ -23,7 +23,8 @@ pub fn adjust_target_wasm(
         .wrap_err("Failed to load module")?;
 
     if threads {
-        threads::remove_unused_threads_function(&mut module)?;
+        threads::remove_unused_threads_function(&mut module)
+            .wrap_err("Failed to remove unused threads function")?;
     }
 
     module.create_memory_anchor(&name, memory_hint)?;
@@ -80,7 +81,7 @@ pub fn adjust_target_wasm(
     module
         .emit_wasm_file(new_path.clone())
         .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to emit wasm file"))?;
+        .wrap_err("Failed to emit wasm file")?;
 
     Ok(new_path)
 }
