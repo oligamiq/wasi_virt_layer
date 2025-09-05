@@ -5,6 +5,7 @@ use eyre::{Context as _, ContextCompat};
 
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
+    instrs::{InstrRead, InstrRewrite},
     rewrite::TargetMemoryType,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
@@ -182,6 +183,26 @@ pub fn adjust_merged_wasm(
             })
             .collect::<eyre::Result<Vec<_>>>()?;
     }
+
+    // memory_init(memory, data)
+    // fn(&mut self, Id<Memory>, Id<Data>)
+    // data_drop(&mut self, data: DataId)
+    // so we remove all data_drop sections.
+    module
+        .funcs
+        .iter_mut()
+        .map(|func| {
+            match &mut func.kind {
+                walrus::FunctionKind::Local(l) => {
+                    l.builder_mut()
+                        .func_body()
+                        .retain(|instr, _| !instr.is_data_drop());
+                }
+                _ => {}
+            }
+            Ok(())
+        })
+        .collect::<eyre::Result<Vec<_>>>()?;
 
     manager
         .flush(&mut module)

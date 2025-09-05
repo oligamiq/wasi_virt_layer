@@ -297,6 +297,8 @@ impl Wasip1Op {
                 Wasip1OpKind::Start { start_func_id }
             }
             _ if name.starts_with("reset") => {
+                log::warn!("Table segment is not supported yet");
+
                 let global = module
                     .globals
                     .iter()
@@ -317,27 +319,21 @@ impl Wasip1Op {
                     .data
                     .iter()
                     .filter_map(|data| match data.kind {
-                        walrus::DataKind::Active { memory, offset } => {
-                            if memory == wasm_mem {
-                                if let ConstExpr::Value(v) = offset {
-                                    if let ir::Value::I32(offset) = v {
-                                        Some((offset, data.value.len()))
-                                    } else {
-                                        log::warn!("Data segment {:?} is not i32", offset);
-                                        None
-                                    }
+                        walrus::DataKind::Active { memory, offset } if memory == wasm_mem => {
+                            if let ConstExpr::Value(v) = offset {
+                                if let ir::Value::I32(offset) = v {
+                                    Some((offset, data.value.len()))
                                 } else {
-                                    log::warn!("Data segment {:?} is not a value", offset);
+                                    log::warn!("Data segment {:?} is not i32", offset);
                                     None
                                 }
                             } else {
+                                log::warn!("Data segment {:?} is not a value", offset);
                                 None
                             }
                         }
-                        _ => {
-                            log::warn!("Data segment passive is not supported");
-                            None
-                        }
+                        // Passive is across memories so ignore on now
+                        _ => None,
                     })
                     .collect::<Vec<_>>();
 

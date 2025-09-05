@@ -194,6 +194,32 @@ pub fn adjust_wasm(
                     .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
             }
 
+            for table in module.tables.iter_mut() {
+                for elem in &table.elem_segments {
+                    let elem = module.elements.get_mut(*elem);
+                    if let walrus::ElementKind::Active {
+                        table: table_id, ..
+                    } = elem.kind
+                    {
+                        if table_id != table.id() {
+                            unreachable!();
+                        }
+                    } else {
+                        unreachable!();
+                    }
+                    match &mut elem.items {
+                        walrus::ElementItems::Functions(ids) => {
+                            ids.iter_mut().for_each(|id| {
+                                if *id == dup_id {
+                                    *id = fid;
+                                }
+                            });
+                        }
+                        walrus::ElementItems::Expressions(..) => unimplemented!(),
+                    }
+                }
+            }
+
             // __wasip1_vfs_self_wasi_thread_start
             module
                 .connect_func(
