@@ -92,9 +92,15 @@ pub mod __private {
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
+    static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+
     #[cfg(target_os = "wasi")]
     {
-        println!("debug_call_indirect: tid={tid}, idx={idx}");
+        let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
+        if nest == 0 {
+            println!("debug_call_indirect: tid={tid}, idx={idx}");
+        }
+        NEST.fetch_sub(1, atomic::Ordering::SeqCst);
     }
 
     #[cfg(not(target_os = "wasi"))]
@@ -107,12 +113,18 @@ unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
 #[cfg(feature = "std")]
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
-unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i32) {
+unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
+    static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+
     #[cfg(target_os = "wasi")]
     {
-        println!(
-            "debug_atomic_wait: ptr={ptr:?}, expression={expression:?}, timeout_ns={timeout_ns}"
-        );
+        let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
+        if nest == 0 {
+            println!(
+                "debug_atomic_wait: ptr={ptr:?}, expression={expression:?}, timeout_ns={timeout_ns}"
+            );
+        }
+        NEST.fetch_sub(1, atomic::Ordering::SeqCst);
     }
 
     #[cfg(not(target_os = "wasi"))]

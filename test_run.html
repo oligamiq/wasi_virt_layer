@@ -81,6 +81,8 @@ self.onmessage = async (ev) => {
       ];
       const wasi = new WASI(args, env, fds);
 
+      let inst = undefined;
+
       const imports = {};
       for (const key in wasi.wasiImport) {
         const inner_key = \`\${snakeToCamel(key)}Import\`;
@@ -104,20 +106,24 @@ self.onmessage = async (ev) => {
         importsObj.env = {
           memory: new WebAssembly.Memory({ initial: 34, maximum: 34, shared: true })
         };
-        const inst = await WebAssembly.instantiate(module, importsObj);
+        inst = await WebAssembly.instantiate(module, importsObj);
         return inst;
       });
+
+      if (inst === undefined) {
+          throw new Error("inst is not an instance");
+      }
 
       // Start WASI with custom _start
       wasi.start({
         exports: {
-          memory: root.memory || undefined,
+          memory: inst.exports.memory,
           _start: () => {
             postLog('log', '[WASI main] Calling root.start() and root.main()');
-            try { root.start(); } catch (e) { postLog('error', e && e.message ? e.message : String(e)); }
+            try { root.start(); } catch (e) { postLog('error', e && e.message ? e.message : String(e)); throw e; }
             postLog('log', '[WASI main] root.start() called');
             postLog('log', '[WASI main] Calling root.main()');
-            try { root.main(); } catch (e) { postLog('error', e && e.message ? e.message : String(e)); }
+            try { root.main(); } catch (e) { postLog('error', e && e.message ? e.message : String(e)); throw e; }
             postLog('log', '[WASI main] root.main() returned');
           }
         }
@@ -125,7 +131,8 @@ self.onmessage = async (ev) => {
 
       postLog('done', 'WASI finished');
     } catch (e) {
-      postLog('error', e && e.message ? e.message : String(e));
+        postLog('error', e && e.message ? e.message : String(e));
+        throw e;
     } finally {
       postLog('status', { running: false });
     }

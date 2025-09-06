@@ -22,7 +22,7 @@ impl Guest for Starter {
         test_threads::_start();
         println!("_start done. Starting _main...");
         test_threads::_main();
-        println!("_main done.")
+        println!("_main done.");
     }
 }
 

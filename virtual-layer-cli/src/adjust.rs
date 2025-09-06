@@ -51,6 +51,43 @@ pub fn adjust_merged_wasm(
         e.wrap_err("Failed to enable debug_call_indirect")?;
     }
 
+    if let Some(e) = {
+        module
+            .exports
+            .iter()
+            .find(|export| export.name == "debug_atomic_wait")
+            .map(|debug_atomic_wait| {
+                log::info!("debug_atomic_wait function found. Enabling debug feature.");
+                let fid = match debug_atomic_wait.item {
+                    walrus::ExportItem::Function(fid) => fid,
+                    _ => eyre::bail!("debug_atomic_wait is not a function export"),
+                };
+                Ok(fid)
+            })
+    }
+    .map(|fid| {
+        use walrus::ValType::{I32, I64};
+        let fid = fid?;
+
+        let func = module.funcs.get_mut(fid);
+        let local_func = match &mut func.kind {
+            walrus::FunctionKind::Local(local_func) => local_func,
+            _ => eyre::bail!("debug_atomic_wait is not a local function"),
+        };
+        local_func.builder_mut().func_body().unreachable_at(0);
+
+        module
+            .gen_inspect(fid, &[I32, I32, I64], |instr| match instr {
+                walrus::ir::Instr::AtomicWait(_) => true,
+                _ => false,
+            })
+            .wrap_err("Failed to set debug_atomic_wait")?;
+
+        eyre::Ok(())
+    }) {
+        e.wrap_err("Failed to enable debug_atomic_wait")?;
+    }
+
     let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
     for wasm_path in wasm_paths {

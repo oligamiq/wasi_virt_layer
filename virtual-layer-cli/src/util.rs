@@ -167,6 +167,16 @@ pub(crate) trait WalrusUtilModule {
     fn debug_call_indirect(&mut self, id: FunctionId) -> eyre::Result<()>
     where
         Self: Sized;
+
+    #[allow(dead_code)]
+    fn gen_inspect(
+        &mut self,
+        inspector: FunctionId,
+        params: &[ValType],
+        filter: impl FnMut(&ir::Instr) -> bool,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -816,9 +826,12 @@ impl WalrusUtilModule for walrus::Module {
             eyre::bail!("Function type must be (i32, i32) -> ()");
         }
 
+        let ids = self.funcs.find_children_with(id)?;
+
         let tables = self
             .funcs
             .iter_local()
+            .filter(|(fid, _)| !ids.contains(fid))
             .map(|(fid, fn_)| {
                 fn_.read(|instr, pos| {
                     if let walrus::ir::Instr::CallIndirect(call) = instr {
@@ -878,10 +891,6 @@ impl WalrusUtilModule for walrus::Module {
         {
             match self.funcs.get_mut(fid).kind {
                 FunctionKind::Local(ref mut local_func) => {
-                    println!(
-                        "Inserting debug_call_indirect for table {:?} at function {:?} position {:?} seq_id {:?}",
-                        tid, fid, pos, seq_id
-                    );
                     if let Some(walrus::ir::Instr::CallIndirect(walrus::ir::CallIndirect {
                         table,
                         ..
@@ -902,6 +911,94 @@ impl WalrusUtilModule for walrus::Module {
                         .builder_mut()
                         .instr_seq(seq_id)
                         .call_at(pos, table_fns[&tid]);
+                }
+                _ => unreachable!(),
+            }
+        }
+
+        Ok(())
+    }
+
+    fn gen_inspect(
+        &mut self,
+        inspector: FunctionId,
+        params: &[ValType],
+        mut filter: impl FnMut(&walrus::ir::Instr) -> bool,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        // check inspector type
+        if self.types.get(self.funcs.get(inspector).ty()).params() != params {
+            eyre::bail!("Inspector function type must be ({:?}) -> ()", params);
+        }
+
+        let middle_fn_id = self.add_func(&params, &params, |builder, args| {
+            let mut func_body = builder.func_body();
+            for arg in args {
+                func_body.local_get(*arg);
+            }
+            func_body.call(inspector);
+            for arg in args {
+                func_body.local_get(*arg);
+            }
+            func_body.return_();
+            Ok(())
+        })?;
+
+        let ids = self.funcs.find_children_with(middle_fn_id)?;
+
+        let instrs = self
+            .funcs
+            .iter_local()
+            .filter(|(fid, _)| !ids.contains(fid))
+            .map(|(fid, fn_)| {
+                fn_.read(|instr, pos| {
+                    if filter(instr) {
+                        Some((fid, pos))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<eyre::Result<Vec<_>>>()
+            .wrap_err("Failed to read functions")?
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x)
+            .collect::<Vec<_>>();
+
+        for (fid, (pos, seq_id)) in instrs
+            .into_iter()
+            .sorted_by(|(fid_a, (pos_a, seq_id_a)), (fid_b, (pos_b, seq_id_b))| {
+                match fid_a.cmp(&fid_b) {
+                    std::cmp::Ordering::Equal => match seq_id_a.cmp(&seq_id_b) {
+                        std::cmp::Ordering::Equal => pos_a.cmp(&pos_b),
+                        other => other,
+                    },
+                    other => other,
+                }
+            })
+            .rev()
+        {
+            match self.funcs.get_mut(fid).kind {
+                FunctionKind::Local(ref mut local_func) => {
+                    println!(
+                        "Inserting inspect at function {:?} position {:?} seq_id {:?}",
+                        fid, pos, seq_id
+                    );
+                    let mut instr_seq = local_func.builder_mut().instr_seq(seq_id);
+                    let instr = instr_seq
+                        .instrs()
+                        .get(pos)
+                        .map(|(instr, _)| instr)
+                        .ok_or_else(|| eyre::eyre!("Instruction at position not found"))?;
+
+                    if !filter(instr) {
+                        eyre::bail!("Instruction at position does not match filter");
+                    }
+
+                    instr_seq.call_at(pos, middle_fn_id);
                 }
                 _ => unreachable!(),
             }

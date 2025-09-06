@@ -52,6 +52,7 @@ wasi.start({{
             root.start();
             console.log("[WASI main]");
             root.main();
+            console.log("[WASI main] done.");
         }}
     }},
 }});

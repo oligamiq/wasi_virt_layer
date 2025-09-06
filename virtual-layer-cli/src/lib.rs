@@ -220,13 +220,18 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
         .wrap_err("Failed to optimize core Wasm")?;
 
-    let (core_wasm_opt_adjusted, mem_size) = if threads {
+    let (core_wasm_opt, mem_size) = if threads {
         println!("Adjusting core Wasm...");
-        let core_wasm_opt_adjusted =
+        let (core_wasm_opt_adjusted, mem_size) =
             threads::adjust_core_wasm(&core_wasm_opt).wrap_err("Failed to adjust core Wasm")?;
+        println!("Optimizing core Wasm...");
+        let core_wasm_opt_adjusted_opt =
+            building::optimize_wasm(&core_wasm_opt_adjusted, &[], false)
+                .wrap_err("Failed to optimize core Wasm")?;
         tmp_files.push(core_wasm.to_string());
         tmp_files.push(core_wasm_opt.to_string());
-        core_wasm_opt_adjusted
+        tmp_files.push(core_wasm_opt_adjusted.to_string());
+        (core_wasm_opt_adjusted_opt, mem_size)
     } else {
         tmp_files.push(core_wasm.to_string());
         (core_wasm_opt, Vec::new())
@@ -237,7 +242,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
     }
 
-    std::fs::rename(&core_wasm_opt_adjusted, &core_wasm).expect("Failed to rename file");
+    std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
     std::fs::OpenOptions::new()
         .write(true)
