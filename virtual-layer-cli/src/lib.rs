@@ -237,10 +237,10 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         (core_wasm_opt, Vec::new())
     };
 
-    for tmp_file in tmp_files {
-        std::fs::remove_file(&tmp_file)
-            .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
-    }
+    // for tmp_file in tmp_files {
+    //     std::fs::remove_file(&tmp_file)
+    //         .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
+    // }
 
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 

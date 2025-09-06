@@ -169,11 +169,11 @@ pub(crate) trait WalrusUtilModule {
         Self: Sized;
 
     #[allow(dead_code)]
-    fn gen_inspect(
+    fn gen_inspect<const N: usize>(
         &mut self,
         inspector: FunctionId,
         params: &[ValType],
-        filter: impl FnMut(&ir::Instr) -> bool,
+        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
         Self: Sized;
@@ -584,6 +584,11 @@ impl WalrusUtilModule for walrus::Module {
                     walrus::ElementItems::Functions(ids) => {
                         ids.iter_mut().for_each(|id| {
                             if *id == old_id {
+                                log::info!(
+                                    "Rewriting function id on table. Old: {:?}, New: {:?}",
+                                    old_id,
+                                    new_id
+                                );
                                 *id = new_id;
                             }
                         });
@@ -732,6 +737,12 @@ impl WalrusUtilModule for walrus::Module {
                         let ty = self.types.get(call.ty);
                         if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
                             if let Some(new_id) = using_tables.get(&call.table).cloned() {
+                                log::info!(
+                                    "Rewriting call_indirect to direct call in function {:?}. Old: {:?}, New: {:?}",
+                                    fn_id,
+                                    call,
+                                    new_id
+                                );
                                 *instr = Instr::Call(Call { func: new_id });
                             }
                         }
@@ -757,6 +768,12 @@ impl WalrusUtilModule for walrus::Module {
                     |instr, _| {
                         if let walrus::ir::Instr::Call(call) = instr {
                             if call.func == old_id {
+                                log::info!(
+                                    "Rewriting call to direct call in function {:?}. Old: {:?}, New: {:?}",
+                                    id,
+                                    old_id,
+                                    new_id
+                                );
                                 call.func = new_id;
                             }
                         }
@@ -874,17 +891,14 @@ impl WalrusUtilModule for walrus::Module {
         for (tid, (fid, (pos, seq_id))) in tables
             .into_iter()
             .sorted_by(
-                |(tid_a, (fid_a, (pos_a, seq_id_a))), (tid_b, (fid_b, (pos_b, seq_id_b)))| {
-                    match tid_a.cmp(&tid_b) {
-                        std::cmp::Ordering::Equal => match fid_a.cmp(&fid_b) {
-                            std::cmp::Ordering::Equal => match seq_id_a.cmp(&seq_id_b) {
-                                std::cmp::Ordering::Equal => pos_a.cmp(&pos_b),
-                                other => other,
-                            },
-                            other => other,
-                        },
+                |(_, (fid_a, (pos_a, seq_id_a))), (_, (fid_b, (pos_b, seq_id_b)))| match fid_a
+                    .cmp(&fid_b)
+                {
+                    std::cmp::Ordering::Equal => match seq_id_a.cmp(&seq_id_b) {
+                        std::cmp::Ordering::Equal => pos_a.cmp(&pos_b),
                         other => other,
-                    }
+                    },
+                    other => other,
                 },
             )
             .rev()
@@ -919,34 +933,27 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn gen_inspect(
+    fn gen_inspect<const N: usize>(
         &mut self,
         inspector: FunctionId,
         params: &[ValType],
-        mut filter: impl FnMut(&walrus::ir::Instr) -> bool,
+        mut filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
         // check inspector type
-        if self.types.get(self.funcs.get(inspector).ty()).params() != params {
+        if self.types.get(self.funcs.get(inspector).ty()).params()
+            != params
+                .iter()
+                .cloned()
+                .chain(std::iter::repeat(ValType::I32).take(N))
+                .collect::<Vec<_>>()
+        {
             eyre::bail!("Inspector function type must be ({:?}) -> ()", params);
         }
 
-        let middle_fn_id = self.add_func(&params, &params, |builder, args| {
-            let mut func_body = builder.func_body();
-            for arg in args {
-                func_body.local_get(*arg);
-            }
-            func_body.call(inspector);
-            for arg in args {
-                func_body.local_get(*arg);
-            }
-            func_body.return_();
-            Ok(())
-        })?;
-
-        let ids = self.funcs.find_children_with(middle_fn_id)?;
+        let ids = self.funcs.find_children_with(inspector)?;
 
         let instrs = self
             .funcs
@@ -954,8 +961,8 @@ impl WalrusUtilModule for walrus::Module {
             .filter(|(fid, _)| !ids.contains(fid))
             .map(|(fid, fn_)| {
                 fn_.read(|instr, pos| {
-                    if filter(instr) {
-                        Some((fid, pos))
+                    if let Some(ret) = filter(instr) {
+                        Some((ret, fid, pos))
                     } else {
                         None
                     }
@@ -968,19 +975,59 @@ impl WalrusUtilModule for walrus::Module {
             .filter_map(|x| x)
             .collect::<Vec<_>>();
 
-        for (fid, (pos, seq_id)) in instrs
+        let group_fns = instrs
+            .iter()
+            .map(|(ret, _, _)| *ret)
+            .collect::<std::collections::HashSet<_>>()
             .into_iter()
-            .sorted_by(|(fid_a, (pos_a, seq_id_a)), (fid_b, (pos_b, seq_id_b))| {
-                match fid_a.cmp(&fid_b) {
+            .map(|ret| {
+                let middle_fn_id = self.add_func(&params, &params, |builder, args| {
+                    let mut func_body = builder.func_body();
+                    for ret in ret {
+                        func_body.i32_const(ret);
+                    }
+                    for arg in args {
+                        func_body.local_get(*arg);
+                    }
+                    func_body.call(inspector);
+                    for arg in args {
+                        func_body.local_get(*arg);
+                    }
+                    func_body.return_();
+                    Ok(())
+                })?;
+                Ok((ret, middle_fn_id))
+            })
+            .collect::<eyre::Result<std::collections::HashMap<_, _>>>()?;
+
+        let ids = group_fns
+            .values()
+            .cloned()
+            .map(|fid| self.funcs.find_children_with(fid))
+            .collect::<eyre::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<std::collections::HashSet<_>>();
+
+        for (ret, fid, (pos, seq_id)) in instrs
+            .into_iter()
+            .sorted_by(
+                |(_, fid_a, (pos_a, seq_id_a)), (_, fid_b, (pos_b, seq_id_b))| match fid_a
+                    .cmp(&fid_b)
+                {
                     std::cmp::Ordering::Equal => match seq_id_a.cmp(&seq_id_b) {
                         std::cmp::Ordering::Equal => pos_a.cmp(&pos_b),
                         other => other,
                     },
                     other => other,
-                }
-            })
+                },
+            )
             .rev()
         {
+            if ids.contains(&fid) {
+                continue;
+            }
+
             match self.funcs.get_mut(fid).kind {
                 FunctionKind::Local(ref mut local_func) => {
                     println!(
@@ -994,11 +1041,11 @@ impl WalrusUtilModule for walrus::Module {
                         .map(|(instr, _)| instr)
                         .ok_or_else(|| eyre::eyre!("Instruction at position not found"))?;
 
-                    if !filter(instr) {
+                    if filter(instr).is_none() {
                         eyre::bail!("Instruction at position does not match filter");
                     }
 
-                    instr_seq.call_at(pos, middle_fn_id);
+                    instr_seq.call_at(pos, group_fns[&ret]);
                 }
                 _ => unreachable!(),
             }

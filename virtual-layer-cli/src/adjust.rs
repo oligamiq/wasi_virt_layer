@@ -78,8 +78,8 @@ pub fn adjust_merged_wasm(
 
         module
             .gen_inspect(fid, &[I32, I32, I64], |instr| match instr {
-                walrus::ir::Instr::AtomicWait(_) => true,
-                _ => false,
+                walrus::ir::Instr::AtomicWait(_) => Some([]),
+                _ => None,
             })
             .wrap_err("Failed to set debug_atomic_wait")?;
 

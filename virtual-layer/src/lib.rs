@@ -98,7 +98,29 @@ unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
     {
         let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
         if nest == 0 {
-            println!("debug_call_indirect: tid={tid}, idx={idx}");
+            eprintln!("debug_call_indirect: tid={tid}, idx={idx}");
+        }
+        NEST.fetch_sub(1, atomic::Ordering::SeqCst);
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    {
+        panic!("This function is only available on WASI");
+    }
+}
+
+#[cfg(feature = "debug")]
+#[cfg(feature = "std")]
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_call_function(idx: i32) {
+    static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+
+    #[cfg(target_os = "wasi")]
+    {
+        let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
+        if nest == 0 {
+            eprintln!("debug_call_function: idx={idx}");
         }
         NEST.fetch_sub(1, atomic::Ordering::SeqCst);
     }
@@ -120,7 +142,7 @@ unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, 
     {
         let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
         if nest == 0 {
-            println!(
+            eprintln!(
                 "debug_atomic_wait: ptr={ptr:?}, expression={expression:?}, timeout_ns={timeout_ns}"
             );
         }

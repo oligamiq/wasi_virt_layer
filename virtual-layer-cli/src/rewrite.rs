@@ -27,6 +27,35 @@ pub fn adjust_wasm(
         .to_eyre()
         .wrap_err("Failed to load module")?;
 
+    if let Some(e) = {
+        module
+            .exports
+            .iter()
+            .find(|export| export.name == "debug_call_function")
+            .map(|debug_call_function| {
+                log::info!("debug_call_function function found. Enabling debug feature.");
+                let fid = match debug_call_function.item {
+                    walrus::ExportItem::Function(fid) => fid,
+                    _ => eyre::bail!("debug_call_function is not a function export"),
+                };
+                Ok(fid)
+            })
+    }
+    .map(|fid| {
+        let fid = fid?;
+
+        module
+            .gen_inspect(fid, &[], |instr| match instr {
+                walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
+                _ => None,
+            })
+            .wrap_err("Failed to set debug_atomic_wait")?;
+
+        eyre::Ok(())
+    }) {
+        e.wrap_err("Failed to enable debug_call_function")?;
+    }
+
     if !<Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
         .iter()
         .chain(<Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS)
