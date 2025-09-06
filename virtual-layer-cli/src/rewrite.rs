@@ -1,8 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, Package};
@@ -15,7 +11,7 @@ use crate::{
     threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT,
-        WalrusUtilFuncs as _, WalrusUtilImport, WalrusUtilModule,
+        WalrusUtilImport, WalrusUtilModule,
     },
 };
 
@@ -118,11 +114,6 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err_with(|| eyre::eyre!("{name}_import_anchor not found"))?;
 
-            // module
-            //     .imports
-            //     .swap_import(root, &component_name, "wasi", "thread-spawn")
-            //     .wrap_err("thread-spawn import not found")?;
-
             let import_root_thread_spawn_fn_id = module
                 .imports
                 .get_func(root, &component_name)
@@ -142,108 +133,8 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err("wasi.thread-spawn import not found")?;
 
-            let f_ty_id = module.funcs.get(fid).ty();
-            let f_ty_id_params = module.types.get(f_ty_id).params().to_vec();
-            let f_ty_id_results = module.types.get(f_ty_id).results().to_vec();
-            let fid_pos_on_table = module
-                .fid_pos_on_table(fid)
-                .wrap_err("Failed to get fid pos on table")?;
-
-            use walrus::ir::*;
-            let using_tables = module
-                .funcs
-                .flat_read(
-                    |instr, _| {
-                        if let Instr::CallIndirect(call) = instr {
-                            if fid_pos_on_table.iter().any(|(tid, _)| *tid == call.table) {
-                                let ty = module.types.get(call.ty);
-                                if f_ty_id_params == ty.params() && f_ty_id_results == ty.results()
-                                {
-                                    return Some(call.table);
-                                }
-                            }
-                        }
-                        None
-                    },
-                    anchor_fid,
-                )
-                .wrap_err("Failed to read using tables")?
-                .into_iter()
-                .filter_map(|x| x)
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .filter_map(|table| {
-                    let fid = fid_pos_on_table
-                        .iter()
-                        .filter(|(tid, _)| *tid == table)
-                        .map(|(_, pos)| *pos as i32)
-                        .collect::<Vec<_>>();
-                    if fid.is_empty() {
-                        return None;
-                    }
-                    if fid.len() > 1 {
-                        log::warn!("Multiple fid pos found on table, why? using the first one");
-                    }
-                    let fid = fid[0];
-                    Some((table, fid))
-                })
-                .map(|(table, fid)| {
-                    use walrus::*;
-
-                    let params_ty = core::iter::once(ValType::I32)
-                        .chain(f_ty_id_params.clone())
-                        .collect::<Vec<_>>();
-                    let results_ty = f_ty_id_results.clone();
-
-                    let args = params_ty
-                        .iter()
-                        .map(|ty| module.locals.add(*ty))
-                        .collect::<Vec<_>>();
-
-                    let mut func = FunctionBuilder::new(&mut module.types, &params_ty, &results_ty);
-                    func.func_body()
-                        .local_get(args[0])
-                        .i32_const(fid)
-                        .binop(BinaryOp::I32Eq)
-                        .if_else(
-                            ValType::I32,
-                            |cons| {
-                                for arg in args.iter().skip(1) {
-                                    cons.local_get(*arg);
-                                }
-                                cons.call(import_root_thread_spawn_fn_id).return_();
-                            },
-                            |els| {
-                                for arg in args.iter().skip(1) {
-                                    els.local_get(*arg);
-                                }
-                                els.call_indirect(f_ty_id, table);
-                            },
-                        );
-
-                    Ok((table, func.finish(args, &mut module.funcs)))
-                })
-                .collect::<eyre::Result<HashMap<_, _>>>()?;
-
             module
-                .funcs
-                .flat_rewrite(
-                    |instr, _| {
-                        if let Some(call) = instr.call_mut() {
-                            if call.func == fid {
-                                call.func = import_root_thread_spawn_fn_id;
-                            }
-                        }
-                        if let Some(call) = instr.call_indirect_mut() {
-                            let ty = module.types.get(call.ty);
-                            if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-                                let new_id = using_tables.get(&call.table).cloned().unwrap();
-                                *instr = Instr::Call(Call { func: new_id });
-                            }
-                        }
-                    },
-                    anchor_fid,
-                )
+                .renew_call_fn_in_the_fn(import_root_thread_spawn_fn_id, fid, anchor_fid)
                 .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
 
             module.connect_func(
@@ -258,26 +149,9 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err("Failed to get wasip1-vfs.__wasip1_vfs_self_wasi_thread_start")?;
 
-            for (id, _, _) in module
-                .get_using_func(dup_id)
-                .wrap_err("Failed to get using func")?
-            {
-                module
-                    .funcs
-                    .rewrite(
-                        |instr, _| {
-                            if let walrus::ir::Instr::Call(call) = instr {
-                                if call.func == dup_id {
-                                    call.func = fid;
-                                }
-                            }
-                        },
-                        id,
-                    )
-                    .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
-            }
-
-            module.renew_id_on_table(dup_id, fid)?;
+            module
+                .renew_call_fn(dup_id, fid)
+                .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
 
             // __wasip1_vfs_self_wasi_thread_start
             module

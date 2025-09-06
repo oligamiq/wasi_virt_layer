@@ -1,7 +1,7 @@
 use eyre::Context as _;
-use walrus::{ir::CallIndirect, *};
+use walrus::*;
 
-use crate::util::{ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilModule};
+use crate::util::{ResultUtil as _, WalrusUtilModule};
 
 #[derive(
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
@@ -305,7 +305,7 @@ impl Wasip1Op {
                         if let GlobalKind::Local(ConstExpr::Value(v)) = global.kind {
                             Some((global.id(), v.clone()))
                         } else {
-                            log::warn!("Global segment {:?} is not a value", global.kind);
+                            log::warn!("Global segment {:?} is not a value, we support only local variables", global.kind);
                             None
                         }
                     })
@@ -321,11 +321,17 @@ impl Wasip1Op {
                                 if let ir::Value::I32(offset) = v {
                                     Some((offset, data.value.len()))
                                 } else {
-                                    log::warn!("Data segment {:?} is not i32", offset);
+                                    log::warn!(
+                                        "Data segment {:?} is not i32, we support only i32",
+                                        offset
+                                    );
                                     None
                                 }
                             } else {
-                                log::warn!("Data segment {:?} is not a value", offset);
+                                log::warn!(
+                                    "Data segment {:?} is not a value, we support only i32",
+                                    offset
+                                );
                                 None
                             }
                         }
@@ -379,23 +385,15 @@ impl Wasip1Op {
         main_void_func_id: FunctionId,
         start_func_id: FunctionId,
     ) -> eyre::Result<()> {
-        module.funcs.flat_rewrite(
-            |instr, _| {
-                if let ir::Instr::Call(call) = instr {
-                    if call.func == main_void_func_id {
-                        *instr = ir::Instr::Const(ir::Const {
-                            value: ir::Value::I32(0),
-                        })
-                    }
-                }
-                if let ir::Instr::CallIndirect(CallIndirect { .. }) = instr {
-                    log::warn!(
-                        "call_indirect found in start function. This may cause runtime error."
-                    );
-                }
-            },
-            start_func_id,
-        )?;
+        let fake_fn_id = module.add_func(&[], &[walrus::ValType::I32], |func, _| {
+            func.func_body().i32_const(0).return_();
+
+            Ok(())
+        })?;
+
+        module
+            .renew_call_fn_in_the_fn(main_void_func_id, fake_fn_id, start_func_id)
+            .wrap_err("Failed to rewrite main_void call in start")?;
 
         module.connect_func_inner(fid, main_void_func_id)?;
 
