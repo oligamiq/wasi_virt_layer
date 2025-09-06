@@ -27,10 +27,17 @@ for (const key in wasi.wasiImport) {
         // console.log(`[WASI ${inner_key}] ret`, ret);
         return ret;
     }
+    core_imports[`__wasip1_vfs_test_threads_${key}`] = (...args) => {
+        console.log(`[WASI ${key}]`, ...args);
+        const ret = wasi.wasiImport[key](...args);
+        console.log(`[WASI ${key}] ret`, ret);
+        return ret;
+    }
 }
 console.log(core_imports);
 
-const wasm_path = "target/wasm32-wasip1-threads/release/threads_vfs.opt.adjusted.opt.wasm";
+// const wasm_path = "target/wasm32-wasip1-threads/release/threads_vfs.opt.adjusted.opt.wasm";
+const wasm_path = "dist/test_threads.opt.adjusted.wasm";
 
 const _fs = await import('node:fs/promises');
 const wasm = await WebAssembly.compile(await _fs.readFile(wasm_path));
@@ -73,12 +80,16 @@ const imports = {
     "wasip1-vfs:host/virtual-file-system-wasip1-threads-import": {
         "[static]wasip1-threads.thread-spawn-import": (...args) => {
             console.log("[wasip1-threads] thread-spawn-import", ...args);
+            throw new Error("thread spawn not implemented");
         }
     },
     "wasi_snapshot_preview1": core_imports,
     wasi: {
-
-    }
+        "__wasip1_vfs_wasi_thread_spawn_test_threads": (...args) => {
+            console.log("[wasip1-threads] __wasip1_vfs_wasi_thread_spawn_test_threads", ...args);
+            throw new Error("thread spawn not implemented");
+        }
+    },
 };
 console.log("WebAssembly Imports:", imports);
 inst = await WebAssembly.instantiate(wasm, imports);
@@ -90,9 +101,15 @@ inst = inst as WebAssembly.Instance;
 
 wasi.start({
     exports: {
-        memory: inst.exports.memory as WebAssembly.Memory,
+        // memory: inst.exports.memory as WebAssembly.Memory,
+        memory: imports.env.memory,
         _start: () => {
-            inst.exports.main();
+            // inst.exports.main();
+            inst.exports.__wasip1_vfs_test_threads__start();
+            // __wasip1_vfs_test_threads___main_voidだと、途中で無限停止する
+            // その上、前触れもなくエラーを吐く
+            // [WASI stderr] thread 'main' panicked at C:\Users\nziq5\.rustup\toolchains\stable-x86_64-pc-windows-msvc\lib/rustlib/src/rust\library/std/src/thread/mod.rs:729:29:
+            // [WASI stderr] failed to spawn thread: Os { code: 6, kind: WouldBlock, message: "Resource temporarily unavailable" }
         }
     },
 });
