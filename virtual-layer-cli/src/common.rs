@@ -470,7 +470,10 @@ impl Wasip1Op {
             start_func_id,
         } = self.kind
         {
-            self.main_void(module, self.fid, main_void_func_id, start_func_id)?;
+            self.main_void(module, self.fid, main_void_func_id, start_func_id)
+                .wrap_err(
+                    "Failed to implement main_void wasm memory etc before call main function",
+                )?;
         } else if let Wasip1OpKind::Start { start_func_id } = self.kind {
             self.start(
                 module,
@@ -479,7 +482,8 @@ impl Wasip1Op {
                 wasm_mem,
                 vfs_mem,
                 is_reset_contain,
-            )?;
+            )
+            .wrap_err("Failed to implement wasm memory etc before call main function")?;
         } else if let Wasip1OpKind::Skip = self.kind {
         } else {
             let Self { fid, kind } = self;
@@ -589,7 +593,7 @@ impl Wasip1Op {
                     }
                 })
                 .to_eyre()
-                .wrap_err_with(|| eyre::eyre!("Failed to replace function: {:?}", kind))?;
+                .wrap_err_with(|| eyre::eyre!("Failed to replace function: {kind:?}"))?;
         }
 
         Ok(())

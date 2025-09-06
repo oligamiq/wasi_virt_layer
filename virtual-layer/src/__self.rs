@@ -31,7 +31,7 @@ impl WasmAccess for __self {
         todo!()
     }
 
-    fn _main() {
+    fn _main() -> wasip1::Errno {
         todo!()
     }
 

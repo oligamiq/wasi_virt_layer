@@ -133,8 +133,14 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err("Failed to get wasip1-vfs.__wasip1_vfs_self_wasi_thread_start")?;
 
+            let id = module
+                .imports
+                .get_func("wasip1-vfs", "__wasip1_vfs_wasi_thread_start_entry")
+                .to_eyre()
+                .wrap_err("Failed to get wasip1-vfs.__wasip1_vfs_wasi_thread_start_entry")?;
+
             module
-                .renew_call_fn(dup_id, fid)
+                .renew_call_fn(dup_id, id)
                 .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
 
             // __wasip1_vfs_self_wasi_thread_start

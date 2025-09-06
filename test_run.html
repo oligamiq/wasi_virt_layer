@@ -124,7 +124,14 @@
             Wasip1: imports,
           },
           "wasip1-vfs:host/virtual-file-system-wasip1-threads-import": {
-            Wasip1Threads: {},
+            Wasip1Threads: {
+                threadSpawnImport: (...args) => {
+                  log(`[WASI thread spawn] arg=${arg}`);
+                  // Note: This example does NOT actually spawn a thread.
+                  // Implementing actual threading is left as an exercise to the reader.
+                  throw new Error('threadSpawnImport is not implemented in this example');
+                },
+            },
           },
         }, async (module, imports) => {
           log('WebAssembly Module:', module);

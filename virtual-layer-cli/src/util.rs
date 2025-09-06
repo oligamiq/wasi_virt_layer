@@ -157,6 +157,10 @@ pub(crate) trait WalrusUtilModule {
     ) -> eyre::Result<FunctionId>
     where
         Self: Sized;
+
+    fn check_function_type(&self, before: FunctionId, after: FunctionId) -> eyre::Result<()>
+    where
+        Self: Sized;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -172,6 +176,9 @@ impl WalrusUtilImport for ModuleImports {
 
 impl WalrusUtilModule for walrus::Module {
     fn connect_func_inner(&mut self, fid: FunctionId, export_id: FunctionId) -> eyre::Result<()> {
+        self.check_function_type(fid, export_id)
+            .wrap_err("Function types do not match on connect func inner")?;
+
         self.replace_imported_func(fid, |(builder, arg_locals)| {
             let mut func_body = builder.func_body();
 
@@ -541,6 +548,9 @@ impl WalrusUtilModule for walrus::Module {
     where
         Self: Sized,
     {
+        self.check_function_type(old_id, new_id)
+            .wrap_err("Function types do not match on renew id on table")?;
+
         for table in self.tables.iter_mut() {
             for elem in &table.elem_segments {
                 let elem = self.elements.get_mut(*elem);
@@ -559,6 +569,12 @@ impl WalrusUtilModule for walrus::Module {
                         ids.iter_mut().for_each(|id| {
                             if *id == old_id {
                                 *id = new_id;
+                                println!(
+                                    "Rewrote function id {} to {} on table {}",
+                                    old_id.index(),
+                                    new_id.index(),
+                                    table.id().index()
+                                );
                             }
                         });
                     }
@@ -613,6 +629,10 @@ impl WalrusUtilModule for walrus::Module {
         let f_ty_id = self.funcs.get(old_id).ty();
         let f_ty_id_params = self.types.get(f_ty_id).params().to_vec();
         let f_ty_id_results = self.types.get(f_ty_id).results().to_vec();
+
+        // check new_id type and old_id type
+        self.check_function_type(old_id, new_id)
+            .wrap_err("Function types do not match on renew call fn that nesting this function")?;
 
         let fid_pos_on_table = self
             .fid_pos_on_table(old_id)
@@ -701,9 +721,9 @@ impl WalrusUtilModule for walrus::Module {
                     if let Some(call) = instr.call_indirect_mut() {
                         let ty = self.types.get(call.ty);
                         if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-                            let new_id = using_tables.get(&call.table).cloned().unwrap();
-
-                            *instr = Instr::Call(Call { func: new_id });
+                            if let Some(new_id) = using_tables.get(&call.table).cloned() {
+                                *instr = Instr::Call(Call { func: new_id });
+                            }
                         }
                     }
                 },
@@ -760,6 +780,27 @@ impl WalrusUtilModule for walrus::Module {
         fn_(&mut func, &args)?;
 
         Ok(func.finish(args, &mut self.funcs))
+    }
+
+    fn check_function_type(&self, before: FunctionId, after: FunctionId) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        let a_ty = self.funcs.get(before).ty();
+        let a_ty_params = self.types.get(a_ty).params();
+        let a_ty_results = self.types.get(a_ty).results();
+
+        let b_ty = self.funcs.get(after).ty();
+        let b_ty_params = self.types.get(b_ty).params();
+        let b_ty_results = self.types.get(b_ty).results();
+
+        if a_ty_params != b_ty_params || a_ty_results != b_ty_results {
+            eyre::bail!(
+                "Function types do not match. Before: {a_ty_params:?} -> {a_ty_results:?}, After: {b_ty_params:?} -> {b_ty_results:?}"
+            );
+        }
+
+        Ok(())
     }
 }
 

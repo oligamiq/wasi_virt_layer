@@ -28,7 +28,7 @@ macro_rules! import_wasm {
                 );
 
                 #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name ___main_void>]();
+                pub fn [<__wasip1_vfs_ $name ___main_void>]() -> $crate::__private::wasip1::Errno;
 
                 #[unsafe(no_mangle)]
                 pub fn [<__wasip1_vfs_ $name __start>]();
@@ -109,13 +109,13 @@ macro_rules! import_wasm {
                 $crate::__memory_director_wasm_access!($name);
 
                 #[inline(always)]
-                fn _main()
+                fn _main() -> $crate::__private::wasip1::Errno
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
-                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() };
+                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() }
                 }
 
                 #[inline(always)]
@@ -429,7 +429,7 @@ pub trait WasmAccess: Copy {
     /// Using this and export_env,
     /// it is possible to override arguments, for example, to call
     /// If this function name is main, same name with rust generated main on test and error
-    fn _main();
+    fn _main() -> wasip1::Errno;
 
     /// memory reset to memory which instantiate
     /// function's roll
@@ -663,7 +663,9 @@ impl WasmAccess for WasmAccessFaker {
     }
 
     #[inline(always)]
-    fn _main() {}
+    fn _main() -> wasip1::Errno {
+        wasip1::ERRNO_SUCCESS
+    }
 
     #[inline(always)]
     fn reset() {}
