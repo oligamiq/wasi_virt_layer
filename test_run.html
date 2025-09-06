@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WASI on the Web - test_run</title>
+  <!--
+    ⚠️ SharedArrayBuffer を使うため、サイトは cross-origin isolated (COOP/COEP ヘッダー) が必須です。
+    サーバ設定例:
+      Cross-Origin-Opener-Policy: same-origin
+      Cross-Origin-Embedder-Policy: require-corp
+    ローカルで簡易確認する場合は、以下のいずれかを推奨:
+      - `npx http-server -c-1 --cors -p 8080 --hdr "Cross-Origin-Opener-Policy: same-origin" --hdr "Cross-Origin-Embedder-Policy: require-corp"`
+      - `python -m http.server 8080` などで配信し、適切なプロキシ/ヘッダーを付与
+  -->
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", sans-serif; margin: 0; background: #0b1020; color: #eef2ff; }
+    header { padding: 16px 20px; border-bottom: 1px solid #20263a; position: sticky; top: 0; background: #0b1020; }
+    h1 { margin: 0; font-size: 18px; letter-spacing: .3px; }
+    main { padding: 20px; display: grid; gap: 16px; }
+    .row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    button { padding: 10px 14px; border-radius: 10px; border: 0; background: #4c6fff; color: white; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .badge { padding: 4px 8px; border-radius: 999px; background: #17203a; color: #9fb2ff; font-size: 12px; }
+    .console { background: #0e1530; border: 1px solid #1b2344; border-radius: 12px; min-height: 220px; padding: 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 13px; overflow: auto; }
+    .log { white-space: pre-wrap; margin: 0; }
+    a { color: #9fb2ff; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>WASI on the Web - test_run</h1>
+  </header>
+  <main>
+    <div class="row">
+      <button id="runBtn">Run</button>
+      <span id="isoBadge" class="badge"></span>
+      <span class="badge">Requires: <code>threads_vfs.js</code> in same directory</span>
+    </div>
+    <section class="console" id="console"></section>
+    <p>
+      This page expects your own <code>threads_vfs.js</code> (which exports <code>instantiate</code>) and any related WASM asset(s) to be placed next to this HTML.
+      The code mirrors your <code>test_run.ts</code> with browser-friendly imports.
+    </p>
+  </main>
+
+  <script type="module">
+    // Import WASI shim from a CDN ESM endpoint.
+    // You can switch to another ESM CDN if preferred.
+    import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI } from "https://esm.sh/@bjorn3/browser_wasi_shim";
+    // Your build should provide this file next to the HTML. It must export { instantiate }.
+    import { instantiate } from "./dist/threads_vfs.js";
+
+    const elConsole = document.getElementById('console');
+    const runBtn = document.getElementById('runBtn');
+    const isoBadge = document.getElementById('isoBadge');
+
+    const log = (...args) => {
+      const line = document.createElement('div');
+      line.className = 'log';
+      line.textContent = args.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(' ');
+      elConsole.appendChild(line);
+      elConsole.scrollTop = elConsole.scrollHeight;
+      console.log(...args);
+    };
+    const warn = (...args) => {
+      const line = document.createElement('div');
+      line.className = 'log';
+      line.style.color = '#ffdb89';
+      line.textContent = args.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(' ');
+      elConsole.appendChild(line);
+      elConsole.scrollTop = elConsole.scrollHeight;
+      console.warn(...args);
+    };
+    const error = (...args) => {
+      const line = document.createElement('div');
+      line.className = 'log';
+      line.style.color = '#ff8a8a';
+      line.textContent = args.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(' ');
+      elConsole.appendChild(line);
+      elConsole.scrollTop = elConsole.scrollHeight;
+      console.error(...args);
+    };
+
+    // Show cross-origin isolation status (required for SharedArrayBuffer)
+    const iso = self.crossOriginIsolated === true;
+    isoBadge.textContent = iso ? 'crossOriginIsolated: true ✅' : 'crossOriginIsolated: false ⚠️ Set COOP/COEP headers';
+
+    function snakeToCamel(snakeCaseString) {
+      return snakeCaseString.toLowerCase().replace(/_([a-z])/g, (m, letter) => letter.toUpperCase());
+    }
+
+    async function run() {
+      runBtn.disabled = true;
+      try {
+        const args = ["bin", "arg1", "arg2"];
+        const env = ["FOO=bar"];
+        const fds = [
+          new OpenFile(new File([])), // stdin
+          ConsoleStdout.lineBuffered((msg) => log(`[WASI stdout] ${msg}`)),
+          ConsoleStdout.lineBuffered((msg) => warn(`[WASI stderr] ${msg}`)),
+          new PreopenDirectory(".", new Map()),
+        ];
+        const wasi = new WASI(args, env, fds);
+
+        let inst /** @type {WebAssembly.Instance|undefined} */ = undefined;
+
+        const imports = {};
+        for (const key in wasi.wasiImport) {
+          const inner_key = `${snakeToCamel(key)}Import`;
+          imports[inner_key] = (...args) => {
+            const ret = wasi.wasiImport[key](...args);
+            return ret;
+          };
+        }
+        log('WASI imports (proxied):', Object.keys(imports));
+
+        // Instantiate the VFS + WASI module graph. Your threads_vfs.js is expected to know
+        // how to resolve and (optionally) fetch any underlying .wasm resources.
+        // If your toolchain outputs a specific module URL, adjust the first argument accordingly.
+        // Here we mirror your `undefined` placeholder.
+        const root = await instantiate(undefined, {
+          "wasip1-vfs:host/virtual-file-system-wasip1-core": {
+            Wasip1: imports,
+          },
+          "wasip1-vfs:host/virtual-file-system-wasip1-threads-import": {
+            Wasip1Threads: {},
+          },
+        }, async (module, imports) => {
+          log('WebAssembly Module:', module);
+          // Provide a shared memory (requires crossOriginIsolated)
+          imports.env = {
+            memory: new WebAssembly.Memory({ initial: 34, maximum: 34, shared: true })
+          };
+          log('WebAssembly Imports prepared');
+          inst = await WebAssembly.instantiate(module, imports);
+          return inst;
+        });
+
+        if (!inst) throw new Error('inst is not an instance');
+
+        // Start WASI with a custom _start that chains into the VFS root.
+        wasi.start({
+          exports: {
+            memory: /** @type {WebAssembly.Memory} */ (inst.exports.memory),
+            _start: () => {
+              root.start();
+              log('[WASI main]');
+              root.main();
+            },
+          },
+        });
+
+        log('Done.');
+      } catch (e) {
+        error('Runtime error:', e && e.message ? e.message : e);
+        if (!self.crossOriginIsolated) {
+          error('SharedArrayBuffer requires cross-origin isolation (COOP/COEP). Configure your server headers.');
+        }
+        throw e;
+      } finally {
+        runBtn.disabled = false;
+      }
+    }
+
+    runBtn.addEventListener('click', run);
+  </script>
+</body>
+</html>

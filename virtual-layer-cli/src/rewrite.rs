@@ -3,8 +3,10 @@ use std::{fs, path::Path};
 use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, Package};
 use eyre::Context as _;
+use itertools::Itertools;
 use strum::VariantNames;
 use toml_edit::{Document, DocumentMut, Item};
+use walrus::ir::BinaryOp;
 
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
@@ -144,21 +146,119 @@ pub fn adjust_wasm(
                 .into_iter()
                 .chain(core::iter::once(anchor_fid))
             {
-                let child = module.funcs.get_mut(child);
-                let func = match &mut child.kind {
-                    walrus::FunctionKind::Local(imported_function) => imported_function,
-                    _ => continue,
-                };
-                func.builder_mut()
-                    .func_body()
-                    .rewrite(|instr, _| {
-                        if let walrus::ir::Instr::Call(call) = instr {
-                            if call.func == fid {
-                                call.func = import_root_thread_spawn_fn_id;
+                let keys = {
+                    let child = module.funcs.get_mut(child);
+                    let func = match &mut child.kind {
+                        walrus::FunctionKind::Local(imported_function) => imported_function,
+                        _ => continue,
+                    };
+                    func.builder_mut()
+                        .func_body()
+                        .rewrite(|instr, (pos, key)| {
+                            if let Some(call) = instr.call_mut() {
+                                if call.func == fid {
+                                    call.func = import_root_thread_spawn_fn_id;
+                                }
                             }
-                        }
-                    })
-                    .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
+                            if let Some(call) = instr.call_indirect_mut() {
+                                return Some((pos, key, (call.table, call.ty)));
+                            }
+                            None
+                        })
+                        .wrap_err("Failed to rewrite thread-spawn call in root spawn")?
+                        .into_iter()
+                        .filter_map(|key| key)
+                        .collect::<Vec<_>>()
+                };
+
+                let fid_pos = module.fid_pos_on_table(fid)?;
+
+                for (table, keys) in keys
+                    .into_iter()
+                    .into_group_map_by(|(_, _, (table, _))| *table)
+                    .into_iter()
+                {
+                    let fid = fid_pos
+                        .iter()
+                        .filter(|(tid, _)| *tid == table)
+                        .map(|(_, pos)| *pos as i32)
+                        .collect::<Vec<_>>();
+
+                    if fid.is_empty() {
+                        continue;
+                    }
+
+                    if fid.len() > 1 {
+                        log::warn!("Multiple fid pos found on table, why? using the first one");
+                    }
+
+                    let fid = fid[0];
+
+                    let new_func = {
+                        use walrus::*;
+
+                        let ty_id = keys
+                            .iter()
+                            .find(|(_, _, (table, _))| *table == *table)
+                            .unwrap()
+                            .2
+                            .1;
+
+                        let ty = module.types.get(ty_id);
+                        let params_ty = core::iter::once(ValType::I32)
+                            .chain(ty.params().iter().copied())
+                            .collect::<Vec<_>>();
+                        let results_ty = ty.results().to_vec();
+
+                        let args = params_ty
+                            .iter()
+                            .map(|ty| module.locals.add(*ty))
+                            .collect::<Vec<_>>();
+
+                        let mut func =
+                            FunctionBuilder::new(&mut module.types, &params_ty, &results_ty);
+                        func.func_body()
+                            .local_get(args[0])
+                            .i32_const(fid)
+                            .binop(BinaryOp::I32Eq)
+                            .if_else(
+                                ValType::I32,
+                                |cons| {
+                                    for arg in args.iter().skip(1) {
+                                        cons.local_get(*arg);
+                                    }
+                                    cons.call(import_root_thread_spawn_fn_id).return_();
+                                },
+                                |els| {
+                                    for arg in args.iter().skip(1) {
+                                        els.local_get(*arg);
+                                    }
+                                    els.call_indirect(ty_id, table);
+                                },
+                            );
+                        func.finish(args, &mut module.funcs)
+                    };
+
+                    let child = module.funcs.get_mut(child);
+                    let func = match &mut child.kind {
+                        walrus::FunctionKind::Local(imported_function) => imported_function,
+                        _ => continue,
+                    };
+                    for (pos, key, _) in keys
+                        .into_iter()
+                        .into_group_map_by(|(_, key, _)| *key)
+                        .into_values()
+                        .flat_map(|keys| {
+                            keys.into_iter()
+                                .sorted_by(|(a, _, _), (b, _, _)| a.cmp(&b))
+                                .rev()
+                        })
+                    {
+                        let mut seq = func.builder_mut().instr_seq(key);
+                        seq.instrs_mut().remove(pos);
+                        seq.call_at(pos, new_func);
+                    }
+                }
             }
 
             module.connect_func(
@@ -177,48 +277,21 @@ pub fn adjust_wasm(
                 .get_using_func(dup_id)
                 .wrap_err("Failed to get using func")?
             {
-                let func = module.funcs.get_mut(id);
-                let func = match &mut func.kind {
-                    walrus::FunctionKind::Local(f) => f,
-                    _ => continue,
-                };
-                func.builder_mut()
-                    .func_body()
-                    .rewrite(|instr, _| {
-                        if let walrus::ir::Instr::Call(call) = instr {
-                            if call.func == dup_id {
-                                call.func = fid;
+                module
+                    .rewrite(
+                        |instr, _| {
+                            if let walrus::ir::Instr::Call(call) = instr {
+                                if call.func == dup_id {
+                                    call.func = fid;
+                                }
                             }
-                        }
-                    })
+                        },
+                        id,
+                    )
                     .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
             }
 
-            for table in module.tables.iter_mut() {
-                for elem in &table.elem_segments {
-                    let elem = module.elements.get_mut(*elem);
-                    if let walrus::ElementKind::Active {
-                        table: table_id, ..
-                    } = elem.kind
-                    {
-                        if table_id != table.id() {
-                            unreachable!();
-                        }
-                    } else {
-                        unreachable!();
-                    }
-                    match &mut elem.items {
-                        walrus::ElementItems::Functions(ids) => {
-                            ids.iter_mut().for_each(|id| {
-                                if *id == dup_id {
-                                    *id = fid;
-                                }
-                            });
-                        }
-                        walrus::ElementItems::Expressions(..) => unimplemented!(),
-                    }
-                }
-            }
+            module.renew_id_on_table(dup_id, fid)?;
 
             // __wasip1_vfs_self_wasi_thread_start
             module

@@ -1,5 +1,5 @@
 use eyre::Context as _;
-use walrus::*;
+use walrus::{ir::CallIndirect, *};
 
 use crate::{
     instrs::InstrRewrite,
@@ -382,9 +382,8 @@ impl Wasip1Op {
         main_void_func_id: FunctionId,
         start_func_id: FunctionId,
     ) -> eyre::Result<()> {
-        let start_func = module.funcs.get_mut(start_func_id);
-        if let walrus::FunctionKind::Local(func) = &mut start_func.kind {
-            func.builder_mut().func_body().rewrite(|instr, _| {
+        module.flat_rewrite(
+            |instr, _| {
                 if let ir::Instr::Call(call) = instr {
                     if call.func == main_void_func_id {
                         *instr = ir::Instr::Const(ir::Const {
@@ -392,10 +391,14 @@ impl Wasip1Op {
                         })
                     }
                 }
-            })?;
-        } else {
-            eyre::bail!("Invalid start function kind");
-        }
+                if let ir::Instr::CallIndirect(CallIndirect { .. }) = instr {
+                    log::warn!(
+                        "call_indirect found in start function. This may cause runtime error."
+                    );
+                }
+            },
+            start_func_id,
+        )?;
 
         module.connect_func_inner(fid, main_void_func_id)?;
 

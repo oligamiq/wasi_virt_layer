@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use eyre::Context as _;
 use walrus::{ir::InstrSeqId, *};
 
-use crate::instrs::InstrRead;
+use crate::instrs::{InstrRead, InstrRewrite as _};
 
 pub(crate) trait WalrusUtilImport {
     fn find_mut(&mut self, module: impl AsRef<str>, name: impl AsRef<str>) -> Option<&mut Import>;
@@ -86,6 +86,30 @@ pub(crate) trait WalrusUtilModule {
 
     /// Find children flat functions
     fn find_children(&self, fid: FunctionId) -> eyre::Result<Vec<FunctionId>>;
+
+    /// call rewrite on function
+    fn rewrite<T>(
+        &mut self,
+        find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
+
+    /// call rewrite on children functions
+    fn flat_rewrite<T>(
+        &mut self,
+        find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
+
+    fn renew_id_on_table(&mut self, old_id: FunctionId, new_id: FunctionId) -> eyre::Result<()>
+    where
+        Self: Sized;
+
+    fn fid_pos_on_table(&self, fid: FunctionId) -> eyre::Result<Vec<(TableId, usize)>>;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -485,6 +509,104 @@ impl WalrusUtilModule for walrus::Module {
             }
         }
         Ok(children)
+    }
+
+    fn flat_rewrite<T>(
+        &mut self,
+        mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        let fids = self.find_children(fid)?;
+        let mut ret = vec![];
+        for fid in fids {
+            let func = self.funcs.get_mut(fid);
+            if let FunctionKind::Local(local_func) = &mut func.kind {
+                ret.extend(local_func.builder_mut().func_body().rewrite(&mut find)?);
+            }
+        }
+        Ok(ret)
+    }
+
+    fn renew_id_on_table(&mut self, old_id: FunctionId, new_id: FunctionId) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        for table in self.tables.iter_mut() {
+            for elem in &table.elem_segments {
+                let elem = self.elements.get_mut(*elem);
+                if let walrus::ElementKind::Active {
+                    table: table_id, ..
+                } = elem.kind
+                {
+                    if table_id != table.id() {
+                        unreachable!();
+                    }
+                } else {
+                    unreachable!();
+                }
+                match &mut elem.items {
+                    walrus::ElementItems::Functions(ids) => {
+                        ids.iter_mut().for_each(|id| {
+                            if *id == old_id {
+                                *id = new_id;
+                            }
+                        });
+                    }
+                    walrus::ElementItems::Expressions(..) => unimplemented!(),
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn rewrite<T>(
+        &mut self,
+        find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        let func = self.funcs.get_mut(fid);
+        if let FunctionKind::Local(local_func) = &mut func.kind {
+            local_func.builder_mut().func_body().rewrite(find)
+        } else {
+            eyre::bail!("Function is not local");
+        }
+    }
+
+    fn fid_pos_on_table(&self, fid: FunctionId) -> eyre::Result<Vec<(TableId, usize)>> {
+        let mut positions = vec![];
+        for table in self.tables.iter() {
+            for elem in &table.elem_segments {
+                let elem = self.elements.get(*elem);
+                if let walrus::ElementKind::Active {
+                    table: table_id, ..
+                } = elem.kind
+                {
+                    if table_id != table.id() {
+                        unreachable!();
+                    }
+                } else {
+                    unreachable!();
+                }
+                match &elem.items {
+                    walrus::ElementItems::Functions(ids) => {
+                        ids.iter().enumerate().for_each(|(i, id)| {
+                            if *id == fid {
+                                positions.push((table.id(), i));
+                            }
+                        });
+                    }
+                    walrus::ElementItems::Expressions(..) => unimplemented!(),
+                }
+            }
+        }
+        Ok(positions)
     }
 }
 
