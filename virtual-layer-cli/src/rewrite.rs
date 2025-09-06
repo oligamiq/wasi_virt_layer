@@ -77,22 +77,6 @@ pub fn adjust_wasm(
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("{name}_import_anchor not found"))?;
 
-        // module
-        // .imports
-        // .find_mut(root, &component_name)
-        // .map(|import| {
-        //     import.module = "archived".to_string();
-        // })
-        // .ok_or_else(|| eyre::eyre!("{component_name} import not found"))?;
-
-        // module
-        //     .imports
-        //     .find_mut("wasi_snapshot_preview1", name)
-        //     .map(|import| {
-        //         import.module = root.to_string();
-        //         import.name = component_name;
-        //     });
-
         module
             .imports
             .swap_import(root, &component_name, "wasi_snapshot_preview1", name)
@@ -114,14 +98,14 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err_with(|| eyre::eyre!("{name}_import_anchor not found"))?;
 
-            let import_root_thread_spawn_fn_id = module
+            let real_thread_spawn_fn_id = module
                 .imports
                 .get_func(root, &component_name)
                 .to_eyre()
                 .wrap_err_with(|| eyre::eyre!("{component_name} import not found"))?;
 
             // rewrite call id in export.__wasip1_vfs_root_spawn_anchor
-            let anchor_fid = module
+            let root_fid = module
                 .exports
                 .get_func("__wasip1_vfs_root_spawn_anchor")
                 .to_eyre()
@@ -134,7 +118,7 @@ pub fn adjust_wasm(
                 .wrap_err("wasi.thread-spawn import not found")?;
 
             module
-                .renew_call_fn_in_the_fn(import_root_thread_spawn_fn_id, fid, anchor_fid)
+                .renew_call_fn_in_the_fn(fid, real_thread_spawn_fn_id, root_fid)
                 .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
 
             module.connect_func(
