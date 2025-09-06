@@ -1,10 +1,7 @@
 use eyre::Context as _;
 use walrus::{ir::CallIndirect, *};
 
-use crate::{
-    instrs::InstrRewrite,
-    util::{ResultUtil as _, WalrusUtilModule},
-};
+use crate::util::{ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilModule};
 
 #[derive(
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
@@ -382,7 +379,7 @@ impl Wasip1Op {
         main_void_func_id: FunctionId,
         start_func_id: FunctionId,
     ) -> eyre::Result<()> {
-        module.flat_rewrite(
+        module.funcs.flat_rewrite(
             |instr, _| {
                 if let ir::Instr::Call(call) = instr {
                     if call.func == main_void_func_id {

@@ -1,20 +1,18 @@
-use std::{fs, path::Path};
+use std::{collections::HashSet, fs, path::Path};
 
 use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, Package};
 use eyre::Context as _;
-use itertools::Itertools;
 use strum::VariantNames;
 use toml_edit::{Document, DocumentMut, Item};
 use walrus::ir::BinaryOp;
 
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
-    instrs::InstrRewrite,
     threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT,
-        WalrusUtilImport, WalrusUtilModule,
+        WalrusUtilFuncs as _, WalrusUtilImport, WalrusUtilModule,
     },
 };
 
@@ -141,51 +139,48 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err("wasi.thread-spawn import not found")?;
 
-            for child in module
-                .find_children(anchor_fid)?
+            let f_ty_id = module.funcs.get(fid).ty();
+            let f_ty_id_params = module.types.get(f_ty_id).params().to_vec();
+            let f_ty_id_results = module.types.get(f_ty_id).results().to_vec();
+            let keys = module
+                .funcs
+                .flat_rewrite(
+                    |instr, _| {
+                        if let Some(call) = instr.call_mut() {
+                            if call.func == fid {
+                                call.func = import_root_thread_spawn_fn_id;
+                            }
+                        }
+                        if let Some(call) = instr.call_indirect_mut() {
+                            return Some((call.table, call.ty));
+                        }
+                        None
+                    },
+                    anchor_fid,
+                )
+                .wrap_err("Failed to rewrite thread-spawn call in root spawn")?
                 .into_iter()
-                .chain(core::iter::once(anchor_fid))
-            {
-                let keys = {
-                    let child = module.funcs.get_mut(child);
-                    let func = match &mut child.kind {
-                        walrus::FunctionKind::Local(imported_function) => imported_function,
-                        _ => continue,
-                    };
-                    func.builder_mut()
-                        .func_body()
-                        .rewrite(|instr, (pos, key)| {
-                            if let Some(call) = instr.call_mut() {
-                                if call.func == fid {
-                                    call.func = import_root_thread_spawn_fn_id;
-                                }
-                            }
-                            if let Some(call) = instr.call_indirect_mut() {
-                                return Some((pos, key, (call.table, call.ty)));
-                            }
-                            None
-                        })
-                        .wrap_err("Failed to rewrite thread-spawn call in root spawn")?
-                        .into_iter()
-                        .filter_map(|key| key)
-                        .collect::<Vec<_>>()
-                };
-
-                let fid_pos = module.fid_pos_on_table(fid)?;
-
-                for (table, keys) in keys
-                    .into_iter()
-                    .into_group_map_by(|(_, _, (table, _))| *table)
-                    .into_iter()
-                {
-                    let fid = fid_pos
+                .filter_map(|key| key)
+                .filter_map(|(table, ty_id)| {
+                    let ty = module.types.get(ty_id);
+                    if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
+                        Some(table)
+                    } else {
+                        None
+                    }
+                })
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .map(|table| {
+                    let fid = module
+                        .fid_pos_on_table(fid)?
                         .iter()
                         .filter(|(tid, _)| *tid == table)
                         .map(|(_, pos)| *pos as i32)
                         .collect::<Vec<_>>();
 
                     if fid.is_empty() {
-                        continue;
+                        return Ok(None);
                     }
 
                     if fid.len() > 1 {
@@ -197,18 +192,10 @@ pub fn adjust_wasm(
                     let new_func = {
                         use walrus::*;
 
-                        let ty_id = keys
-                            .iter()
-                            .find(|(_, _, (table, _))| *table == *table)
-                            .unwrap()
-                            .2
-                            .1;
-
-                        let ty = module.types.get(ty_id);
                         let params_ty = core::iter::once(ValType::I32)
-                            .chain(ty.params().iter().copied())
+                            .chain(f_ty_id_params.clone())
                             .collect::<Vec<_>>();
-                        let results_ty = ty.results().to_vec();
+                        let results_ty = f_ty_id_results.clone();
 
                         let args = params_ty
                             .iter()
@@ -233,33 +220,48 @@ pub fn adjust_wasm(
                                     for arg in args.iter().skip(1) {
                                         els.local_get(*arg);
                                     }
-                                    els.call_indirect(ty_id, table);
+                                    els.call_indirect(f_ty_id, table);
                                 },
                             );
                         func.finish(args, &mut module.funcs)
                     };
+                    Ok(Some((table, new_func)))
+                })
+                .collect::<eyre::Result<Vec<_>>>()?
+                .into_iter()
+                .filter_map(|k| k)
+                .collect::<Vec<_>>();
 
-                    let child = module.funcs.get_mut(child);
-                    let func = match &mut child.kind {
-                        walrus::FunctionKind::Local(imported_function) => imported_function,
-                        _ => continue,
-                    };
-                    for (pos, key, _) in keys
-                        .into_iter()
-                        .into_group_map_by(|(_, key, _)| *key)
-                        .into_values()
-                        .flat_map(|keys| {
-                            keys.into_iter()
-                                .sorted_by(|(a, _, _), (b, _, _)| a.cmp(&b))
-                                .rev()
-                        })
-                    {
-                        let mut seq = func.builder_mut().instr_seq(key);
-                        seq.instrs_mut().remove(pos);
-                        seq.call_at(pos, new_func);
-                    }
-                }
-            }
+            module
+                .funcs
+                .flat_rewrite(
+                    |instr, _| {
+                        if let Some(call_indirect) = instr.call_indirect_mut() {
+                            let keys = keys
+                                .iter()
+                                .copied()
+                                .filter(|(table, _)| call_indirect.table == *table)
+                                .map(|(_, v)| v)
+                                .filter(|_| {
+                                    f_ty_id_params == module.types.get(call_indirect.ty).params()
+                                        && f_ty_id_results
+                                            == module.types.get(call_indirect.ty).results()
+                                })
+                                .collect::<Vec<_>>();
+
+                            if !keys.is_empty() {
+                                if keys.len() > 1 {
+                                    unreachable!();
+                                }
+
+                                use walrus::ir;
+                                *instr = ir::Instr::Call(ir::Call { func: keys[0] });
+                            }
+                        }
+                    },
+                    anchor_fid,
+                )
+                .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
 
             module.connect_func(
                 "wasi",
@@ -278,6 +280,7 @@ pub fn adjust_wasm(
                 .wrap_err("Failed to get using func")?
             {
                 module
+                    .funcs
                     .rewrite(
                         |instr, _| {
                             if let walrus::ir::Instr::Call(call) = instr {
