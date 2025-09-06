@@ -1,11 +1,14 @@
-use std::{collections::HashSet, fs, path::Path};
+use std::{
+    collections::{HashMap, HashSet},
+    fs,
+    path::Path,
+};
 
 use camino::Utf8PathBuf;
 use cargo_metadata::{Metadata, Package};
 use eyre::Context as _;
 use strum::VariantNames;
 use toml_edit::{Document, DocumentMut, Item};
-use walrus::ir::BinaryOp;
 
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
@@ -142,7 +145,87 @@ pub fn adjust_wasm(
             let f_ty_id = module.funcs.get(fid).ty();
             let f_ty_id_params = module.types.get(f_ty_id).params().to_vec();
             let f_ty_id_results = module.types.get(f_ty_id).results().to_vec();
-            let keys = module
+            let fid_pos_on_table = module
+                .fid_pos_on_table(fid)
+                .wrap_err("Failed to get fid pos on table")?;
+
+            use walrus::ir::*;
+            let using_tables = module
+                .funcs
+                .flat_read(
+                    |instr, _| {
+                        if let Instr::CallIndirect(call) = instr {
+                            if fid_pos_on_table.iter().any(|(tid, _)| *tid == call.table) {
+                                let ty = module.types.get(call.ty);
+                                if f_ty_id_params == ty.params() && f_ty_id_results == ty.results()
+                                {
+                                    return Some(call.table);
+                                }
+                            }
+                        }
+                        None
+                    },
+                    anchor_fid,
+                )
+                .wrap_err("Failed to read using tables")?
+                .into_iter()
+                .filter_map(|x| x)
+                .collect::<HashSet<_>>()
+                .into_iter()
+                .filter_map(|table| {
+                    let fid = fid_pos_on_table
+                        .iter()
+                        .filter(|(tid, _)| *tid == table)
+                        .map(|(_, pos)| *pos as i32)
+                        .collect::<Vec<_>>();
+                    if fid.is_empty() {
+                        return None;
+                    }
+                    if fid.len() > 1 {
+                        log::warn!("Multiple fid pos found on table, why? using the first one");
+                    }
+                    let fid = fid[0];
+                    Some((table, fid))
+                })
+                .map(|(table, fid)| {
+                    use walrus::*;
+
+                    let params_ty = core::iter::once(ValType::I32)
+                        .chain(f_ty_id_params.clone())
+                        .collect::<Vec<_>>();
+                    let results_ty = f_ty_id_results.clone();
+
+                    let args = params_ty
+                        .iter()
+                        .map(|ty| module.locals.add(*ty))
+                        .collect::<Vec<_>>();
+
+                    let mut func = FunctionBuilder::new(&mut module.types, &params_ty, &results_ty);
+                    func.func_body()
+                        .local_get(args[0])
+                        .i32_const(fid)
+                        .binop(BinaryOp::I32Eq)
+                        .if_else(
+                            ValType::I32,
+                            |cons| {
+                                for arg in args.iter().skip(1) {
+                                    cons.local_get(*arg);
+                                }
+                                cons.call(import_root_thread_spawn_fn_id).return_();
+                            },
+                            |els| {
+                                for arg in args.iter().skip(1) {
+                                    els.local_get(*arg);
+                                }
+                                els.call_indirect(f_ty_id, table);
+                            },
+                        );
+
+                    Ok((table, func.finish(args, &mut module.funcs)))
+                })
+                .collect::<eyre::Result<HashMap<_, _>>>()?;
+
+            module
                 .funcs
                 .flat_rewrite(
                     |instr, _| {
@@ -152,110 +235,10 @@ pub fn adjust_wasm(
                             }
                         }
                         if let Some(call) = instr.call_indirect_mut() {
-                            return Some((call.table, call.ty));
-                        }
-                        None
-                    },
-                    anchor_fid,
-                )
-                .wrap_err("Failed to rewrite thread-spawn call in root spawn")?
-                .into_iter()
-                .filter_map(|key| key)
-                .filter_map(|(table, ty_id)| {
-                    let ty = module.types.get(ty_id);
-                    if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-                        Some(table)
-                    } else {
-                        None
-                    }
-                })
-                .collect::<HashSet<_>>()
-                .into_iter()
-                .map(|table| {
-                    let fid = module
-                        .fid_pos_on_table(fid)?
-                        .iter()
-                        .filter(|(tid, _)| *tid == table)
-                        .map(|(_, pos)| *pos as i32)
-                        .collect::<Vec<_>>();
-
-                    if fid.is_empty() {
-                        return Ok(None);
-                    }
-
-                    if fid.len() > 1 {
-                        log::warn!("Multiple fid pos found on table, why? using the first one");
-                    }
-
-                    let fid = fid[0];
-
-                    let new_func = {
-                        use walrus::*;
-
-                        let params_ty = core::iter::once(ValType::I32)
-                            .chain(f_ty_id_params.clone())
-                            .collect::<Vec<_>>();
-                        let results_ty = f_ty_id_results.clone();
-
-                        let args = params_ty
-                            .iter()
-                            .map(|ty| module.locals.add(*ty))
-                            .collect::<Vec<_>>();
-
-                        let mut func =
-                            FunctionBuilder::new(&mut module.types, &params_ty, &results_ty);
-                        func.func_body()
-                            .local_get(args[0])
-                            .i32_const(fid)
-                            .binop(BinaryOp::I32Eq)
-                            .if_else(
-                                ValType::I32,
-                                |cons| {
-                                    for arg in args.iter().skip(1) {
-                                        cons.local_get(*arg);
-                                    }
-                                    cons.call(import_root_thread_spawn_fn_id).return_();
-                                },
-                                |els| {
-                                    for arg in args.iter().skip(1) {
-                                        els.local_get(*arg);
-                                    }
-                                    els.call_indirect(f_ty_id, table);
-                                },
-                            );
-                        func.finish(args, &mut module.funcs)
-                    };
-                    Ok(Some((table, new_func)))
-                })
-                .collect::<eyre::Result<Vec<_>>>()?
-                .into_iter()
-                .filter_map(|k| k)
-                .collect::<Vec<_>>();
-
-            module
-                .funcs
-                .flat_rewrite(
-                    |instr, _| {
-                        if let Some(call_indirect) = instr.call_indirect_mut() {
-                            let keys = keys
-                                .iter()
-                                .copied()
-                                .filter(|(table, _)| call_indirect.table == *table)
-                                .map(|(_, v)| v)
-                                .filter(|_| {
-                                    f_ty_id_params == module.types.get(call_indirect.ty).params()
-                                        && f_ty_id_results
-                                            == module.types.get(call_indirect.ty).results()
-                                })
-                                .collect::<Vec<_>>();
-
-                            if !keys.is_empty() {
-                                if keys.len() > 1 {
-                                    unreachable!();
-                                }
-
-                                use walrus::ir;
-                                *instr = ir::Instr::Call(ir::Call { func: keys[0] });
+                            let ty = module.types.get(call.ty);
+                            if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
+                                let new_id = using_tables.get(&call.table).cloned().unwrap();
+                                *instr = Instr::Call(Call { func: new_id });
                             }
                         }
                     },

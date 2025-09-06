@@ -67,11 +67,47 @@ pub(crate) trait WalrusUtilFuncs {
     /// call rewrite on children functions
     fn flat_rewrite<T>(
         &mut self,
-        find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        Ok(self
+            .find_children_with(fid)?
+            .into_iter()
+            .map(|fid| self.rewrite(&mut find, fid))
+            .collect::<eyre::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>())
+    }
+
+    fn read<T>(
+        &self,
+        find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
         fid: FunctionId,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
+
+    fn flat_read<T>(
+        &self,
+        mut find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        Ok(self
+            .find_children_with(fid)?
+            .into_iter()
+            .map(|fid| self.read(&mut find, fid))
+            .collect::<eyre::Result<Vec<_>>>()?
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>())
+    }
 }
 
 pub(crate) trait WalrusUtilModule {
@@ -585,25 +621,6 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
         Ok(children)
     }
 
-    fn flat_rewrite<T>(
-        &mut self,
-        mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
-    ) -> eyre::Result<Vec<T>>
-    where
-        Self: Sized,
-    {
-        let fids = self.find_children_with(fid)?;
-        let mut ret = vec![];
-        for fid in fids {
-            let func = self.get_mut(fid);
-            if let FunctionKind::Local(local_func) = &mut func.kind {
-                ret.extend(local_func.builder_mut().func_body().rewrite(&mut find)?);
-            }
-        }
-        Ok(ret)
-    }
-
     fn rewrite<T>(
         &mut self,
         find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
@@ -615,6 +632,22 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
         let func = self.get_mut(fid);
         if let FunctionKind::Local(local_func) = &mut func.kind {
             local_func.builder_mut().func_body().rewrite(find)
+        } else {
+            eyre::bail!("Function is not local");
+        }
+    }
+
+    fn read<T>(
+        &self,
+        mut find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
+        fid: FunctionId,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        let func = self.get(fid);
+        if let FunctionKind::Local(local_func) = &func.kind {
+            local_func.read(&mut find)
         } else {
             eyre::bail!("Function is not local");
         }
