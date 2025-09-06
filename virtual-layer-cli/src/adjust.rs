@@ -27,6 +27,30 @@ pub fn adjust_merged_wasm(
         .get_global_anchor("vfs")
         .wrap_err("Failed to get global anchor")?;
 
+    if let Some(e) = {
+        module
+            .exports
+            .iter()
+            .find(|export| export.name == "debug_call_indirect")
+            .map(|debug_call_indirect| {
+                log::info!("debug_call_indirect function found. Enabling debug feature.");
+                let fid = match debug_call_indirect.item {
+                    walrus::ExportItem::Function(fid) => fid,
+                    _ => eyre::bail!("debug_call_indirect is not a function export"),
+                };
+                Ok(fid)
+            })
+    }
+    .map(|fid| {
+        module
+            .debug_call_indirect(fid?)
+            .wrap_err("Failed to set debug_call_indirect")?;
+
+        eyre::Ok(())
+    }) {
+        e.wrap_err("Failed to enable debug_call_indirect")?;
+    }
+
     let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
     for wasm_path in wasm_paths {

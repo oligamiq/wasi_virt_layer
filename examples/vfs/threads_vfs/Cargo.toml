@@ -19,7 +19,7 @@ parking_lot = "0.12.3"
 
 [dependencies.wasip1-virtual-layer]
 workspace = true
-features = ["std", "threads"]
+features = ["std", "threads", "debug"]
 
 [lib]
 crate-type = ["cdylib"]

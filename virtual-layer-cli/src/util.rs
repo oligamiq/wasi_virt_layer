@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use eyre::Context as _;
+use itertools::Itertools;
 use walrus::{ir::InstrSeqId, *};
 
 use crate::instrs::{InstrRead, InstrRewrite as _};
@@ -159,6 +160,11 @@ pub(crate) trait WalrusUtilModule {
         Self: Sized;
 
     fn check_function_type(&self, before: FunctionId, after: FunctionId) -> eyre::Result<()>
+    where
+        Self: Sized;
+
+    #[allow(dead_code)]
+    fn debug_call_indirect(&mut self, id: FunctionId) -> eyre::Result<()>
     where
         Self: Sized;
 }
@@ -569,12 +575,6 @@ impl WalrusUtilModule for walrus::Module {
                         ids.iter_mut().for_each(|id| {
                             if *id == old_id {
                                 *id = new_id;
-                                println!(
-                                    "Rewrote function id {} to {} on table {}",
-                                    old_id.index(),
-                                    new_id.index(),
-                                    table.id().index()
-                                );
                             }
                         });
                     }
@@ -798,6 +798,113 @@ impl WalrusUtilModule for walrus::Module {
             eyre::bail!(
                 "Function types do not match. Before: {a_ty_params:?} -> {a_ty_results:?}, After: {b_ty_params:?} -> {b_ty_results:?}"
             );
+        }
+
+        Ok(())
+    }
+
+    // Insert a specific function into every call_indirect within all functions.
+    // The type of the received function is fn (table_id, pos);
+    fn debug_call_indirect(&mut self, id: FunctionId) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        // check id type
+        if self.types.get(self.funcs.get(id).ty()).params() != [ValType::I32, ValType::I32]
+            || self.types.get(self.funcs.get(id).ty()).results() != []
+        {
+            eyre::bail!("Function type must be (i32, i32) -> ()");
+        }
+
+        let tables = self
+            .funcs
+            .iter_local()
+            .map(|(fid, fn_)| {
+                fn_.read(|instr, pos| {
+                    if let walrus::ir::Instr::CallIndirect(call) = instr {
+                        Some((call.table, (fid, pos)))
+                    } else {
+                        None
+                    }
+                })
+            })
+            .collect::<eyre::Result<Vec<_>>>()
+            .wrap_err("Failed to read functions")?
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x)
+            .collect::<Vec<_>>();
+
+        let table_fns = tables
+            .iter()
+            .map(|(table, _)| *table)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .map(|table| {
+                // As if nothing had happened, it passes the value again.
+                let middle_fn_id =
+                    self.add_func(&[ValType::I32], &[ValType::I32], |builder, args| {
+                        builder
+                            .func_body()
+                            .i32_const(table.index() as i32)
+                            .local_get(args[0])
+                            .call(id)
+                            .local_get(args[0])
+                            .return_();
+                        Ok(())
+                    })?;
+
+                Ok((table, middle_fn_id))
+            })
+            .collect::<eyre::Result<std::collections::HashMap<_, _>>>()?;
+
+        for (tid, (fid, (pos, seq_id))) in tables
+            .into_iter()
+            .sorted_by(
+                |(tid_a, (fid_a, (pos_a, seq_id_a))), (tid_b, (fid_b, (pos_b, seq_id_b)))| {
+                    match tid_a.cmp(&tid_b) {
+                        std::cmp::Ordering::Equal => match fid_a.cmp(&fid_b) {
+                            std::cmp::Ordering::Equal => match seq_id_a.cmp(&seq_id_b) {
+                                std::cmp::Ordering::Equal => pos_a.cmp(&pos_b),
+                                other => other,
+                            },
+                            other => other,
+                        },
+                        other => other,
+                    }
+                },
+            )
+            .rev()
+        {
+            match self.funcs.get_mut(fid).kind {
+                FunctionKind::Local(ref mut local_func) => {
+                    println!(
+                        "Inserting debug_call_indirect for table {:?} at function {:?} position {:?} seq_id {:?}",
+                        tid, fid, pos, seq_id
+                    );
+                    if let Some(walrus::ir::Instr::CallIndirect(walrus::ir::CallIndirect {
+                        table,
+                        ..
+                    })) = local_func
+                        .builder_mut()
+                        .instr_seq(seq_id)
+                        .instrs()
+                        .get(pos)
+                        .map(|(instr, _)| instr)
+                    {
+                        if *table != tid {
+                            eyre::bail!("Table id mismatch");
+                        }
+                    } else {
+                        eyre::bail!("Instruction at position is not call_indirect");
+                    }
+                    local_func
+                        .builder_mut()
+                        .instr_seq(seq_id)
+                        .call_at(pos, table_fns[&tid]);
+                }
+                _ => unreachable!(),
+            }
         }
 
         Ok(())

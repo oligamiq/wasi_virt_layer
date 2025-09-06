@@ -1,5 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(target_os = "wasi")]
+#[cfg(feature = "std")]
+#[cfg(feature = "debug")]
+use core::sync::atomic;
+
 mod __self;
 mod binary_map;
 pub mod memory;
@@ -79,5 +84,39 @@ pub mod __private {
 
     pub mod utils {
         pub use crate::binary_map::StaticArrayBuilder;
+    }
+}
+
+#[cfg(feature = "debug")]
+#[cfg(feature = "std")]
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
+    #[cfg(target_os = "wasi")]
+    {
+        println!("debug_call_indirect: tid={tid}, idx={idx}");
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    {
+        panic!("This function is only available on WASI");
+    }
+}
+
+#[cfg(feature = "debug")]
+#[cfg(feature = "std")]
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i32) {
+    #[cfg(target_os = "wasi")]
+    {
+        println!(
+            "debug_atomic_wait: ptr={ptr:?}, expression={expression:?}, timeout_ns={timeout_ns}"
+        );
+    }
+
+    #[cfg(not(target_os = "wasi"))]
+    {
+        panic!("This function is only available on WASI");
     }
 }

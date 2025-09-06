@@ -9,6 +9,7 @@ alloc = []
 multi_memory = ["alloc"]
 std = ["alloc", "wasip1/std"]
 threads = ["alloc", "dep:parking_lot", "dep:dashmap"]
+debug = []
 
 [dependencies]
 wit-bindgen = { version = "0.44.0", default-features = false }

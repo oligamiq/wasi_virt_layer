@@ -294,7 +294,7 @@ impl Wasip1Op {
                 Wasip1OpKind::Start { start_func_id }
             }
             _ if name.starts_with("reset") => {
-                log::warn!("Table segment is not supported yet");
+                log::warn!("Table segment is not supported yet on reset operation");
 
                 let global = module
                     .globals
