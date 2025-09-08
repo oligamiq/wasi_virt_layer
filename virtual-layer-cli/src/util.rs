@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    borrow::Borrow,
+    path::{Path, PathBuf},
+};
 
 use eyre::Context as _;
 use itertools::Itertools;
@@ -47,10 +50,11 @@ pub(crate) trait WalrusUtilImport {
 
 pub(crate) trait WalrusUtilFuncs {
     /// Find children flat functions
-    fn find_children(&self, fid: FunctionId) -> eyre::Result<Vec<FunctionId>>;
+    fn find_children(&self, fid: impl Borrow<FunctionId>) -> eyre::Result<Vec<FunctionId>>;
 
     /// Find children flat functions with self
-    fn find_children_with(&self, fid: FunctionId) -> eyre::Result<Vec<FunctionId>> {
+    fn find_children_with(&self, fid: impl Borrow<FunctionId>) -> eyre::Result<Vec<FunctionId>> {
+        let fid = *fid.borrow();
         let mut children = self.find_children(fid)?;
         children.insert(0, fid);
         Ok(children)
@@ -60,7 +64,7 @@ pub(crate) trait WalrusUtilFuncs {
     fn rewrite<T>(
         &mut self,
         find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
@@ -69,7 +73,7 @@ pub(crate) trait WalrusUtilFuncs {
     fn flat_rewrite<T>(
         &mut self,
         find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
@@ -77,7 +81,7 @@ pub(crate) trait WalrusUtilFuncs {
     fn read<T>(
         &self,
         find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
@@ -85,7 +89,7 @@ pub(crate) trait WalrusUtilFuncs {
     fn flat_read<T>(
         &self,
         find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
@@ -102,7 +106,11 @@ pub(crate) trait WalrusUtilModule {
         export_name: impl AsRef<str>,
     ) -> eyre::Result<()>;
 
-    fn connect_func_inner(&mut self, fid: FunctionId, export_id: FunctionId) -> eyre::Result<()>;
+    fn connect_func_inner(
+        &mut self,
+        fid: impl Borrow<FunctionId>,
+        export_id: impl Borrow<FunctionId>,
+    ) -> eyre::Result<()>;
 
     /// add fake function to the module
     /// and return the function id
@@ -128,27 +136,39 @@ pub(crate) trait WalrusUtilModule {
     fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
 
     /// Return all functions that call functions in this fid
-    fn get_using_func(&self, fid: FunctionId)
-    -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>>;
+    fn get_using_func(
+        &self,
+        fid: impl Borrow<FunctionId>,
+    ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>>;
 
-    fn renew_id_on_table(&mut self, old_id: FunctionId, new_id: FunctionId) -> eyre::Result<()>
-    where
-        Self: Sized;
-
-    fn fid_pos_on_table(&self, fid: FunctionId) -> eyre::Result<Vec<(TableId, usize)>>;
-
-    fn renew_call_fn(&mut self, old_id: FunctionId, new_id: FunctionId) -> eyre::Result<()>
-    where
-        Self: Sized;
-
-    fn renew_call_fn_in_the_fn(
+    fn renew_id_on_table(
         &mut self,
-        old_id: FunctionId,
-        new_id: FunctionId,
-        fn_id: FunctionId,
+        old_id: impl Borrow<FunctionId>,
+        new_id: impl Borrow<FunctionId>,
     ) -> eyre::Result<()>
     where
         Self: Sized;
+
+    fn fid_pos_on_table(&self, fid: impl Borrow<FunctionId>)
+    -> eyre::Result<Vec<(TableId, usize)>>;
+
+    fn renew_call_fn(
+        &mut self,
+        old_id: impl Borrow<FunctionId>,
+        new_id: impl Borrow<FunctionId>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized;
+
+    // this is broken
+    // fn renew_call_fn_in_the_fn(
+    //     &mut self,
+    //     old_id: impl Borrow<FunctionId>,
+    //     new_id: impl Borrow<FunctionId>,
+    //     fn_id: impl Borrow<FunctionId>,
+    // ) -> eyre::Result<()>
+    // where
+    //     Self: Sized;
 
     fn gen_new_function(
         &mut self,
@@ -159,19 +179,23 @@ pub(crate) trait WalrusUtilModule {
     where
         Self: Sized;
 
-    fn check_function_type(&self, before: FunctionId, after: FunctionId) -> eyre::Result<()>
+    fn check_function_type(
+        &self,
+        before: impl Borrow<FunctionId>,
+        after: impl Borrow<FunctionId>,
+    ) -> eyre::Result<()>
     where
         Self: Sized;
 
     #[allow(dead_code)]
-    fn debug_call_indirect(&mut self, id: FunctionId) -> eyre::Result<()>
+    fn debug_call_indirect(&mut self, id: impl Borrow<FunctionId>) -> eyre::Result<()>
     where
         Self: Sized;
 
     #[allow(dead_code)]
     fn gen_inspect<const N: usize>(
         &mut self,
-        inspector: FunctionId,
+        inspector: impl Borrow<FunctionId>,
         params: &[ValType],
         filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
@@ -197,7 +221,14 @@ impl WalrusUtilImport for ModuleImports {
 }
 
 impl WalrusUtilModule for walrus::Module {
-    fn connect_func_inner(&mut self, fid: FunctionId, export_id: FunctionId) -> eyre::Result<()> {
+    fn connect_func_inner(
+        &mut self,
+        fid: impl Borrow<FunctionId>,
+        export_id: impl Borrow<FunctionId>,
+    ) -> eyre::Result<()> {
+        let fid = *fid.borrow();
+        let export_id = *export_id.borrow();
+
         self.check_function_type(fid, export_id)
             .wrap_err("Function types do not match on connect func inner")?;
 
@@ -544,8 +575,10 @@ impl WalrusUtilModule for walrus::Module {
 
     fn get_using_func(
         &self,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>> {
+        let fid = *fid.borrow();
+
         Ok(self
             .funcs
             .iter_local()
@@ -566,10 +599,17 @@ impl WalrusUtilModule for walrus::Module {
             .collect::<Vec<_>>())
     }
 
-    fn renew_id_on_table(&mut self, old_id: FunctionId, new_id: FunctionId) -> eyre::Result<()>
+    fn renew_id_on_table(
+        &mut self,
+        old_id: impl Borrow<FunctionId>,
+        new_id: impl Borrow<FunctionId>,
+    ) -> eyre::Result<()>
     where
         Self: Sized,
     {
+        let old_id = *old_id.borrow();
+        let new_id = *new_id.borrow();
+
         self.check_function_type(old_id, new_id)
             .wrap_err("Function types do not match on renew id on table")?;
 
@@ -607,7 +647,12 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn fid_pos_on_table(&self, fid: FunctionId) -> eyre::Result<Vec<(TableId, usize)>> {
+    fn fid_pos_on_table(
+        &self,
+        fid: impl Borrow<FunctionId>,
+    ) -> eyre::Result<Vec<(TableId, usize)>> {
+        let fid = *fid.borrow();
+
         let mut positions = vec![];
         for table in self.tables.iter() {
             for elem in &table.elem_segments {
@@ -624,8 +669,8 @@ impl WalrusUtilModule for walrus::Module {
                 }
                 match &elem.items {
                     walrus::ElementItems::Functions(ids) => {
-                        ids.iter().enumerate().for_each(|(i, id)| {
-                            if *id == fid {
+                        ids.iter().copied().enumerate().for_each(|(i, id)| {
+                            if id == fid {
                                 positions.push((table.id(), i));
                             }
                         });
@@ -637,134 +682,142 @@ impl WalrusUtilModule for walrus::Module {
         Ok(positions)
     }
 
-    fn renew_call_fn_in_the_fn(
+    // this is broken
+    // fn renew_call_fn_in_the_fn(
+    //     &mut self,
+    //     old_id: impl Borrow<FunctionId>,
+    //     new_id: impl Borrow<FunctionId>,
+    //     fn_id: impl Borrow<FunctionId>,
+    // ) -> eyre::Result<()>
+    // where
+    //     Self: Sized,
+    // {
+    //     use walrus::ir::*;
+    //     let f_ty_id = self.funcs.get(old_id).ty();
+    //     let f_ty_id_params = self.types.get(f_ty_id).params().to_vec();
+    //     let f_ty_id_results = self.types.get(f_ty_id).results().to_vec();
+
+    //     // check new_id type and old_id type
+    //     self.check_function_type(old_id, new_id)
+    //         .wrap_err("Function types do not match on renew call fn that nesting this function")?;
+
+    //     let fid_pos_on_table = self
+    //         .fid_pos_on_table(old_id)
+    //         .wrap_err("Failed to get fid pos on table")?;
+
+    //     let using_tables = self
+    //         .funcs
+    //         .flat_read(
+    //             |instr, _| {
+    //                 if let Instr::CallIndirect(call) = instr {
+    //                     if fid_pos_on_table.iter().any(|(tid, _)| *tid == call.table) {
+    //                         let ty = self.types.get(call.ty);
+    //                         if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
+    //                             return Some(call.table);
+    //                         }
+    //                     }
+    //                 }
+    //                 None
+    //             },
+    //             fn_id,
+    //         )
+    //         .wrap_err("Failed to read using tables")?
+    //         .into_iter()
+    //         .filter_map(|x| x)
+    //         .collect::<std::collections::HashSet<_>>()
+    //         .into_iter()
+    //         .filter_map(|table| {
+    //             let fid = fid_pos_on_table
+    //                 .iter()
+    //                 .filter(|(tid, _)| *tid == table)
+    //                 .map(|(_, pos)| *pos as i32)
+    //                 .collect::<Vec<_>>();
+    //             if fid.is_empty() {
+    //                 return None;
+    //             }
+    //             if fid.len() > 1 {
+    //                 log::warn!("Multiple fid pos found on table, why? using the first one");
+    //             }
+    //             let fid = fid[0];
+    //             Some((table, fid))
+    //         })
+    //         .map(|(table, fid)| {
+    //             use walrus::*;
+
+    //             let params_ty = core::iter::once(ValType::I32)
+    //                 .chain(f_ty_id_params.clone())
+    //                 .collect::<Vec<_>>();
+    //             let results_ty = f_ty_id_results.clone();
+
+    //             let new_id = self.gen_new_function(&params_ty, &results_ty, |func, args| {
+    //                 func.func_body()
+    //                     .local_get(args[0])
+    //                     .i32_const(fid)
+    //                     .binop(BinaryOp::I32Eq)
+    //                     .if_else(
+    //                         ValType::I32,
+    //                         |cons| {
+    //                             for arg in args.iter().skip(1) {
+    //                                 cons.local_get(*arg);
+    //                             }
+    //                             cons.call(new_id).return_();
+    //                         },
+    //                         |els| {
+    //                             for arg in args.iter().skip(1) {
+    //                                 els.local_get(*arg);
+    //                             }
+    //                             els.call_indirect(f_ty_id, table);
+    //                         },
+    //                     );
+
+    //                 Ok(())
+    //             })?;
+
+    //             Ok((table, new_id))
+    //         })
+    //         .collect::<eyre::Result<std::collections::HashMap<_, _>>>()?;
+
+    //     self.funcs
+    //         .flat_rewrite(
+    //             |instr, _| {
+    //                 if let Some(call) = instr.call_mut() {
+    //                     if call.func == old_id {
+    //                         call.func = new_id;
+    //                     }
+    //                 }
+    //                 if let Some(call) = instr.call_indirect_mut() {
+    //                     let ty = self.types.get(call.ty);
+    //                     if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
+    //                         if let Some(new_id) = using_tables.get(&call.table).cloned() {
+    //                             log::info!(
+    //                                 "Rewriting call_indirect to direct call in function {:?}. Old: {:?}, New: {:?}",
+    //                                 fn_id,
+    //                                 call,
+    //                                 new_id
+    //                             );
+    //                             *instr = Instr::Call(Call { func: new_id });
+    //                         }
+    //                     }
+    //                 }
+    //             },
+    //             fn_id,
+    //         )
+    //         .wrap_err("Failed to renew function")?;
+
+    //     Ok(())
+    // }
+
+    fn renew_call_fn(
         &mut self,
-        old_id: FunctionId,
-        new_id: FunctionId,
-        fn_id: FunctionId,
+        old_id: impl Borrow<FunctionId>,
+        new_id: impl Borrow<FunctionId>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        use walrus::ir::*;
-        let f_ty_id = self.funcs.get(old_id).ty();
-        let f_ty_id_params = self.types.get(f_ty_id).params().to_vec();
-        let f_ty_id_results = self.types.get(f_ty_id).results().to_vec();
+        let old_id = *old_id.borrow();
+        let new_id = *new_id.borrow();
 
-        // check new_id type and old_id type
-        self.check_function_type(old_id, new_id)
-            .wrap_err("Function types do not match on renew call fn that nesting this function")?;
-
-        let fid_pos_on_table = self
-            .fid_pos_on_table(old_id)
-            .wrap_err("Failed to get fid pos on table")?;
-
-        let using_tables = self
-            .funcs
-            .flat_read(
-                |instr, _| {
-                    if let Instr::CallIndirect(call) = instr {
-                        if fid_pos_on_table.iter().any(|(tid, _)| *tid == call.table) {
-                            let ty = self.types.get(call.ty);
-                            if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-                                return Some(call.table);
-                            }
-                        }
-                    }
-                    None
-                },
-                fn_id,
-            )
-            .wrap_err("Failed to read using tables")?
-            .into_iter()
-            .filter_map(|x| x)
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .filter_map(|table| {
-                let fid = fid_pos_on_table
-                    .iter()
-                    .filter(|(tid, _)| *tid == table)
-                    .map(|(_, pos)| *pos as i32)
-                    .collect::<Vec<_>>();
-                if fid.is_empty() {
-                    return None;
-                }
-                if fid.len() > 1 {
-                    log::warn!("Multiple fid pos found on table, why? using the first one");
-                }
-                let fid = fid[0];
-                Some((table, fid))
-            })
-            .map(|(table, fid)| {
-                use walrus::*;
-
-                let params_ty = core::iter::once(ValType::I32)
-                    .chain(f_ty_id_params.clone())
-                    .collect::<Vec<_>>();
-                let results_ty = f_ty_id_results.clone();
-
-                let new_id = self.gen_new_function(&params_ty, &results_ty, |func, args| {
-                    func.func_body()
-                        .local_get(args[0])
-                        .i32_const(fid)
-                        .binop(BinaryOp::I32Eq)
-                        .if_else(
-                            ValType::I32,
-                            |cons| {
-                                for arg in args.iter().skip(1) {
-                                    cons.local_get(*arg);
-                                }
-                                cons.call(new_id).return_();
-                            },
-                            |els| {
-                                for arg in args.iter().skip(1) {
-                                    els.local_get(*arg);
-                                }
-                                els.call_indirect(f_ty_id, table);
-                            },
-                        );
-
-                    Ok(())
-                })?;
-
-                Ok((table, new_id))
-            })
-            .collect::<eyre::Result<std::collections::HashMap<_, _>>>()?;
-
-        self.funcs
-            .flat_rewrite(
-                |instr, _| {
-                    if let Some(call) = instr.call_mut() {
-                        if call.func == old_id {
-                            call.func = new_id;
-                        }
-                    }
-                    if let Some(call) = instr.call_indirect_mut() {
-                        let ty = self.types.get(call.ty);
-                        if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-                            if let Some(new_id) = using_tables.get(&call.table).cloned() {
-                                log::info!(
-                                    "Rewriting call_indirect to direct call in function {:?}. Old: {:?}, New: {:?}",
-                                    fn_id,
-                                    call,
-                                    new_id
-                                );
-                                *instr = Instr::Call(Call { func: new_id });
-                            }
-                        }
-                    }
-                },
-                fn_id,
-            )
-            .wrap_err("Failed to renew function")?;
-
-        Ok(())
-    }
-
-    fn renew_call_fn(&mut self, old_id: FunctionId, new_id: FunctionId) -> eyre::Result<()>
-    where
-        Self: Sized,
-    {
         for (id, _, _) in self
             .get_using_func(old_id)
             .wrap_err("Failed to get using func")?
@@ -809,10 +862,17 @@ impl WalrusUtilModule for walrus::Module {
         Ok(func.finish(args, &mut self.funcs))
     }
 
-    fn check_function_type(&self, before: FunctionId, after: FunctionId) -> eyre::Result<()>
+    fn check_function_type(
+        &self,
+        before: impl Borrow<FunctionId>,
+        after: impl Borrow<FunctionId>,
+    ) -> eyre::Result<()>
     where
         Self: Sized,
     {
+        let before = *before.borrow();
+        let after = *after.borrow();
+
         let a_ty = self.funcs.get(before).ty();
         let a_ty_params = self.types.get(a_ty).params();
         let a_ty_results = self.types.get(a_ty).results();
@@ -832,10 +892,12 @@ impl WalrusUtilModule for walrus::Module {
 
     // Insert a specific function into every call_indirect within all functions.
     // The type of the received function is fn (table_id, pos);
-    fn debug_call_indirect(&mut self, id: FunctionId) -> eyre::Result<()>
+    fn debug_call_indirect(&mut self, id: impl Borrow<FunctionId>) -> eyre::Result<()>
     where
         Self: Sized,
     {
+        let id = *id.borrow();
+
         // check id type
         if self.types.get(self.funcs.get(id).ty()).params() != [ValType::I32, ValType::I32]
             || self.types.get(self.funcs.get(id).ty()).results() != []
@@ -935,13 +997,15 @@ impl WalrusUtilModule for walrus::Module {
 
     fn gen_inspect<const N: usize>(
         &mut self,
-        inspector: FunctionId,
+        inspector: impl Borrow<FunctionId>,
         params: &[ValType],
         mut filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
+        let inspector = *inspector.borrow();
+
         // check inspector type
         if self.types.get(self.funcs.get(inspector).ty()).params()
             != params
@@ -1084,7 +1148,9 @@ impl WalrusUtilModule for walrus::Module {
 }
 
 impl WalrusUtilFuncs for walrus::ModuleFunctions {
-    fn find_children(&self, fid: FunctionId) -> eyre::Result<Vec<FunctionId>> {
+    fn find_children(&self, fid: impl Borrow<FunctionId>) -> eyre::Result<Vec<FunctionId>> {
+        let fid = *fid.borrow();
+
         let mut children = vec![];
         let mut stack = vec![fid];
         while let Some(fid) = stack.pop() {
@@ -1108,11 +1174,13 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     fn rewrite<T>(
         &mut self,
         find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized,
     {
+        let fid = *fid.borrow();
+
         let func = self.get_mut(fid);
         if let FunctionKind::Local(local_func) = &mut func.kind {
             local_func.builder_mut().func_body().rewrite(find)
@@ -1124,11 +1192,13 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     fn read<T>(
         &self,
         mut find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized,
     {
+        let fid = *fid.borrow();
+
         let func = self.get(fid);
         if let FunctionKind::Local(local_func) = &func.kind {
             local_func.read(&mut find)
@@ -1140,7 +1210,7 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     fn flat_rewrite<T>(
         &mut self,
         mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized,
@@ -1167,7 +1237,7 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     fn flat_read<T>(
         &self,
         mut find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
-        fid: FunctionId,
+        fid: impl Borrow<FunctionId>,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized,

@@ -1,7 +1,7 @@
 use eyre::Context as _;
 use walrus::*;
 
-use crate::util::{ResultUtil as _, WalrusUtilModule};
+use crate::util::{ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule};
 
 #[derive(
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
@@ -391,7 +391,7 @@ impl Wasip1Op {
         module: &mut walrus::Module,
         fid: FunctionId,
         main_void_func_id: FunctionId,
-        start_func_id: FunctionId,
+        start_fn_id: FunctionId,
     ) -> eyre::Result<()> {
         let fake_fn_id = module.add_func(&[], &[walrus::ValType::I32], |func, _| {
             func.func_body().i32_const(0).return_();
@@ -399,9 +399,83 @@ impl Wasip1Op {
             Ok(())
         })?;
 
-        module
-            .renew_call_fn_in_the_fn(main_void_func_id, fake_fn_id, start_func_id)
-            .wrap_err("Failed to rewrite main_void call in start")?;
+        let call_main_void: i32 = module
+            .funcs
+            .rewrite(
+                |instr, _| {
+                    if let walrus::ir::Instr::Call(c) = instr {
+                        if c.func == main_void_func_id {
+                            c.func = fake_fn_id;
+                            1
+                        } else {
+                            0
+                        }
+                    } else {
+                        0
+                    }
+                },
+                start_fn_id,
+            )
+            .wrap_err("Failed to read main_void calls")?
+            .into_iter()
+            .sum();
+        if call_main_void == 0 {
+            let call_count = module
+                .funcs
+                .flat_read(
+                    |instr, _| {
+                        if let walrus::ir::Instr::Call(c) = instr {
+                            if c.func == main_void_func_id { 1 } else { 0 }
+                        } else {
+                            0
+                        }
+                    },
+                    start_fn_id,
+                )
+                .wrap_err("Failed to read main_void calls")?
+                .into_iter()
+                .count();
+
+            if call_count == 1 {
+                log::warn!(
+                    "main_void is not called directly in start function, but called in nested function. we replaced once call to a fake function that returns 0."
+                );
+                module
+                    .funcs
+                    .flat_rewrite(
+                        |instr, _| {
+                            if let walrus::ir::Instr::Call(c) = instr {
+                                if c.func == main_void_func_id {
+                                    c.func = fake_fn_id;
+                                }
+                            }
+                        },
+                        start_fn_id,
+                    )
+                    .wrap_err("Failed to read main_void calls")?;
+            } else {
+                if call_count > 1 {
+                    log::warn!(
+                        "main_void is not called directly in start function, but called in nested function. main_void called multiple times in start function, rust's default is once."
+                    );
+                } else {
+                    log::warn!(
+                        "main_void is not called in nested start function, we think call_indirect is used. we replaced all calls to a fake function that returns 0."
+                    );
+                }
+
+                // Strictly speaking, it should be limited to functions called within start_fn,
+                // but since the main_void function is only called inside start_fn and through export,
+                // it is acceptable to modify it in this function.
+                module
+                    .renew_call_fn(main_void_func_id, fake_fn_id)
+                    .wrap_err("Failed to rewrite main_void call in start")?;
+            }
+        } else if call_main_void > 1 {
+            log::warn!(
+                "main_void called multiple times in start function, rust's default is once. we replaced all calls to a fake function that returns 0."
+            );
+        }
 
         module.connect_func_inner(fid, main_void_func_id)?;
 

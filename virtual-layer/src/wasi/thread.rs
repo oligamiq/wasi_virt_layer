@@ -79,25 +79,39 @@ pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess, const N: usize> {
 
 pub struct DirectThreadPool;
 
-/// Spawn a new thread.
-/// If you call `std::thread::spawn` in ThreadPool, it will be looped.
-/// So, you should use `root_spawn` instead.
-pub fn root_spawn<F, T>(f: F) -> std::thread::JoinHandle<T>
-where
-    F: FnOnce() -> T,
-    F: Send + 'static,
-    T: Send + 'static,
-{
-    std::thread::spawn(f)
-}
+mod spawn {
+    use core::cell::UnsafeCell;
 
-#[cfg(target_os = "wasi")]
-#[unsafe(no_mangle)]
-extern "C" fn __wasip1_vfs_root_spawn_anchor() {
-    root_spawn(move || {
-        unreachable!();
-    });
+    // It is safe as it releases immediately.
+    thread_local! {
+        static IS_ROOT_THREAD: UnsafeCell<bool> = UnsafeCell::new(false);
+    }
+
+    /// Spawn a new thread.
+    /// If you call `std::thread::spawn` in ThreadPool, it will be looped.
+    /// So, you should use `root_spawn` instead.
+    pub fn root_spawn<F, T>(f: F) -> std::thread::JoinHandle<T>
+    where
+        F: FnOnce() -> T,
+        F: Send + 'static,
+        T: Send + 'static,
+    {
+        IS_ROOT_THREAD.with(|flag| {
+            unsafe { flag.get().write(true) };
+        });
+
+        std::thread::spawn(f)
+    }
+
+    #[cfg(target_os = "wasi")]
+    #[unsafe(no_mangle)]
+    /// When calling thread_spawn, first branch based on the result of this function.
+    extern "C" fn __wasip1_vfs_is_root_spawn() -> bool {
+        // get and turn off the flag
+        IS_ROOT_THREAD.with(|flag| unsafe { flag.get().replace(false) })
+    }
 }
+pub use spawn::root_spawn;
 
 impl VirtualThread for DirectThreadPool {
     // new thread start function call by other wasm
@@ -106,6 +120,8 @@ impl VirtualThread for DirectThreadPool {
         accessor: impl ThreadAccess,
         runner: ThreadRunner,
     ) -> Option<NonZero<u32>> {
+        println!("Spawning a new thread for {}", accessor.as_name());
+
         static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
 
         let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -150,6 +166,8 @@ macro_rules! export_thread {
                 }
 
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
+                    println!("Calling wasi_thread_start for {}", self.as_name());
+
                     #[cfg(target_os = "wasi")]
                     {
                         match *self {
@@ -178,7 +196,7 @@ macro_rules! export_thread {
                 fn as_name(&self) -> &'static str {
                     match *self {
                         $(
-                            [<__ $wasm>] => stringify!($wasm),
+                            [<__ $wasm>] => $crate::export_thread!(@as_name, $wasm),
                         )*
                     }
                 }
@@ -202,6 +220,8 @@ macro_rules! export_thread {
                     data_ptr: $crate::__private::inner::thread::ThreadRunnerBase,
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
+
+                    println!("Spawning a new thread for {}", $crate::export_thread!(@as_name, $wasm));
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;
@@ -227,6 +247,14 @@ macro_rules! export_thread {
 
     (@filter, $ptr:ident, $wasm:ident) => {
         $ptr.apply::<$wasm>()
+    };
+
+    (@as_name, self) => {
+        <$crate::__private::__self as $crate::memory::WasmAccess>::NAME
+    };
+
+    (@as_name, $wasm:ident) => {
+        <$wasm as $crate::memory::WasmAccess>::NAME
     };
 
     (@sched_yield, $pool:tt, self) => {

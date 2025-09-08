@@ -11,7 +11,7 @@ use crate::{
     threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT,
-        WalrusUtilImport, WalrusUtilModule,
+        WalrusUtilFuncs, WalrusUtilImport, WalrusUtilModule,
     },
 };
 
@@ -104,12 +104,11 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err_with(|| eyre::eyre!("{component_name} import not found"))?;
 
-            // rewrite call id in export.__wasip1_vfs_root_spawn_anchor
-            let root_fid = module
+            let branch_fid = module
                 .exports
-                .get_func("__wasip1_vfs_root_spawn_anchor")
+                .get_func("__wasip1_vfs_is_root_spawn")
                 .to_eyre()
-                .wrap_err("__wasip1_vfs_root_spawn_anchor not found")?;
+                .wrap_err("__wasip1_vfs_is_root_spawn not found")?;
 
             let fid = module
                 .imports
@@ -117,9 +116,56 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err("wasi.thread-spawn import not found")?;
 
+            // module
+            //     .renew_call_fn_in_the_fn(fid, real_thread_spawn_fn_id, root_fid)
+            //     .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
+
+            use walrus::ValType::I32;
+            let real_thread_spawn_fn_id = module
+                .add_func(&[I32], &[I32], |builder, args| {
+                    let mut body = builder.func_body();
+                    body.call(branch_fid)
+                        .if_else(
+                            I32,
+                            |then| {
+                                then.local_get(args[0]) // pass the argument to thread-spawn
+                                    .call(real_thread_spawn_fn_id);
+                            },
+                            |else_| {
+                                else_
+                                    .local_get(args[0]) // pass the argument to thread-spawn
+                                    .call(fid); // call thread-spawn
+                            },
+                        )
+                        .return_();
+
+                    Ok(())
+                })
+                .wrap_err("Failed to add real thread spawn function")?;
+
             module
-                .renew_call_fn_in_the_fn(fid, real_thread_spawn_fn_id, root_fid)
-                .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
+                .get_using_func(branch_fid)
+                .map(|v| {
+                    v.iter()
+                        .copied()
+                        .map(|(fid, _, _)| {
+                            module.funcs.rewrite(
+                                |instr, _| {
+                                    if let walrus::ir::Instr::Call(c) = instr {
+                                        if c.func == fid {
+                                            c.func = real_thread_spawn_fn_id;
+                                        }
+                                    }
+                                },
+                                fid,
+                            )?;
+
+                            Ok(())
+                        })
+                        .collect::<eyre::Result<Vec<()>>>()
+                })
+                .flatten()
+                .wrap_err("Failed to get using functions for branch")?;
 
             module.connect_func(
                 "wasi",
@@ -152,10 +198,7 @@ pub fn adjust_wasm(
                 )
                 .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
 
-            module
-                .exports
-                .remove("__wasip1_vfs_root_spawn_anchor")
-                .unwrap();
+            module.exports.remove("__wasip1_vfs_is_root_spawn").unwrap();
         }
     }
 

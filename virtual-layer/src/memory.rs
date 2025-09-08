@@ -46,6 +46,8 @@ macro_rules! import_wasm {
             $crate::__memory_director_import_etc!($name);
 
             impl $crate::memory::WasmAccess for $name {
+                const NAME: &'static str = stringify!($name);
+
                 #[inline(always)]
                 fn memcpy<T>(offset: *mut T, data: &[T])
                 {
@@ -376,6 +378,8 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
 use alloc::vec::Vec;
 
 pub trait WasmAccess: Copy {
+    const NAME: &'static str;
+
     /// Copies data from the source pointer to the offset.
     fn memcpy<T>(offset: *mut T, data: &[T]);
 
@@ -648,6 +652,8 @@ mod tests {
 pub(crate) struct WasmAccessFaker;
 
 impl WasmAccess for WasmAccessFaker {
+    const NAME: &'static str = "WasmAccessFaker";
+
     fn memcpy<T>(offset: *mut T, data: &[T]) {
         unsafe {
             core::ptr::copy_nonoverlapping(data.as_ptr(), offset, data.len());

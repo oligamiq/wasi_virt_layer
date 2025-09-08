@@ -5,6 +5,8 @@ use crate::memory::WasmAccess;
 pub struct __self;
 
 impl WasmAccess for __self {
+    const NAME: &'static str = "__self";
+
     fn memcpy<T>(offset: *mut T, data: &[T]) {
         todo!()
     }
