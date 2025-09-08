@@ -110,7 +110,7 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         params: &[ValType],
         results: &[ValType],
-        fn_: impl FnOnce(&mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
+        fn_: impl FnMut(&mut FunctionBuilder, &Vec<LocalId>) -> eyre::Result<()>,
     ) -> eyre::Result<FunctionId>;
 
     /// get the memory id from target name
@@ -177,6 +177,12 @@ pub(crate) trait WalrusUtilModule {
     ) -> eyre::Result<()>
     where
         Self: Sized;
+
+    #[allow(dead_code)]
+    fn assert_i32_const(
+        &mut self,
+        val: i32,
+    ) -> eyre::Result<impl FnMut(&mut walrus::InstrSeqBuilder) -> eyre::Result<()> + 'static>;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -768,12 +774,6 @@ impl WalrusUtilModule for walrus::Module {
                     |instr, _| {
                         if let walrus::ir::Instr::Call(call) = instr {
                             if call.func == old_id {
-                                log::info!(
-                                    "Rewriting call to direct call in function {:?}. Old: {:?}, New: {:?}",
-                                    id,
-                                    old_id,
-                                    new_id
-                                );
                                 call.func = new_id;
                             }
                         }
@@ -1030,10 +1030,6 @@ impl WalrusUtilModule for walrus::Module {
 
             match self.funcs.get_mut(fid).kind {
                 FunctionKind::Local(ref mut local_func) => {
-                    println!(
-                        "Inserting inspect at function {:?} position {:?} seq_id {:?}",
-                        fid, pos, seq_id
-                    );
                     let mut instr_seq = local_func.builder_mut().instr_seq(seq_id);
                     let instr = instr_seq
                         .instrs()
@@ -1052,6 +1048,38 @@ impl WalrusUtilModule for walrus::Module {
         }
 
         Ok(())
+    }
+
+    fn assert_i32_const(
+        &mut self,
+        val: i32,
+    ) -> eyre::Result<impl FnMut(&mut walrus::InstrSeqBuilder) -> eyre::Result<()> + 'static> {
+        use walrus::ValType::I32;
+        let fid = self.add_func(&[I32], &[I32], |builder, args| {
+            builder
+                .func_body()
+                .i32_const(val)
+                .local_get(args[0])
+                .binop(walrus::ir::BinaryOp::I32Eq)
+                .if_else(
+                    None,
+                    |cons| {
+                        cons.local_get(args[0]);
+                        cons.return_();
+                    },
+                    |els| {
+                        els.unreachable();
+                    },
+                );
+            Ok(())
+        })?;
+
+        Ok(
+            move |func_body: &mut walrus::InstrSeqBuilder| -> eyre::Result<()> {
+                func_body.call(fid);
+                Ok(())
+            },
+        )
     }
 }
 

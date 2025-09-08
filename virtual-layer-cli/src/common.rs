@@ -143,6 +143,9 @@ pub enum Wasip1OpKind {
         global: Box<[(walrus::GlobalId, walrus::ir::Value)]>,
         zero_range: Box<[(i32, Option<i32>)]>,
         mem_init: Box<[(i32, usize, usize)]>,
+        // automatically call this with constructed wasm module,
+        // so use this
+        start_section_id: Option<walrus::FunctionId>,
     },
     MemoryTrap {},
     Skip,
@@ -315,28 +318,30 @@ impl Wasip1Op {
                 let data_range = module
                     .data
                     .iter()
-                    .filter_map(|data| match data.kind {
-                        walrus::DataKind::Active { memory, offset } if memory == wasm_mem => {
-                            if let ConstExpr::Value(v) = offset {
-                                if let ir::Value::I32(offset) = v {
-                                    Some((offset, data.value.len()))
+                    .filter_map(|data| {
+                        match data.kind {
+                            walrus::DataKind::Active { memory, offset } if memory == wasm_mem => {
+                                if let ConstExpr::Value(v) = offset {
+                                    if let ir::Value::I32(offset) = v {
+                                        Some((offset, data.value.len()))
+                                    } else {
+                                        log::warn!(
+                                            "Data segment {:?} is not i32, we support only i32",
+                                            offset
+                                        );
+                                        None
+                                    }
                                 } else {
                                     log::warn!(
-                                        "Data segment {:?} is not i32, we support only i32",
+                                        "Data segment {:?} is not a value, we support only i32",
                                         offset
                                     );
                                     None
                                 }
-                            } else {
-                                log::warn!(
-                                    "Data segment {:?} is not a value, we support only i32",
-                                    offset
-                                );
-                                None
                             }
+                            // Passive is across memories so ignore on now
+                            _ => None,
                         }
-                        // Passive is across memories so ignore on now
-                        _ => None,
                     })
                     .collect::<Vec<_>>();
 
@@ -359,10 +364,13 @@ impl Wasip1Op {
                     .collect::<Vec<_>>()
                     .into_boxed_slice();
 
+                let start_section_id = module.start;
+
                 Wasip1OpKind::Reset {
                     global,
                     zero_range,
                     mem_init,
+                    start_section_id,
                 }
             }
             _ if name.starts_with("memory_trap") => Wasip1OpKind::MemoryTrap {},
@@ -417,9 +425,9 @@ impl Wasip1Op {
                     if let Wasip1OpKind::Reset { mem_init, .. } = &reset.kind {
                         for (offset, len, ptr) in mem_init {
                             func_body
-                                .i32_const(*ptr as i32)
-                                .i32_const(*offset)
-                                .i32_const(*len as i32)
+                                .i32_const(*ptr as i32) // dst
+                                .i32_const(*offset) // src
+                                .i32_const(*len as i32) // len
                                 .memory_copy(wasm_mem, vfs_mem);
                         }
                     } else {
@@ -488,6 +496,13 @@ impl Wasip1Op {
         } else {
             let Self { fid, kind } = self;
 
+            // let mut asserter = if matches!(kind, Wasip1OpKind::Reset { .. }) {
+            //     let mem_size = module.memories.get(wasm_mem).initial as i32;
+            //     Some(module.assert_i32_const(mem_sizey)?)
+            // } else {
+            //     None
+            // };
+
             module
                 .replace_imported_func(fid, |(body, arg_locals)| {
                     let mut body = body.func_body();
@@ -546,19 +561,26 @@ impl Wasip1Op {
                             global,
                             zero_range,
                             mem_init,
+                            start_section_id,
                         } => {
-                            for global in global.iter() {
-                                let (id, value) = global;
+                            for (id, value) in global.iter() {
                                 body.const_(*value).global_set(*id);
                             }
                             for (start, end) in zero_range.iter() {
-                                body.i32_const(*start).i32_const(0);
+                                // ptr
+                                body.i32_const(*start)
+                                    // value
+                                    .i32_const(0);
 
+                                // len
                                 if let Some(end) = end {
                                     body.i32_const(*end - *start);
                                 } else {
-                                    body.memory_size(wasm_mem)
-                                        .i32_const(64 * 1024)
+                                    body.memory_size(wasm_mem);
+
+                                    // asserter.as_mut().unwrap()(&mut body).unwrap();
+
+                                    body.i32_const(64 * 1024)
                                         .binop(ir::BinaryOp::I32Mul)
                                         .i32_const(*start)
                                         .binop(ir::BinaryOp::I32Sub);
@@ -566,11 +588,16 @@ impl Wasip1Op {
                                 body.memory_fill(wasm_mem);
                             }
                             for (mem_offset, mem_len, mem_ptr) in mem_init.iter() {
-                                body.i32_const(*mem_offset)
-                                    .i32_const(*mem_ptr as i32)
-                                    .i32_const(*mem_len as i32)
+                                body.i32_const(*mem_offset) // dst
+                                    .i32_const(*mem_ptr as i32) // src
+                                    .i32_const(*mem_len as i32) // len
                                     .memory_copy(vfs_mem, wasm_mem);
                             }
+
+                            if let Some(start_section_id) = start_section_id {
+                                body.call(*start_section_id);
+                            }
+
                             body.return_();
                         }
                         Wasip1OpKind::MemoryTrap { .. } => {
