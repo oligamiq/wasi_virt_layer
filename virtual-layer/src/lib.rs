@@ -1,9 +1,9 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-#[cfg(target_os = "wasi")]
-#[cfg(feature = "std")]
-#[cfg(feature = "debug")]
-use core::sync::atomic;
+// #[cfg(target_os = "wasi")]
+// #[cfg(feature = "std")]
+// #[cfg(feature = "debug")]
+// use core::sync::atomic;
 
 mod __self;
 mod binary_map;
@@ -92,15 +92,21 @@ pub mod __private {
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
-    static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+    // static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
 
     #[cfg(target_os = "wasi")]
     {
-        let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
-        if nest == 0 {
-            eprintln!("debug_call_indirect: tid={tid}, idx={idx}");
-        }
-        NEST.fetch_sub(1, atomic::Ordering::SeqCst);
+        // let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
+        // if nest == 0 {
+        transporter::Wasip1Transporter::write_to_stderr(b"debug_call_indirect: tid=").unwrap();
+        // transporter::Wasip1Transporter::write_to_stderr(tid.to_string().as_bytes()).unwrap();
+        num_to_str(tid, transporter::Wasip1Transporter::write_to_stderr).unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(b", idx=").unwrap();
+        // transporter::Wasip1Transporter::write_to_stderr(idx.to_string().as_bytes()).unwrap();
+        num_to_str(idx, transporter::Wasip1Transporter::write_to_stderr).unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+        // }
+        // NEST.fetch_sub(1, atomic::Ordering::SeqCst);
     }
 
     #[cfg(not(target_os = "wasi"))]
@@ -108,21 +114,52 @@ unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
         panic!("This function is only available on WASI");
     }
 }
+fn num_to_str(
+    n: i32,
+    writer: impl Fn(&[u8]) -> Result<wasip1::Size, wasip1::Errno>,
+) -> Result<(), wasip1::Errno> {
+    if n == 0 {
+        writer(&[b'0'])?;
+        return Ok(());
+    }
+
+    let mut buf = [0u8; 11];
+    let mut i = buf.len();
+
+    let negative = n < 0;
+    let mut num = if negative { -(n as i64) } else { n as i64 };
+
+    while num > 0 {
+        i -= 1;
+        buf[i] = b'0' + (num % 10) as u8;
+        num /= 10;
+    }
+
+    if negative {
+        i -= 1;
+        buf[i] = b'-';
+    }
+
+    writer(&buf[i..])?;
+    Ok(())
+}
 
 #[cfg(feature = "debug")]
 #[cfg(feature = "std")]
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_call_function(idx: i32) {
-    static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+    // static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
 
     #[cfg(target_os = "wasi")]
     {
-        let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
-        if nest == 0 {
-            eprintln!("debug_call_function: idx={idx}");
-        }
-        NEST.fetch_sub(1, atomic::Ordering::SeqCst);
+        // let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
+        // if nest == 0 {
+        transporter::Wasip1Transporter::write_to_stderr(b"debug_call_function: idx=").unwrap();
+        num_to_str(idx, transporter::Wasip1Transporter::write_to_stderr).unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+        // }
+        // NEST.fetch_sub(1, atomic::Ordering::SeqCst);
     }
 
     #[cfg(not(target_os = "wasi"))]
@@ -136,17 +173,22 @@ unsafe extern "C" fn debug_call_function(idx: i32) {
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
-    static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
+    // static NEST: atomic::AtomicU32 = atomic::AtomicU32::new(0);
 
     #[cfg(target_os = "wasi")]
     {
-        let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
-        if nest == 0 {
-            eprintln!(
-                "debug_atomic_wait: ptr={ptr:?}, expression={expression:?}, timeout_ns={timeout_ns}"
-            );
-        }
-        NEST.fetch_sub(1, atomic::Ordering::SeqCst);
+        // let nest = NEST.fetch_add(1, atomic::Ordering::SeqCst);
+        // if nest == 0 {
+        transporter::Wasip1Transporter::write_to_stderr(b"debug_atomic_wait: ptr=").unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(format!("{ptr:?}").as_bytes()).unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(b", expression=").unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(format!("{expression:?}").as_bytes())
+            .unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(b", timeout_ns=").unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(timeout_ns.to_string().as_bytes()).unwrap();
+        transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+        // }
+        // NEST.fetch_sub(1, atomic::Ordering::SeqCst);
     }
 
     #[cfg(not(target_os = "wasi"))]

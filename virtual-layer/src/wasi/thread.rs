@@ -96,6 +96,7 @@ mod spawn {
         F: Send + 'static,
         T: Send + 'static,
     {
+        println!("Spawning a root thread");
         IS_ROOT_THREAD.with(|flag| {
             unsafe { flag.get().write(true) };
         });
@@ -107,6 +108,7 @@ mod spawn {
     #[unsafe(no_mangle)]
     /// When calling thread_spawn, first branch based on the result of this function.
     extern "C" fn __wasip1_vfs_is_root_spawn() -> bool {
+        eprintln!("Checking if current thread is root thread");
         // get and turn off the flag
         IS_ROOT_THREAD.with(|flag| unsafe { flag.get().replace(false) })
     }

@@ -9,7 +9,9 @@ wit_bindgen::generate!({
 struct Starter;
 
 impl Guest for Starter {
-    fn init() -> () {}
+    fn init() -> () {
+        test_threads::_main();
+    }
 
     fn start() {
         test_threads::_start();
@@ -52,7 +54,7 @@ export_thread!(DirectThreadPool, self, test_threads);
 export_process!(test_threads);
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
-    environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
+    environ: &["RUST_MIN_STACK=16777216", "HOME=~/", "RUST_BACKTRACE=full"],
 };
 export_env!(@block, @const, VirtualEnvTy, test_threads);
 

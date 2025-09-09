@@ -6,7 +6,7 @@ use eyre::{Context as _, ContextCompat};
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
     instrs::InstrRewrite,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
 };
 
 pub fn adjust_merged_wasm(
@@ -27,57 +27,81 @@ pub fn adjust_merged_wasm(
         .get_global_anchor("vfs")
         .wrap_err("Failed to get global anchor")?;
 
-    if let Some(e) = {
+    fn get_fid(
+        module: &mut walrus::Module,
+        name: &str,
+    ) -> eyre::Result<Option<walrus::FunctionId>> {
         module
             .exports
             .iter()
-            .find(|export| export.name == "debug_call_indirect")
-            .map(|debug_call_indirect| {
-                log::info!("debug_call_indirect function found. Enabling debug feature.");
-                let fid = match debug_call_indirect.item {
+            .find(|export| export.name == name)
+            .map(|export| {
+                let fid = match export.item {
                     walrus::ExportItem::Function(fid) => fid,
-                    _ => eyre::bail!("debug_call_indirect is not a function export"),
+                    _ => eyre::bail!("{name} is not a function export"),
                 };
                 Ok(fid)
             })
+            .transpose()
     }
-    .map(|fid| {
+
+    let name = "debug_call_function";
+    if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
+        let excludes = ["debug_call_indirect", "debug_atomic_wait"]
+            .iter()
+            .map(|name| {
+                Ok(get_fid(&mut module, name)?
+                    .and_then(|fid| Some(module.funcs.find_children_with(fid)))
+                    .transpose()?)
+            })
+            .collect::<eyre::Result<Vec<_>>>()?
+            .into_iter()
+            .filter_map(|x| x)
+            .flatten()
+            .collect::<Vec<_>>();
+
+        log::info!("{name} function found. Enabling debug feature.");
+
         module
-            .debug_call_indirect(fid?)
+            .gen_inspect(fid, &[], &excludes, |instr| match instr {
+                walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
+                _ => None,
+            })
+            .wrap_err("Failed to set debug_atomic_wait")?;
+
+        eyre::Ok(())
+    }) {
+        e.wrap_err("Failed to enable debug_call_function")?;
+    }
+
+    let name = "debug_call_indirect";
+    if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
+        module
+            .debug_call_indirect(fid)
             .wrap_err("Failed to set debug_call_indirect")?;
+
+        log::info!("{name} function found. Enabling debug feature.");
 
         eyre::Ok(())
     }) {
         e.wrap_err("Failed to enable debug_call_indirect")?;
     }
 
-    if let Some(e) = {
-        module
-            .exports
-            .iter()
-            .find(|export| export.name == "debug_atomic_wait")
-            .map(|debug_atomic_wait| {
-                log::info!("debug_atomic_wait function found. Enabling debug feature.");
-                let fid = match debug_atomic_wait.item {
-                    walrus::ExportItem::Function(fid) => fid,
-                    _ => eyre::bail!("debug_atomic_wait is not a function export"),
-                };
-                Ok(fid)
-            })
-    }
-    .map(|fid| {
+    let name = "debug_atomic_wait";
+    if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
         use walrus::ValType::{I32, I64};
-        let fid = fid?;
 
-        let func = module.funcs.get_mut(fid);
-        let local_func = match &mut func.kind {
-            walrus::FunctionKind::Local(local_func) => local_func,
-            _ => eyre::bail!("debug_atomic_wait is not a local function"),
-        };
-        local_func.builder_mut().func_body().unreachable_at(0);
+        log::info!("{name} function found. Enabling debug feature.");
+
+        // let func = module.funcs.get_mut(fid);
+        // let local_func = match &mut func.kind {
+        //     walrus::FunctionKind::Local(local_func) => local_func,
+        //     _ => eyre::bail!("debug_atomic_wait is not a local function"),
+        // };
+        // local_func.builder_mut().func_body().unreachable_at(0);
 
         module
-            .gen_inspect(fid, &[I32, I32, I64], |instr| match instr {
+            .gen_inspect(fid, &[I32, I32, I64], &[fid], |instr| match instr {
                 walrus::ir::Instr::AtomicWait(_) => Some([]),
                 _ => None,
             })
@@ -87,35 +111,6 @@ pub fn adjust_merged_wasm(
     }) {
         e.wrap_err("Failed to enable debug_atomic_wait")?;
     }
-
-    // if let Some(e) = {
-    //     module
-    //         .exports
-    //         .iter()
-    //         .find(|export| export.name == "debug_call_function")
-    //         .map(|debug_call_function| {
-    //             log::info!("debug_call_function function found. Enabling debug feature.");
-    //             let fid = match debug_call_function.item {
-    //                 walrus::ExportItem::Function(fid) => fid,
-    //                 _ => eyre::bail!("debug_call_function is not a function export"),
-    //             };
-    //             Ok(fid)
-    //         })
-    // }
-    // .map(|fid| {
-    //     let fid = fid?;
-
-    //     module
-    //         .gen_inspect(fid, &[], |instr| match instr {
-    //             walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
-    //             _ => None,
-    //         })
-    //         .wrap_err("Failed to set debug_atomic_wait")?;
-
-    //     eyre::Ok(())
-    // }) {
-    //     e.wrap_err("Failed to enable debug_call_function")?;
-    // }
 
     let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
@@ -220,7 +215,7 @@ pub fn adjust_merged_wasm(
         // threads
         if threads {
             module
-                .connect_func(
+                .connect_func_without_remove(
                     "wasip1-vfs",
                     format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
                     format!("__wasip1_vfs_wasi_thread_start_{wasm_name}"),
@@ -230,7 +225,7 @@ pub fn adjust_merged_wasm(
                 })?;
 
             module
-                .connect_func(
+                .connect_func_without_remove(
                     "wasi",
                     format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
                     format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),

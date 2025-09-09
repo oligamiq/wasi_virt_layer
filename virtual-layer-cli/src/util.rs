@@ -106,10 +106,18 @@ pub(crate) trait WalrusUtilModule {
         export_name: impl AsRef<str>,
     ) -> eyre::Result<()>;
 
+    fn connect_func_without_remove(
+        &mut self,
+        import_module: impl AsRef<str>,
+        import_name: impl AsRef<str>,
+        export_name: impl AsRef<str>,
+    ) -> eyre::Result<()>;
+
     fn connect_func_inner(
         &mut self,
         fid: impl Borrow<FunctionId>,
         export_id: impl Borrow<FunctionId>,
+        is_delete: bool,
     ) -> eyre::Result<()>;
 
     /// add fake function to the module
@@ -197,6 +205,7 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         inspector: impl Borrow<FunctionId>,
         params: &[ValType],
+        exclude: &[impl Borrow<FunctionId>],
         filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
@@ -225,6 +234,7 @@ impl WalrusUtilModule for walrus::Module {
         &mut self,
         fid: impl Borrow<FunctionId>,
         export_id: impl Borrow<FunctionId>,
+        is_delete: bool,
     ) -> eyre::Result<()> {
         let fid = *fid.borrow();
         let export_id = *export_id.borrow();
@@ -257,7 +267,33 @@ impl WalrusUtilModule for walrus::Module {
             .map(|f| f.id())
             .ok_or_else(|| eyre::eyre!("Export not found"))?;
 
-        self.exports.delete(export_id);
+        if is_delete {
+            self.exports.delete(export_id);
+        }
+
+        Ok(())
+    }
+
+    fn connect_func_without_remove(
+        &mut self,
+        import_module: impl AsRef<str>,
+        import_name: impl AsRef<str>,
+        export_name: impl AsRef<str>,
+    ) -> eyre::Result<()> {
+        let fid = self
+            .imports
+            .get_func(import_module, &import_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("import {} not found", import_name.as_ref()))?;
+
+        let export_id = self
+            .exports
+            .get_func(&export_name)
+            .to_eyre()
+            .wrap_err_with(|| eyre::eyre!("export {} not found", export_name.as_ref()))?;
+
+        self.connect_func_inner(fid, export_id, false)
+            .wrap_err("Failed to connect func")?;
 
         Ok(())
     }
@@ -280,7 +316,10 @@ impl WalrusUtilModule for walrus::Module {
             .to_eyre()
             .wrap_err_with(|| eyre::eyre!("export {} not found", export_name.as_ref()))?;
 
-        self.connect_func_inner(fid, export_id)
+        self.connect_func_inner(fid, export_id, true)
+            .wrap_err("Failed to connect func")?;
+
+        Ok(())
     }
 
     fn add_func(
@@ -999,6 +1038,7 @@ impl WalrusUtilModule for walrus::Module {
         &mut self,
         inspector: impl Borrow<FunctionId>,
         params: &[ValType],
+        exclude: &[impl Borrow<FunctionId>],
         mut filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
@@ -1019,10 +1059,12 @@ impl WalrusUtilModule for walrus::Module {
 
         let ids = self.funcs.find_children_with(inspector)?;
 
+        let exclude = exclude.iter().map(|id| *id.borrow()).collect::<Vec<_>>();
+
         let instrs = self
             .funcs
             .iter_local()
-            .filter(|(fid, _)| !ids.contains(fid))
+            .filter(|(fid, _)| !ids.contains(fid) && !exclude.contains(fid))
             .map(|(fid, fn_)| {
                 fn_.read(|instr, pos| {
                     if let Some(ret) = filter(instr) {
