@@ -4,7 +4,10 @@ use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
-use crate::rewrite::{TargetMemoryType, adjust_target_feature, get_target_feature};
+use crate::{
+    rewrite::{TargetMemoryType, adjust_target_feature, get_target_feature},
+    util::ResultUtil as _,
+};
 
 pub mod adjust;
 pub mod args;
@@ -220,27 +223,65 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
         .wrap_err("Failed to optimize core Wasm")?;
 
-    let (core_wasm_opt, mem_size) = if threads {
+    // todo!();
+    let debug = true;
+
+    let (core_wasm_opt, mem_size) = if threads || debug {
         println!("Adjusting core Wasm...");
-        let (core_wasm_opt_adjusted, mem_size) =
-            threads::adjust_core_wasm(&core_wasm_opt).wrap_err("Failed to adjust core Wasm")?;
+        let (core_wasm_opt_adjusted, mem_size, changed) =
+            threads::adjust_core_wasm(&core_wasm_opt, threads, debug)
+                .wrap_err("Failed to adjust core Wasm")?;
         println!("Optimizing core Wasm...");
-        let core_wasm_opt_adjusted_opt =
+        let mut core_wasm_opt_adjusted_opt =
             building::optimize_wasm(&core_wasm_opt_adjusted, &[], false)
                 .wrap_err("Failed to optimize core Wasm")?;
         tmp_files.push(core_wasm.to_string());
         tmp_files.push(core_wasm_opt.to_string());
         tmp_files.push(core_wasm_opt_adjusted.to_string());
+
+        if debug && changed {
+            loop {
+                let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
+                    .to_eyre()
+                    .wrap_err("Failed to load module")?;
+                let changed = threads::readjust_debug_call_function(&mut module)
+                    .wrap_err("Failed to readjust debug_call_function")?;
+
+                tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
+
+                let new_path = core_wasm_opt_adjusted_opt.with_extension("adjusted.wasm");
+
+                module
+                    .emit_wasm_file(new_path.clone())
+                    .to_eyre()
+                    .wrap_err("Failed to write temporary wasm file")?;
+
+                core_wasm_opt_adjusted_opt = new_path.clone();
+
+                if !changed {
+                    break;
+                }
+
+                tmp_files.push(new_path.to_string());
+
+                let new_core_wasm_opt_adjusted_opt =
+                    building::optimize_wasm(&core_wasm_opt_adjusted_opt, &[], false)
+                        .wrap_err("Failed to optimize core Wasm")?;
+
+                core_wasm_opt_adjusted_opt = new_core_wasm_opt_adjusted_opt;
+            }
+        }
+
         (core_wasm_opt_adjusted_opt, mem_size)
     } else {
         tmp_files.push(core_wasm.to_string());
-        (core_wasm_opt, Vec::new())
+        (core_wasm_opt, Some(Vec::new()))
     };
 
-    // for tmp_file in tmp_files {
-    //     std::fs::remove_file(&tmp_file)
-    //         .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
-    // }
+    for tmp_file in tmp_files {
+        std::fs::remove_file(&tmp_file)
+            .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
+    }
 
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
@@ -254,7 +295,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 let name = core_wasm_name
                     .get_file_main_name()
                     .wrap_err("Failed to get core wasm main name")?;
-                if threads {
+                if let Some(mem_size) = mem_size {
                     test_run::thread::gen_threads_run(name, mem_size)
                 } else {
                     test_run::gen_test_run(name)
