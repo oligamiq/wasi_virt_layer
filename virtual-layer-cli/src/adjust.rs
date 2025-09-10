@@ -45,27 +45,38 @@ pub fn adjust_merged_wasm(
             .transpose()
     }
 
-    let name = "debug_call_function";
+    let name = "debug_call_function_start";
     if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
-        let excludes = ["debug_call_indirect", "debug_atomic_wait"]
-            .iter()
-            .map(|name| {
-                Ok(get_fid(&mut module, name)?
-                    .and_then(|fid| Some(module.funcs.find_children_with(fid)))
-                    .transpose()?)
-            })
-            .collect::<eyre::Result<Vec<_>>>()?
-            .into_iter()
-            .filter_map(|x| x)
-            .flatten()
-            .collect::<Vec<_>>();
+        let excludes = [
+            "debug_call_indirect",
+            "debug_atomic_wait",
+            "debug_blind_print_etc_flag",
+            "debug_call_function_start",
+            "debug_call_function_end",
+        ]
+        .iter()
+        .map(|name| {
+            Ok(get_fid(&mut module, name)?
+                .and_then(|fid| Some(module.funcs.find_children_with(fid)))
+                .transpose()?)
+        })
+        .collect::<eyre::Result<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|x| x)
+        .flatten()
+        .collect::<Vec<_>>();
 
-        log::info!("{name} function found. Enabling debug feature.");
+        let finalize_name = "debug_call_function_end";
+        let finalize = get_fid(&mut module, finalize_name)?.unwrap();
+
+        log::info!("{name}, {finalize_name} function found. Enabling debug feature.");
 
         module
-            .gen_inspect(fid, &[], &excludes, |instr| match instr {
-                walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
-                _ => None,
+            .gen_inspect_with_finalize(Some(fid), Some(finalize), &[], &[], &excludes, |instr| {
+                match instr {
+                    walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
+                    _ => None,
+                }
             })
             .wrap_err("Failed to set debug_atomic_wait")?;
 

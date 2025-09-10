@@ -2,6 +2,7 @@ use std::fs;
 
 use camino::Utf8PathBuf;
 use eyre::Context;
+use walrus::ir::InstrSeqId;
 
 use crate::{instrs::InstrRead, util::ResultUtil};
 
@@ -117,9 +118,21 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 
     let debugger = module
         .exports
-        .get_func("debug_call_function")
+        .get_func("debug_call_function_start")
         .to_eyre()
         .wrap_err("Failed to get debug_call_function export")?;
+
+    let finalize = module
+        .exports
+        .get_func("debug_call_function_end")
+        .to_eyre()
+        .wrap_err("Failed to get debug_call_function_end export")?;
+
+    #[allow(non_camel_case_types)]
+    enum DebugFunction {
+        Start((usize, InstrSeqId)),
+        End((usize, InstrSeqId)),
+    }
 
     let positions = module
         .funcs
@@ -128,7 +141,10 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             Ok(f.read(|instr, pos| {
                 if let walrus::ir::Instr::Call(call) = instr {
                     if call.func == debugger {
-                        return Some(pos);
+                        return Some(DebugFunction::Start(pos));
+                    }
+                    if call.func == finalize {
+                        return Some(DebugFunction::End(pos));
                     }
                 }
                 None
@@ -143,17 +159,16 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         .rev()
         .collect::<Vec<_>>();
 
-    let fids = module.funcs.iter().map(|f| f.id()).collect::<Vec<_>>();
+    // let fids = module.funcs.iter().map(|f| f.id()).collect::<Vec<_>>();
 
-    for (fid, (pos, seq)) in positions {
-        let func = match module.funcs.get_mut(fid).kind {
+    for (outer_fid, pos) in positions {
+        let func = match module.funcs.get_mut(outer_fid).kind {
             walrus::FunctionKind::Local(ref mut local_func) => local_func,
             _ => {
                 return Err(eyre::eyre!("Function is not local"));
             }
         };
         let mut func_body = func.builder_mut().func_body();
-        let mut instr = func_body.instr_seq(seq);
         use walrus::ir::*;
         const MAX_LOOKAHEAD: usize = 15;
 
@@ -163,16 +178,14 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             MustBroken,
         }
 
-        match instr
-            .instrs()
-            .iter()
-            .skip(pos + 1)
-            .take(MAX_LOOKAHEAD)
-            .find_map(|(instr, _)| {
+        fn take_and_check_instr<'a, T: 'a>(
+            iter: impl IntoIterator<Item = &'a (Instr, T)>,
+            fids: &[walrus::FunctionId],
+        ) -> Option<LookaheadResult> {
+            iter.into_iter().take(MAX_LOOKAHEAD).find_map(|(instr, _)| {
                 if let Instr::Call(call) = instr {
-                    if call.func == debugger {
+                    if fids.contains(&call.func) {
                         return Some(LookaheadResult::MustBroken);
-                        // panic!("Found debug_call_function again in lookahead");
                     }
                     Some(LookaheadResult::FoundFunction(call.func))
                     // I think optimizer would inline;
@@ -181,54 +194,127 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                 } else {
                     None
                 }
-            }) {
-            Some(LookaheadResult::FoundFunction(id)) => {
-                if let Instr::Const(Const {
-                    value: Value::I32(v),
-                }) = instr.instrs()[pos - 1].0
-                {
-                    let id = fids.iter().copied().position(|f| f == id).unwrap() as i32;
-                    if v != id {
-                        instr.instrs_mut().remove(pos - 1);
-                        instr.const_at(pos - 1, Value::I32(id));
-                        changed = true;
+            })
+        }
+
+        fn check_instr(
+            result: Option<LookaheadResult>,
+            instr: &mut walrus::InstrSeqBuilder,
+            fid: walrus::FunctionId,
+            outer_fid: walrus::FunctionId,
+            name: impl AsRef<str>,
+            pos: usize,
+            changed: &mut bool,
+        ) -> eyre::Result<()> {
+            let name = name.as_ref();
+            match result {
+                Some(LookaheadResult::FoundFunction(id)) => {
+                    if let Instr::Const(Const {
+                        value: Value::I32(v),
+                    }) = instr.instrs()[pos - 1].0
+                    {
+                        // let id = fids.iter().copied().position(|f| f == id).unwrap() as i32;
+                        let id = id.index() as i32;
+                        if v != id {
+                            instr.instrs_mut().remove(pos - 1);
+                            instr.const_at(pos - 1, Value::I32(id));
+                            *changed = true;
+                        }
+                    } else {
+                        log::warn!(
+                            "Expected I32 before {name}, found {:?} in {outer_fid:?} function",
+                            instr.instrs()[pos - 1]
+                        );
+                        return check_instr(None, instr, fid, outer_fid, name, pos, changed);
                     }
-                } else {
-                    return Err(eyre::eyre!(
-                        "Expected I32 before debug_call_function, found {:?} in {fid:?} function",
-                        instr.instrs()[pos - 1]
-                    ));
+                }
+                Some(LookaheadResult::FoundBlock) => {}
+                None | Some(LookaheadResult::MustBroken) => {
+                    log::warn!(
+                        "Could not find a function call after {name} within {MAX_LOOKAHEAD} instructions. Removing {name} call in {fid:?} function.",
+                    );
+
+                    let fail_before = if !matches!(
+                        instr.instrs()[pos - 1].0,
+                        Instr::Const(Const {
+                            value: Value::I32(_)
+                        })
+                    ) {
+                        log::warn!(
+                            "Expected I32 before {name}, found {:?} in {outer_fid:?} function",
+                            instr.instrs()[pos - 1]
+                        );
+
+                        true
+                    } else {
+                        false
+                    };
+
+                    let fail_after = if !matches!(
+                        instr.instrs()[pos].0,
+                        Instr::Call(Call { func: f }) if f == fid
+                    ) {
+                        log::warn!(
+                            "Expected {name} after I32, found {:?} in {outer_fid:?} function",
+                            instr.instrs()[pos]
+                        );
+
+                        true
+                    } else {
+                        false
+                    };
+
+                    match (fail_before, fail_after) {
+                        (_, true) => {}
+                        (true, false) => {
+                            instr.instrs_mut().remove(pos);
+                            instr.drop_at(pos);
+                        }
+                        (false, false) => {
+                            instr.instrs_mut().remove(pos);
+                            instr.instrs_mut().remove(pos - 1);
+                        }
+                    }
+
+                    *changed = true;
                 }
             }
-            Some(LookaheadResult::FoundBlock) => {}
-            None | Some(LookaheadResult::MustBroken) => {
-                log::warn!(
-                    "Could not find a function call after debug_call_function within {MAX_LOOKAHEAD} instructions. Removing debug_call_function call in {fid:?} function.",
-                );
-                if !matches!(
-                    instr.instrs()[pos - 1].0,
-                    Instr::Const(Const {
-                        value: Value::I32(_)
-                    })
-                ) {
-                    return Err(eyre::eyre!(
-                        "Expected I32 before debug_call_function, found {:?} in {fid:?} function",
-                        instr.instrs()[pos - 1]
-                    ));
-                }
-                if !matches!(
-                    instr.instrs()[pos].0,
-                    Instr::Call(Call { func: f }) if f == debugger
-                ) {
-                    return Err(eyre::eyre!(
-                        "Expected debug_call_function after I32, found {:?} in {fid:?} function",
-                        instr.instrs()[pos]
-                    ));
-                }
 
-                instr.instrs_mut().remove(pos);
-                instr.instrs_mut().remove(pos - 1);
-                changed = true;
+            Ok(())
+        }
+
+        match pos {
+            DebugFunction::Start((pos, seq)) => {
+                let mut instr = func_body.instr_seq(seq);
+
+                check_instr(
+                    take_and_check_instr(
+                        instr.instrs().iter().skip(pos + 1),
+                        &[debugger, finalize],
+                    ),
+                    &mut instr,
+                    debugger,
+                    outer_fid,
+                    "debug_call_function_start",
+                    pos,
+                    &mut changed,
+                )?;
+            }
+            DebugFunction::End((pos, seq)) => {
+                let mut instr = func_body.instr_seq(seq);
+
+                check_instr(
+                    take_and_check_instr(
+                        instr.instrs().iter().skip(pos - 1).rev(),
+                        &[debugger, finalize],
+                    ),
+                    &mut instr,
+                    finalize,
+                    outer_fid,
+                    "debug_call_function_end",
+                    pos,
+                    &mut changed,
+                )?;
             }
         }
     }

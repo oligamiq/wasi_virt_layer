@@ -1,5 +1,6 @@
 use std::{
     borrow::Borrow,
+    collections::HashSet,
     path::{Path, PathBuf},
 };
 
@@ -95,6 +96,7 @@ pub(crate) trait WalrusUtilFuncs {
         Self: Sized;
 }
 
+#[allow(dead_code)]
 pub(crate) trait WalrusUtilModule {
     /// connect function from import to export
     /// export will be removed
@@ -205,6 +207,30 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         inspector: impl Borrow<FunctionId>,
         params: &[ValType],
+        exclude: &[impl Borrow<FunctionId>],
+        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized;
+
+    #[allow(dead_code)]
+    fn gen_finalize<const N: usize>(
+        &mut self,
+        finalize: impl Borrow<FunctionId>,
+        params: &[ValType],
+        exclude: &[impl Borrow<FunctionId>],
+        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized;
+
+    #[allow(dead_code)]
+    fn gen_inspect_with_finalize<const N: usize>(
+        &mut self,
+        inspector: Option<impl Borrow<FunctionId>>,
+        finalize: Option<impl Borrow<FunctionId>>,
+        params: &[ValType],
+        results: &[ValType],
         exclude: &[impl Borrow<FunctionId>],
         filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
@@ -1039,32 +1065,93 @@ impl WalrusUtilModule for walrus::Module {
         inspector: impl Borrow<FunctionId>,
         params: &[ValType],
         exclude: &[impl Borrow<FunctionId>],
+        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        self.gen_inspect_with_finalize(
+            Some(inspector),
+            None::<FunctionId>,
+            params,
+            &[],
+            exclude,
+            filter,
+        )
+    }
+
+    fn gen_finalize<const N: usize>(
+        &mut self,
+        finalize: impl Borrow<FunctionId>,
+        results: &[ValType],
+        exclude: &[impl Borrow<FunctionId>],
+        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        self.gen_inspect_with_finalize(
+            None::<FunctionId>,
+            Some(finalize),
+            &[],
+            results,
+            exclude,
+            filter,
+        )
+    }
+
+    fn gen_inspect_with_finalize<const N: usize>(
+        &mut self,
+        inspector: Option<impl Borrow<FunctionId>>,
+        finalize: Option<impl Borrow<FunctionId>>,
+        params: &[ValType],
+        results: &[ValType],
+        exclude: &[impl Borrow<FunctionId>],
         mut filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        let inspector = *inspector.borrow();
+        let inspector: Option<FunctionId> = inspector.map(|id| *id.borrow());
+        let finalize: Option<FunctionId> = finalize.map(|id| *id.borrow());
 
         // check inspector type
-        if self.types.get(self.funcs.get(inspector).ty()).params()
-            != params
-                .iter()
-                .cloned()
-                .chain(std::iter::repeat(ValType::I32).take(N))
-                .collect::<Vec<_>>()
-        {
-            eyre::bail!("Inspector function type must be ({:?}) -> ()", params);
+        let check_inspector = |params: &[ValType], name: &str, fid| {
+            if self.types.get(self.funcs.get(fid).ty()).params()
+                != params
+                    .iter()
+                    .cloned()
+                    .chain(std::iter::repeat(ValType::I32).take(N))
+                    .collect::<Vec<_>>()
+            {
+                eyre::bail!("{name} function type must be ({params:?}) -> ()",);
+            }
+
+            Ok(())
+        };
+
+        if let Some(inspector) = inspector {
+            check_inspector(params, "Inspector", inspector)?;
         }
 
-        let ids = self.funcs.find_children_with(inspector)?;
+        if let Some(finalize) = finalize {
+            check_inspector(results, "Finalize", finalize)?;
+        }
 
-        let exclude = exclude.iter().map(|id| *id.borrow()).collect::<Vec<_>>();
+        let exclude = [inspector, finalize]
+            .iter()
+            .filter_map(|id| *id)
+            .map(|f| self.funcs.find_children_with(f))
+            .collect::<eyre::Result<HashSet<_>>>()?
+            .into_iter()
+            .flatten()
+            .chain(exclude.iter().map(|id| *id.borrow()))
+            .collect::<HashSet<_>>();
 
         let instrs = self
             .funcs
             .iter_local()
-            .filter(|(fid, _)| !ids.contains(fid) && !exclude.contains(fid))
+            .filter(|(fid, _)| !exclude.contains(fid))
             .map(|(fid, fn_)| {
                 fn_.read(|instr, pos| {
                     if let Some(ret) = filter(instr) {
@@ -1081,34 +1168,44 @@ impl WalrusUtilModule for walrus::Module {
             .filter_map(|x| x)
             .collect::<Vec<_>>();
 
-        let group_fns = instrs
+        let instrs_set = instrs
             .iter()
             .map(|(ret, _, _)| *ret)
-            .collect::<std::collections::HashSet<_>>()
-            .into_iter()
-            .map(|ret| {
-                let middle_fn_id = self.add_func(&params, &params, |builder, args| {
-                    let mut func_body = builder.func_body();
-                    for ret in ret {
-                        func_body.i32_const(ret);
-                    }
-                    for arg in args {
-                        func_body.local_get(*arg);
-                    }
-                    func_body.call(inspector);
-                    for arg in args {
-                        func_body.local_get(*arg);
-                    }
-                    func_body.return_();
-                    Ok(())
-                })?;
-                Ok((ret, middle_fn_id))
-            })
-            .collect::<eyre::Result<std::collections::HashMap<_, _>>>()?;
+            .collect::<std::collections::HashSet<_>>();
 
-        let ids = group_fns
-            .values()
-            .cloned()
+        let mut group_by_fns = |fns: Option<FunctionId>, params: &[ValType]| {
+            fns.map(|fns| {
+                instrs_set
+                    .iter()
+                    .map(|ret| {
+                        let middle_fn_id = self.add_func(&params, &params, |builder, args| {
+                            let mut func_body = builder.func_body();
+                            for ret in ret {
+                                func_body.i32_const(*ret);
+                            }
+                            for arg in args {
+                                func_body.local_get(*arg);
+                            }
+                            func_body.call(fns);
+                            for arg in args {
+                                func_body.local_get(*arg);
+                            }
+                            func_body.return_();
+                            Ok(())
+                        })?;
+                        Ok((ret, middle_fn_id))
+                    })
+                    .collect::<eyre::Result<std::collections::HashMap<_, _>>>()
+            })
+            .transpose()
+        };
+
+        let group_inspector_fns = group_by_fns(inspector, params)?;
+        let group_finalize_fns = group_by_fns(finalize, results)?;
+
+        let ids = [inspector, finalize]
+            .iter()
+            .filter_map(|id| *id)
             .map(|fid| self.funcs.find_children_with(fid))
             .collect::<eyre::Result<Vec<_>>>()?
             .into_iter()
@@ -1147,7 +1244,12 @@ impl WalrusUtilModule for walrus::Module {
                         eyre::bail!("Instruction at position does not match filter");
                     }
 
-                    instr_seq.call_at(pos, group_fns[&ret]);
+                    if let Some(_) = finalize {
+                        instr_seq.call_at(pos + 1, group_finalize_fns.as_ref().unwrap()[&ret]);
+                    }
+                    if let Some(_) = inspector {
+                        instr_seq.call_at(pos, group_inspector_fns.as_ref().unwrap()[&ret]);
+                    }
                 }
                 _ => unreachable!(),
             }
