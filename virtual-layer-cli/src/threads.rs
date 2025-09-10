@@ -1,8 +1,8 @@
-use std::fs;
+use std::{borrow::Borrow, fs};
 
 use camino::Utf8PathBuf;
 use eyre::Context;
-use walrus::ir::InstrSeqId;
+use itertools::Itertools;
 
 use crate::{instrs::InstrRead, util::ResultUtil};
 
@@ -128,30 +128,178 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         .to_eyre()
         .wrap_err("Failed to get debug_call_function_end export")?;
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     #[allow(non_camel_case_types)]
     enum DebugFunction {
         Start((usize, InstrSeqId)),
         End((usize, InstrSeqId)),
     }
 
+    impl DebugFunction {
+        fn position(&self) -> (usize, InstrSeqId) {
+            match self {
+                DebugFunction::Start(pos) => *pos,
+                DebugFunction::End(pos) => *pos,
+            }
+        }
+
+        fn seq(&self) -> InstrSeqId {
+            match self {
+                DebugFunction::Start((_, seq)) => *seq,
+                DebugFunction::End((_, seq)) => *seq,
+            }
+        }
+
+        fn cmp_by_seq(&self, other: &Self) -> std::cmp::Ordering {
+            let (self_pos, self_seq) = self.position();
+            let (other_pos, other_seq) = other.position();
+
+            match self_seq.cmp(&other_seq) {
+                std::cmp::Ordering::Equal => self_pos.cmp(&other_pos),
+                ord => ord,
+            }
+        }
+    }
+    use walrus::ir::*;
+    use walrus::*;
+    const MAX_LOOKAHEAD: usize = 15;
+
+    enum LookaheadResult {
+        FoundFunction(walrus::FunctionId),
+        FoundBlock,
+        MetStart,
+        MetEnd,
+    }
+
+    impl LookaheadResult {
+        fn id(&self) -> Option<walrus::FunctionId> {
+            match self {
+                LookaheadResult::FoundFunction(id) => Some(*id),
+                _ => None,
+            }
+        }
+    }
+
+    fn take_and_check_instr<'a, T: 'a>(
+        iter: impl IntoIterator<Item = &'a (Instr, T)>,
+        start_fid: impl Borrow<walrus::FunctionId>,
+        end_fid: impl Borrow<walrus::FunctionId>,
+    ) -> Option<LookaheadResult> {
+        let start_fid: FunctionId = *start_fid.borrow();
+        let end_fid: FunctionId = *end_fid.borrow();
+
+        iter.into_iter().take(MAX_LOOKAHEAD).find_map(|(instr, _)| {
+            if let Instr::Call(call) = instr {
+                if call.func == start_fid {
+                    return Some(LookaheadResult::MetStart);
+                }
+                if call.func == end_fid {
+                    return Some(LookaheadResult::MetEnd);
+                }
+                Some(LookaheadResult::FoundFunction(call.func))
+                // I think optimizer would inline;
+            } else if let Instr::Block(..) = instr {
+                Some(LookaheadResult::FoundBlock)
+            } else {
+                None
+            }
+        })
+    }
+
+    struct DebugFunctionSet {
+        fid: walrus::FunctionId,
+        seq: InstrSeqId,
+        start_position: Option<usize>,
+        end_position: Option<usize>,
+        debugging_function_id: Option<walrus::FunctionId>,
+    }
+
     let positions = module
         .funcs
         .iter_local_mut()
-        .map(|(id, f)| {
-            Ok(f.read(|instr, pos| {
-                if let walrus::ir::Instr::Call(call) = instr {
-                    if call.func == debugger {
-                        return Some(DebugFunction::Start(pos));
+        .map(|(fid, f)| {
+            let calls = f
+                .read(|instr, pos| {
+                    if let walrus::ir::Instr::Call(call) = instr {
+                        if call.func == debugger {
+                            return Some(DebugFunction::Start(pos));
+                        }
+                        if call.func == finalize {
+                            return Some(DebugFunction::End(pos));
+                        }
                     }
-                    if call.func == finalize {
-                        return Some(DebugFunction::End(pos));
+                    None
+                })?
+                .into_iter()
+                .filter_map(|pos| pos)
+                .sorted_by(|a, b| a.cmp_by_seq(b))
+                .collect::<Vec<_>>();
+
+            if calls.is_empty() {
+                return Ok(Vec::<DebugFunctionSet>::new());
+            }
+
+            let set = calls
+                .iter()
+                .copied()
+                .zip(calls.iter().copied().skip(1))
+                .filter(|(call, _)| matches!(call, DebugFunction::Start(_)))
+                .map(|(call, may_finalize)| {
+                    if call.seq() == may_finalize.seq() {
+                        (call, Some(may_finalize))
+                    } else {
+                        (call, None)
                     }
-                }
-                None
-            })?
-            .into_iter()
-            .filter_map(|pos| pos)
-            .map(move |pos| (id, pos)))
+                })
+                .map(|(call, may_finalize)| {
+                    let (pos, seq) = call.position();
+                    let instr = f.block(seq);
+                    let taken =
+                        take_and_check_instr(instr.iter().skip(pos + 1), debugger, finalize)
+                            .and_then(|t| t.id());
+                    let finalize_taken = may_finalize.and_then(|f| {
+                        let pos = f.position().0;
+                        take_and_check_instr(instr.iter().skip(pos - 1).rev(), debugger, finalize)
+                            .and_then(|t| t.id())
+                    });
+                    match (taken, finalize_taken) {
+                        (_, None) => DebugFunctionSet {
+                            fid,
+                            seq,
+                            start_position: Some(pos),
+                            end_position: None,
+                            debugging_function_id: taken,
+                        },
+                        (None, Some(_)) => todo!(),
+                        (Some(taken), Some(_)) => todo!(),
+                    }
+                });
+
+            let set_other = calls
+                .iter()
+                .copied()
+                .skip(1)
+                .zip(calls.iter().copied())
+                .filter(|(call, _)| matches!(call, DebugFunction::End(_)))
+                .filter(|(_, may_finalize)| matches!(may_finalize, DebugFunction::End(_)))
+                .map(|(call, _)| {
+                    let (pos, seq) = call.position();
+                    let instr = f.block(seq);
+                    let taken =
+                        take_and_check_instr(instr.iter().skip(pos - 1).rev(), debugger, finalize)
+                            .and_then(|t| t.id());
+                    DebugFunctionSet {
+                        fid,
+                        seq,
+                        start_position: None,
+                        end_position: Some(pos),
+                        debugging_function_id: taken,
+                    }
+                });
+
+            let set = set.chain(set_other).collect::<Vec<_>>();
+
+            todo!();
         })
         .collect::<eyre::Result<Vec<_>>>()?
         .into_iter()
@@ -169,33 +317,6 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             }
         };
         let mut func_body = func.builder_mut().func_body();
-        use walrus::ir::*;
-        const MAX_LOOKAHEAD: usize = 15;
-
-        enum LookaheadResult {
-            FoundFunction(walrus::FunctionId),
-            FoundBlock,
-            MustBroken,
-        }
-
-        fn take_and_check_instr<'a, T: 'a>(
-            iter: impl IntoIterator<Item = &'a (Instr, T)>,
-            fids: &[walrus::FunctionId],
-        ) -> Option<LookaheadResult> {
-            iter.into_iter().take(MAX_LOOKAHEAD).find_map(|(instr, _)| {
-                if let Instr::Call(call) = instr {
-                    if fids.contains(&call.func) {
-                        return Some(LookaheadResult::MustBroken);
-                    }
-                    Some(LookaheadResult::FoundFunction(call.func))
-                    // I think optimizer would inline;
-                } else if let Instr::Block(..) = instr {
-                    Some(LookaheadResult::FoundBlock)
-                } else {
-                    None
-                }
-            })
-        }
 
         fn check_instr(
             result: Option<LookaheadResult>,
@@ -282,6 +403,18 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 
             Ok(())
         }
+
+        let (pos, seq) = pos.position();
+
+        let mut instr = func_body.instr_seq(seq);
+
+        let checked = (
+            take_and_check_instr(instr.instrs().iter().skip(pos + 1), &[debugger, finalize]),
+            take_and_check_instr(
+                instr.instrs().iter().skip(pos - 1).rev(),
+                &[debugger, finalize],
+            ),
+        );
 
         match pos {
             DebugFunction::Start((pos, seq)) => {
