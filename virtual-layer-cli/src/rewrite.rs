@@ -145,26 +145,22 @@ pub fn adjust_wasm(
 
             module
                 .get_using_func(branch_fid)
-                .map(|v| {
-                    v.iter()
-                        .copied()
-                        .map(|(fid, _, _)| {
-                            module.funcs.rewrite(
-                                |instr, _| {
-                                    if let walrus::ir::Instr::Call(c) = instr {
-                                        if c.func == fid {
-                                            c.func = real_thread_spawn_fn_id;
-                                        }
+                .and_then(|v| {
+                    v.iter().copied().try_for_each(|(fid, _, _)| {
+                        module.funcs.rewrite(
+                            |instr, _| {
+                                if let walrus::ir::Instr::Call(c) = instr {
+                                    if c.func == fid {
+                                        c.func = real_thread_spawn_fn_id;
                                     }
-                                },
-                                fid,
-                            )?;
+                                }
+                            },
+                            fid,
+                        )?;
 
-                            Ok(())
-                        })
-                        .collect::<eyre::Result<Vec<()>>>()
+                        Ok(())
+                    })
                 })
-                .flatten()
                 .wrap_err("Failed to get using functions for branch")?;
 
             module.connect_func(

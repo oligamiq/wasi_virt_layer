@@ -1,6 +1,5 @@
 use std::{
     borrow::Borrow,
-    collections::HashSet,
     path::{Path, PathBuf},
 };
 
@@ -985,12 +984,9 @@ impl WalrusUtilModule for walrus::Module {
                     }
                 })
             })
-            .collect::<eyre::Result<Vec<_>>>()
-            .wrap_err("Failed to read functions")?
-            .into_iter()
-            .flatten()
-            .filter_map(|x| x)
-            .collect::<Vec<_>>();
+            .flatten_ok()
+            .filter_map_ok(|x| x)
+            .collect::<eyre::Result<Vec<_>>>()?;
 
         let table_fns = tables
             .iter()
@@ -1142,11 +1138,10 @@ impl WalrusUtilModule for walrus::Module {
             .iter()
             .filter_map(|id| *id)
             .map(|f| self.funcs.find_children_with(f))
-            .collect::<eyre::Result<HashSet<_>>>()?
-            .into_iter()
-            .flatten()
-            .chain(exclude.iter().map(|id| *id.borrow()))
-            .collect::<HashSet<_>>();
+            .flatten_ok()
+            .chain(exclude.iter().map(|id| Ok(*id.borrow())))
+            .collect::<eyre::Result<std::collections::HashSet<_>>>()
+            .wrap_err("Failed to find exclude functions")?;
 
         let instrs = self
             .funcs
@@ -1161,12 +1156,9 @@ impl WalrusUtilModule for walrus::Module {
                     }
                 })
             })
-            .collect::<eyre::Result<Vec<_>>>()
-            .wrap_err("Failed to read functions")?
-            .into_iter()
-            .flatten()
-            .filter_map(|x| x)
-            .collect::<Vec<_>>();
+            .flatten_ok()
+            .filter_map_ok(|x| x)
+            .collect::<eyre::Result<Vec<_>>>()?;
 
         let instrs_set = instrs
             .iter()
@@ -1207,10 +1199,9 @@ impl WalrusUtilModule for walrus::Module {
             .iter()
             .filter_map(|id| *id)
             .map(|fid| self.funcs.find_children_with(fid))
-            .collect::<eyre::Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<std::collections::HashSet<_>>();
+            .flatten_ok()
+            .collect::<eyre::Result<std::collections::HashSet<_>>>()
+            .wrap_err("Failed to find exclude functions")?;
 
         for (ret, fid, (pos, seq_id)) in instrs
             .into_iter()
@@ -1359,8 +1350,7 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     where
         Self: Sized,
     {
-        Ok(self
-            .find_children_with(fid)?
+        self.find_children_with(fid)?
             .into_iter()
             .filter(|fid| {
                 if let walrus::FunctionKind::Local(_) = self.get(*fid).kind {
@@ -1372,10 +1362,8 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
             .collect::<Vec<_>>()
             .into_iter()
             .map(|fid| self.rewrite(&mut find, fid))
-            .collect::<eyre::Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>())
+            .flatten_ok()
+            .collect()
     }
 
     fn flat_read<T>(
@@ -1386,8 +1374,7 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     where
         Self: Sized,
     {
-        Ok(self
-            .find_children_with(fid)?
+        self.find_children_with(fid)?
             .into_iter()
             .filter(|fid| {
                 if let walrus::FunctionKind::Local(_) = self.get(*fid).kind {
@@ -1397,10 +1384,8 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
                 }
             })
             .map(|fid| self.read(&mut find, fid))
-            .collect::<eyre::Result<Vec<_>>>()?
-            .into_iter()
-            .flatten()
-            .collect::<Vec<_>>())
+            .flatten_ok()
+            .collect()
     }
 }
 

@@ -6,7 +6,7 @@ use eyre::{Context as _, ContextCompat};
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
     instrs::InstrRewrite,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
 
 pub fn adjust_merged_wasm(
@@ -26,102 +26,6 @@ pub fn adjust_merged_wasm(
     let vfs_globals = module
         .get_global_anchor("vfs")
         .wrap_err("Failed to get global anchor")?;
-
-    fn get_fid(
-        module: &mut walrus::Module,
-        name: &str,
-    ) -> eyre::Result<Option<walrus::FunctionId>> {
-        module
-            .exports
-            .iter()
-            .find(|export| export.name == name)
-            .map(|export| {
-                let fid = match export.item {
-                    walrus::ExportItem::Function(fid) => fid,
-                    _ => eyre::bail!("{name} is not a function export"),
-                };
-                Ok(fid)
-            })
-            .transpose()
-    }
-
-    let name = "debug_call_function_start";
-    if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
-        let excludes = [
-            "debug_call_indirect",
-            "debug_atomic_wait",
-            "debug_blind_print_etc_flag",
-            "debug_call_function_start",
-            "debug_call_function_end",
-        ]
-        .iter()
-        .map(|name| {
-            Ok(get_fid(&mut module, name)?
-                .and_then(|fid| Some(module.funcs.find_children_with(fid)))
-                .transpose()?)
-        })
-        .collect::<eyre::Result<Vec<_>>>()?
-        .into_iter()
-        .filter_map(|x| x)
-        .flatten()
-        .collect::<Vec<_>>();
-
-        let finalize_name = "debug_call_function_end";
-        let finalize = get_fid(&mut module, finalize_name)?.unwrap();
-
-        log::info!("{name}, {finalize_name} function found. Enabling debug feature.");
-
-        module
-            .gen_inspect_with_finalize(Some(fid), Some(finalize), &[], &[], &excludes, |instr| {
-                match instr {
-                    walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
-                    _ => None,
-                }
-            })
-            .wrap_err("Failed to set debug_atomic_wait")?;
-
-        eyre::Ok(())
-    }) {
-        e.wrap_err("Failed to enable debug_call_function")?;
-    }
-
-    let name = "debug_call_indirect";
-    if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
-        module
-            .debug_call_indirect(fid)
-            .wrap_err("Failed to set debug_call_indirect")?;
-
-        log::info!("{name} function found. Enabling debug feature.");
-
-        eyre::Ok(())
-    }) {
-        e.wrap_err("Failed to enable debug_call_indirect")?;
-    }
-
-    let name = "debug_atomic_wait";
-    if let Some(e) = get_fid(&mut module, name)?.map(|fid| {
-        use walrus::ValType::{I32, I64};
-
-        log::info!("{name} function found. Enabling debug feature.");
-
-        // let func = module.funcs.get_mut(fid);
-        // let local_func = match &mut func.kind {
-        //     walrus::FunctionKind::Local(local_func) => local_func,
-        //     _ => eyre::bail!("debug_atomic_wait is not a local function"),
-        // };
-        // local_func.builder_mut().func_body().unreachable_at(0);
-
-        module
-            .gen_inspect(fid, &[I32, I32, I64], &[fid], |instr| match instr {
-                walrus::ir::Instr::AtomicWait(_) => Some([]),
-                _ => None,
-            })
-            .wrap_err("Failed to set debug_atomic_wait")?;
-
-        eyre::Ok(())
-    }) {
-        e.wrap_err("Failed to enable debug_atomic_wait")?;
-    }
 
     let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
@@ -191,12 +95,11 @@ pub fn adjust_merged_wasm(
             .map(|reset_op_i| ops.remove(reset_op_i));
 
         ops.into_iter()
-            .map(|op| {
+            .try_for_each(|op| {
                 op.replace(&mut module, memory_id, vfs_memory_id, reset_op.as_ref())
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))?;
-                Ok(())
+                eyre::Ok(())
             })
-            .collect::<eyre::Result<Vec<_>>>()
             .wrap_err_with(|| eyre::eyre!("Failed to replace Wasm memory access on {wasm_name}"))?;
 
         reset_op
@@ -205,9 +108,7 @@ pub fn adjust_merged_wasm(
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))
             })
             .transpose()
-            .wrap_err_with(|| {
-                eyre::eyre!("Failed to implement reset wasm memory etc before call main function")
-            })?;
+            .wrap_err("Failed to implement reset wasm memory etc before call main function")?;
 
         module
             .exports

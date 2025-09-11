@@ -13,6 +13,7 @@ pub mod adjust;
 pub mod args;
 pub mod building;
 pub mod common;
+pub mod debug;
 pub mod director;
 pub mod down_color;
 pub mod instrs;
