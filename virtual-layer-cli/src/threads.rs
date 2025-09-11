@@ -206,18 +206,42 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         })
     }
 
+    #[derive(Debug, Clone, Copy)]
     struct DebugFunctionSet {
-        fid: walrus::FunctionId,
+        outer_fid: walrus::FunctionId,
         seq: InstrSeqId,
         start_position: Option<usize>,
         end_position: Option<usize>,
         debugging_function_id: Option<walrus::FunctionId>,
     }
 
+    impl DebugFunctionSet {
+        fn cmp_by_fid_seq_pos(&self, other: &Self) -> std::cmp::Ordering {
+            match self.outer_fid.cmp(&other.outer_fid) {
+                std::cmp::Ordering::Equal => match self.seq.cmp(&other.seq) {
+                    std::cmp::Ordering::Equal => self.cmp_pos().cmp(&other.cmp_pos()),
+                    ord => ord,
+                },
+                ord => ord,
+            }
+        }
+
+        fn cmp_pos(&self) -> Option<usize> {
+            if let (Some(self_pos), Some(end_pos)) = (self.start_position, self.end_position) {
+                if self_pos < end_pos {
+                    return Some(self_pos);
+                } else {
+                    panic!("DebugFunctionSet start_position is not less than other start_position");
+                }
+            }
+            self.start_position.or(self.end_position)
+        }
+    }
+
     let positions = module
         .funcs
         .iter_local_mut()
-        .map(|(fid, f)| {
+        .map(|(outer_fid, f)| {
             let calls = f
                 .read(|instr, pos| {
                     if let walrus::ir::Instr::Call(call) = instr {
@@ -251,205 +275,203 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                         (call, None)
                     }
                 })
-                .map(|(call, may_finalize)| {
+                .flat_map(|(call, may_finalize)| {
                     let (pos, seq) = call.position();
                     let instr = f.block(seq);
-                    let taken =
+                    let debugging_function_id =
                         take_and_check_instr(instr.iter().skip(pos + 1), debugger, finalize)
                             .and_then(|t| t.id());
-                    let finalize_taken = may_finalize.and_then(|f| {
+                    let debugging_function_id_alt = may_finalize.and_then(|f| {
                         let pos = f.position().0;
                         take_and_check_instr(instr.iter().skip(pos - 1).rev(), debugger, finalize)
                             .and_then(|t| t.id())
                     });
-                    match (taken, finalize_taken) {
-                        (_, None) => DebugFunctionSet {
-                            fid,
+                    let end_position = may_finalize.map(|f| f.position().0);
+                    if debugging_function_id == debugging_function_id_alt {
+                        vec![DebugFunctionSet {
+                            outer_fid,
                             seq,
                             start_position: Some(pos),
-                            end_position: None,
-                            debugging_function_id: taken,
-                        },
-                        (None, Some(_)) => todo!(),
-                        (Some(taken), Some(_)) => todo!(),
+                            end_position,
+                            debugging_function_id,
+                        }]
+                    } else {
+                        vec![
+                            DebugFunctionSet {
+                                outer_fid,
+                                seq,
+                                start_position: Some(pos),
+                                end_position: None,
+                                debugging_function_id,
+                            },
+                            DebugFunctionSet {
+                                outer_fid,
+                                seq,
+                                start_position: None,
+                                end_position,
+                                debugging_function_id: debugging_function_id_alt,
+                            },
+                        ]
                     }
-                });
-
-            let set_other = calls
-                .iter()
-                .copied()
-                .skip(1)
-                .zip(calls.iter().copied())
-                .filter(|(call, _)| matches!(call, DebugFunction::End(_)))
-                .filter(|(_, may_finalize)| matches!(may_finalize, DebugFunction::End(_)))
-                .map(|(call, _)| {
-                    let (pos, seq) = call.position();
-                    let instr = f.block(seq);
-                    let taken =
-                        take_and_check_instr(instr.iter().skip(pos - 1).rev(), debugger, finalize)
+                })
+                .chain(
+                    calls
+                        .iter()
+                        .copied()
+                        .skip(1)
+                        .zip(calls.iter().copied())
+                        .filter(|(call, _)| matches!(call, DebugFunction::End(_)))
+                        .filter(|(_, may_finalize)| matches!(may_finalize, DebugFunction::End(_)))
+                        .map(|(call, _)| {
+                            let (pos, seq) = call.position();
+                            let instr = f.block(seq);
+                            let debugging_function_id = take_and_check_instr(
+                                instr.iter().skip(pos - 1).rev(),
+                                debugger,
+                                finalize,
+                            )
                             .and_then(|t| t.id());
-                    DebugFunctionSet {
-                        fid,
-                        seq,
-                        start_position: None,
-                        end_position: Some(pos),
-                        debugging_function_id: taken,
-                    }
-                });
 
-            let set = set.chain(set_other).collect::<Vec<_>>();
+                            DebugFunctionSet {
+                                outer_fid,
+                                seq,
+                                start_position: None,
+                                end_position: Some(pos),
+                                debugging_function_id,
+                            }
+                        }),
+                )
+                .collect::<Vec<_>>();
 
-            todo!();
+            Ok(set)
         })
         .collect::<eyre::Result<Vec<_>>>()?
         .into_iter()
         .flatten()
+        .sorted_by(|a, b| a.cmp_by_fid_seq_pos(b))
         .rev()
         .collect::<Vec<_>>();
 
-    // let fids = module.funcs.iter().map(|f| f.id()).collect::<Vec<_>>();
+    #[derive(Debug, Clone, Copy)]
+    struct PositionWithParams<'a> {
+        call_pos: usize,
+        before_value: Option<i32>,
+        fids: &'a [FunctionId],
+    }
 
-    for (outer_fid, pos) in positions {
-        let func = match module.funcs.get_mut(outer_fid).kind {
-            walrus::FunctionKind::Local(ref mut local_func) => local_func,
-            _ => {
-                return Err(eyre::eyre!("Function is not local"));
+    impl<'a> PositionWithParams<'a> {
+        const fn new(call_pos: usize, before_value: Option<i32>, fids: &'a [FunctionId]) -> Self {
+            Self {
+                call_pos,
+                before_value,
+                fids,
             }
-        };
-        let mut func_body = func.builder_mut().func_body();
+        }
 
-        fn check_instr(
-            result: Option<LookaheadResult>,
-            instr: &mut walrus::InstrSeqBuilder,
-            fid: walrus::FunctionId,
-            outer_fid: walrus::FunctionId,
-            name: impl AsRef<str>,
-            pos: usize,
+        fn get_idx(&self, fid: FunctionId) -> i32 {
+            self.fids.iter().position(|&f| f == fid).unwrap() as i32
+        }
+
+        fn apply(
+            &self,
+            instrs: &mut InstrSeqBuilder<'_>,
             changed: &mut bool,
+            debugging_function_id: Option<FunctionId>,
         ) -> eyre::Result<()> {
-            let name = name.as_ref();
-            match result {
-                Some(LookaheadResult::FoundFunction(id)) => {
-                    if let Instr::Const(Const {
-                        value: Value::I32(v),
-                    }) = instr.instrs()[pos - 1].0
-                    {
-                        // let id = fids.iter().copied().position(|f| f == id).unwrap() as i32;
-                        let id = id.index() as i32;
-                        if v != id {
-                            instr.instrs_mut().remove(pos - 1);
-                            instr.const_at(pos - 1, Value::I32(id));
-                            *changed = true;
-                        }
-                    } else {
-                        log::warn!(
-                            "Expected I32 before {name}, found {:?} in {outer_fid:?} function",
-                            instr.instrs()[pos - 1]
-                        );
-                        return check_instr(None, instr, fid, outer_fid, name, pos, changed);
-                    }
-                }
-                Some(LookaheadResult::FoundBlock) => {}
-                None | Some(LookaheadResult::MustBroken) => {
-                    log::warn!(
-                        "Could not find a function call after {name} within {MAX_LOOKAHEAD} instructions. Removing {name} call in {fid:?} function.",
-                    );
-
-                    let fail_before = if !matches!(
-                        instr.instrs()[pos - 1].0,
-                        Instr::Const(Const {
-                            value: Value::I32(_)
-                        })
-                    ) {
-                        log::warn!(
-                            "Expected I32 before {name}, found {:?} in {outer_fid:?} function",
-                            instr.instrs()[pos - 1]
-                        );
-
-                        true
-                    } else {
-                        false
-                    };
-
-                    let fail_after = if !matches!(
-                        instr.instrs()[pos].0,
-                        Instr::Call(Call { func: f }) if f == fid
-                    ) {
-                        log::warn!(
-                            "Expected {name} after I32, found {:?} in {outer_fid:?} function",
-                            instr.instrs()[pos]
-                        );
-
-                        true
-                    } else {
-                        false
-                    };
-
-                    match (fail_before, fail_after) {
-                        (_, true) => {}
-                        (true, false) => {
-                            instr.instrs_mut().remove(pos);
-                            instr.drop_at(pos);
-                        }
-                        (false, false) => {
-                            instr.instrs_mut().remove(pos);
-                            instr.instrs_mut().remove(pos - 1);
-                        }
-                    }
-
-                    *changed = true;
-                }
+            if let Some(debugging_function_id) = debugging_function_id {
+                self.apply_by_id(instrs, changed, debugging_function_id)
+            } else {
+                self.rm(instrs, changed);
+                Ok(())
             }
+        }
+
+        // non debugging_function_id so broken
+        fn rm(&self, instrs: &mut InstrSeqBuilder<'_>, changed: &mut bool) {
+            let PositionWithParams { call_pos, .. } = *self;
+
+            instrs.instrs_mut().remove(call_pos);
+            instrs.drop_at(call_pos);
+
+            *changed = true;
+        }
+
+        fn apply_by_id(
+            &self,
+            instrs: &mut InstrSeqBuilder<'_>,
+            changed: &mut bool,
+            debugging_function_id: FunctionId,
+        ) -> eyre::Result<()> {
+            use walrus::ir::*;
+
+            let PositionWithParams {
+                call_pos,
+                before_value,
+                ..
+            } = *self;
+
+            // let debugging_function_id = debugging_function_id.index() as i32;
+            let debugging_function_id = self.get_idx(debugging_function_id);
+
+            // adjusting the value
+            if let Some(v) = before_value {
+                if debugging_function_id == v {
+                    // already adjusted
+                    return Ok(());
+                }
+                instrs.instrs_mut().remove(call_pos - 1);
+                instrs.const_at(call_pos - 1, Value::I32(debugging_function_id));
+            } else {
+                instrs.drop_at(call_pos - 1);
+                instrs.const_at(call_pos, Value::I32(debugging_function_id));
+            }
+
+            *changed = true;
 
             Ok(())
         }
+    }
 
-        let (pos, seq) = pos.position();
+    let fids = module.funcs.iter().map(|f| f.id()).collect::<Vec<_>>();
 
-        let mut instr = func_body.instr_seq(seq);
+    for DebugFunctionSet {
+        outer_fid,
+        seq,
+        start_position,
+        end_position,
+        debugging_function_id,
+    } in positions
+    {
+        let f = module.funcs.get_mut(outer_fid);
+        let mut instr_seq = match f.kind {
+            walrus::FunctionKind::Local(ref mut l) => l.builder_mut().instr_seq(seq),
+            _ => continue,
+        };
 
-        let checked = (
-            take_and_check_instr(instr.instrs().iter().skip(pos + 1), &[debugger, finalize]),
-            take_and_check_instr(
-                instr.instrs().iter().skip(pos - 1).rev(),
-                &[debugger, finalize],
-            ),
-        );
-
-        match pos {
-            DebugFunction::Start((pos, seq)) => {
-                let mut instr = func_body.instr_seq(seq);
-
-                check_instr(
-                    take_and_check_instr(
-                        instr.instrs().iter().skip(pos + 1),
-                        &[debugger, finalize],
-                    ),
-                    &mut instr,
-                    debugger,
-                    outer_fid,
-                    "debug_call_function_start",
-                    pos,
-                    &mut changed,
-                )?;
+        let gen_before = |pos: usize| -> PositionWithParams {
+            let instr = match &instr_seq.instrs().get(pos - 1) {
+                Some((v, _)) => v,
+                None => return PositionWithParams::new(pos, None, &fids),
+            };
+            if let Instr::Const(Const {
+                value: Value::I32(v),
+            }) = instr
+            {
+                PositionWithParams::new(pos, Some(*v), &fids)
+            } else {
+                PositionWithParams::new(pos, None, &fids)
             }
-            DebugFunction::End((pos, seq)) => {
-                let mut instr = func_body.instr_seq(seq);
+        };
 
-                check_instr(
-                    take_and_check_instr(
-                        instr.instrs().iter().skip(pos - 1).rev(),
-                        &[debugger, finalize],
-                    ),
-                    &mut instr,
-                    finalize,
-                    outer_fid,
-                    "debug_call_function_end",
-                    pos,
-                    &mut changed,
-                )?;
-            }
-        }
+        let start_position = start_position.map(gen_before);
+        let end_position = end_position.map(gen_before);
+
+        start_position
+            .map(|p| p.apply(&mut instr_seq, &mut changed, debugging_function_id))
+            .transpose()?;
+        end_position
+            .map(|p| p.apply(&mut instr_seq, &mut changed, debugging_function_id))
+            .transpose()?;
     }
 
     Ok(changed)
