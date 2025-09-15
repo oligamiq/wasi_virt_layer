@@ -1,5 +1,6 @@
 use eyre::Context as _;
 use itertools::Itertools;
+use walrus::InstrSeqBuilder;
 
 use crate::{
     instrs::InstrRewrite,
@@ -15,10 +16,7 @@ macro_rules! get_instr {
         } else {
             $idx as isize
         } as usize;
-        match $seq.instrs().get(idx).map(|(i, _)| i.clone()) {
-            Some(instr) => instr,
-            None => return eyre::Ok(()),
-        }
+        $seq.instrs().get(idx).map(|(i, _)| i.clone())
     }};
 }
 
@@ -54,7 +52,7 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             let mut body = func.builder_mut().func_body();
             let mut entry_seq = body.instr_seq(entry_id);
 
-            // eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
+            eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
 
             // remove call we don't want
             let len = entry_seq.instrs().len();
@@ -76,20 +74,17 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 
             {
                 entry_seq.rewrite(|instr, (pos, seq_id)| {
-                    if seq_id == entry_id && (pos < 2 || pos >= len - 2) {
-                        return;
-                    }
-
                     if ret_trap
                         .iter()
                         .filter(|(_, s)| *s == seq_id)
-                        .any(|(p, _)| *p - 2 <= pos && pos <= *p)
+                        .any(|(p, _)| pos == *p - 1)
                     {
                         return;
                     }
 
                     if let Instr::Call(Call { func }) = instr
-                        && (*func == debugger || *func == finalize)
+                        && ((*func == debugger && seq_id == entry_id && pos != 1)
+                            || (*func == finalize && seq_id != entry_id && pos != len - 1))
                     {
                         *instr = Instr::Drop(Drop {});
                         changed += 1;
@@ -98,18 +93,63 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                 })?;
             }
 
-            let mut adjust = |seq_id: InstrSeqId, pos: usize, caller| {
+            let adjust_common =
+                |seq: &mut InstrSeqBuilder<'_>,
+                 pos: usize,
+                 caller|
+                 -> eyre::Result<(Option<i32>, Option<walrus::FunctionId>)> {
+                    let before = match get_instr!(seq, pos) {
+                        Some(Instr::Const(Const {
+                            value: Value::I32(value),
+                        })) if value == fid => Some(value),
+                        _ => None,
+                    };
+                    let after = match get_instr!(seq, pos + 1) {
+                        Some(Instr::Call(Call { func })) if func == caller => Some(func),
+                        _ => None,
+                    };
+
+                    Ok((before, after))
+                };
+
+            let mut adjust_front = |seq_id: InstrSeqId, pos: usize, caller| {
                 let mut seq = body.instr_seq(seq_id);
-                let before = match get_instr!(seq, pos) {
-                    Instr::Const(Const {
-                        value: Value::I32(value),
-                    }) if value == fid => Some(value),
-                    _ => None,
-                };
-                let after = match get_instr!(seq, pos + 1) {
-                    Instr::Call(Call { func }) if func == caller => Some(func),
-                    _ => None,
-                };
+                let (before, after) = adjust_common(&mut seq, pos, caller)?;
+                // eprintln!(
+                //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
+                // );
+                match (before, after) {
+                    (Some(_), Some(_)) => {}
+                    (None, None) => {
+                        // eprintln!("pos: {pos}, seq: {seq:?}, added both");
+                        seq.const_at(pos + 2, Value::I32(fid));
+                        seq.call_at(pos + 3, caller);
+                        changed += 1;
+                    }
+                    (None, Some(_)) => {
+                        // eprintln!("pos: {pos}, seq: {seq:?}, added before");
+                        seq.instrs_mut().remove(pos);
+                        seq.const_at(pos, Value::I32(fid));
+                        changed += 1;
+                    }
+                    (Some(_), None) => {
+                        // eprintln!("pos: {pos}, seq: {seq:?}, added after");
+                        seq.instrs_mut().remove(pos + 1);
+                        seq.call_at(pos + 1, caller);
+                        changed += 1;
+                    }
+                }
+                eyre::Ok(())
+            };
+
+            adjust_front(entry_id, len - 2, finalize)?;
+            for (pos, seq) in ret_trap.into_iter() {
+                adjust_front(seq, pos - 2, finalize)?;
+            }
+
+            let mut adjust_first = |seq_id: InstrSeqId, pos: usize, caller| {
+                let mut seq = body.instr_seq(seq_id);
+                let (before, after) = adjust_common(&mut seq, pos, caller)?;
                 // eprintln!(
                 //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
                 // );
@@ -134,14 +174,10 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                         changed += 1;
                     }
                 }
-                Ok(())
+                eyre::Ok(())
             };
 
-            adjust(entry_id, 0, debugger)?;
-            adjust(entry_id, len - 2, finalize)?;
-            for (pos, seq) in ret_trap.into_iter() {
-                adjust(seq, pos - 2, finalize)?;
-            }
+            adjust_first(entry_id, 0, debugger)?;
 
             eyre::Ok(())
         })?;

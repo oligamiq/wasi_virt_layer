@@ -356,9 +356,24 @@ pub fn optimize_wasm(
                 .wrap_err("Failed to remove existing optimized WASM file")?;
         }
 
-        let command = std::process::Command::new("wasm-opt")
-            .args(add_args)
-            .args(["-Oz", wasm_path.as_str()])
+        let mut cmd = std::process::Command::new("wasm-opt");
+
+        cmd.args(add_args);
+
+        if add_args.iter().all(|&arg| {
+            arg != "-O"
+                && arg != "-O0"
+                && arg != "-O1"
+                && arg != "-O2"
+                && arg != "-O3"
+                && arg != "-O4"
+                && arg != "-Oz"
+                && arg != "-Os"
+        }) {
+            cmd.arg("-Oz");
+        }
+
+        let command = cmd
             .args(["--output", output_path.as_str()])
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

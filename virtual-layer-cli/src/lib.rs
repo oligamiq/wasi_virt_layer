@@ -232,69 +232,64 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         let (core_wasm_opt_adjusted, mem_size) = threads::adjust_core_wasm(&core_wasm_opt, threads)
             .wrap_err("Failed to adjust core Wasm")?;
         println!("Optimizing core Wasm...");
-        let mut core_wasm_opt_adjusted_opt =
+        let core_wasm_opt_adjusted_opt =
             building::optimize_wasm(&core_wasm_opt_adjusted, &[], false)
                 .wrap_err("Failed to optimize core Wasm")?;
         tmp_files.push(core_wasm.to_string());
         tmp_files.push(core_wasm_opt.to_string());
         tmp_files.push(core_wasm_opt_adjusted.to_string());
 
-        let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
-            .to_eyre()
-            .wrap_err("Failed to load module")?;
-
-        debug::generate_debug_call_function(&mut module)
-            .wrap_err("Failed to generate debug_call_function")?;
-
-        assert!(
-            !debug::readjust_debug_call_function(&mut module)?,
-            "debug_call_function was why readjusted"
-        );
-
-        module
-            .emit_wasm_file(core_wasm_opt_adjusted_opt.clone())
-            .to_eyre()
-            .wrap_err("Failed to write temporary wasm file")?;
-
         if debug {
-            loop {
-                let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
-                    .to_eyre()
-                    .wrap_err("Failed to load module")?;
-                let changed = debug::readjust_debug_call_function(&mut module)
-                    .wrap_err("Failed to readjust debug_call_function")?;
+            let core_wasm_opt_adjusted_opt_debug =
+                core_wasm_opt_adjusted_opt.with_extension("debug.wasm");
 
-                assert!(
-                    !debug::readjust_debug_call_function(&mut module)?,
-                    "debug_call_function was why readjusted"
-                );
+            let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
+                .to_eyre()
+                .wrap_err("Failed to load module")?;
 
-                tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
+            debug::generate_debug_call_function(&mut module)
+                .wrap_err("Failed to generate debug_call_function")?;
 
-                let new_path = core_wasm_opt_adjusted_opt.with_extension("adjusted.wasm");
+            module
+                .emit_wasm_file(&core_wasm_opt_adjusted_opt_debug)
+                .to_eyre()
+                .wrap_err("Failed to write temporary wasm file")?;
 
-                module
-                    .emit_wasm_file(new_path.clone())
-                    .to_eyre()
-                    .wrap_err("Failed to write temporary wasm file")?;
+            assert!(
+                !debug::readjust_debug_call_function(&mut module)?,
+                "debug_call_function was why readjusted"
+            );
 
-                core_wasm_opt_adjusted_opt = new_path.clone();
+            tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
 
-                if !changed {
-                    break;
-                }
+            let core_wasm_opt_adjusted_opt_debug_opt =
+                building::optimize_wasm(&core_wasm_opt_adjusted_opt_debug, &[], false)
+                    .wrap_err("Failed to optimize core Wasm")?;
 
-                tmp_files.push(new_path.to_string());
+            let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt_debug_opt)
+                .to_eyre()
+                .wrap_err("Failed to load module")?;
+            debug::readjust_debug_call_function(&mut module)
+                .wrap_err("Failed to readjust debug_call_function")?;
 
-                let new_core_wasm_opt_adjusted_opt =
-                    building::optimize_wasm(&core_wasm_opt_adjusted_opt, &[], false)
-                        .wrap_err("Failed to optimize core Wasm")?;
+            tmp_files.push(core_wasm_opt_adjusted_opt_debug_opt.to_string());
 
-                core_wasm_opt_adjusted_opt = new_core_wasm_opt_adjusted_opt;
-            }
+            let new_path = core_wasm_opt_adjusted_opt.with_extension("adjusted.wasm");
+
+            module
+                .emit_wasm_file(new_path.clone())
+                .to_eyre()
+                .wrap_err("Failed to write temporary wasm file")?;
+
+            assert!(
+                !debug::readjust_debug_call_function(&mut module)?,
+                "debug_call_function was why readjusted"
+            );
+
+            (new_path, mem_size)
+        } else {
+            (core_wasm_opt_adjusted_opt, mem_size)
         }
-
-        (core_wasm_opt_adjusted_opt, mem_size)
     } else {
         tmp_files.push(core_wasm.to_string());
         (core_wasm_opt, Some(Vec::new()))
