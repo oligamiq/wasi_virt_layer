@@ -1,10 +1,29 @@
 use eyre::Context as _;
 use itertools::Itertools;
 
-use crate::util::{ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilModule as _};
+use crate::{
+    instrs::InstrRewrite,
+    util::{ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilModule as _},
+};
+
+macro_rules! get_instr {
+    ($seq:expr, $idx:expr) => {{
+        let length = $seq.instrs().len();
+        #[allow(unused_comparisons)]
+        let idx = if $idx < 0 {
+            length as isize + $idx as isize
+        } else {
+            $idx as isize
+        } as usize;
+        match $seq.instrs().get(idx).map(|(i, _)| i.clone()) {
+            Some(instr) => instr,
+            None => return eyre::Ok(()),
+        }
+    }};
+}
 
 pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result<bool> {
-    let mut changed = false;
+    let mut changed = 0;
 
     let debugger = module
         .exports
@@ -17,27 +36,163 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         .get_func("debug_call_function_end")
         .to_eyre()
         .wrap_err("Failed to get debug_call_function_end export")?;
+
+    let excludes =
+        gen_exclude_set(module, EXCLUDE_NAMES).wrap_err("Failed to generate exclude set")?;
+
+    module
+        .funcs
+        .iter_local_mut()
+        .filter(|(func, _)| !excludes.contains(func))
+        .try_for_each(|(fid, func)| {
+            use walrus::ir::*;
+
+            let fid = fid.index() as i32;
+
+            // check debugger call at entry
+            let entry_id = func.entry_block();
+            let mut body = func.builder_mut().func_body();
+            let mut entry_seq = body.instr_seq(entry_id);
+
+            // eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
+
+            // remove call we don't want
+            let len = entry_seq.instrs().len();
+            let ret_trap = entry_seq
+                .rewrite(|instr, (pos, seq_id)| {
+                    if instr.is_return()
+                        || instr.is_return_call()
+                        || instr.is_return_call_indirect()
+                    {
+                        Some((pos, seq_id))
+                    } else {
+                        None
+                    }
+                })?
+                .into_iter()
+                .filter_map(|v| v)
+                .sorted_by(|(a_pos, a_seq), (b_pos, b_seq)| b_seq.cmp(a_seq).then(b_pos.cmp(a_pos)))
+                .collect_vec();
+
+            {
+                entry_seq.rewrite(|instr, (pos, seq_id)| {
+                    if seq_id == entry_id && (pos < 2 || pos >= len - 2) {
+                        return;
+                    }
+
+                    if ret_trap
+                        .iter()
+                        .filter(|(_, s)| *s == seq_id)
+                        .any(|(p, _)| *p - 2 <= pos && pos <= *p)
+                    {
+                        return;
+                    }
+
+                    if let Instr::Call(Call { func }) = instr
+                        && (*func == debugger || *func == finalize)
+                    {
+                        *instr = Instr::Drop(Drop {});
+                        changed += 1;
+                        eprintln!("### pos: {pos}, seq: {seq_id:?}, removed unwanted call");
+                    }
+                })?;
+            }
+
+            let mut adjust = |seq_id: InstrSeqId, pos: usize, caller| {
+                let mut seq = body.instr_seq(seq_id);
+                let before = match get_instr!(seq, pos) {
+                    Instr::Const(Const {
+                        value: Value::I32(value),
+                    }) if value == fid => Some(value),
+                    _ => None,
+                };
+                let after = match get_instr!(seq, pos + 1) {
+                    Instr::Call(Call { func }) if func == caller => Some(func),
+                    _ => None,
+                };
+                // eprintln!(
+                //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
+                // );
+                match (before, after) {
+                    (Some(_), Some(_)) => {}
+                    (None, None) => {
+                        // eprintln!("pos: {pos}, seq: {seq:?}, added both");
+                        seq.const_at(pos, Value::I32(fid));
+                        seq.call_at(pos + 1, caller);
+                        changed += 1;
+                    }
+                    (None, Some(_)) => {
+                        // eprintln!("pos: {pos}, seq: {seq:?}, added before");
+                        seq.instrs_mut().remove(pos);
+                        seq.const_at(pos, Value::I32(fid));
+                        changed += 1;
+                    }
+                    (Some(_), None) => {
+                        // eprintln!("pos: {pos}, seq: {seq:?}, added after");
+                        seq.instrs_mut().remove(pos + 1);
+                        seq.call_at(pos + 1, caller);
+                        changed += 1;
+                    }
+                }
+                Ok(())
+            };
+
+            adjust(entry_id, 0, debugger)?;
+            adjust(entry_id, len - 2, finalize)?;
+            for (pos, seq) in ret_trap.into_iter() {
+                adjust(seq, pos - 2, finalize)?;
+            }
+
+            eyre::Ok(())
+        })?;
+
+    eprintln!("Readjusted debug_call_function, changes made: {changed}");
+
+    Ok(changed != 0)
+}
+
+const EXCLUDE_NAMES: &[&str] = &[
+    "debug_call_indirect",
+    "debug_atomic_wait",
+    "debug_blind_print_etc_flag",
+    "debug_call_function_start",
+    "debug_call_function_end",
+];
+
+fn gen_exclude_set(
+    module: &mut walrus::Module,
+    names: &[&str],
+) -> eyre::Result<Vec<walrus::FunctionId>> {
+    names
+        .iter()
+        .filter_map(|name| {
+            Some(
+                get_fid(module, name)
+                    .transpose()?
+                    .map(|fid| module.funcs.find_children_with(fid))
+                    .flatten(),
+            )
+        })
+        .flatten_ok()
+        .try_collect::<_, Vec<_>, _>()
+}
+
+fn get_fid(module: &mut walrus::Module, name: &str) -> eyre::Result<Option<walrus::FunctionId>> {
+    module
+        .exports
+        .iter()
+        .find(|export| export.name == name)
+        .map(|export| {
+            let fid = match export.item {
+                walrus::ExportItem::Function(fid) => fid,
+                _ => eyre::bail!("{name} is not a function export"),
+            };
+            Ok(fid)
+        })
+        .transpose()
 }
 
 pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result<()> {
-    fn get_fid(
-        module: &mut walrus::Module,
-        name: &str,
-    ) -> eyre::Result<Option<walrus::FunctionId>> {
-        module
-            .exports
-            .iter()
-            .find(|export| export.name == name)
-            .map(|export| {
-                let fid = match export.item {
-                    walrus::ExportItem::Function(fid) => fid,
-                    _ => eyre::bail!("{name} is not a function export"),
-                };
-                Ok(fid)
-            })
-            .transpose()
-    }
-
     let name = "debug_call_indirect";
     if let Some(e) = get_fid(module, name)?.map(|fid| {
         module
@@ -70,25 +225,9 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
     }
 
     let name = "debug_call_function_start";
-    if let Some(e) = get_fid(module, name)?.map(|fid| {
-        let excludes = [
-            "debug_call_indirect",
-            "debug_atomic_wait",
-            "debug_blind_print_etc_flag",
-            "debug_call_function_start",
-            "debug_call_function_end",
-        ]
-        .iter()
-        .filter_map(|name| {
-            Some(
-                get_fid(module, name)
-                    .transpose()?
-                    .map(|fid| module.funcs.find_children_with(fid))
-                    .flatten(),
-            )
-        })
-        .flatten_ok()
-        .try_collect::<_, Vec<_>, _>()?;
+    if let Some(e) = get_fid(module, name)?.map(|debugger| {
+        let excludes =
+            gen_exclude_set(module, EXCLUDE_NAMES).wrap_err("Failed to generate exclude set")?;
 
         let finalize_name = "debug_call_function_end";
         let finalize = get_fid(module, finalize_name)?.unwrap();
@@ -96,13 +235,55 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         log::info!("{name}, {finalize_name} function found. Enabling debug feature.");
 
         module
-            .gen_inspect_with_finalize(Some(fid), Some(finalize), &[], &[], &excludes, |instr| {
-                match instr {
-                    walrus::ir::Instr::Call(id) => Some([id.func.index() as i32]),
-                    _ => None,
+            .funcs
+            .iter_local_mut()
+            .filter(|(func, _)| !excludes.contains(func))
+            .try_for_each(|(fid, func)| {
+                use walrus::ir::*;
+
+                let fid = fid.index() as i32;
+                let entry_id = func.entry_block();
+                let mut body = func.builder_mut().func_body();
+                let mut entry_seq = body.instr_seq(entry_id);
+                {
+                    entry_seq.const_at(0, Value::I32(fid));
+                    entry_seq.call_at(1, debugger);
                 }
-            })
-            .wrap_err("Failed to set debug_atomic_wait")?;
+
+                {
+                    // last instruction must be `Return`
+                    entry_seq.i32_const(fid).call(finalize);
+
+                    let pos = body
+                        .rewrite(|instr, pos| {
+                            if instr.is_return()
+                                || instr.is_return_call()
+                                || instr.is_return_call_indirect()
+                            {
+                                Some(pos)
+                            } else {
+                                None
+                            }
+                        })
+                        .map(|v| {
+                            v.into_iter()
+                                .filter_map(|v| v)
+                                .sorted_by(|(a_pos, a_seq), (b_pos, b_seq)| {
+                                    b_seq.cmp(a_seq).then(b_pos.cmp(a_pos))
+                                })
+                                .collect_vec()
+                        })
+                        .wrap_err("Failed to find return instructions")?;
+
+                    pos.into_iter().for_each(|(pos, seq)| {
+                        let mut seq = body.instr_seq(seq);
+                        seq.const_at(pos, Value::I32(fid))
+                            .call_at(pos + 1, finalize);
+                    });
+                }
+
+                eyre::Ok(())
+            })?;
 
         eyre::Ok(())
     }) {

@@ -54,8 +54,7 @@ pub fn remove_unused_threads_function(wasm: &mut walrus::Module) -> eyre::Result
 pub fn adjust_core_wasm(
     path: &Utf8PathBuf,
     threads: bool,
-    debug: bool,
-) -> eyre::Result<(Utf8PathBuf, Option<Vec<(u64, u64)>>, bool)> {
+) -> eyre::Result<(Utf8PathBuf, Option<Vec<(u64, u64)>>)> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
         .wrap_err("Failed to load module")?;
@@ -91,13 +90,6 @@ pub fn adjust_core_wasm(
         None
     };
 
-    let changed = if debug {
-        readjust_debug_call_function(&mut module)
-            .wrap_err("Failed to readjust debug_call_function")?
-    } else {
-        false
-    };
-
     let new_path = path.with_extension("adjusted.wasm");
 
     if fs::metadata(&new_path).is_ok() {
@@ -109,5 +101,5 @@ pub fn adjust_core_wasm(
         .to_eyre()
         .wrap_err("Failed to write temporary wasm file")?;
 
-    Ok((new_path, mem_size, changed))
+    Ok((new_path, mem_size))
 }

@@ -229,9 +229,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let (core_wasm_opt, mem_size) = if threads || debug {
         println!("Adjusting core Wasm...");
-        let (core_wasm_opt_adjusted, mem_size, changed) =
-            threads::adjust_core_wasm(&core_wasm_opt, threads, debug)
-                .wrap_err("Failed to adjust core Wasm")?;
+        let (core_wasm_opt_adjusted, mem_size) = threads::adjust_core_wasm(&core_wasm_opt, threads)
+            .wrap_err("Failed to adjust core Wasm")?;
         println!("Optimizing core Wasm...");
         let mut core_wasm_opt_adjusted_opt =
             building::optimize_wasm(&core_wasm_opt_adjusted, &[], false)
@@ -240,13 +239,35 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         tmp_files.push(core_wasm_opt.to_string());
         tmp_files.push(core_wasm_opt_adjusted.to_string());
 
-        if debug && changed {
+        let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
+            .to_eyre()
+            .wrap_err("Failed to load module")?;
+
+        debug::generate_debug_call_function(&mut module)
+            .wrap_err("Failed to generate debug_call_function")?;
+
+        assert!(
+            !debug::readjust_debug_call_function(&mut module)?,
+            "debug_call_function was why readjusted"
+        );
+
+        module
+            .emit_wasm_file(core_wasm_opt_adjusted_opt.clone())
+            .to_eyre()
+            .wrap_err("Failed to write temporary wasm file")?;
+
+        if debug {
             loop {
                 let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
                     .to_eyre()
                     .wrap_err("Failed to load module")?;
-                let changed = threads::readjust_debug_call_function(&mut module)
+                let changed = debug::readjust_debug_call_function(&mut module)
                     .wrap_err("Failed to readjust debug_call_function")?;
+
+                assert!(
+                    !debug::readjust_debug_call_function(&mut module)?,
+                    "debug_call_function was why readjusted"
+                );
 
                 tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
 
