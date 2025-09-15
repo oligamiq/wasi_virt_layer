@@ -52,7 +52,7 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             let mut body = func.builder_mut().func_body();
             let mut entry_seq = body.instr_seq(entry_id);
 
-            eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
+            // eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
 
             // remove call we don't want
             let len = entry_seq.instrs().len();

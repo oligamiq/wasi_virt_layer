@@ -358,20 +358,17 @@ pub fn optimize_wasm(
 
         let mut cmd = std::process::Command::new("wasm-opt");
 
-        cmd.args(add_args);
+        const OPTS: &[&str] = &["-O", "-O0", "-O1", "-O2", "-O3", "-O4", "-Oz", "-Os"];
 
-        if add_args.iter().all(|&arg| {
-            arg != "-O"
-                && arg != "-O0"
-                && arg != "-O1"
-                && arg != "-O2"
-                && arg != "-O3"
-                && arg != "-O4"
-                && arg != "-Oz"
-                && arg != "-Os"
-        }) {
+        cmd.args(add_args.iter().filter(|&&arg| !OPTS.contains(&arg)));
+
+        cmd.args(add_args.iter().filter(|&&arg| OPTS.contains(&arg)));
+
+        if add_args.iter().all(|&arg| !OPTS.contains(&arg)) {
             cmd.arg("-Oz");
         }
+
+        cmd.arg(wasm_path.as_str());
 
         let command = cmd
             .args(["--output", output_path.as_str()])
