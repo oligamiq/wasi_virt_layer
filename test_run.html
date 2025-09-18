@@ -52,10 +52,12 @@
     const iso = self.crossOriginIsolated === true;
     isoBadge.textContent = iso ? 'crossOriginIsolated: true ✅' : 'crossOriginIsolated: false ⚠️ Set COOP/COEP headers';
 
+    const url = new URL("./dist/threads_vfs.js", location.href).href;
+
     // Create a module worker using a Blob URL so we keep a single-file distribution.
     const workerCode = `
 import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI } from "https://esm.sh/@bjorn3/browser_wasi_shim";
-import { instantiate } from "${location.origin}/dist/threads_vfs.js";
+import { instantiate } from "${url}";
 
 const postLog = (type, msg) => {
   console.log({ type, msg });
@@ -104,7 +106,7 @@ self.onmessage = async (ev) => {
         postLog('log', 'Preparing WebAssembly imports...');
         // SharedArrayBuffer を使う場合は crossOriginIsolated が必要。
         importsObj.env = {
-          memory: new WebAssembly.Memory({ initial: 34, maximum: 34, shared: true })
+          memory: new WebAssembly.Memory({ initial: 34, maximum: 32768, shared: true })
         };
         inst = await WebAssembly.instantiate(module, importsObj);
         return inst;
