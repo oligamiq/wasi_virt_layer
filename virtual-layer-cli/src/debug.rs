@@ -20,6 +20,7 @@ macro_rules! get_instr {
     }};
 }
 
+/// readjust is broken but check is not broken I think.
 pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result<bool> {
     let mut changed = 0;
 
@@ -35,8 +36,7 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         .to_eyre()
         .wrap_err("Failed to get debug_call_function_end export")?;
 
-    let excludes =
-        gen_exclude_set(module, EXCLUDE_NAMES).wrap_err("Failed to generate exclude set")?;
+    let excludes = gen_exclude_set(module).wrap_err("Failed to generate exclude set")?;
 
     module
         .funcs
@@ -88,7 +88,7 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                     {
                         *instr = Instr::Drop(Drop {});
                         changed += 1;
-                        eprintln!("### pos: {pos}, seq: {seq_id:?}, removed unwanted call");
+                        // eprintln!("### pos: {pos}, seq: {seq_id:?}, removed unwanted call");
                     }
                 })?;
             }
@@ -195,20 +195,16 @@ const EXCLUDE_NAMES: &[&str] = &[
     "debug_call_function_end",
 ];
 
-fn gen_exclude_set(
-    module: &mut walrus::Module,
-    names: &[&str],
-) -> eyre::Result<Vec<walrus::FunctionId>> {
-    names
+fn gen_exclude_set(module: &mut walrus::Module) -> eyre::Result<Vec<walrus::FunctionId>> {
+    let start = module.start;
+
+    EXCLUDE_NAMES
         .iter()
-        .filter_map(|name| {
-            Some(
-                get_fid(module, name)
-                    .transpose()?
-                    .map(|fid| module.funcs.find_children_with(fid))
-                    .flatten(),
-            )
-        })
+        .filter_map(|name| get_fid(module, name).transpose())
+        .chain(start.iter().copied().map(Ok))
+        .collect::<eyre::Result<Vec<_>>>()?
+        .into_iter()
+        .map(|fid| module.funcs.find_children_with(fid))
         .flatten_ok()
         .try_collect::<_, Vec<_>, _>()
 }
@@ -262,8 +258,7 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 
     let name = "debug_call_function_start";
     if let Some(e) = get_fid(module, name)?.map(|debugger| {
-        let excludes =
-            gen_exclude_set(module, EXCLUDE_NAMES).wrap_err("Failed to generate exclude set")?;
+        let excludes = gen_exclude_set(module).wrap_err("Failed to generate exclude set")?;
 
         let finalize_name = "debug_call_function_end";
         let finalize = get_fid(module, finalize_name)?.unwrap();

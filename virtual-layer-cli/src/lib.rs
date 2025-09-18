@@ -263,33 +263,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 "debug_call_function was why readjusted"
             );
 
-            tmp_files.push(core_wasm_opt_adjusted_opt_debug.to_string());
-
-            let core_wasm_opt_adjusted_opt_debug_opt =
-                building::optimize_wasm(&core_wasm_opt_adjusted_opt_debug, &[], false)
-                    .wrap_err("Failed to optimize core Wasm")?;
-
-            let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt_debug_opt)
-                .to_eyre()
-                .wrap_err("Failed to load module")?;
-            debug::readjust_debug_call_function(&mut module)
-                .wrap_err("Failed to readjust debug_call_function")?;
-
-            tmp_files.push(core_wasm_opt_adjusted_opt_debug_opt.to_string());
-
-            let new_path = core_wasm_opt_adjusted_opt.with_extension("adjusted.wasm");
-
-            module
-                .emit_wasm_file(new_path.clone())
-                .to_eyre()
-                .wrap_err("Failed to write temporary wasm file")?;
-
-            assert!(
-                !debug::readjust_debug_call_function(&mut module)?,
-                "debug_call_function was why readjusted"
-            );
-
-            (new_path, mem_size)
+            (core_wasm_opt_adjusted_opt_debug, mem_size)
         } else {
             (core_wasm_opt_adjusted_opt, mem_size)
         }
