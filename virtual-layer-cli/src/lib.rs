@@ -85,7 +85,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     println!("Adjusting VFS Wasm...");
     let (ret, target_memory_type) =
-        adjust_wasm(&ret, &parsed_args.wasm, threads).wrap_err("Failed to adjust Wasm")?;
+        adjust_wasm(&ret, &parsed_args.wasm, threads, debug).wrap_err("Failed to adjust Wasm")?;
 
     println!("Optimizing VFS Wasm...");
     let ret = building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize Wasm")?;
@@ -143,7 +143,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads)
+    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads, debug)
         .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
@@ -261,10 +261,26 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .to_eyre()
                 .wrap_err("Failed to write temporary wasm file")?;
 
-            assert!(
-                !debug::readjust_debug_call_function(&mut module)?,
-                "debug_call_function was why readjusted"
-            );
+            let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt_debug)
+                .to_eyre()
+                .wrap_err("Failed to load module")?;
+
+            debug::generate_debug_call_function_last(&mut module)
+                .wrap_err("Failed to generate debug_blind_print_etc_flag")?;
+
+            module
+                .emit_wasm_file(&core_wasm_opt_adjusted_opt_debug)
+                .to_eyre()
+                .wrap_err("Failed to write temporary wasm file")?;
+
+            // let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt_debug)
+            //     .to_eyre()
+            //     .wrap_err("Failed to load module")?;
+
+            // assert!(
+            //     !debug::readjust_debug_call_function(&mut module)?,
+            //     "debug_call_function was why readjusted"
+            // );
 
             (core_wasm_opt_adjusted_opt_debug, mem_size)
         } else {

@@ -13,6 +13,7 @@ pub fn adjust_merged_wasm(
     path: &Utf8PathBuf,
     wasm_paths: &[impl AsRef<Path>],
     threads: bool,
+    debug: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
@@ -41,7 +42,7 @@ pub fn adjust_merged_wasm(
                 .is_some()
             {
                 module
-                    .connect_func(("wasi_snapshot_preview1", name), &export_name)
+                    .connect_func_without_remove(("wasi_snapshot_preview1", name), &export_name)
                     .wrap_err_with(|| eyre::eyre!("Failed to connect {name}"))?;
             } else {
                 if module.exports.get_func(&export_name).is_ok() {
@@ -233,8 +234,10 @@ pub fn adjust_merged_wasm(
         .iter()
         .copied()
         .for_each(|(id, fid)| {
-            module.funcs.delete(fid);
-            module.exports.delete(id);
+            if !debug {
+                module.funcs.delete(fid);
+                module.exports.delete(id);
+            }
         });
 
     let new_path = path.with_extension("adjusted.wasm");

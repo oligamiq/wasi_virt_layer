@@ -1,10 +1,11 @@
-use eyre::Context as _;
+use std::{cmp, collections::HashMap};
+
+use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
-use walrus::InstrSeqBuilder;
 
 use crate::{
-    instrs::InstrRewrite,
-    util::{ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilModule as _},
+    instrs::{InstrRead as _, InstrRewrite},
+    util::{WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
 };
 
 macro_rules! get_instr {
@@ -24,17 +25,9 @@ macro_rules! get_instr {
 pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result<bool> {
     let mut changed = 0;
 
-    let debugger = module
-        .exports
-        .get_func("debug_call_function_start")
-        .to_eyre()
-        .wrap_err("Failed to get debug_call_function export")?;
+    let debugger = "debug_call_function_start".get_fid(&module.exports)?;
 
-    let finalize = module
-        .exports
-        .get_func("debug_call_function_end")
-        .to_eyre()
-        .wrap_err("Failed to get debug_call_function_end export")?;
+    let finalize = "debug_call_function_end".get_fid(&module.exports)?;
 
     let excludes = gen_exclude_set(module).wrap_err("Failed to generate exclude set")?;
 
@@ -94,7 +87,7 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             }
 
             let adjust_common =
-                |seq: &mut InstrSeqBuilder<'_>,
+                |seq: &mut walrus::InstrSeqBuilder<'_>,
                  pos: usize,
                  caller|
                  -> eyre::Result<(Option<i32>, Option<walrus::FunctionId>)> {
@@ -192,6 +185,7 @@ const EXCLUDE_NAMES: &[&str] = &[
     "debug_atomic_wait",
     "debug_call_function_start",
     "debug_call_function_end",
+    "debug_blind_print_etc_flag",
 ];
 
 fn gen_exclude_set(module: &mut walrus::Module) -> eyre::Result<Vec<walrus::FunctionId>> {
@@ -255,7 +249,15 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         e.wrap_err("Failed to enable debug_atomic_wait")?;
     }
 
+    Ok(())
+}
+
+pub fn generate_debug_call_function_last(module: &mut walrus::Module) -> eyre::Result<()> {
+    use walrus::ir::*;
+    use walrus::*;
+
     let name = "debug_call_function_start";
+
     if let Some(e) = get_fid(module, name)?.map(|debugger| {
         let excludes = gen_exclude_set(module).wrap_err("Failed to generate exclude set")?;
 
@@ -264,14 +266,63 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 
         log::info!("{name}, {finalize_name} function found. Enabling debug feature.");
 
+        let import_count = module
+            .imports
+            .iter()
+            .filter(|imp| matches!(imp.kind, walrus::ImportKind::Function(_)))
+            .count();
+
+        let calc_future_size = |func: &LocalFunction, id: FunctionId| -> eyre::Result<u64> {
+            if excludes.contains(&id) {
+                Ok(func.size())
+            } else {
+                let mut size = func.size();
+                size += 2; // start instrs
+                size += 2; // end instrs
+                size += func
+                    .read(|instr, _| {
+                        if instr.is_return()
+                            || instr.is_return_call()
+                            || instr.is_return_call_indirect()
+                        {
+                            2u64
+                        } else {
+                            0
+                        }
+                    })
+                    .wrap_err("Failed to read return instructions")?
+                    .into_iter()
+                    .sum::<u64>();
+                Ok(size)
+            }
+        };
+
+        // walrus sort on size
+        let fids_with_size: HashMap<FunctionId, usize> = module
+            .funcs
+            .iter_local()
+            .map(|(fid, func)| {
+                calc_future_size(func, fid)
+                    .wrap_err("Failed to calc size")
+                    .map(|size| (fid, size as usize))
+            })
+            .collect::<eyre::Result<Vec<_>>>()?
+            .into_iter()
+            .sorted_by_key(|(id, size)| (cmp::Reverse(*size), *id))
+            .map(|(fid, _)| fid)
+            .enumerate()
+            .map(|(i, fid)| (fid, i + import_count))
+            .collect();
+
         module
             .funcs
             .iter_local_mut()
             .filter(|(func, _)| !excludes.contains(func))
             .try_for_each(|(fid, func)| {
-                use walrus::ir::*;
-
-                let fid = fid.index() as i32;
+                let fid = fids_with_size
+                    .get(&fid)
+                    .copied()
+                    .wrap_err("Failed to get function order id")? as i32;
                 let entry_id = func.entry_block();
                 let mut body = func.builder_mut().func_body();
                 let mut entry_seq = body.instr_seq(entry_id);

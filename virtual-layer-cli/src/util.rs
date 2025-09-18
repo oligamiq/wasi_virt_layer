@@ -375,7 +375,7 @@ impl WalrusUtilModule for walrus::Module {
 
         fn_(&mut builder, &args)?;
 
-        Ok(builder.finish(vec![], &mut self.funcs))
+        Ok(builder.finish(args, &mut self.funcs))
     }
 
     /// if vfs, get vfs memory_id

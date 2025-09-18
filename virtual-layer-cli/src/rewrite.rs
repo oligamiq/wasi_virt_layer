@@ -22,6 +22,7 @@ pub fn adjust_wasm(
     path: &Utf8PathBuf,
     wasm: &[impl AsRef<Path>],
     threads: bool,
+    debug: bool,
 ) -> eyre::Result<(Utf8PathBuf, TargetMemoryType)> {
     let mut module = walrus::Module::from_file(path)
         .to_eyre()
@@ -204,6 +205,38 @@ pub fn adjust_wasm(
         )?;
 
     module.exports.delete(eid);
+
+    if debug {
+        for wasm in wasm {
+            let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
+
+            module
+                .exports
+                .iter()
+                .filter(|export| {
+                    export
+                        .name
+                        .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
+                })
+                .filter(|export| {
+                    Wasip1SnapshotPreview1Func::VARIANTS.contains(
+                        &export
+                            .name
+                            .as_str()
+                            .trim_start_matches(&format!("__wasip1_vfs_{wasm_name}_")),
+                    )
+                })
+                .filter_map(|export| match export.item {
+                    walrus::ExportItem::Function(fid) => Some((export.name.clone(), fid)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .for_each(|(name, old_fid)| {
+                    module.exports.add(&format!("debug_{name}"), old_fid);
+                });
+        }
+    }
 
     let new_path = path.with_extension("adjusted.wasm");
 
