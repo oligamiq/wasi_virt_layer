@@ -142,6 +142,16 @@ pub fn adjust_wasm(
                 )
                 .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
 
+            if !debug {
+                module
+                    .exports
+                    .remove("__wasip1_vfs_self_wasi_thread_start_anchor")
+                    .to_eyre()
+                    .wrap_err(
+                        "Failed to remove __wasip1_vfs_self_wasi_thread_start_anchor export",
+                    )?;
+            }
+
             // __wasip1_vfs_self_wasi_thread_start
             module
                 .connect_func_without_remove(
@@ -150,7 +160,9 @@ pub fn adjust_wasm(
                 )
                 .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
 
-            module.exports.remove("__wasip1_vfs_is_root_spawn").unwrap();
+            if !debug {
+                module.exports.remove("__wasip1_vfs_is_root_spawn").unwrap();
+            }
         }
     }
 

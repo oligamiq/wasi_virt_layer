@@ -63,6 +63,10 @@ pub fn build_vfs(
                 "--color",
                 "always",
             ];
+            // todo!() issue
+            if threads {
+                args.insert(0, "+nightly");
+            }
             if let Some(package_name) = package {
                 args.push("--package");
                 args.push(package_name);

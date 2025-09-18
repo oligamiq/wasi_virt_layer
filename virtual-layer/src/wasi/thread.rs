@@ -100,8 +100,13 @@ mod spawn {
         IS_ROOT_THREAD.with(|flag| {
             unsafe { flag.get().write(true) };
         });
+        println!("Root thread flag set to true");
 
-        std::thread::spawn(f)
+        let s = std::thread::spawn(f);
+
+        println!("Root thread spawned");
+
+        s
     }
 
     #[cfg(target_os = "wasi")]
@@ -175,6 +180,8 @@ macro_rules! export_thread {
                         match *self {
                             $(
                                 Self::[<__ $wasm>] => {
+                                    todo!();
+
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
                                             Some(id) => u32::from(id) as i32,
@@ -214,6 +221,15 @@ macro_rules! export_thread {
                         thread_id: i32,
                         ptr: i32,
                     );
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                unsafe extern "C" fn [<__wasip1_vfs_ $wasm _wasi_thread_start_anchor>](
+                    thread_id: i32,
+                    ptr: i32,
+                ) {
+                    [<__wasip1_vfs_ $wasm _wasi_thread_start>](thread_id, ptr);
                 }
 
                 #[cfg(target_os = "wasi")]

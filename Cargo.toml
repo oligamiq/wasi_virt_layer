@@ -5,7 +5,9 @@ members = [
     "virtual-layer",
     "examples/vfs/example",
     "examples/test_wasm/example",
-    "examples/vfs/rustc_vfs", "examples/test_wasm/test_threads", "examples/vfs/threads_vfs",
+    "examples/vfs/rustc_vfs",
+    "examples/test_wasm/test_threads",
+    "examples/vfs/threads_vfs",
 ]
 default-members = ["virtual-layer-cli"]
 

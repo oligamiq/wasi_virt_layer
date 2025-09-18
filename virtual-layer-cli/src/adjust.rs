@@ -140,6 +140,18 @@ pub fn adjust_merged_wasm(
                 })?;
 
             module
+                .exports
+                .remove(&format!(
+                    "__wasip1_vfs_{wasm_name}_wasi_thread_start_anchor"
+                ))
+                .to_eyre()
+                .wrap_err_with(|| {
+                    eyre::eyre!(
+                        "Failed to remove __wasip1_vfs_{wasm_name}_wasi_thread_start_anchor export"
+                    )
+                })?;
+
+            module
                 .connect_func_without_remove(
                     (
                         "wasi",
