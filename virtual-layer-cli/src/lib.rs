@@ -77,6 +77,12 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     println!("Optimizing VFS Wasm...");
     let ret = building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize Wasm")?;
 
+    let debug = debug::has_debug(
+        &walrus::Module::from_file(&ret)
+            .to_eyre()
+            .wrap_err("Failed to load module")?,
+    );
+
     println!("Adjusting VFS Wasm...");
     let (ret, target_memory_type) =
         adjust_wasm(&ret, &parsed_args.wasm, threads).wrap_err("Failed to adjust Wasm")?;
@@ -223,9 +229,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     println!("Optimizing core Wasm...");
     let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
         .wrap_err("Failed to optimize core Wasm")?;
-
-    // todo!();
-    let debug = true;
 
     tmp_files.push(core_wasm.to_string());
 

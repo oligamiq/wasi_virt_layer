@@ -190,7 +190,6 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 const EXCLUDE_NAMES: &[&str] = &[
     "debug_call_indirect",
     "debug_atomic_wait",
-    "debug_blind_print_etc_flag",
     "debug_call_function_start",
     "debug_call_function_end",
 ];
@@ -322,4 +321,11 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
     }
 
     Ok(())
+}
+
+pub fn has_debug(module: &walrus::Module) -> bool {
+    module
+        .exports
+        .iter()
+        .any(|export| EXCLUDE_NAMES.contains(&export.name.as_str()))
 }

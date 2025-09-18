@@ -299,6 +299,7 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
+    // only debug
     fn connect_func_without_remove(
         &mut self,
         import_module: impl AsRef<str>,
@@ -901,6 +902,12 @@ impl WalrusUtilModule for walrus::Module {
         }
 
         self.renew_id_on_table(old_id, new_id)?;
+
+        // if old function is imported
+        if let walrus::FunctionKind::Import(import) = &self.funcs.get(old_id).kind {
+            self.imports.delete(import.import);
+        }
+        self.funcs.delete(old_id);
 
         Ok(())
     }

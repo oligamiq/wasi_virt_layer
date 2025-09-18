@@ -11,7 +11,7 @@ use crate::{
     threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT,
-        WalrusUtilFuncs, WalrusUtilImport, WalrusUtilModule,
+        WalrusUtilFuncs as _, WalrusUtilImport, WalrusUtilModule,
     },
 };
 
@@ -110,15 +110,17 @@ pub fn adjust_wasm(
                 .to_eyre()
                 .wrap_err("__wasip1_vfs_is_root_spawn not found")?;
 
-            let fid = module
+            let normal_thread_spawn_fn_id = module
                 .imports
                 .get_func("wasi", "thread-spawn")
                 .to_eyre()
                 .wrap_err("wasi.thread-spawn import not found")?;
 
-            // module
-            //     .renew_call_fn_in_the_fn(fid, real_thread_spawn_fn_id, root_fid)
-            //     .wrap_err("Failed to rewrite thread-spawn call in root spawn")?;
+            let self_thread_spawn_fn_id = module
+                .exports
+                .get_func("__wasip1_vfs_wasi_thread_spawn_self")
+                .to_eyre()
+                .wrap_err("__wasip1_vfs_wasi_thread_spawn_self not found")?;
 
             use walrus::ValType::I32;
             let real_thread_spawn_fn_id = module
@@ -134,7 +136,7 @@ pub fn adjust_wasm(
                             |else_| {
                                 else_
                                     .local_get(args[0]) // pass the argument to thread-spawn
-                                    .call(fid); // call thread-spawn
+                                    .call(self_thread_spawn_fn_id); // call thread-spawn
                             },
                         )
                         .return_();
@@ -144,30 +146,8 @@ pub fn adjust_wasm(
                 .wrap_err("Failed to add real thread spawn function")?;
 
             module
-                .get_using_func(branch_fid)
-                .and_then(|v| {
-                    v.iter().copied().try_for_each(|(fid, _, _)| {
-                        module.funcs.rewrite(
-                            |instr, _| {
-                                if let walrus::ir::Instr::Call(c) = instr {
-                                    if c.func == fid {
-                                        c.func = real_thread_spawn_fn_id;
-                                    }
-                                }
-                            },
-                            fid,
-                        )?;
-
-                        Ok(())
-                    })
-                })
-                .wrap_err("Failed to get using functions for branch")?;
-
-            module.connect_func(
-                "wasi",
-                "thread-spawn",
-                "__wasip1_vfs_wasi_thread_spawn_self",
-            )?;
+                .renew_call_fn(normal_thread_spawn_fn_id, real_thread_spawn_fn_id)
+                .wrap_err("Failed to rewrite thread-spawn call")?;
 
             let dup_id = module
                 .imports
@@ -176,10 +156,10 @@ pub fn adjust_wasm(
                 .wrap_err("Failed to get wasip1-vfs.__wasip1_vfs_self_wasi_thread_start")?;
 
             let id = module
-                .imports
-                .get_func("wasip1-vfs", "__wasip1_vfs_wasi_thread_start_entry")
+                .exports
+                .get_func("wasi_thread_start")
                 .to_eyre()
-                .wrap_err("Failed to get wasip1-vfs.__wasip1_vfs_wasi_thread_start_entry")?;
+                .wrap_err("Failed to get wasip1-vfs.wasi_thread_start")?;
 
             module
                 .renew_call_fn(dup_id, id)
@@ -187,7 +167,7 @@ pub fn adjust_wasm(
 
             // __wasip1_vfs_self_wasi_thread_start
             module
-                .connect_func(
+                .connect_func_without_remove(
                     "wasip1-vfs",
                     "__wasip1_vfs_wasi_thread_start_entry",
                     "wasi_thread_start",
@@ -219,7 +199,11 @@ pub fn adjust_wasm(
             })
         ) {
             let import_func_name = format!("[static]wasip1.{func_name}-import");
-            module.connect_func(CORE_MODULE_ROOT, import_func_name, export_func_name)?;
+            module.connect_func_without_remove(
+                CORE_MODULE_ROOT,
+                import_func_name,
+                export_func_name,
+            )?;
 
             return Ok(true);
         } else {
