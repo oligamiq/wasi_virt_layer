@@ -477,7 +477,7 @@ impl Wasip1Op {
             );
         }
 
-        module.connect_func_inner(fid, main_void_func_id, true)?;
+        module.connect_func(fid, main_void_func_id)?;
 
         Ok(())
     }

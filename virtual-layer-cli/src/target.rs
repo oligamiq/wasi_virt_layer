@@ -59,7 +59,8 @@ pub fn adjust_target_wasm(
     if threads {
         module
             .imports
-            .find_mut("wasi", "thread-spawn")
+            .find_mut(("wasi", "thread-spawn"))
+            .ok()
             .map(|import| {
                 import.name = format!("__wasip1_vfs_wasi_thread_spawn_{name}");
             });

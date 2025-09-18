@@ -1,48 +1,89 @@
 use std::{
     borrow::Borrow,
+    fmt::Debug,
     path::{Path, PathBuf},
 };
 
-use eyre::Context as _;
+use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 use walrus::{ir::InstrSeqId, *};
 
 use crate::instrs::{InstrRead, InstrRewrite as _};
 
-pub(crate) trait WalrusUtilImport {
-    fn find_mut(&mut self, module: impl AsRef<str>, name: impl AsRef<str>) -> Option<&mut Import>;
-    fn swap_import(
+#[allow(dead_code)]
+pub(crate) trait WalrusUtilImport: Debug {
+    fn find_mut<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<&mut Import>;
+
+    /// Swap two imports but if other not found, skip
+    /// This is useful when you want to swap imports that may not exist
+    fn may_swap_import<A>(
         &mut self,
-        old_module: impl AsRef<str>,
-        old_name: impl AsRef<str>,
-        new_module: impl AsRef<str>,
-        new_name: impl AsRef<str>,
+        one: impl WalrusFID<A>,
+        other: (impl AsRef<str>, impl AsRef<str>),
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        let old_module = old_module.as_ref();
-        let old_name = old_name.as_ref();
-        let new_module = new_module.as_ref();
-        let new_name = new_name.as_ref();
+        let other_module = other.0.as_ref();
+        let other_name = other.1.as_ref();
 
-        let old_import = self
-            .find_mut(old_module, old_name)
-            .ok_or_else(|| eyre::eyre!("Import {}.{} not found", old_module, old_name))?;
+        let one_import = self
+            .find_mut(one)
+            .wrap_err_with(|| eyre::eyre!("One Import {} not found", one.as_str()))?;
 
-        old_import.module = "archived".to_string();
+        let one_module = one_import.module.clone();
+        let one_name = one_import.name.clone();
 
-        self.find_mut(new_module, new_name).map(|import| {
-            import.module = old_module.to_string();
-            import.name = old_name.to_string();
-        });
+        one_import.module = "archived".to_string();
 
-        let old_import = self
-            .find_mut("archived", old_name)
-            .ok_or_else(|| eyre::eyre!("Import archived.{} not found", old_name))?;
+        self.find_mut((other_module, other_name))
+            .ok()
+            .map(|import| {
+                import.module = one_module;
+                import.name = one_name.clone();
+            });
 
-        old_import.module = new_module.to_string();
-        old_import.name = new_name.to_string();
+        let one_import = self.find_mut(("archived", &one_name)).unwrap();
+
+        one_import.module = other_module.to_string();
+        one_import.name = other_name.to_string();
+
+        Ok(())
+    }
+
+    fn swap_import<A, B>(
+        &mut self,
+        one: impl WalrusFID<A>,
+        other: impl WalrusFID<B>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        let (other_module, other_name) = {
+            let other_import = self
+                .find_mut(other)
+                .wrap_err_with(|| eyre::eyre!("Other Import {} not found", other.as_str()))?;
+            (other_import.module.clone(), other_import.name.clone())
+        };
+
+        let one_import = self
+            .find_mut(one)
+            .wrap_err_with(|| eyre::eyre!("One Import {} not found", one.as_str()))?;
+
+        let one_module = one_import.module.clone();
+        let one_name = one_import.name.clone();
+
+        one_import.module = "archived".to_string();
+
+        let other_import = self.find_mut(other).unwrap();
+
+        other_import.module = one_module;
+        other_import.name = one_name.clone();
+
+        let one_import = self.find_mut(("archived", &one_name)).unwrap();
+
+        one_import.module = other_module;
+        one_import.name = other_name.clone();
 
         Ok(())
     }
@@ -100,24 +141,26 @@ pub(crate) trait WalrusUtilModule {
     /// connect function from import to export
     /// export will be removed
     /// and import will be replaced with the export function
-    fn connect_func(
+    fn connect_func<A, B>(
         &mut self,
-        import_module: impl AsRef<str>,
-        import_name: impl AsRef<str>,
-        export_name: impl AsRef<str>,
-    ) -> eyre::Result<()>;
+        import: impl WalrusFID<A>,
+        export: impl WalrusFID<B>,
+    ) -> eyre::Result<()> {
+        self.connect_func_with_is_delete(import, export, true)
+    }
 
-    fn connect_func_without_remove(
+    fn connect_func_without_remove<A, B>(
         &mut self,
-        import_module: impl AsRef<str>,
-        import_name: impl AsRef<str>,
-        export_name: impl AsRef<str>,
-    ) -> eyre::Result<()>;
+        import: impl WalrusFID<A>,
+        export: impl WalrusFID<B>,
+    ) -> eyre::Result<()> {
+        self.connect_func_with_is_delete(import, export, false)
+    }
 
-    fn connect_func_inner(
+    fn connect_func_with_is_delete<A, B>(
         &mut self,
-        fid: impl Borrow<FunctionId>,
-        export_id: impl Borrow<FunctionId>,
+        import: impl WalrusFID<A>,
+        export: impl WalrusFID<B>,
         is_delete: bool,
     ) -> eyre::Result<()>;
 
@@ -145,26 +188,25 @@ pub(crate) trait WalrusUtilModule {
     fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
 
     /// Return all functions that call functions in this fid
-    fn get_using_func(
+    fn get_using_func<A>(
         &self,
-        fid: impl Borrow<FunctionId>,
+        as_fn: impl WalrusFID<A>,
     ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>>;
 
-    fn renew_id_on_table(
+    fn renew_id_on_table<A, B>(
         &mut self,
-        old_id: impl Borrow<FunctionId>,
-        new_id: impl Borrow<FunctionId>,
+        old: impl WalrusFID<A>,
+        new: impl WalrusFID<B>,
     ) -> eyre::Result<()>
     where
         Self: Sized;
 
-    fn fid_pos_on_table(&self, fid: impl Borrow<FunctionId>)
-    -> eyre::Result<Vec<(TableId, usize)>>;
+    fn fid_pos_on_table<A>(&self, as_fn: impl WalrusFID<A>) -> eyre::Result<Vec<(TableId, usize)>>;
 
-    fn renew_call_fn(
+    fn renew_call_fn<A, B>(
         &mut self,
-        old_id: impl Borrow<FunctionId>,
-        new_id: impl Borrow<FunctionId>,
+        old: impl WalrusFID<A>,
+        new: impl WalrusFID<B>,
     ) -> eyre::Result<()>
     where
         Self: Sized;
@@ -188,46 +230,66 @@ pub(crate) trait WalrusUtilModule {
     where
         Self: Sized;
 
-    fn check_function_type(
+    fn check_function_type<A, B>(
         &self,
-        before: impl Borrow<FunctionId>,
-        after: impl Borrow<FunctionId>,
+        before: impl WalrusFID<A>,
+        after: impl WalrusFID<B>,
     ) -> eyre::Result<()>
     where
         Self: Sized;
 
     #[allow(dead_code)]
-    fn debug_call_indirect(&mut self, id: impl Borrow<FunctionId>) -> eyre::Result<()>
+    fn debug_call_indirect<A>(&mut self, debugger: impl WalrusFID<A>) -> eyre::Result<()>
     where
         Self: Sized;
 
     #[allow(dead_code)]
-    fn gen_inspect<const N: usize>(
+    fn gen_inspect<const N: usize, A>(
         &mut self,
-        inspector: impl Borrow<FunctionId>,
+        inspector: impl WalrusFID<A>,
         params: &[ValType],
         exclude: &[impl Borrow<FunctionId>],
         filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
-        Self: Sized;
+        Self: Sized,
+    {
+        self.gen_inspect_with_finalize(
+            Some(inspector),
+            None::<FunctionId>,
+            params,
+            &[],
+            exclude,
+            filter,
+        )
+    }
 
     #[allow(dead_code)]
-    fn gen_finalize<const N: usize>(
+    fn gen_finalize<const N: usize, A>(
         &mut self,
-        finalize: impl Borrow<FunctionId>,
+        finalize: impl WalrusFID<A>,
         params: &[ValType],
         exclude: &[impl Borrow<FunctionId>],
         filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
     ) -> eyre::Result<()>
     where
-        Self: Sized;
+        Self: Sized,
+    {
+        self.gen_inspect_with_finalize(
+            None::<FunctionId>,
+            Some(finalize),
+            &[],
+            params,
+            exclude,
+            filter,
+        )
+    }
 
     #[allow(dead_code)]
-    fn gen_inspect_with_finalize<const N: usize>(
+    fn gen_inspect_with_finalize<const N: usize, A, B>(
         &mut self,
-        inspector: Option<impl Borrow<FunctionId>>,
-        finalize: Option<impl Borrow<FunctionId>>,
+        inspector: Option<impl WalrusFID<A>>,
+        finalize: Option<impl WalrusFID<B>>,
         params: &[ValType],
         results: &[ValType],
         exclude: &[impl Borrow<FunctionId>],
@@ -244,25 +306,24 @@ pub(crate) trait WalrusUtilModule {
 }
 
 impl WalrusUtilImport for ModuleImports {
-    fn find_mut(&mut self, module: impl AsRef<str>, name: impl AsRef<str>) -> Option<&mut Import> {
-        let import_id = self
-            .iter()
-            .find(|import| import.module == module.as_ref() && import.name == name.as_ref())?
-            .id();
+    fn find_mut<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<&mut Import> {
+        let fid = as_fn.get_fid(self)?;
 
-        Some(self.get_mut(import_id))
+        let import_id = self.get_imported_func(fid).unwrap().id();
+
+        Ok(self.get_mut(import_id))
     }
 }
 
 impl WalrusUtilModule for walrus::Module {
-    fn connect_func_inner(
+    fn connect_func_with_is_delete<A, B>(
         &mut self,
-        fid: impl Borrow<FunctionId>,
-        export_id: impl Borrow<FunctionId>,
+        import: impl WalrusFID<A>,
+        export: impl WalrusFID<B>,
         is_delete: bool,
     ) -> eyre::Result<()> {
-        let fid = *fid.borrow();
-        let export_id = *export_id.borrow();
+        let fid = import.get_fid(&self.imports)?;
+        let export_id = export.get_fid(&self.exports)?;
 
         self.check_function_type(fid, export_id)
             .wrap_err("Function types do not match on connect func inner")?;
@@ -295,55 +356,6 @@ impl WalrusUtilModule for walrus::Module {
         if is_delete {
             self.exports.delete(export_id);
         }
-
-        Ok(())
-    }
-
-    // only debug
-    fn connect_func_without_remove(
-        &mut self,
-        import_module: impl AsRef<str>,
-        import_name: impl AsRef<str>,
-        export_name: impl AsRef<str>,
-    ) -> eyre::Result<()> {
-        let fid = self
-            .imports
-            .get_func(import_module, &import_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("import {} not found", import_name.as_ref()))?;
-
-        let export_id = self
-            .exports
-            .get_func(&export_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("export {} not found", export_name.as_ref()))?;
-
-        self.connect_func_inner(fid, export_id, false)
-            .wrap_err("Failed to connect func")?;
-
-        Ok(())
-    }
-
-    fn connect_func(
-        &mut self,
-        import_module: impl AsRef<str>,
-        import_name: impl AsRef<str>,
-        export_name: impl AsRef<str>,
-    ) -> eyre::Result<()> {
-        let fid = self
-            .imports
-            .get_func(import_module, &import_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("import {} not found", import_name.as_ref()))?;
-
-        let export_id = self
-            .exports
-            .get_func(&export_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("export {} not found", export_name.as_ref()))?;
-
-        self.connect_func_inner(fid, export_id, true)
-            .wrap_err("Failed to connect func")?;
 
         Ok(())
     }
@@ -638,11 +650,11 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn get_using_func(
+    fn get_using_func<A>(
         &self,
-        fid: impl Borrow<FunctionId>,
+        as_fn: impl WalrusFID<A>,
     ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>> {
-        let fid = *fid.borrow();
+        let fid = as_fn.get_fid(self)?;
 
         Ok(self
             .funcs
@@ -664,16 +676,16 @@ impl WalrusUtilModule for walrus::Module {
             .collect::<Vec<_>>())
     }
 
-    fn renew_id_on_table(
+    fn renew_id_on_table<A, B>(
         &mut self,
-        old_id: impl Borrow<FunctionId>,
-        new_id: impl Borrow<FunctionId>,
+        old: impl WalrusFID<A>,
+        new: impl WalrusFID<B>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        let old_id = *old_id.borrow();
-        let new_id = *new_id.borrow();
+        let old_id = old.get_fid(self)?;
+        let new_id = new.get_fid(self)?;
 
         self.check_function_type(old_id, new_id)
             .wrap_err("Function types do not match on renew id on table")?;
@@ -712,11 +724,8 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn fid_pos_on_table(
-        &self,
-        fid: impl Borrow<FunctionId>,
-    ) -> eyre::Result<Vec<(TableId, usize)>> {
-        let fid = *fid.borrow();
+    fn fid_pos_on_table<A>(&self, fid: impl WalrusFID<A>) -> eyre::Result<Vec<(TableId, usize)>> {
+        let fid = fid.get_fid(self)?;
 
         let mut positions = vec![];
         for table in self.tables.iter() {
@@ -747,141 +756,16 @@ impl WalrusUtilModule for walrus::Module {
         Ok(positions)
     }
 
-    // this is broken
-    // fn renew_call_fn_in_the_fn(
-    //     &mut self,
-    //     old_id: impl Borrow<FunctionId>,
-    //     new_id: impl Borrow<FunctionId>,
-    //     fn_id: impl Borrow<FunctionId>,
-    // ) -> eyre::Result<()>
-    // where
-    //     Self: Sized,
-    // {
-    //     use walrus::ir::*;
-    //     let f_ty_id = self.funcs.get(old_id).ty();
-    //     let f_ty_id_params = self.types.get(f_ty_id).params().to_vec();
-    //     let f_ty_id_results = self.types.get(f_ty_id).results().to_vec();
-
-    //     // check new_id type and old_id type
-    //     self.check_function_type(old_id, new_id)
-    //         .wrap_err("Function types do not match on renew call fn that nesting this function")?;
-
-    //     let fid_pos_on_table = self
-    //         .fid_pos_on_table(old_id)
-    //         .wrap_err("Failed to get fid pos on table")?;
-
-    //     let using_tables = self
-    //         .funcs
-    //         .flat_read(
-    //             |instr, _| {
-    //                 if let Instr::CallIndirect(call) = instr {
-    //                     if fid_pos_on_table.iter().any(|(tid, _)| *tid == call.table) {
-    //                         let ty = self.types.get(call.ty);
-    //                         if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-    //                             return Some(call.table);
-    //                         }
-    //                     }
-    //                 }
-    //                 None
-    //             },
-    //             fn_id,
-    //         )
-    //         .wrap_err("Failed to read using tables")?
-    //         .into_iter()
-    //         .filter_map(|x| x)
-    //         .collect::<std::collections::HashSet<_>>()
-    //         .into_iter()
-    //         .filter_map(|table| {
-    //             let fid = fid_pos_on_table
-    //                 .iter()
-    //                 .filter(|(tid, _)| *tid == table)
-    //                 .map(|(_, pos)| *pos as i32)
-    //                 .collect::<Vec<_>>();
-    //             if fid.is_empty() {
-    //                 return None;
-    //             }
-    //             if fid.len() > 1 {
-    //                 log::warn!("Multiple fid pos found on table, why? using the first one");
-    //             }
-    //             let fid = fid[0];
-    //             Some((table, fid))
-    //         })
-    //         .map(|(table, fid)| {
-    //             use walrus::*;
-
-    //             let params_ty = core::iter::once(ValType::I32)
-    //                 .chain(f_ty_id_params.clone())
-    //                 .collect::<Vec<_>>();
-    //             let results_ty = f_ty_id_results.clone();
-
-    //             let new_id = self.gen_new_function(&params_ty, &results_ty, |func, args| {
-    //                 func.func_body()
-    //                     .local_get(args[0])
-    //                     .i32_const(fid)
-    //                     .binop(BinaryOp::I32Eq)
-    //                     .if_else(
-    //                         ValType::I32,
-    //                         |cons| {
-    //                             for arg in args.iter().skip(1) {
-    //                                 cons.local_get(*arg);
-    //                             }
-    //                             cons.call(new_id).return_();
-    //                         },
-    //                         |els| {
-    //                             for arg in args.iter().skip(1) {
-    //                                 els.local_get(*arg);
-    //                             }
-    //                             els.call_indirect(f_ty_id, table);
-    //                         },
-    //                     );
-
-    //                 Ok(())
-    //             })?;
-
-    //             Ok((table, new_id))
-    //         })
-    //         .collect::<eyre::Result<std::collections::HashMap<_, _>>>()?;
-
-    //     self.funcs
-    //         .flat_rewrite(
-    //             |instr, _| {
-    //                 if let Some(call) = instr.call_mut() {
-    //                     if call.func == old_id {
-    //                         call.func = new_id;
-    //                     }
-    //                 }
-    //                 if let Some(call) = instr.call_indirect_mut() {
-    //                     let ty = self.types.get(call.ty);
-    //                     if f_ty_id_params == ty.params() && f_ty_id_results == ty.results() {
-    //                         if let Some(new_id) = using_tables.get(&call.table).cloned() {
-    //                             log::info!(
-    //                                 "Rewriting call_indirect to direct call in function {:?}. Old: {:?}, New: {:?}",
-    //                                 fn_id,
-    //                                 call,
-    //                                 new_id
-    //                             );
-    //                             *instr = Instr::Call(Call { func: new_id });
-    //                         }
-    //                     }
-    //                 }
-    //             },
-    //             fn_id,
-    //         )
-    //         .wrap_err("Failed to renew function")?;
-
-    //     Ok(())
-    // }
-
-    fn renew_call_fn(
+    fn renew_call_fn<A, B>(
         &mut self,
-        old_id: impl Borrow<FunctionId>,
-        new_id: impl Borrow<FunctionId>,
+        old: impl WalrusFID<A>,
+        new: impl WalrusFID<B>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        let old_id = *old_id.borrow();
-        let new_id = *new_id.borrow();
+        let old_id = old.get_fid(self)?;
+        let new_id = new.get_fid(self)?;
 
         for (id, _, _) in self
             .get_using_func(old_id)
@@ -933,16 +817,16 @@ impl WalrusUtilModule for walrus::Module {
         Ok(func.finish(args, &mut self.funcs))
     }
 
-    fn check_function_type(
+    fn check_function_type<A, B>(
         &self,
-        before: impl Borrow<FunctionId>,
-        after: impl Borrow<FunctionId>,
+        before: impl WalrusFID<A>,
+        after: impl WalrusFID<B>,
     ) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        let before = *before.borrow();
-        let after = *after.borrow();
+        let before = before.get_fid(self)?;
+        let after = after.get_fid(self)?;
 
         let a_ty = self.funcs.get(before).ty();
         let a_ty_params = self.types.get(a_ty).params();
@@ -963,11 +847,11 @@ impl WalrusUtilModule for walrus::Module {
 
     // Insert a specific function into every call_indirect within all functions.
     // The type of the received function is fn (table_id, pos);
-    fn debug_call_indirect(&mut self, id: impl Borrow<FunctionId>) -> eyre::Result<()>
+    fn debug_call_indirect<A>(&mut self, id: impl WalrusFID<A>) -> eyre::Result<()>
     where
         Self: Sized,
     {
-        let id = *id.borrow();
+        let id = id.get_fid(self)?;
 
         // check id type
         if self.types.get(self.funcs.get(id).ty()).params() != [ValType::I32, ValType::I32]
@@ -1063,50 +947,10 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn gen_inspect<const N: usize>(
+    fn gen_inspect_with_finalize<const N: usize, A, B>(
         &mut self,
-        inspector: impl Borrow<FunctionId>,
-        params: &[ValType],
-        exclude: &[impl Borrow<FunctionId>],
-        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
-    ) -> eyre::Result<()>
-    where
-        Self: Sized,
-    {
-        self.gen_inspect_with_finalize(
-            Some(inspector),
-            None::<FunctionId>,
-            params,
-            &[],
-            exclude,
-            filter,
-        )
-    }
-
-    fn gen_finalize<const N: usize>(
-        &mut self,
-        finalize: impl Borrow<FunctionId>,
-        results: &[ValType],
-        exclude: &[impl Borrow<FunctionId>],
-        filter: impl FnMut(&ir::Instr) -> Option<[i32; N]>,
-    ) -> eyre::Result<()>
-    where
-        Self: Sized,
-    {
-        self.gen_inspect_with_finalize(
-            None::<FunctionId>,
-            Some(finalize),
-            &[],
-            results,
-            exclude,
-            filter,
-        )
-    }
-
-    fn gen_inspect_with_finalize<const N: usize>(
-        &mut self,
-        inspector: Option<impl Borrow<FunctionId>>,
-        finalize: Option<impl Borrow<FunctionId>>,
+        inspector: Option<impl WalrusFID<A>>,
+        finalize: Option<impl WalrusFID<B>>,
         params: &[ValType],
         results: &[ValType],
         exclude: &[impl Borrow<FunctionId>],
@@ -1115,8 +959,8 @@ impl WalrusUtilModule for walrus::Module {
     where
         Self: Sized,
     {
-        let inspector: Option<FunctionId> = inspector.map(|id| *id.borrow());
-        let finalize: Option<FunctionId> = finalize.map(|id| *id.borrow());
+        let inspector: Option<FunctionId> = inspector.map(|id| id.get_fid(self)).transpose()?;
+        let finalize: Option<FunctionId> = finalize.map(|id| id.get_fid(self)).transpose()?;
 
         // check inspector type
         let check_inspector = |params: &[ValType], name: &str, fid| {
@@ -1444,6 +1288,12 @@ impl<T> ResultUtil<T> for anyhow::Result<T> {
     }
 }
 
+impl<T, I: Iterator> ResultUtil<T> for Result<T, itertools::ExactlyOneError<I>> {
+    fn to_eyre(self) -> eyre::Result<T> {
+        self.map_err(|e| eyre::eyre!(e.to_string()))
+    }
+}
+
 pub trait Normal<T> {
     fn normal(self) -> eyre::Result<T>;
 }
@@ -1463,6 +1313,245 @@ impl Normal<walrus::ir::Value> for walrus::ValType {
 
 pub const CORE_MODULE_ROOT: &str = "wasip1-vfs:host/virtual-file-system-wasip1-core";
 pub const THREADS_MODULE_ROOT: &str = "wasip1-vfs:host/virtual-file-system-wasip1-threads-import";
+
+pub trait WalrusFID<Marker>: Copy {
+    fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId>;
+    fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId>;
+    fn as_str(self) -> String;
+}
+
+pub trait WalrusFIDAssister {
+    fn get_fid_by_fid(&self, fid: FunctionId) -> eyre::Result<FunctionId>;
+    fn find_fid_by_fid(&self, fid: FunctionId) -> Option<FunctionId>;
+    fn get_fid_by_name(&self, name: &str) -> eyre::Result<FunctionId>;
+    fn find_fid_by_name(&self, name: &str) -> Option<FunctionId>;
+    fn get_fid_by_double_name(&self, module: &str, name: &str) -> eyre::Result<FunctionId>;
+    fn find_fid_by_double_name(&self, module: &str, name: &str) -> Option<FunctionId>;
+}
+
+pub struct FunctionIdMarker;
+pub struct StrMarker;
+pub struct DoubleStrMarker;
+
+impl<B: Borrow<FunctionId> + Copy> WalrusFID<FunctionIdMarker> for B {
+    fn as_str(self) -> String {
+        format!("{:?}", self.borrow())
+    }
+
+    fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId> {
+        let fid = *self.borrow();
+        assist
+            .get_fid_by_fid(fid)
+            .wrap_err_with(|| eyre::eyre!("FunctionId {:?} not found in get_fid", fid))
+    }
+
+    fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId> {
+        let fid = *self.borrow();
+        assist.find_fid_by_fid(fid)
+    }
+}
+
+impl<S: AsRef<str> + Copy> WalrusFID<StrMarker> for S {
+    fn as_str(self) -> String {
+        self.as_ref().to_string()
+    }
+
+    fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId> {
+        let name = self.as_ref();
+        assist
+            .get_fid_by_name(name)
+            .wrap_err_with(|| eyre::eyre!("Function name {name} not found in get_fid"))
+    }
+
+    fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId> {
+        let name = self.as_ref();
+        assist.find_fid_by_name(name)
+    }
+}
+
+impl<S1: AsRef<str> + Copy, S2: AsRef<str> + Copy> WalrusFID<DoubleStrMarker> for (S1, S2) {
+    fn as_str(self) -> String {
+        format!("{}.{}", self.0.as_ref(), self.1.as_ref())
+    }
+
+    fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId> {
+        let module = self.0.as_ref();
+        let name = self.1.as_ref();
+        assist
+            .get_fid_by_double_name(module, name)
+            .wrap_err_with(|| eyre::eyre!("Function name {module}.{name} not found in get_fid"))
+    }
+
+    fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId> {
+        let module = self.0.as_ref();
+        let name = self.1.as_ref();
+        assist.find_fid_by_double_name(module, name)
+    }
+}
+
+impl WalrusFIDAssister for walrus::Module {
+    fn get_fid_by_fid(&self, fid: FunctionId) -> eyre::Result<FunctionId> {
+        if self.funcs.iter().any(|f| f.id() == fid) {
+            Ok(fid)
+        } else {
+            eyre::bail!("FunctionId {:?} not found in get_fid_by_fid", fid);
+        }
+    }
+
+    fn find_fid_by_fid(&self, fid: FunctionId) -> Option<FunctionId> {
+        if self.funcs.iter().any(|f| f.id() == fid) {
+            Some(fid)
+        } else {
+            None
+        }
+    }
+
+    fn find_fid_by_name(&self, name: &str) -> Option<FunctionId> {
+        if let Ok(id) = self.exports.get_fid_by_name(name) {
+            Some(id)
+        } else {
+            self.imports.find_fid_by_name(name)
+        }
+    }
+
+    fn get_fid_by_name(&self, name: &str) -> eyre::Result<FunctionId> {
+        if let Ok(id) = self.exports.get_fid_by_name(name) {
+            Ok(id)
+        } else {
+            self.imports.get_fid_by_name(name)
+        }
+    }
+
+    fn get_fid_by_double_name(&self, module: &str, name: &str) -> eyre::Result<FunctionId> {
+        self.imports.get_fid_by_double_name(module, name)
+    }
+
+    fn find_fid_by_double_name(&self, module: &str, name: &str) -> Option<FunctionId> {
+        self.imports.find_fid_by_double_name(module, name)
+    }
+}
+
+impl WalrusFIDAssister for walrus::ModuleImports {
+    fn get_fid_by_fid(&self, fid: FunctionId) -> eyre::Result<FunctionId> {
+        if self.iter().any(|im| match im.kind {
+            walrus::ImportKind::Function(f) if f == fid => true,
+            _ => false,
+        }) {
+            Ok(fid)
+        } else {
+            eyre::bail!("FunctionId {fid:?} not found in get_fid_by_fid");
+        }
+    }
+
+    fn find_fid_by_fid(&self, fid: FunctionId) -> Option<FunctionId> {
+        if self.iter().any(|im| match im.kind {
+            walrus::ImportKind::Function(f) if f == fid => true,
+            _ => false,
+        }) {
+            Some(fid)
+        } else {
+            None
+        }
+    }
+
+    fn find_fid_by_name(&self, name: &str) -> Option<FunctionId> {
+        self.iter()
+            .filter_map(|im| match im.kind {
+                walrus::ImportKind::Function(fid) if im.name == name => Some(fid),
+                _ => None,
+            })
+            .exactly_one()
+            .ok()
+    }
+
+    fn get_fid_by_name(&self, name: &str) -> eyre::Result<FunctionId> {
+        self.iter()
+            .filter_map(|im| match im.kind {
+                walrus::ImportKind::Function(fid) if im.name == name => Some(fid),
+                _ => None,
+            })
+            .exactly_one()
+            .to_eyre()
+            .wrap_err_with(|| {
+                eyre::eyre!("Multiple or no function name {name} found in get_fid_by_name")
+            })
+    }
+
+    fn get_fid_by_double_name(&self, module: &str, name: &str) -> eyre::Result<FunctionId> {
+        self.iter()
+            .filter_map(|im| match im.kind {
+                walrus::ImportKind::Function(fid) if im.name == name && im.module == module => {
+                    Some(fid)
+                }
+                _ => None,
+            })
+            .exactly_one()
+            .to_eyre()
+            .wrap_err_with(|| {
+                eyre::eyre!("Function name {module}.{name} not found in get_fid_by_double_name")
+            })
+    }
+
+    fn find_fid_by_double_name(&self, module: &str, name: &str) -> Option<FunctionId> {
+        self.iter()
+            .filter_map(|im| match im.kind {
+                walrus::ImportKind::Function(fid) if im.name == name && im.module == module => {
+                    Some(fid)
+                }
+                _ => None,
+            })
+            .exactly_one()
+            .ok()
+    }
+}
+
+impl WalrusFIDAssister for ModuleExports {
+    fn get_fid_by_fid(&self, fid: FunctionId) -> eyre::Result<FunctionId> {
+        if self.iter().any(|ex| match ex.item {
+            walrus::ExportItem::Function(f) if f == fid => true,
+            _ => false,
+        }) {
+            Ok(fid)
+        } else {
+            eyre::bail!("FunctionId {:?} not found in get_fid_by_fid", fid);
+        }
+    }
+
+    fn find_fid_by_fid(&self, fid: FunctionId) -> Option<FunctionId> {
+        if self.iter().any(|ex| match ex.item {
+            walrus::ExportItem::Function(f) if f == fid => true,
+            _ => false,
+        }) {
+            Some(fid)
+        } else {
+            None
+        }
+    }
+
+    fn find_fid_by_name(&self, name: &str) -> Option<FunctionId> {
+        self.iter().find_map(|ex| match ex.item {
+            walrus::ExportItem::Function(fid) if ex.name == name => Some(fid),
+            _ => None,
+        })
+    }
+
+    fn get_fid_by_name(&self, name: &str) -> eyre::Result<FunctionId> {
+        self.iter()
+            .find_map(|ex| match ex.item {
+                walrus::ExportItem::Function(fid) if ex.name == name => Some(fid),
+                _ => None,
+            })
+            .wrap_err_with(|| eyre::eyre!("Function name {name} not found in get_fid_by_name"))
+    }
+
+    fn get_fid_by_double_name(&self, _: &str, _: &str) -> eyre::Result<FunctionId> {
+        panic!("Module name is not stored in exports, cannot get by double name");
+    }
+
+    fn find_fid_by_double_name(&self, _: &str, _: &str) -> Option<FunctionId> {
+        panic!("Module name is not stored in exports, cannot find by double name");
+    }
+}
 
 #[cfg(test)]
 mod tests {

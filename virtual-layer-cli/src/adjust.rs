@@ -41,7 +41,7 @@ pub fn adjust_merged_wasm(
                 .is_some()
             {
                 module
-                    .connect_func("wasi_snapshot_preview1", name, &export_name)
+                    .connect_func(("wasi_snapshot_preview1", name), &export_name)
                     .wrap_err_with(|| eyre::eyre!("Failed to connect {name}"))?;
             } else {
                 if module.exports.get_func(&export_name).is_ok() {
@@ -128,9 +128,11 @@ pub fn adjust_merged_wasm(
         if threads {
             module
                 .connect_func_without_remove(
-                    "wasip1-vfs",
-                    format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
-                    format!("__wasip1_vfs_wasi_thread_start_{wasm_name}"),
+                    (
+                        "wasip1-vfs",
+                        &format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
+                    ),
+                    &format!("__wasip1_vfs_wasi_thread_start_{wasm_name}"),
                 )
                 .wrap_err_with(|| {
                     eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_start_{wasm_name}")
@@ -138,9 +140,11 @@ pub fn adjust_merged_wasm(
 
             module
                 .connect_func_without_remove(
-                    "wasi",
-                    format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
-                    format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
+                    (
+                        "wasi",
+                        &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
+                    ),
+                    &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
                 )
                 .wrap_err_with(|| {
                     eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_spawn_{wasm_name}")
