@@ -106,18 +106,33 @@ pub fn adjust_wasm(
 
             let self_thread_spawn_fn_id = "__wasip1_vfs_wasi_thread_spawn_self".get_fid(&module)?;
 
+            let debug_something_id = if debug {
+                Some("debug_something".get_fid(&module.exports)?)
+            } else {
+                None
+            };
+
             use walrus::ValType::I32;
             let real_thread_spawn_fn_id = module
                 .add_func(&[I32], &[I32], |builder, args| {
                     let mut body = builder.func_body();
+                    if let Some(debug_something_id) = debug_something_id {
+                        body.call(debug_something_id);
+                    }
                     body.call(branch_fid)
                         .if_else(
                             I32,
                             |then| {
+                                if let Some(debug_something_id) = debug_something_id {
+                                    then.call(debug_something_id);
+                                }
                                 then.local_get(args[0]) // pass the argument to thread-spawn
                                     .call(real_thread_spawn_fn_id);
                             },
                             |else_| {
+                                if let Some(debug_something_id) = debug_something_id {
+                                    else_.call(debug_something_id);
+                                }
                                 else_
                                     .local_get(args[0]) // pass the argument to thread-spawn
                                     .call(self_thread_spawn_fn_id); // call thread-spawn
@@ -150,6 +165,12 @@ pub fn adjust_wasm(
                     .wrap_err(
                         "Failed to remove __wasip1_vfs_self_wasi_thread_start_anchor export",
                     )?;
+            }
+
+            if debug {
+                module
+                    .exports
+                    .add("real_thread_spawn_fn", real_thread_spawn_fn_id);
             }
 
             // __wasip1_vfs_self_wasi_thread_start

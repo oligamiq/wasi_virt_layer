@@ -87,6 +87,15 @@ mod spawn {
         static IS_ROOT_THREAD: UnsafeCell<bool> = UnsafeCell::new(false);
     }
 
+    #[cfg(feature = "debug")]
+    #[cfg(target_os = "wasi")]
+    #[unsafe(no_mangle)]
+    extern "C" fn root_spawn_debug() {
+        root_spawn(|| {
+            unreachable!();
+        });
+    }
+
     /// Spawn a new thread.
     /// If you call `std::thread::spawn` in ThreadPool, it will be looped.
     /// So, you should use `root_spawn` instead.

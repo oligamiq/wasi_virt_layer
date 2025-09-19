@@ -10,6 +10,7 @@ unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
     transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
 }
 
+#[inline(never)]
 fn num_to_str(
     n: i32,
     writer: impl Fn(&[u8]) -> Result<wasip1::Size, wasip1::Errno>,
@@ -40,6 +41,38 @@ fn num_to_str(
     Ok(())
 }
 
+#[inline(never)]
+fn ptr_to_str(
+    ptr: *const (),
+    writer: impl Fn(&[u8]) -> Result<wasip1::Size, wasip1::Errno>,
+) -> Result<(), wasip1::Errno> {
+    let mut buf = [0u8; 2 + core::mem::size_of::<usize>() * 2];
+    buf[0] = b'0';
+    buf[1] = b'x';
+
+    let mut i = buf.len();
+    let mut num = ptr as usize;
+
+    if num == 0 {
+        i -= 1;
+        buf[i] = b'0';
+    } else {
+        while num > 0 {
+            i -= 1;
+            let digit = (num & 0xf) as u8;
+            buf[i] = if digit < 10 {
+                b'0' + digit
+            } else {
+                b'a' + (digit - 10)
+            };
+            num >>= 4;
+        }
+    }
+
+    writer(&buf[i..])?;
+    Ok(())
+}
+
 mod call_function {
     use super::*;
 
@@ -47,10 +80,12 @@ mod call_function {
         static DEPTH: core::cell::Cell<u32> = core::cell::Cell::new(0);
     }
 
+    #[inline(never)]
     pub(super) fn depth_write_out() {
         DEPTH.with(|d| depth_write_out_inner(d.get()));
     }
 
+    #[inline(never)]
     fn depth_write_out_inner(depth: u32) {
         for _ in 0..depth {
             transporter::Wasip1Transporter::write_to_stderr(b">").unwrap();
@@ -59,6 +94,7 @@ mod call_function {
 
     const DECREASE_ERROR: &[u8] = b"Attempted to decrease depth below 0";
 
+    #[inline(never)]
     fn decrease_with_write_out() {
         DEPTH.with(|d| {
             let current = d.get();
@@ -72,6 +108,7 @@ mod call_function {
         });
     }
 
+    #[inline(never)]
     fn increase_with_write_out() {
         DEPTH.with(|d| {
             let current = d.get();
@@ -109,10 +146,27 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
     transporter::Wasip1Transporter::write_to_stderr(b"debug_atomic_wait: ptr=").unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(format!("{ptr:?}").as_bytes()).unwrap();
+    ptr_to_str(
+        ptr as *const (),
+        transporter::Wasip1Transporter::write_to_stderr,
+    )
+    .unwrap();
     transporter::Wasip1Transporter::write_to_stderr(b", expression=").unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(format!("{expression:?}").as_bytes()).unwrap();
+    ptr_to_str(
+        expression as *const (),
+        transporter::Wasip1Transporter::write_to_stderr,
+    )
+    .unwrap();
     transporter::Wasip1Transporter::write_to_stderr(b", timeout_ns=").unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(timeout_ns.to_string().as_bytes()).unwrap();
+    num_to_str(
+        timeout_ns as i32,
+        transporter::Wasip1Transporter::write_to_stderr,
+    )
+    .unwrap();
     transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+}
+
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_something() {
+    transporter::Wasip1Transporter::write_to_stderr(b"debug_something called\n").unwrap();
 }
