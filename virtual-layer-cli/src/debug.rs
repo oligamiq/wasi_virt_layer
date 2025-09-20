@@ -186,20 +186,25 @@ const EXCLUDE_NAMES: &[&str] = &[
     "debug_call_function_start",
     "debug_call_function_end",
     "debug_blind_print_etc_flag",
+    "debug_loop",
 ];
 
 fn gen_exclude_set(module: &mut walrus::Module) -> eyre::Result<Vec<walrus::FunctionId>> {
     let start = module.start;
 
-    EXCLUDE_NAMES
-        .iter()
-        .filter_map(|name| get_fid(module, name).transpose())
-        .chain(start.iter().copied().map(Ok))
-        .collect::<eyre::Result<Vec<_>>>()?
-        .into_iter()
-        .map(|fid| module.funcs.find_children_with(fid))
-        .flatten_ok()
-        .try_collect::<_, Vec<_>, _>()
+    [
+        "debug_call_function_start",
+        "debug_call_function_end",
+        "debug_loop",
+    ]
+    .iter()
+    .filter_map(|name| get_fid(module, name).transpose())
+    .chain(start.iter().copied().map(Ok))
+    .collect::<eyre::Result<Vec<_>>>()?
+    .into_iter()
+    .map(|fid| module.funcs.find_children_with(fid))
+    .flatten_ok()
+    .try_collect::<_, Vec<_>, _>()
 }
 
 fn get_fid(module: &mut walrus::Module, name: &str) -> eyre::Result<Option<walrus::FunctionId>> {
@@ -247,6 +252,27 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         eyre::Ok(())
     }) {
         e.wrap_err("Failed to enable debug_atomic_wait")?;
+    }
+
+    let name = "debug_loop";
+    if let Some(e) = get_fid(module, name)?.map(|fid| {
+        log::info!("{name} function found. Enabling debug feature.");
+
+        let mut count = 0;
+
+        module
+            .gen_inspect(fid, &[], &[fid], |instr| match instr {
+                walrus::ir::Instr::Loop(_) => Some([{
+                    count += 1;
+                    count
+                }]),
+                _ => None,
+            })
+            .wrap_err("Failed to set debug_loop")?;
+
+        eyre::Ok(())
+    }) {
+        e.wrap_err("Failed to enable debug_loop")?;
     }
 
     Ok(())

@@ -66,6 +66,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     println!("Compiling {}", building_crate.name);
 
+    // todo!();
     let ret = building::build_vfs(
         manifest_path.clone(),
         &parsed_args.package,

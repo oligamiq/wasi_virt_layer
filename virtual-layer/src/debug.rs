@@ -1,23 +1,35 @@
-use crate::transporter;
+pub(crate) fn out(buf: &[u8]) {
+    unsafe {
+        let ciovec_arr = [wasip1::Ciovec {
+            buf: buf.as_ptr() as *const u8,
+            buf_len: buf.len(),
+        }];
+
+        let mut rp0 = core::mem::MaybeUninit::<wasip1::Size>::uninit();
+        wasip1::wasi_snapshot_preview1::fd_write(
+            wasip1::FD_STDERR as i32,
+            ciovec_arr.as_ptr() as i32,
+            1,
+            rp0.as_mut_ptr() as i32,
+        );
+    }
+}
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
     call_function::depth_write_out();
-    transporter::Wasip1Transporter::write_to_stderr(b"debug_call_indirect: tid=").unwrap();
-    num_to_str(tid, transporter::Wasip1Transporter::write_to_stderr).unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(b", idx=").unwrap();
-    num_to_str(idx, transporter::Wasip1Transporter::write_to_stderr).unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+    out(b"debug_call_indirect: tid=");
+    num_to_str(tid, out);
+    out(b", idx=");
+    num_to_str(idx, out);
+    out(b"\n");
 }
 
 #[inline(never)]
-fn num_to_str(
-    n: i32,
-    writer: impl Fn(&[u8]) -> Result<wasip1::Size, wasip1::Errno>,
-) -> Result<(), wasip1::Errno> {
+fn num_to_str(n: i32, writer: impl Fn(&[u8])) {
     if n == 0 {
-        writer(&[b'0'])?;
-        return Ok(());
+        writer(&[b'0']);
+        return;
     }
 
     let mut buf = [0u8; 11];
@@ -37,15 +49,11 @@ fn num_to_str(
         buf[i] = b'-';
     }
 
-    writer(&buf[i..])?;
-    Ok(())
+    writer(&buf[i..]);
 }
 
 #[inline(never)]
-fn ptr_to_str(
-    ptr: *const (),
-    writer: impl Fn(&[u8]) -> Result<wasip1::Size, wasip1::Errno>,
-) -> Result<(), wasip1::Errno> {
+fn ptr_to_str(ptr: *const (), writer: impl Fn(&[u8])) {
     let mut buf = [0u8; 2 + core::mem::size_of::<usize>() * 2];
     buf[0] = b'0';
     buf[1] = b'x';
@@ -69,8 +77,7 @@ fn ptr_to_str(
         }
     }
 
-    writer(&buf[i..])?;
-    Ok(())
+    writer(&buf[i..]);
 }
 
 mod call_function {
@@ -88,7 +95,7 @@ mod call_function {
     #[inline(never)]
     fn depth_write_out_inner(depth: u32) {
         for _ in 0..depth {
-            transporter::Wasip1Transporter::write_to_stderr(b">").unwrap();
+            out(b">");
         }
     }
 
@@ -103,7 +110,7 @@ mod call_function {
                 d.set(current);
                 depth_write_out_inner(current);
             } else {
-                transporter::Wasip1Transporter::write_to_stderr(DECREASE_ERROR).unwrap();
+                out(DECREASE_ERROR);
             }
         });
     }
@@ -120,17 +127,17 @@ mod call_function {
     #[unsafe(no_mangle)]
     unsafe extern "C" fn debug_call_function_start(idx: i32) {
         increase_with_write_out();
-        transporter::Wasip1Transporter::write_to_stderr(b"debug_call_function: idx=").unwrap();
-        num_to_str(idx, transporter::Wasip1Transporter::write_to_stderr).unwrap();
-        transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+        out(b"debug_call_function: idx=");
+        num_to_str(idx, out);
+        out(b"\n");
     }
 
     #[unsafe(no_mangle)]
     unsafe extern "C" fn debug_call_function_end(idx: i32) {
         decrease_with_write_out();
-        transporter::Wasip1Transporter::write_to_stderr(b"debug_call_function_end: idx=").unwrap();
-        num_to_str(idx, transporter::Wasip1Transporter::write_to_stderr).unwrap();
-        transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+        out(b"debug_call_function_end: idx=");
+        num_to_str(idx, out);
+        out(b"\n");
     }
 }
 
@@ -140,33 +147,29 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
     eprintln!("This is an error message from debug_blind_print_etc_flag");
 
     let str = format!("This is a formatted message: {}, {}", 42, "hello");
-    transporter::Wasip1Transporter::write_to_stderr(str.as_bytes()).unwrap();
+    out(str.as_bytes());
 }
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
-    transporter::Wasip1Transporter::write_to_stderr(b"debug_atomic_wait: ptr=").unwrap();
-    ptr_to_str(
-        ptr as *const (),
-        transporter::Wasip1Transporter::write_to_stderr,
-    )
-    .unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(b", expression=").unwrap();
-    ptr_to_str(
-        expression as *const (),
-        transporter::Wasip1Transporter::write_to_stderr,
-    )
-    .unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(b", timeout_ns=").unwrap();
-    num_to_str(
-        timeout_ns as i32,
-        transporter::Wasip1Transporter::write_to_stderr,
-    )
-    .unwrap();
-    transporter::Wasip1Transporter::write_to_stderr(b"\n").unwrap();
+    out(b"debug_atomic_wait: ptr=");
+    ptr_to_str(ptr as *const (), out);
+    out(b", expression=");
+    ptr_to_str(expression as *const (), out);
+    out(b", timeout_ns=");
+    num_to_str(timeout_ns as i32, out);
+    out(b"\n");
 }
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_something() {
-    transporter::Wasip1Transporter::write_to_stderr(b"debug_something called\n").unwrap();
+    out(b"debug_something called\n");
+}
+
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_loop(idx: i32) {
+    call_function::depth_write_out();
+    out(b"debug_loop called: idx=");
+    num_to_str(idx, out);
+    out(b"\n");
 }

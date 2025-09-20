@@ -1,0 +1,44 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug executable 'main'",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=main",
+                    "--package=ahc-template"
+                ],
+                "filter": {
+                    "name": "main",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "name": "Deno",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/dist/test_run.ts",
+            "args": [],
+            "runtimeExecutable": "deno",
+            "runtimeArgs": [
+                "run",
+                // "--inspect-brk", // default additional args
+                // "--allow-read",
+                // "--allow-env",
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
+        }
+    ]
+}

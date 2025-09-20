@@ -58,12 +58,12 @@ pub fn build_vfs(
                 } else {
                     "wasm32-wasip1"
                 },
-                "--release",
                 "--message-format=json-render-diagnostics",
                 "--color",
                 "always",
             ];
-            // todo!() issue
+            args.push("--release");
+            // todo!() https://github.com/rust-lang/rust/issues/146721
             if threads {
                 args.insert(0, "+nightly");
             }
