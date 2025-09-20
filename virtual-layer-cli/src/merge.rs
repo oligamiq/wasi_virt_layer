@@ -1,9 +1,8 @@
 use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
-use eyre::Context as _;
 
-use crate::util::{CaminoUtilModule, ResultUtil as _, WalrusUtilModule};
+use crate::util::{CaminoUtilModule, WalrusUtilModule};
 
 pub fn merge(
     vfs: &Utf8PathBuf,

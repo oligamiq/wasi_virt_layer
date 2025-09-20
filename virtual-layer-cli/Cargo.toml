@@ -19,19 +19,13 @@ log = "0.4.27"
 regex = "1.11.1"
 serde_json = "1.0.142"
 walrus = "0.23.3"
-wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
+# wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
 wit-component = "0.236.1"
 walrus-simple-interpreter = "0.2.3"
 strum = { version = "0.27.2", features = ["derive"] }
 toml_edit = "0.23.3"
 itertools = "0.14.0"
 cfg-if = "1.0.3"
-gimli = "0.32.3"
-object = { version = "0.37.1", default-features = false, features = [
-    "wasm",
-    "write_std",
-    "read_core",
-] }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"

@@ -24,9 +24,5 @@ documentation = ""
 homepage = ""
 readme = "README.md"
 
-[patch.crates-io]
-# walrus = { git = "https://github.com/oligamiq/walrus" }
-walrus = { path = "../walrus" }
-
 [workspace.dependencies]
 wasip1-virtual-layer = { path = "virtual-layer", default-features = false }

@@ -16,7 +16,6 @@ pub mod common;
 pub mod debug;
 pub mod director;
 pub mod down_color;
-pub mod dwarf;
 pub mod instrs;
 pub mod is_valid;
 pub mod merge;
@@ -89,14 +88,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     toml_restores.restore()?;
 
-    // println!("parsing DWARF...");
-    // dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
-
-    // println!("Optimizing VFS Wasm...");
-    // let ret =
-    //     building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
-
-    // dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
+    println!("Optimizing VFS Wasm...");
+    let ret =
+        building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
     let print_debug = debug::has_debug(&walrus::Module::load(&ret, dwarf)?);
 
@@ -149,8 +143,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     println!("Merging Wasm...");
 
-    dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
-
     let output = format!("{out_dir}/merged.wasm");
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
@@ -190,8 +182,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     } else {
         ret
     };
-
-    dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret, &wasm_names)
@@ -255,8 +245,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     tmp_files.push(core_wasm.to_string());
 
-    dwarf::parse_dwarf(&core_wasm).wrap_err("Failed to parse DWARF")?;
-
     let (core_wasm_opt, mem_size) = if threads || print_debug {
         let (core_wasm_opt_adjusted_opt, mem_size) = if threads {
             println!("Adjusting core Wasm...");
@@ -302,7 +290,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
             (core_wasm_opt_adjusted_opt_debug, mem_size)
         } else {
-            (core_wasm_opt_adjusted_opt, None)
+            (core_wasm_opt_adjusted_opt, mem_size)
         }
     } else {
         (core_wasm_opt, Some(Vec::new()))
@@ -314,8 +302,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     }
 
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
-
-    dwarf::parse_dwarf(&core_wasm).wrap_err("Failed to parse DWARF")?;
 
     std::fs::OpenOptions::new()
         .write(true)

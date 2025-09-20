@@ -53,6 +53,8 @@ pub struct Args {
     pub threads: Option<bool>,
 
     /// Enable dwarf
+    /// This is broken currently.
+    /// See https://github.com/wasm-bindgen/walrus/issues/258
     #[arg(long)]
     pub dwarf: Option<bool>,
 }
@@ -67,6 +69,10 @@ impl Args {
         let parsed = Args::parse_from(args);
         if parsed.wasm.is_empty() {
             unimplemented!("target to only self file is not supported yet");
+        }
+
+        if parsed.dwarf.unwrap_or(false) {
+            log::error!("Warning: dwarf support is experimental and may not work as expected.");
         }
 
         parsed

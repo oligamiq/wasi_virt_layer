@@ -10,7 +10,10 @@ struct Starter;
 
 impl Guest for Starter {
     fn init() -> () {
-        test_threads::_main();
+        // test_threads::_main();
+        std::thread::spawn(|| println!("Hello from a thread spawned in the `init` function!"))
+            .join()
+            .unwrap();
     }
 
     fn start() {

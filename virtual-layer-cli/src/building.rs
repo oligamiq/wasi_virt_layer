@@ -352,6 +352,10 @@ pub fn optimize_wasm(
     require_update: bool,
     dwarf: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
+    // if dwarf {
+    //     return Ok(wasm_path.clone());
+    // }
+
     let mut before_path = wasm_path.clone();
 
     let mut first = true;
@@ -381,10 +385,8 @@ pub fn optimize_wasm(
 
         cmd.arg(wasm_path.as_str());
 
-        cmd
-            .args(["--output", output_path.as_str()]);
-        let command = 
-                cmd
+        cmd.args(["--output", output_path.as_str()]);
+        let command = cmd
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
