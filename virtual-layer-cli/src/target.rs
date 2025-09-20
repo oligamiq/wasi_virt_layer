@@ -13,14 +13,13 @@ pub fn adjust_target_wasm(
     path: &Utf8PathBuf,
     memory_hint: Option<usize>,
     threads: bool,
+    dwarf: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let name = path
         .get_file_main_name()
         .unwrap_or_else(|| panic!("Failed to get file name from {path}"));
 
-    let mut module = walrus::Module::from_file(path)
-        .to_eyre()
-        .wrap_err("Failed to load module")?;
+    let mut module = walrus::Module::load(path, dwarf)?;
 
     if threads {
         threads::remove_unused_threads_function(&mut module)

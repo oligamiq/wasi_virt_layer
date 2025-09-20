@@ -48,35 +48,37 @@ pub fn build_vfs(
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut ret = None;
 
-    let mut command = std::process::Command::new("cargo")
-        .args({
-            let mut args = vec![
-                "build",
-                "--target",
-                if threads {
-                    "wasm32-wasip1-threads"
-                } else {
-                    "wasm32-wasip1"
-                },
-                "--message-format=json-render-diagnostics",
-                "--color",
-                "always",
-            ];
-            args.push("--release");
-            // todo!() https://github.com/rust-lang/rust/issues/146721
+    let mut command_base = std::process::Command::new("cargo");
+    let command = command_base.args({
+        let mut args = vec![
+            "build",
+            "--target",
             if threads {
-                args.insert(0, "+nightly");
-            }
-            if let Some(package_name) = package {
-                args.push("--package");
-                args.push(package_name);
-            }
-            if let Some(ref manifest_path) = manifest_path {
-                args.push("--manifest-path");
-                args.push(&manifest_path);
-            }
-            args
-        })
+                "wasm32-wasip1-threads"
+            } else {
+                "wasm32-wasip1"
+            },
+            "--message-format=json-render-diagnostics",
+            "--color",
+            "always",
+        ];
+        args.push("--release");
+        // todo!() https://github.com/rust-lang/rust/issues/146721
+        if threads {
+            args.insert(0, "+nightly");
+        }
+        if let Some(package_name) = package {
+            args.push("--package");
+            args.push(package_name);
+        }
+        if let Some(ref manifest_path) = manifest_path {
+            args.push("--manifest-path");
+            args.push(&manifest_path);
+        }
+        args
+    });
+
+    let mut command = command
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -348,6 +350,7 @@ pub fn optimize_wasm(
     wasm_path: &camino::Utf8PathBuf,
     add_args: &[&str],
     require_update: bool,
+    dwarf: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut before_path = wasm_path.clone();
 
@@ -362,6 +365,10 @@ pub fn optimize_wasm(
 
         let mut cmd = std::process::Command::new("wasm-opt");
 
+        if dwarf {
+            cmd.arg("--debuginfo");
+        }
+
         const OPTS: &[&str] = &["-O", "-O0", "-O1", "-O2", "-O3", "-O4", "-Oz", "-Os"];
 
         cmd.args(add_args.iter().filter(|&&arg| !OPTS.contains(&arg)));
@@ -374,8 +381,10 @@ pub fn optimize_wasm(
 
         cmd.arg(wasm_path.as_str());
 
-        let command = cmd
-            .args(["--output", output_path.as_str()])
+        cmd
+            .args(["--output", output_path.as_str()]);
+        let command = 
+                cmd
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
             .spawn()
@@ -386,8 +395,9 @@ pub fn optimize_wasm(
             .wrap_err("Failed to wait for wasm-opt process")?;
 
         if !output.status.success() {
+            let out = String::from_utf8_lossy(&output.stdout);
             let err = String::from_utf8_lossy(&output.stderr);
-            eyre::bail!("wasm-opt failed: {err}");
+            eyre::bail!("wasm-opt failed: {err}\nstdout: {out}");
         }
 
         let before_size = std::fs::metadata(&before_path)

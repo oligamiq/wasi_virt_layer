@@ -303,6 +303,10 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         val: i32,
     ) -> eyre::Result<impl FnMut(&mut walrus::InstrSeqBuilder) -> eyre::Result<()> + 'static>;
+
+    fn load(path: impl AsRef<Path>, dwarf: bool) -> eyre::Result<Self>
+    where
+        Self: Sized;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -1130,6 +1134,20 @@ impl WalrusUtilModule for walrus::Module {
                 Ok(())
             },
         )
+    }
+
+    fn load(path: impl AsRef<Path>, dwarf: bool) -> eyre::Result<Self>
+    where
+        Self: Sized,
+    {
+        let mut config = walrus::ModuleConfig::new();
+        config.generate_dwarf(dwarf);
+        let module = walrus::Module::from_file_with_config(path.as_ref(), &config)
+            .to_eyre()
+            .wrap_err_with(|| {
+                eyre::eyre!("Failed to load Wasm file: {}", path.as_ref().display())
+            })?;
+        Ok(module)
     }
 }
 

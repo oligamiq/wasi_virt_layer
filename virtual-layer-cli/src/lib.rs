@@ -5,8 +5,8 @@ use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
 use crate::{
-    rewrite::{TargetMemoryType, adjust_target_feature, get_target_feature},
-    util::ResultUtil as _,
+    rewrite::{TargetMemoryType, TomlRestorers, adjust_target_feature, get_target_feature},
+    util::{ResultUtil as _, WalrusUtilModule},
 };
 
 pub mod adjust;
@@ -16,6 +16,7 @@ pub mod common;
 pub mod debug;
 pub mod director;
 pub mod down_color;
+pub mod dwarf;
 pub mod instrs;
 pub mod is_valid;
 pub mod merge;
@@ -32,6 +33,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     color_eyre::install()?;
 
     let mut tmp_files = Vec::new();
+    let mut toml_restores = TomlRestorers::new();
 
     let parsed_args = args::Args::new(args);
 
@@ -48,17 +50,27 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package)?;
 
     if let Some(target_memory_type) = parsed_args.target_memory_type {
-        adjust_target_feature(
+        toml_restores.push(adjust_target_feature(
             &cargo_metadata,
             &building_crate,
             target_memory_type == TargetMemoryType::Multi,
             "multi_memory",
-        )?;
+        )?);
     }
 
     if let Some(threads) = parsed_args.threads {
-        adjust_target_feature(&cargo_metadata, &building_crate, threads, "threads")?;
+        toml_restores.push(adjust_target_feature(
+            &cargo_metadata,
+            &building_crate,
+            threads,
+            "threads",
+        )?);
     }
+
+    if let Some(dwarf) = parsed_args.dwarf {
+        toml_restores.push(rewrite::set_dwarf(&cargo_metadata, &building_crate, dwarf)?);
+    }
+    let dwarf = parsed_args.dwarf.unwrap_or(false);
 
     let threads = parsed_args
         .threads
@@ -75,21 +87,27 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     )
     .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {}", building_crate.name))?;
 
-    println!("Optimizing VFS Wasm...");
-    let ret = building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize Wasm")?;
+    toml_restores.restore()?;
 
-    let debug = debug::has_debug(
-        &walrus::Module::from_file(&ret)
-            .to_eyre()
-            .wrap_err("Failed to load module")?,
-    );
+    // println!("parsing DWARF...");
+    // dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
+
+    // println!("Optimizing VFS Wasm...");
+    // let ret =
+    //     building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
+
+    // dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
+
+    let print_debug = debug::has_debug(&walrus::Module::load(&ret, dwarf)?);
 
     println!("Adjusting VFS Wasm...");
     let (ret, target_memory_type) =
-        adjust_wasm(&ret, &parsed_args.wasm, threads, debug).wrap_err("Failed to adjust Wasm")?;
+        adjust_wasm(&ret, &parsed_args.wasm, threads, print_debug, dwarf)
+            .wrap_err("Failed to adjust Wasm")?;
 
     println!("Optimizing VFS Wasm...");
-    let ret = building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize Wasm")?;
+    let ret =
+        building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
     println!("Generated VFS: {ret}");
 
@@ -118,11 +136,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             let name = old_wasm.get_file_main_name().unwrap();
             println!("Optimizing target Wasm [{name}]...");
             tmp_files.push(wasm.to_string());
-            let wasm = building::optimize_wasm(&wasm.into(), &[], false)
+            let wasm = building::optimize_wasm(&wasm.into(), &[], false, dwarf)
                 .wrap_err("Failed to optimize Wasm")?;
             tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
-            let wasm = target::adjust_target_wasm(&wasm, memory_hint, threads)
+            let wasm = target::adjust_target_wasm(&wasm, memory_hint, threads, dwarf)
                 .wrap_err("Failed to adjust Wasm")?;
             tmp_files.push(wasm.to_string());
             Ok((wasm, name))
@@ -131,26 +149,28 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     println!("Merging Wasm...");
 
+    dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
+
     let output = format!("{out_dir}/merged.wasm");
     if std::fs::metadata(&output).is_ok() {
         std::fs::remove_file(&output).expect("Failed to remove existing file");
     }
-    merge::merge(&ret, &wasm_paths, &output).wrap_err("Failed to merge Wasm")?;
+    merge::merge(&ret, &wasm_paths, &output, dwarf).wrap_err("Failed to merge Wasm")?;
     tmp_files.push(output.clone());
 
     println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&output.clone().into(), &[], false)
+    let ret = building::optimize_wasm(&output.clone().into(), &[], false, dwarf)
         .wrap_err("Failed to optimize merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads, debug)
+    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads, print_debug, dwarf)
         .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
         println!("Generating single memory Merged Wasm...");
-        let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true)?;
+        let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true, dwarf)?;
         tmp_files.push(ret.to_string());
         ret
     } else {
@@ -158,18 +178,20 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     };
 
     println!("Optimizing Merged Wasm...");
-    let ret =
-        building::optimize_wasm(&ret, &[], false).wrap_err("Failed to optimize merged Wasm")?;
+    let ret = building::optimize_wasm(&ret, &[], false, dwarf)
+        .wrap_err("Failed to optimize merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
         println!("Directing process {target_memory_type} memory Merged Wasm...");
-        let ret = director::director(&ret, &wasm_paths)?;
+        let ret = director::director(&ret, &wasm_paths, dwarf)?;
         tmp_files.push(ret.to_string());
         ret
     } else {
         ret
     };
+
+    dwarf::parse_dwarf(&ret).wrap_err("Failed to parse DWARF")?;
 
     println!("Translating Wasm to Component...");
     let component = building::wasm_to_component(&ret, &wasm_names)
@@ -228,31 +250,37 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .ok_or_else(|| eyre::eyre!("Failed to find core wasm name"))?;
 
     println!("Optimizing core Wasm...");
-    let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false)
+    let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false, dwarf)
         .wrap_err("Failed to optimize core Wasm")?;
 
     tmp_files.push(core_wasm.to_string());
 
-    let (core_wasm_opt, mem_size) = if threads || debug {
-        println!("Adjusting core Wasm...");
-        let (core_wasm_opt_adjusted, mem_size) = threads::adjust_core_wasm(&core_wasm_opt, threads)
-            .wrap_err("Failed to adjust core Wasm")?;
-        println!("Optimizing core Wasm...");
-        let core_wasm_opt_adjusted_opt =
-            building::optimize_wasm(&core_wasm_opt_adjusted, &[], false)
-                .wrap_err("Failed to optimize core Wasm")?;
-        tmp_files.push(core_wasm_opt.to_string());
-        tmp_files.push(core_wasm_opt_adjusted.to_string());
+    dwarf::parse_dwarf(&core_wasm).wrap_err("Failed to parse DWARF")?;
 
-        if debug {
+    let (core_wasm_opt, mem_size) = if threads || print_debug {
+        let (core_wasm_opt_adjusted_opt, mem_size) = if threads {
+            println!("Adjusting core Wasm...");
+            let (core_wasm_opt_adjusted, mem_size) =
+                threads::adjust_core_wasm(&core_wasm_opt, threads, dwarf)
+                    .wrap_err("Failed to adjust core Wasm")?;
+            println!("Optimizing core Wasm...");
+            let core_wasm_opt_adjusted_opt =
+                building::optimize_wasm(&core_wasm_opt_adjusted, &[], false, dwarf)
+                    .wrap_err("Failed to optimize core Wasm")?;
+            tmp_files.push(core_wasm_opt.to_string());
+            tmp_files.push(core_wasm_opt_adjusted.to_string());
+            (core_wasm_opt_adjusted_opt, mem_size)
+        } else {
+            (core_wasm_opt, None)
+        };
+
+        if print_debug {
             let core_wasm_opt_adjusted_opt_debug =
                 core_wasm_opt_adjusted_opt.with_extension("debug.wasm");
 
             tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
 
-            let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt)
-                .to_eyre()
-                .wrap_err("Failed to load module")?;
+            let mut module = walrus::Module::load(&core_wasm_opt_adjusted_opt, dwarf)?;
 
             debug::generate_debug_call_function(&mut module)
                 .wrap_err("Failed to generate debug_call_function")?;
@@ -262,9 +290,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .to_eyre()
                 .wrap_err("Failed to write temporary wasm file")?;
 
-            let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt_debug)
-                .to_eyre()
-                .wrap_err("Failed to load module")?;
+            let mut module = walrus::Module::load(&core_wasm_opt_adjusted_opt_debug, dwarf)?;
 
             debug::generate_debug_call_function_last(&mut module)
                 .wrap_err("Failed to generate debug_blind_print_etc_flag")?;
@@ -274,18 +300,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .to_eyre()
                 .wrap_err("Failed to write temporary wasm file")?;
 
-            // let mut module = walrus::Module::from_file(&core_wasm_opt_adjusted_opt_debug)
-            //     .to_eyre()
-            //     .wrap_err("Failed to load module")?;
-
-            // assert!(
-            //     !debug::readjust_debug_call_function(&mut module)?,
-            //     "debug_call_function was why readjusted"
-            // );
-
             (core_wasm_opt_adjusted_opt_debug, mem_size)
         } else {
-            (core_wasm_opt_adjusted_opt, mem_size)
+            (core_wasm_opt_adjusted_opt, None)
         }
     } else {
         (core_wasm_opt, Some(Vec::new()))
@@ -297,6 +314,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     }
 
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
+
+    dwarf::parse_dwarf(&core_wasm).wrap_err("Failed to parse DWARF")?;
 
     std::fs::OpenOptions::new()
         .write(true)

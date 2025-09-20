@@ -2,12 +2,12 @@
 
 // #[cfg(target_os = "wasi")]
 // #[cfg(feature = "std")]
-// #[cfg(feature = "debug")]
+// #[cfg(feature = "unstable_print_debug")]
 // use core::sync::atomic;
 
 mod __self;
 mod binary_map;
-#[cfg(all(feature = "debug", target_os = "wasi"))]
+#[cfg(all(feature = "unstable_print_debug", target_os = "wasi"))]
 mod debug;
 pub mod memory;
 mod transporter;

@@ -3,7 +3,7 @@ use std::fs;
 use camino::Utf8PathBuf;
 use eyre::Context;
 
-use crate::util::ResultUtil;
+use crate::util::{ResultUtil, WalrusUtilModule as _};
 
 pub fn remove_unused_threads_function(wasm: &mut walrus::Module) -> eyre::Result<()> {
     // if wasm doesn't have wasi.thread-spawn on import,
@@ -54,10 +54,9 @@ pub fn remove_unused_threads_function(wasm: &mut walrus::Module) -> eyre::Result
 pub fn adjust_core_wasm(
     path: &Utf8PathBuf,
     threads: bool,
+    dwarf: bool,
 ) -> eyre::Result<(Utf8PathBuf, Option<Vec<(u64, u64)>>)> {
-    let mut module = walrus::Module::from_file(path)
-        .to_eyre()
-        .wrap_err("Failed to load module")?;
+    let mut module = walrus::Module::load(path, dwarf)?;
 
     let mem_size = if threads {
         module.memories.iter_mut().for_each(|mem| {

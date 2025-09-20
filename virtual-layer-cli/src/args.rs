@@ -51,6 +51,10 @@ pub struct Args {
     /// This will change the crate feature flags to enable multi-threading.
     #[arg(long)]
     pub threads: Option<bool>,
+
+    /// Enable dwarf
+    #[arg(long)]
+    pub dwarf: Option<bool>,
 }
 
 impl Args {

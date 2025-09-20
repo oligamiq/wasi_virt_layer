@@ -26,6 +26,12 @@ strum = { version = "0.27.2", features = ["derive"] }
 toml_edit = "0.23.3"
 itertools = "0.14.0"
 cfg-if = "1.0.3"
+gimli = "0.32.3"
+object = { version = "0.37.1", default-features = false, features = [
+    "wasm",
+    "write_std",
+    "read_core",
+] }
 
 [dev-dependencies]
 assert_cmd = "2.0.17"

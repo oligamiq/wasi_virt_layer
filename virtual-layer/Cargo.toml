@@ -9,7 +9,8 @@ alloc = []
 multi_memory = ["alloc"]
 std = ["alloc", "wasip1/std"]
 threads = ["alloc", "dep:parking_lot", "dep:dashmap"]
-debug = ["std", "dep:backtrace"]
+# this is unstable
+unstable_print_debug = ["std", "dep:backtrace"]
 
 [dependencies]
 wit-bindgen = { version = "0.44.0", default-features = false }
@@ -32,6 +33,3 @@ backtrace = { version = "0.3.75", optional = true, default-features = false, fea
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 wasip1 = { version = "0.11.1", default-features = false, package = "wasi" }
-
-[profile.release]
-debug = true

@@ -14,10 +14,9 @@ pub fn adjust_merged_wasm(
     wasm_paths: &[impl AsRef<Path>],
     threads: bool,
     debug: bool,
+    dwarf: bool,
 ) -> eyre::Result<Utf8PathBuf> {
-    let mut module = walrus::Module::from_file(path)
-        .to_eyre()
-        .wrap_err("Failed to load module")?;
+    let mut module = walrus::Module::load(path, dwarf)?;
 
     let vfs_memory_id = module
         .get_target_memory_id("vfs")

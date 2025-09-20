@@ -87,7 +87,7 @@ mod spawn {
         static IS_ROOT_THREAD: UnsafeCell<bool> = UnsafeCell::new(false);
     }
 
-    #[cfg(feature = "debug")]
+    #[cfg(feature = "unstable_print_debug")]
     #[cfg(target_os = "wasi")]
     #[unsafe(no_mangle)]
     extern "C" fn root_spawn_debug() {
@@ -96,7 +96,7 @@ mod spawn {
         });
     }
 
-    #[cfg(feature = "debug")]
+    #[cfg(feature = "unstable_print_debug")]
     #[cfg(target_os = "wasi")]
     #[unsafe(no_mangle)]
     extern "C" fn root_spawn_debug2() {
@@ -132,9 +132,7 @@ mod spawn {
         let b = b.stack_size(1024 * 1024 * 2); // 2MB stack
         let b = b.name("wasip1-root-thread".to_string());
 
-        let fmt = format!("Root thread builder: {b:?}");
-        crate::debug::out(fmt.as_bytes());
-        crate::debug::out(b"\n");
+        println!("Thread builder created: {b:?}");
 
         // // let s = {
         // let thread_id = {

@@ -3,12 +3,14 @@ use std::{fs, path::Path};
 use camino::Utf8PathBuf;
 use eyre::{Context as _, ContextCompat};
 
-use crate::util::{CaminoUtilModule as _, ResultUtil as _};
+use crate::util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule};
 
-pub fn director(path: &Utf8PathBuf, wasm: &[impl AsRef<Path>]) -> eyre::Result<Utf8PathBuf> {
-    let mut module = walrus::Module::from_file(path)
-        .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to load module"))?;
+pub fn director(
+    path: &Utf8PathBuf,
+    wasm: &[impl AsRef<Path>],
+    dwarf: bool,
+) -> eyre::Result<Utf8PathBuf> {
+    let mut module = walrus::Module::load(path, dwarf)?;
 
     let wasm = wasm.iter().map(|p| {
         camino::Utf8PathBuf::from_path_buf(p.as_ref().to_owned())
