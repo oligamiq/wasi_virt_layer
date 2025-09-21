@@ -110,62 +110,6 @@ mod spawn {
 
         println!("Thread builder created: {b:?}");
 
-        // // let s = {
-        // let thread_id = {
-        //     use core::sync::atomic::{AtomicU64, Ordering};
-        //     static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-        //     #[cold]
-        //     fn exhausted() -> ! {
-        //         panic!("failed to generate unique thread ID: bitspace exhausted")
-        //     }
-
-        //     let mut last = COUNTER.load(Ordering::Relaxed);
-        //     loop {
-        //         let Some(id) = last.checked_add(1) else {
-        //             exhausted();
-        //         };
-
-        //         match COUNTER.compare_exchange_weak(last, id, Ordering::Relaxed, Ordering::Relaxed)
-        //         {
-        //             Ok(_) => break core::num::NonZero::new(id).unwrap(),
-        //             Err(id) => last = id,
-        //         }
-        //     }
-        // };
-
-        // println!("Generated unique thread ID: {thread_id}");
-
-        // let thread = {
-        //     use alloc::sync::Arc;
-
-        //     #[derive(Debug)]
-        //     struct Inner {
-        //         name: Option<CString>,
-        //         thread_id: core::num::NonZero<u64>,
-        //     }
-
-        //     let name = Some("wasip1-root-thread").map(|s| CString::new(s).unwrap());
-
-        //     // We have to use `unsafe` here to construct the `Parker` in-place,
-        //     // which is required for the UNIX implementation.
-        //     //
-        //     // SAFETY: We pin the Arc immediately after creation, so its address never
-        //     // changes.
-        //     let inner = unsafe {
-        //         let inner = Inner { name, thread_id };
-        //         core::pin::Pin::new_unchecked(Arc::new(inner))
-        //     };
-
-        //     inner
-        // };
-        // println!("Inner thread data created: {thread:?}");
-
-        // let my_thread = std::thread::Thread::new(id, name);
-
-        // let hooks = spawnhook::run_spawn_hooks(&my_thread);
-        // };
-
         let s = unsafe { b.spawn_unchecked(f) };
 
         println!("Root thread spawned");
@@ -206,6 +150,7 @@ impl VirtualThread for DirectThreadPool {
         root_spawn(move || {
             println!("In new thread with ID: {}", thread_id);
             accessor.call_wasi_thread_start(runner, NonZero::new(thread_id));
+            println!("Thread with ID {} finished execution", thread_id);
         });
 
         println!("Root thread spawned");
@@ -241,6 +186,8 @@ macro_rules! export_thread {
                                         },
                                         ptr.inner() as i32,
                                     ) }
+
+                                    println!("Called wasi_thread_start for {}", self.as_name());
                                 }
                             )*
                         }
@@ -279,9 +226,8 @@ macro_rules! export_thread {
                     ptr: i32,
                 ) {
                     unsafe {
-
+                        [<__wasip1_vfs_ $wasm _wasi_thread_start>](thread_id, ptr);
                     }
-                    [<__wasip1_vfs_ $wasm _wasi_thread_start>](thread_id, ptr);
                 }
 
                 #[cfg(target_os = "wasi")]
@@ -297,7 +243,7 @@ macro_rules! export_thread {
                     #[allow(unused_mut)]
                     let mut pool = $pool;
 
-                    println!("data_ptr converted: {data_ptr:?}");
+                    println!("data_ptr: {data_ptr:?}");
 
                     match pool.new_thread(ACCESSOR, data_ptr) {
                         Some(thread_id) => {
