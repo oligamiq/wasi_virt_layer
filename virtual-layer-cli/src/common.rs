@@ -1,7 +1,7 @@
 use eyre::Context as _;
 use walrus::*;
 
-use crate::util::{ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule};
+use crate::util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs, WalrusUtilModule};
 
 #[derive(
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
@@ -491,6 +491,10 @@ impl Wasip1Op {
         vfs_mem: walrus::MemoryId,
         is_reset_contain: Option<&Wasip1Op>,
     ) -> eyre::Result<()> {
+        let initializer = "__wasip1_vfs_thread_initializer"
+            .get_fid(&module.exports)
+            .ok();
+
         module
             .replace_imported_func(fid, |(builder, arg_locals)| {
                 let mut func_body = builder.func_body();
@@ -513,6 +517,9 @@ impl Wasip1Op {
                     func_body.local_get(*local);
                 }
                 func_body.call(start_func_id);
+                if let Some(initializer) = initializer {
+                    func_body.call(initializer);
+                }
                 func_body.return_();
             })
             .to_eyre()

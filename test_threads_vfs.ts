@@ -101,12 +101,12 @@ wasi.start({
         memory: inst.exports.memory as WebAssembly.Memory,
         _start: () => {
             // init only
-            inst.exports.start();
+            inst.exports._start();
             console.log("[WASI main]");
             inst.exports.init();
-            console.log("[WASI init] done.");
+            // console.log("[WASI init] done.");
             // main
-            inst.exports.main();
+            // inst.exports.main();
             console.log("[WASI main] done.");
         }
     },

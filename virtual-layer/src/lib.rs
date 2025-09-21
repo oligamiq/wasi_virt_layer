@@ -9,6 +9,7 @@ mod __self;
 mod binary_map;
 #[cfg(all(feature = "unstable_print_debug", target_os = "wasi"))]
 mod debug;
+mod initializer;
 pub mod memory;
 mod transporter;
 mod wasi;
