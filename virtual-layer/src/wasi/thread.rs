@@ -31,26 +31,7 @@ pub trait VirtualThread {
 /// this type is *mut Box<dyn FnOnce()>
 /// but we can't use it directly, because ABI was not designed with this in mind
 #[repr(transparent)]
-pub struct ThreadRunnerBase {
-    main: *mut Box<dyn FnOnce()>,
-}
-
-impl ThreadRunnerBase {
-    #[cfg(target_os = "wasi")]
-    pub fn apply<Wasm: WasmAccess>(&self) -> ThreadRunner {
-        #[cfg(feature = "multi_memory")]
-        {
-            ThreadRunner::new(self.main)
-        }
-
-        #[cfg(not(feature = "multi_memory"))]
-        {
-            ThreadRunner::new(Wasm::memory_director_mut(self.main))
-        }
-    }
-}
-#[repr(transparent)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug)]
 pub struct ThreadRunner {
     main: *mut Box<dyn FnOnce()>,
 }
@@ -58,17 +39,12 @@ pub struct ThreadRunner {
 unsafe impl Send for ThreadRunner {}
 
 impl ThreadRunner {
-    fn new(main: *mut Box<dyn FnOnce()>) -> Self {
-        ThreadRunner { main }
-    }
-
     pub const fn inner(self) -> *mut Box<dyn FnOnce()> {
         self.main
     }
 }
 
 pub trait ThreadAccess: Send + 'static {
-    fn to_correct_memory(&self, ptr: ThreadRunnerBase) -> ThreadRunner;
     fn call_wasi_thread_start(&self, ptr: ThreadRunner, thread_id: Option<NonZero<u32>>);
     fn as_name(&self) -> &'static str;
 }
@@ -250,26 +226,6 @@ macro_rules! export_thread {
             }
 
             impl $crate::thread::ThreadAccess for ThreadAccessor {
-                fn to_correct_memory(&self, ptr: $crate::__private::inner::thread::ThreadRunnerBase) -> $crate::thread::ThreadRunner {
-                    println!("Converting to correct memory for {}", self.as_name());
-
-                    #[cfg(target_os = "wasi")]
-                    {
-                        match *self {
-                            $(
-                                Self::[<__ $wasm>] => {
-                                    $crate::export_thread!(@filter, ptr, $wasm)
-                                }
-                            )*
-                        }
-                    }
-
-                    #[cfg(not(target_os = "wasi"))]
-                    {
-                        panic!("This function is only available on WASI");
-                    }
-                }
-
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
                     println!("Calling wasi_thread_start for {}", self.as_name());
 
@@ -278,8 +234,6 @@ macro_rules! export_thread {
                         match *self {
                             $(
                                 Self::[<__ $wasm>] => {
-                                    todo!();
-
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
                                             Some(id) => u32::from(id) as i32,
@@ -287,8 +241,6 @@ macro_rules! export_thread {
                                         },
                                         ptr.inner() as i32,
                                     ) }
-
-                                    todo!();
                                 }
                             )*
                         }
@@ -314,7 +266,6 @@ macro_rules! export_thread {
                 #[doc(hidden)]
                 #[link(wasm_import_module = "wasip1-vfs")]
                 unsafe extern "C" {
-                    #[unsafe(no_mangle)]
                     pub fn [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                         thread_id: i32,
                         ptr: i32,
@@ -327,13 +278,16 @@ macro_rules! export_thread {
                     thread_id: i32,
                     ptr: i32,
                 ) {
+                    unsafe {
+
+                    }
                     [<__wasip1_vfs_ $wasm _wasi_thread_start>](thread_id, ptr);
                 }
 
                 #[cfg(target_os = "wasi")]
                 #[unsafe(no_mangle)]
                 unsafe extern "C" fn [<__wasip1_vfs_wasi_thread_spawn_ $wasm>](
-                    data_ptr: $crate::__private::inner::thread::ThreadRunnerBase,
+                    data_ptr: $crate::__private::inner::thread::ThreadRunner,
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
@@ -343,13 +297,9 @@ macro_rules! export_thread {
                     #[allow(unused_mut)]
                     let mut pool = $pool;
 
-                    println!("Thread pool obtained");
+                    println!("data_ptr converted: {data_ptr:?}");
 
-                    let correct_memory = ACCESSOR.to_correct_memory(data_ptr);
-
-                    println!("Correct memory obtained for {}: {:?}", ACCESSOR.as_name(), correct_memory);
-
-                    match pool.new_thread(ACCESSOR, correct_memory) {
+                    match pool.new_thread(ACCESSOR, data_ptr) {
                         Some(thread_id) => {
                             println!("New thread created with ID {thread_id}");
                             return u32::from(thread_id) as i32;
@@ -363,14 +313,6 @@ macro_rules! export_thread {
                 $crate::export_thread!(@sched_yield, $pool, $wasm);
             )*
         }
-    };
-
-    (@filter, $ptr:ident, self) => {
-        $ptr.apply::<$crate::__private::__self>()
-    };
-
-    (@filter, $ptr:ident, $wasm:ident) => {
-        $ptr.apply::<$wasm>()
     };
 
     (@as_name, self) => {

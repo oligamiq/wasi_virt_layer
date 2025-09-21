@@ -79,7 +79,7 @@ pub mod __private {
 
         #[cfg(feature = "threads")]
         pub mod thread {
-            pub use crate::wasi::thread::ThreadRunnerBase;
+            pub use crate::wasi::thread::ThreadRunner;
         }
 
         pub use crate::wit::virtual_file_system;

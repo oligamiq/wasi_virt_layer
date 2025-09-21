@@ -27,6 +27,14 @@ const root = await instantiate(undefined, {{
     }},
     "wasip1-vfs:host/virtual-file-system-wasip1-threads-import": {{
         Wasip1Threads: {{
+            threadSpawnImport: (data_ptr) => {{
+                console.log("[WASI threadSpawnImport]", data_ptr);
+                const thread_id = Math.floor(Math.random() * 100000);
+                console.log("[WASI threadSpawnImport] thread_id", thread_id);
+                const ret = root["wasip1-vfs:host/virtual-file-system-wasip1-threads-export"].wasiThreadStart(thread_id, data_ptr);
+                console.log("[WASI threadSpawnImport] ret", ret);
+                return ret;
+            }}
         }},
     }},
 }}, async (module, imports) => {{
