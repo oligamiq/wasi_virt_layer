@@ -136,6 +136,7 @@ pub enum Wasip1OpKind {
         main_void_func_id: FunctionId,
         start_func_id: FunctionId,
     },
+    // About start section etc
     Start {
         start_func_id: FunctionId,
     },
@@ -468,7 +469,7 @@ impl Wasip1Op {
                 // but since the main_void function is only called inside start_fn and through export,
                 // it is acceptable to modify it in this function.
                 module
-                    .renew_call_fn(main_void_func_id, fake_fn_id)
+                    .connect_func_alt(main_void_func_id, fake_fn_id)
                     .wrap_err("Failed to rewrite main_void call in start")?;
             }
         } else if call_main_void > 1 {
@@ -477,7 +478,7 @@ impl Wasip1Op {
             );
         }
 
-        module.connect_func_without_remove(fid, main_void_func_id)?;
+        module.connect_func_alt(fid, main_void_func_id)?;
 
         Ok(())
     }
@@ -495,8 +496,18 @@ impl Wasip1Op {
             .get_fid(&module.exports)
             .ok();
 
-        module
-            .replace_imported_func(fid, |(builder, arg_locals)| {
+        if let Some(_) = initializer {
+            module
+                .exports
+                .remove("__wasip1_vfs_thread_initializer")
+                .to_eyre()
+                .wrap_err("Failed to remove __wasip1_vfs_thread_initializer export")?;
+        }
+
+        module.connect_func_alt(fid, start_func_id)?;
+
+        let pre_initializer = module
+            .add_func(&[], &[], |builder, _| {
                 let mut func_body = builder.func_body();
 
                 if let Some(reset) = is_reset_contain {
@@ -513,32 +524,18 @@ impl Wasip1Op {
                     }
                 }
 
-                for local in arg_locals {
-                    func_body.local_get(*local);
-                }
-                func_body.call(start_func_id);
-                if let Some(initializer) = initializer {
-                    func_body.call(initializer);
-                }
-                func_body.return_();
+                Ok(())
             })
-            .to_eyre()
             .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
 
-        let export_id = module
-            .exports
-            .iter()
-            .find(|f| {
-                if let walrus::ExportItem::Function(f) = f.item {
-                    f == start_func_id
-                } else {
-                    false
-                }
-            })
-            .map(|f| f.id())
-            .ok_or_else(|| eyre::eyre!("Export not found"))?;
-
-        module.exports.delete(export_id);
+        if let Some(before) = module.start {
+            let func = module.funcs.get_mut(before);
+            let mut body = func.kind.unwrap_local_mut().builder_mut().func_body();
+            body.call_at(0, pre_initializer);
+            if let Some(initializer) = initializer {
+                body.call(initializer);
+            }
+        }
 
         Ok(())
     }

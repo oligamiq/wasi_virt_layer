@@ -112,12 +112,20 @@ pub fn adjust_merged_wasm(
 
         module
             .exports
-            .iter_mut()
-            .find(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
-            .map(|export| {
-                export.name = format!("_{wasm_name}_start").into();
-            })
-            .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
+            .remove(&format!("__wasip1_vfs_{wasm_name}__start_anchor"))
+            .to_eyre()
+            .wrap_err_with(|| {
+                eyre::eyre!("Failed to remove __start_anchor export on {wasm_name}.")
+            })?;
+
+        // module
+        //     .exports
+        //     .iter_mut()
+        //     .find(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
+        //     .map(|export| {
+        //         export.name = format!("_{wasm_name}_start").into();
+        //     })
+        //     .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
 
         // rm memory export
         module
@@ -127,7 +135,7 @@ pub fn adjust_merged_wasm(
         // threads
         if threads {
             module
-                .connect_func_without_remove(
+                .connect_func_alt(
                     (
                         "wasip1-vfs",
                         &format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
@@ -151,7 +159,7 @@ pub fn adjust_merged_wasm(
                 })?;
 
             module
-                .connect_func_without_remove(
+                .connect_func_alt(
                     (
                         "wasi",
                         &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),

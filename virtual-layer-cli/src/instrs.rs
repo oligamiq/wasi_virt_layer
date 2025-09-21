@@ -11,7 +11,6 @@ pub trait InstrRewrite {
 
     fn retain(&mut self, keep: impl FnMut(&Instr, (usize, InstrSeqId)) -> bool);
 }
-// let s = func.block(func.entry_block());
 
 pub trait InstrRead {
     fn read<T>(&self, find: impl FnMut(&Instr, (usize, InstrSeqId)) -> T) -> eyre::Result<Vec<T>>;

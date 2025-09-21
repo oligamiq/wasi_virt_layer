@@ -106,6 +106,11 @@ pub fn adjust_wasm(
 
             let self_thread_spawn_fn_id = "__wasip1_vfs_wasi_thread_spawn_self".get_fid(&module)?;
 
+            module
+                .exports
+                .remove("__wasip1_vfs_wasi_thread_spawn_self")
+                .unwrap();
+
             let debug_something_id = if debug {
                 Some("debug_something".get_fid(&module.exports)?)
             } else {
@@ -151,7 +156,7 @@ pub fn adjust_wasm(
             let exporting_thread_starter_id = "wasi_thread_start".get_fid(&module.exports)?;
 
             module
-                .renew_call_fn(
+                .connect_func_alt(
                     ("wasip1-vfs", "__wasip1_vfs_self_wasi_thread_start"),
                     exporting_thread_starter_id,
                 )
@@ -175,7 +180,7 @@ pub fn adjust_wasm(
 
             // __wasip1_vfs_self_wasi_thread_start
             module
-                .connect_func_without_remove(
+                .renew_call_fn(
                     ("wasip1-vfs", "__wasip1_vfs_wasi_thread_start_entry"),
                     exporting_thread_starter_id,
                 )
@@ -207,7 +212,7 @@ pub fn adjust_wasm(
                 ..
             })
         ) {
-            module.connect_func_without_remove(
+            module.connect_func_alt(
                 (
                     CORE_MODULE_ROOT,
                     &format!("[static]wasip1.{func_name}-import"),

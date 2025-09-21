@@ -149,6 +149,12 @@ pub(crate) trait WalrusUtilModule {
         self.connect_func_with_is_delete(import, export, true)
     }
 
+    fn connect_func_alt<A, B>(
+        &mut self,
+        import: impl WalrusFID<A>,
+        export: impl WalrusFID<B>,
+    ) -> eyre::Result<()>;
+
     fn connect_func_without_remove<A, B>(
         &mut self,
         import: impl WalrusFID<A>,
@@ -1148,6 +1154,30 @@ impl WalrusUtilModule for walrus::Module {
                 eyre::eyre!("Failed to load Wasm file: {}", path.as_ref().display())
             })?;
         Ok(module)
+    }
+
+    fn connect_func_alt<A, B>(
+        &mut self,
+        import: impl WalrusFID<A>,
+        export: impl WalrusFID<B>,
+    ) -> eyre::Result<()> {
+        let export = export.get_fid(&self.exports)?;
+        self.renew_call_fn(import, export)?;
+        let eid = self
+            .exports
+            .iter()
+            .find(|e| {
+                if let walrus::ExportItem::Function(f) = e.item {
+                    f == export
+                } else {
+                    false
+                }
+            })
+            .map(|e| e.id())
+            .unwrap();
+
+        self.exports.delete(eid);
+        Ok(())
     }
 }
 
