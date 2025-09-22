@@ -303,25 +303,15 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
-    std::fs::OpenOptions::new()
-        .write(true)
-        .create(true)
-        .open(format!("{out_dir}/test_run.ts"))
-        .expect("Failed to create file")
-        .write_all(
-            {
-                let name = core_wasm_name
-                    .get_file_main_name()
-                    .wrap_err("Failed to get core wasm main name")?;
-                if let Some(mem_size) = mem_size {
-                    test_run::thread::gen_threads_run(name, mem_size)
-                } else {
-                    test_run::gen_test_run(name)
-                }
-            }
-            .as_bytes(),
-        )
-        .expect("Failed to write file");
+    let name = core_wasm_name
+        .get_file_main_name()
+        .wrap_err("Failed to get core wasm main name")?;
+
+    if let Some(mem_size) = mem_size {
+        test_run::thread::gen_threads_run(name, mem_size, &out_dir);
+    } else {
+        test_run::gen_test_run(name, out_dir);
+    }
 
     Ok(())
 }

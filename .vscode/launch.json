@@ -57,6 +57,21 @@
             "env": {
                 "RUST_BACKTRACE": "1"
             }
+        },
+        {
+            "name": "node",
+            "type": "node",
+            "request": "launch",
+            "program": "${workspaceFolder}/dist/test_run.ts",
+            "args": [],
+            "runtimeExecutable": "npx",
+            "runtimeArgs": [
+                "ts-node",
+            ],
+            "cwd": "${workspaceFolder}/dist",
+            "env": {
+                "RUST_BACKTRACE": "1"
+            }
         }
     ]
 }

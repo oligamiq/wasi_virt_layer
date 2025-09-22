@@ -1,12 +1,14 @@
+use std::io::Write as _;
+
 pub mod common;
 pub mod thread;
 
-pub fn gen_test_run(wasm_name: impl AsRef<str>) -> String {
+pub fn gen_test_run(wasm_name: impl AsRef<str>, out_dir: impl AsRef<str>) {
     let wasm_name = wasm_name.as_ref();
 
     let core = common::core(wasm_name);
 
-    format!(
+    let code_base = format!(
         r#"
 {core}
 
@@ -38,7 +40,16 @@ wasi.start({{
     }},
 }});
 "#
-    )
-    .trim_start()
-    .to_owned()
+    );
+
+    let code = code_base.trim_start();
+
+    let out_dir = out_dir.as_ref();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .open(format!("{out_dir}/test_run.ts"))
+        .expect("Failed to create file")
+        .write_all(code.as_bytes())
+        .expect("Failed to write file");
 }
