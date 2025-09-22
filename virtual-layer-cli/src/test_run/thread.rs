@@ -5,30 +5,17 @@ pub fn gen_threads_run(
     mem_size: Vec<(u64, u64)>,
     out_dir: impl AsRef<str>,
 ) {
-    // let wasm_name = wasm_name.as_ref();
-
-    // let mut memories = String::new();
-    // for (i, (init, max)) in mem_size.iter().enumerate() {
-    //     let i = if i > 0 {
-    //         memories.push_str(",\n        ");
-    //         i.to_string()
-    //     } else {
-    //         "".to_string()
-    //     };
-    //     memories.push_str(&format!(
-    //         "memory{i}: new WebAssembly.Memory({{initial:{init}, maximum:{max}, shared:true}})"
-    //     ));
-    // }
+    let wasm_name = wasm_name.as_ref();
 
     [
         ("common.ts", common_ts()),
-        ("inst.ts", custom_instantiate_ts()),
+        ("inst.ts", &custom_instantiate_ts(wasm_name)),
         ("test_run.ts", test_run_ts()),
         ("thread_spawn.ts", thread_spawn_ts()),
         ("tsconfig.json", tsconfig_json()),
         ("package.json", package_json()),
         ("worker_background_worker.ts", worker_background_worker_ts()),
-        ("worker.ts", &worker_ts(mem_size)),
+        ("worker.ts", &worker_ts(wasm_name, mem_size)),
     ]
     .iter()
     .for_each(|(name, content)| {
@@ -91,10 +78,14 @@ export { set_fake_worker };
     .trim()
 }
 
-fn custom_instantiate_ts() -> &'static str {
-    r#"
-import { type ImportObject, instantiate } from "./threads_vfs.js";
+fn custom_instantiate_ts(wasm_name: &str) -> String {
+    let pre = format!(
+        r#"
+import {{ type ImportObject, instantiate }} from "./{wasm_name}.js";
+"#
+    );
 
+    let post = r#"
 function snakeToCamel(snakeCaseString) {
 	return snakeCaseString
 		.toLowerCase()
@@ -109,7 +100,9 @@ export const custom_instantiate = async (
 	wasiThreadImport: {
 		"thread-spawn": (start_arg: number) => number;
 	},
-	memory: WebAssembly.Memory,
+	memory: {
+		[key: string]: WebAssembly.Memory;
+	},
 ): Promise<WebAssembly.Instance> => {
 	const imports = {};
 	for (const key in wasiImport) {
@@ -140,7 +133,7 @@ export const custom_instantiate = async (
 		} as ImportObject,
 		async (module, imports) => {
 			imports.env = {
-				memory,
+				...memory,
 			};
 
 			inst = await WebAssembly.instantiate(module, imports);
@@ -172,8 +165,9 @@ export const custom_instantiate = async (
 
 	return fake;
 };
-"#
-    .trim()
+"#;
+
+    format!("{}{}", pre.trim(), post.trim())
 }
 
 fn test_run_ts() -> &'static str {
@@ -222,7 +216,9 @@ globalThis.onmessage = (event) => {
 		async (
 			thread_spawn_wasm: WebAssembly.Module,
 			imports: {
-				env: { memory: WebAssembly.Memory };
+				env: {
+					[key: string]: WebAssembly.Memory;
+				};
 				wasi: { "thread-spawn": (start_arg: number) => number };
 				// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 				wasi_snapshot_preview1: { [key: string]: (...args: any[]) => unknown };
@@ -232,7 +228,7 @@ globalThis.onmessage = (event) => {
 				thread_spawn_wasm,
 				imports.wasi_snapshot_preview1,
 				imports.wasi,
-				imports.env.memory,
+				imports.env,
 			);
 		},
 	);
@@ -270,7 +266,7 @@ fn package_json() -> &'static str {
 	"type": "module",
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@oligami/browser_wasi_shim-threads": "^0.1.6"
+		"@oligami/browser_wasi_shim-threads": "^0.2.0"
 	},
 	"devDependencies": {
 		"ts-node": "^10.9.2"
@@ -294,11 +290,28 @@ run();
     .trim()
 }
 
-fn worker_ts(mem_size: Vec<(u64, u64)>) -> String {
-    if mem_size.len() != 1 {
-        panic!("Only one memory supported for now");
+fn worker_ts(wasm_name: &str, mem_size: Vec<(u64, u64)>) -> String {
+    let mut memories = String::new();
+    for (i, (init, max)) in mem_size.iter().enumerate() {
+        let i = if i > 0 {
+            memories.push_str("\n");
+            i.to_string()
+        } else {
+            "".to_string()
+        };
+        memories.push_str(&{
+            let str = format!(
+                r#"
+                memory{i}: new WebAssembly.Memory({{
+                    initial:{init},
+                    maximum:{max},
+                    shared:true,
+                }}),"#
+            );
+            format!("                {}", str.trim())
+        });
     }
-    let (init, max) = mem_size[0];
+
     format!(
         r#"
 import {{ readFileSync }} from "node:fs";
@@ -311,7 +324,7 @@ set_fake_worker();
 globalThis.onmessage = async (message) => {{
 	const {{ wasi_ref }} = message.data;
 
-	const wasm_path = "./threads_vfs.core.wasm";
+	const wasm_path = "./{wasm_name}.core.wasm";
 	const wasm = await WebAssembly.compile(
 		readFileSync(wasm_path) as BufferSource,
 	);
@@ -328,11 +341,9 @@ globalThis.onmessage = async (message) => {{
 			thread_spawn_worker_url: "./thread_spawn.ts",
 			thread_spawn_wasm: wasm,
 			worker_background_worker_url: "./worker_background_worker.ts",
-            share_memory: new WebAssembly.Memory({{
-                initial: {init},
-                maximum: {max},
-                shared: true,
-            }}),
+            share_memory: {{
+{memories}
+            }},
         }},
 	);
 
