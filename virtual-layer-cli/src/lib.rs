@@ -1,5 +1,3 @@
-use std::io::Write as _;
-
 use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;

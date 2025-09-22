@@ -63,69 +63,29 @@ mod spawn {
         static IS_ROOT_THREAD: UnsafeCell<bool> = UnsafeCell::new(false);
     }
 
-    #[cfg(feature = "unstable_print_debug")]
-    #[cfg(target_os = "wasi")]
-    #[unsafe(no_mangle)]
-    extern "C" fn root_spawn_debug() {
-        root_spawn(|| {
-            unreachable!();
-        });
-    }
-
-    #[cfg(feature = "unstable_print_debug")]
-    #[cfg(target_os = "wasi")]
-    #[unsafe(no_mangle)]
-    extern "C" fn root_spawn_debug2() {
-        let b = std::thread::Builder::new();
-        unsafe {
-            b.spawn_unchecked::<_, ()>(|| {
-                todo!();
-            })
-            .unwrap();
-        };
-    }
-
     /// Spawn a new thread.
     /// If you call `std::thread::spawn` in ThreadPool, it will be looped.
     /// So, you should use `root_spawn` instead.
-    pub fn root_spawn<F, T>(f: F) -> std::thread::JoinHandle<T>
+    pub fn root_spawn<F, T>(
+        builder: std::thread::Builder,
+        f: F,
+    ) -> std::io::Result<std::thread::JoinHandle<T>>
     where
         F: FnOnce() -> T,
         F: Send + 'static,
         T: Send + 'static,
     {
-        // println!("Backtrace at root_spawn:\n{:?}", *crate::debug::BACKTRACE);
-
-        println!("Spawning a root thread");
         IS_ROOT_THREAD.with(|flag| {
             unsafe { flag.get().write(true) };
         });
-        println!("Root thread flag set to true");
 
-        // let s = std::thread::spawn(f);
-        let b = std::thread::Builder::new();
-
-        let b = b.stack_size(1024 * 1024 * 2); // 2MB stack
-        let b = b.name("wasip1-root-thread".to_string());
-
-        println!("Thread builder created: {b:?}");
-
-        let s = unsafe { b.spawn_unchecked(f) };
-
-        println!("Root thread spawned");
-
-        let s = s.expect("failed to spawn thread");
-
-        println!("Root thread handle created");
-
-        s
+        builder.spawn(f)
     }
 
     #[cfg(target_os = "wasi")]
     #[unsafe(no_mangle)]
     /// When calling thread_spawn, first branch based on the result of this function.
     extern "C" fn __wasip1_vfs_is_root_spawn() -> bool {
-        eprintln!("Checking if current thread is root thread");
         // get and turn off the flag
         IS_ROOT_THREAD.with(|flag| unsafe { flag.get().replace(false) })
     }
@@ -139,21 +99,17 @@ impl VirtualThread for DirectThreadPool {
         accessor: impl ThreadAccess,
         runner: ThreadRunner,
     ) -> Option<NonZero<u32>> {
-        println!("Spawning a new thread for {}", accessor.as_name());
-
         static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
 
         let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
 
-        println!("Assigned thread ID: {}", thread_id);
+        let builder = std::thread::Builder::new();
 
-        root_spawn(move || {
-            println!("In new thread with ID: {}", thread_id);
+        root_spawn(builder, move || {
             accessor.call_wasi_thread_start(runner, NonZero::new(thread_id));
-            println!("Thread with ID {} finished execution", thread_id);
-        });
+        })
+        .ok()?;
 
-        println!("Root thread spawned");
         NonZero::new(thread_id as u32)
     }
 }
@@ -172,8 +128,6 @@ macro_rules! export_thread {
 
             impl $crate::thread::ThreadAccess for ThreadAccessor {
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
-                    println!("Calling wasi_thread_start for {}", self.as_name());
-
                     #[cfg(target_os = "wasi")]
                     {
                         match *self {
@@ -186,8 +140,6 @@ macro_rules! export_thread {
                                         },
                                         ptr.inner() as i32,
                                     ) }
-
-                                    println!("Called wasi_thread_start for {}", self.as_name());
                                 }
                             )*
                         }
@@ -238,16 +190,11 @@ macro_rules! export_thread {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
 
-                    println!("Spawning a new thread for {}", $crate::export_thread!(@as_name, $wasm));
-
                     #[allow(unused_mut)]
                     let mut pool = $pool;
 
-                    println!("data_ptr: {data_ptr:?}");
-
                     match pool.new_thread(ACCESSOR, data_ptr) {
                         Some(thread_id) => {
-                            println!("New thread created with ID {thread_id}");
                             return u32::from(thread_id) as i32;
                         },
                         None => {

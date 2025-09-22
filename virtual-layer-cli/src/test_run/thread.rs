@@ -5,20 +5,20 @@ pub fn gen_threads_run(
     mem_size: Vec<(u64, u64)>,
     out_dir: impl AsRef<str>,
 ) {
-    let wasm_name = wasm_name.as_ref();
+    // let wasm_name = wasm_name.as_ref();
 
-    let mut memories = String::new();
-    for (i, (init, max)) in mem_size.iter().enumerate() {
-        let i = if i > 0 {
-            memories.push_str(",\n        ");
-            i.to_string()
-        } else {
-            "".to_string()
-        };
-        memories.push_str(&format!(
-            "memory{i}: new WebAssembly.Memory({{initial:{init}, maximum:{max}, shared:true}})"
-        ));
-    }
+    // let mut memories = String::new();
+    // for (i, (init, max)) in mem_size.iter().enumerate() {
+    //     let i = if i > 0 {
+    //         memories.push_str(",\n        ");
+    //         i.to_string()
+    //     } else {
+    //         "".to_string()
+    //     };
+    //     memories.push_str(&format!(
+    //         "memory{i}: new WebAssembly.Memory({{initial:{init}, maximum:{max}, shared:true}})"
+    //     ));
+    // }
 
     [
         ("common.ts", common_ts()),
@@ -86,8 +86,9 @@ const set_fake_worker = () => {
 };
 
 export { set_fake_worker };
+
 "#
-    .trim_start()
+    .trim()
 }
 
 fn custom_instantiate_ts() -> &'static str {
@@ -162,17 +163,17 @@ export const custom_instantiate = async (
 				root.init();
 				console.log("[WASI main] done.");
 			},
-            wasi_thread_start: (tid, arg) => {
-                console.log("[WASI wasi_thread_start] tid", tid, "arg", arg);
-                root.virtualFileSystemWasip1ThreadsExport.wasiThreadStart(tid, arg);
-            }
+			wasi_thread_start: (tid, arg) => {
+				console.log("[WASI wasi_thread_start] tid", tid, "arg", arg);
+				root.virtualFileSystemWasip1ThreadsExport.wasiThreadStart(tid, arg);
+			},
 		},
 	};
 
 	return fake;
 };
 "#
-    .trim_start()
+    .trim()
 }
 
 fn test_run_ts() -> &'static str {
@@ -204,7 +205,7 @@ worker.postMessage({
 	},
 });
 "#
-    .trim_start()
+    .trim()
 }
 
 fn thread_spawn_ts() -> &'static str {
@@ -237,7 +238,7 @@ globalThis.onmessage = (event) => {
 	);
 };
 "#
-    .trim_start()
+    .trim()
 }
 
 fn tsconfig_json() -> &'static str {
@@ -257,14 +258,13 @@ fn tsconfig_json() -> &'static str {
 	"exclude": ["node_modules"]
 }
 "#
-    .trim_start()
+    .trim()
 }
 
 fn package_json() -> &'static str {
     r#"
 {
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
 		"run": "ts-node test_run.ts"
 	},
 	"type": "module",
@@ -272,12 +272,12 @@ fn package_json() -> &'static str {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
 		"@oligami/browser_wasi_shim-threads": "^0.1.6"
 	},
-    "devDependencies": {
-        "ts-node": "^10.9.2"
-    }
+	"devDependencies": {
+		"ts-node": "^10.9.2"
+	}
 }
 "#
-    .trim_start()
+    .trim()
 }
 
 fn worker_background_worker_ts() -> &'static str {
@@ -291,7 +291,7 @@ set_fake_worker();
 
 run();
 "#
-    .trim_start()
+    .trim()
 }
 
 fn worker_ts(mem_size: Vec<(u64, u64)>) -> String {
@@ -328,7 +328,11 @@ globalThis.onmessage = async (message) => {{
 			thread_spawn_worker_url: "./thread_spawn.ts",
 			thread_spawn_wasm: wasm,
 			worker_background_worker_url: "./worker_background_worker.ts",
-            share_memory: new WebAssembly.Memory({{ initial: {init}, maximum: {max}, shared: true }}),
+            share_memory: new WebAssembly.Memory({{
+                initial: {init},
+                maximum: {max},
+                shared: true,
+            }}),
         }},
 	);
 
@@ -348,6 +352,6 @@ globalThis.onmessage = async (message) => {{
 }};
 "#
     )
-    .trim_start()
+    .trim()
     .to_string()
 }
