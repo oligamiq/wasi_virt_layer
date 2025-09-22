@@ -9,7 +9,7 @@ wit_bindgen::generate!({
 struct Starter;
 
 impl Guest for Starter {
-    fn init() -> () {
+    fn init() {
         fn print_loop() {
             for i in 0..1000 {
                 println!("Hello from a thread spawned in the `init` function! {i}");
@@ -32,8 +32,8 @@ impl Guest for Starter {
     }
 
     fn main() {
-        test_threads::reset();
-        test_threads::_start();
+        // test_threads::reset();
+        // test_threads::_start();
         println!("Starting _main...");
         test_threads::_main();
         println!("_main done.");

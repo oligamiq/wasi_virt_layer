@@ -151,9 +151,9 @@ export const custom_instantiate = async (
 			memory: inst.exports.memory as WebAssembly.Memory,
 			_start: () => {
 				// init only
-				root.start();
+                root.start();
 				console.log("[WASI main]");
-				root.init();
+				root.main();
 				console.log("[WASI main] done.");
 			},
 			wasi_thread_start: (tid, arg) => {

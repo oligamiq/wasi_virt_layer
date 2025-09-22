@@ -135,7 +135,7 @@ pub fn adjust_merged_wasm(
         // threads
         if threads {
             module
-                .connect_func_alt(
+                .renew_call_fn(
                     (
                         "wasip1-vfs",
                         &format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
