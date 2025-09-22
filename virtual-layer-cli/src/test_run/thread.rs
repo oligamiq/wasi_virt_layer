@@ -1,4 +1,4 @@
-use std::io::Write as _;
+use std::{io::Write as _, mem};
 
 pub fn gen_threads_run(
     wasm_name: impl AsRef<str>,
@@ -28,7 +28,7 @@ pub fn gen_threads_run(
         ("tsconfig.json", tsconfig_json()),
         ("package.json", package_json()),
         ("worker_background_worker.ts", worker_background_worker_ts()),
-        ("worker.ts", worker_ts()),
+        ("worker.ts", &worker_ts(mem_size)),
     ]
     .iter()
     .for_each(|(name, content)| {
@@ -177,8 +177,7 @@ export const custom_instantiate = async (
 				root.init();
 				console.log("[WASI main] done.");
 			},
-            wasi_thread_start: (arg) => {
-                tid += 1;
+            wasi_thread_start: (tid, arg) => {
                 console.log("[WASI wasi_thread_start] tid", tid, "arg", arg);
                 root.virtualFileSystemWasip1ThreadsExport.wasiThreadStart(tid, arg);
             }
@@ -291,7 +290,7 @@ fn package_json() -> &'static str {
 	"type": "module",
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@oligami/browser_wasi_shim-threads": "^0.1.5"
+		"@oligami/browser_wasi_shim-threads": "^0.1.6"
 	},
     "devDependencies": {
         "ts-node": "^10.9.2"
@@ -315,19 +314,22 @@ run();
     .trim_start()
 }
 
-fn worker_ts() -> &'static str {
-    r#"
-import { readFileSync } from "node:fs";
-import { WASIFarmAnimal } from "@oligami/browser_wasi_shim-threads";
-import { set_fake_worker } from "./common.ts";
-import { custom_instantiate } from "./inst.ts";
+fn worker_ts(mem_size: Vec<(u64, u64)>) -> String {
+    if mem_size.len() != 1 {
+        panic!("Only one memory supported for now");
+    }
+    let (init, max) = mem_size[0];
+    format!(
+        r#"
+import {{ readFileSync }} from "node:fs";
+import {{ WASIFarmAnimal }} from "@oligami/browser_wasi_shim-threads";
+import {{ set_fake_worker }} from "./common.ts";
+import {{ custom_instantiate }} from "./inst.ts";
 
 set_fake_worker();
 
-globalThis.onmessage = async (message) => {
-	const { wasi_ref } = message.data;
-
-	// console.log("wasi_ref:", wasi_ref);
+globalThis.onmessage = async (message) => {{
+	const {{ wasi_ref }} = message.data;
 
 	const wasm_path = "./threads_vfs.core.wasm";
 	const wasm = await WebAssembly.compile(
@@ -337,18 +339,17 @@ globalThis.onmessage = async (message) => {
 	const args = ["bin", "arg1", "arg2"];
 	const env = ["FOO=bar"];
 
-	// console.log("WASM:", wasm);
-
 	const wasi = new WASIFarmAnimal(
 		wasi_ref,
 		args, // args
 		env, // env
-		{
+		{{
 			can_thread_spawn: true,
 			thread_spawn_worker_url: "./thread_spawn.ts",
 			thread_spawn_wasm: wasm,
 			worker_background_worker_url: "./worker_background_worker.ts",
-		},
+            share_memory: new WebAssembly.Memory({{ initial: {init}, maximum: {max}, shared: true }}),
+        }},
 	);
 
 	// console.log("WASI:", wasi);
@@ -366,7 +367,11 @@ globalThis.onmessage = async (message) => {
 
 	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 	wasi.start(root as any);
-};
+
+    process.exit(0);
+}};
 "#
+    )
     .trim_start()
+    .to_string()
 }

@@ -15,15 +15,15 @@ pub(crate) fn out(buf: &[u8]) {
     }
 }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
-    call_function::depth_write_out();
-    out(b"debug_call_indirect: tid=");
-    num_to_str(tid, out);
-    out(b", idx=");
-    num_to_str(idx, out);
-    out(b"\n");
-}
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn debug_call_indirect(tid: i32, idx: i32) {
+//     call_function::depth_write_out();
+//     out(b"debug_call_indirect: tid=");
+//     num_to_str(tid, out);
+//     out(b", idx=");
+//     num_to_str(idx, out);
+//     out(b"\n");
+// }
 
 #[inline(never)]
 fn num_to_str(n: i32, writer: impl Fn(&[u8])) {
@@ -94,6 +94,14 @@ mod call_function {
 
     #[inline(never)]
     fn depth_write_out_inner(depth: u32) {
+        let current = std::thread::current();
+        // let tid = current.name().unwrap_or("unknown");
+        // out(tid.as_bytes());
+        num_to_str(
+            u64::from(unsafe { core::mem::transmute::<_, core::num::NonZero<u64>>(current.id()) })
+                as i32,
+            out,
+        );
         for _ in 0..depth {
             out(b">");
         }
@@ -150,26 +158,26 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
     out(str.as_bytes());
 }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
-    out(b"debug_atomic_wait: ptr=");
-    ptr_to_str(ptr as *const (), out);
-    out(b", expression=");
-    ptr_to_str(expression as *const (), out);
-    out(b", timeout_ns=");
-    num_to_str(timeout_ns as i32, out);
-    out(b"\n");
-}
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
+//     out(b"debug_atomic_wait: ptr=");
+//     ptr_to_str(ptr as *const (), out);
+//     out(b", expression=");
+//     ptr_to_str(expression as *const (), out);
+//     out(b", timeout_ns=");
+//     num_to_str(timeout_ns as i32, out);
+//     out(b"\n");
+// }
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_something() {
     out(b"debug_something called\n");
 }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn debug_loop(idx: i32) {
-    call_function::depth_write_out();
-    out(b"debug_loop called: idx=");
-    num_to_str(idx, out);
-    out(b"\n");
-}
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn debug_loop(idx: i32) {
+//     call_function::depth_write_out();
+//     out(b"debug_loop called: idx=");
+//     num_to_str(idx, out);
+//     out(b"\n");
+// }
