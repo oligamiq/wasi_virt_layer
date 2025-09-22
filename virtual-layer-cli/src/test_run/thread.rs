@@ -1,4 +1,4 @@
-use std::{io::Write as _, mem};
+use std::io::Write as _;
 
 pub fn gen_threads_run(
     wasm_name: impl AsRef<str>,
@@ -57,7 +57,6 @@ class WorkerWrapper {
 		});
 	}
 	postMessage(msg: unknown) {
-        console.log("WorkerWrapper posting message:", msg);
 		this.worker.postMessage({
 			data: msg,
 		});
@@ -73,7 +72,6 @@ const set_fake_worker = () => {
 	}
 
 	globalThis.postMessage = (msg: unknown) => {
-        console.log("Posting message to worker:", msg);
 		parentPort.postMessage({
 			data: msg,
 		});
@@ -115,26 +113,17 @@ export const custom_instantiate = async (
 	const imports = {};
 	for (const key in wasiImport) {
 		const inner_key = `${snakeToCamel(key)}Import`;
-		imports[inner_key] = (...args) => {
-			// console.log(`[WASI ${inner_key}]`, ...args);
-			const ret = wasiImport[key](...args);
-			// console.log(`[WASI ${inner_key}] ret`, ret);
-			return ret;
-		};
+		imports[inner_key] = wasiImport[key];
 	}
 
 	const threadSpawnImports = {
 		threadSpawnImport: (start_arg) => {
-			console.log("[WASI thread-spawn] start_arg", start_arg);
 			const tid = wasiThreadImport["thread-spawn"](start_arg);
-			console.log("[WASI thread-spawn] tid", tid);
 			return tid;
 		},
 	};
 
 	let inst: WebAssembly.Instance | undefined = undefined;
-
-    console.log("custom_instantiate starting");
 
 	const root = await instantiate(
 		(_path) => {
@@ -149,11 +138,9 @@ export const custom_instantiate = async (
 			},
 		} as ImportObject,
 		async (module, imports) => {
-			console.log("WebAssembly Module:", module);
 			imports.env = {
 				memory,
 			};
-			console.log("WebAssembly Imports:", imports);
 
 			inst = await WebAssembly.instantiate(module, imports);
 			return inst;
@@ -164,8 +151,6 @@ export const custom_instantiate = async (
 		throw new Error("inst is not an instance");
 	}
 	inst = inst as WebAssembly.Instance;
-
-    let tid = 0;
 
 	const fake = {
 		exports: {
@@ -183,8 +168,6 @@ export const custom_instantiate = async (
             }
 		},
 	};
-
-    console.log("custom_instantiate done");
 
 	return fake;
 };
@@ -232,10 +215,7 @@ import { custom_instantiate } from "./inst.ts";
 
 set_fake_worker();
 
-console.log("Thread spawn worker started");
-
 globalThis.onmessage = (event) => {
-	console.log("Thread spawn event received:", event.data);
 	thread_spawn_on_worker(
 		event.data,
 		async (
@@ -352,11 +332,7 @@ globalThis.onmessage = async (message) => {{
         }},
 	);
 
-	// console.log("WASI:", wasi);
-
 	await wasi.wait_worker_background_worker();
-
-	// console.log("WASI2:", wasi);
 
 	const root = await custom_instantiate(
 		wasm,
