@@ -157,7 +157,10 @@ macro_rules! export_thread {
                 fn as_name(&self) -> &'static str {
                     match *self {
                         $(
-                            Self::[<__ $wasm>] => $crate::export_thread!(@as_name, $wasm),
+                            Self::[<__ $wasm>] => {
+                                $crate::__as_t!(@as_t, $wasm);
+                                <T as $crate::memory::WasmAccess>::NAME
+                            }
                         )*
                     }
                 }
@@ -212,14 +215,6 @@ macro_rules! export_thread {
                 $crate::export_thread!(@sched_yield, $pool, $wasm);
             )*
         }
-    };
-
-    (@as_name, self) => {
-        <$crate::__private::__self as $crate::memory::WasmAccess>::NAME
-    };
-
-    (@as_name, $wasm:ident) => {
-        <$wasm as $crate::memory::WasmAccess>::NAME
     };
 
     (@sched_yield, $pool:tt, self) => {

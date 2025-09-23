@@ -5,3 +5,14 @@ pub mod file;
 pub mod process;
 #[cfg(feature = "threads")]
 pub mod thread;
+
+#[macro_export]
+macro_rules! __as_t {
+    (@as_t, self) => {
+        type T = $crate::__private::__self;
+    };
+
+    (@as_t, $wasm:ty) => {
+        type T = $wasm;
+    };
+}

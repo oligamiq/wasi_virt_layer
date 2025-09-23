@@ -75,7 +75,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-export_env!(@block, @static, &mut VIRTUAL_ENV.lock(), test_wasm_opt);
+export_env!(@static, &mut VIRTUAL_ENV.lock(), test_wasm_opt, self);
 
 const FILE_COUNT: usize = 10;
 

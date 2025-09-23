@@ -91,7 +91,7 @@ macro_rules! import_wasm {
                 }
 
                 #[inline(always)]
-                fn load_le<T: core::fmt::Debug>(offset: *const T) -> T
+                fn load_le<T: core::fmt::Debug + Copy>(offset: *const T) -> T
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
@@ -386,7 +386,7 @@ pub trait WasmAccess: Copy {
     /// Copies data from the source pointer to the offset.
     fn memcpy_to<T>(offset: &mut [T], src: *const T);
     fn store_le<T>(offset: *mut T, value: T);
-    fn load_le<T: core::fmt::Debug>(offset: *const T) -> T;
+    fn load_le<T: core::fmt::Debug + Copy>(offset: *const T) -> T;
 
     /// utility internal
     fn as_array<'a, T: core::fmt::Debug + Copy>(
@@ -664,7 +664,7 @@ impl WasmAccess for WasmAccessFaker {
         unsafe { core::ptr::write(offset, value) };
     }
 
-    fn load_le<T: core::fmt::Debug>(offset: *const T) -> T {
+    fn load_le<T: core::fmt::Debug + Copy>(offset: *const T) -> T {
         unsafe { core::ptr::read(offset) }
     }
 

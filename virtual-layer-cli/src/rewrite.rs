@@ -202,7 +202,7 @@ pub fn adjust_wasm(
 
     fn block_func(module: &mut walrus::Module, func_name: impl AsRef<str>) -> eyre::Result<bool> {
         let func_name = func_name.as_ref();
-        let export_func_name = format!("__wasip1_vfs_{func_name}");
+        let export_func_name = format!("__wasip1_vfs_self_{func_name}");
         let func_name = func_name.replace("_", "-");
 
         if matches!(
