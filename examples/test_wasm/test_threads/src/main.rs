@@ -13,3 +13,14 @@ fn main() {
     .join()
     .unwrap();
 }
+
+#[cfg(target_arch = "wasm32")]
+unsafe extern "C" {
+    fn __wasi_init_tp();
+}
+
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn __________wasip1_vfs_thread_initializer() {
+    unsafe { __wasi_init_tp() };
+}

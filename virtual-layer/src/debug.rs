@@ -132,21 +132,21 @@ mod call_function {
         });
     }
 
-    #[unsafe(no_mangle)]
-    unsafe extern "C" fn debug_call_function_start(idx: i32) {
-        increase_with_write_out();
-        out(b"debug_call_function: idx=");
-        num_to_str(idx, out);
-        out(b"\n");
-    }
+    // #[unsafe(no_mangle)]
+    // unsafe extern "C" fn debug_call_function_start(idx: i32) {
+    //     increase_with_write_out();
+    //     out(b"debug_call_function: idx=");
+    //     num_to_str(idx, out);
+    //     out(b"\n");
+    // }
 
-    #[unsafe(no_mangle)]
-    unsafe extern "C" fn debug_call_function_end(idx: i32) {
-        decrease_with_write_out();
-        out(b"debug_call_function_end: idx=");
-        num_to_str(idx, out);
-        out(b"\n");
-    }
+    // #[unsafe(no_mangle)]
+    // unsafe extern "C" fn debug_call_function_end(idx: i32) {
+    //     decrease_with_write_out();
+    //     out(b"debug_call_function_end: idx=");
+    //     num_to_str(idx, out);
+    //     out(b"\n");
+    // }
 }
 
 #[unsafe(no_mangle)]
@@ -169,10 +169,10 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
 //     out(b"\n");
 // }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn debug_something() {
-    out(b"debug_something called\n");
-}
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn debug_something() {
+//     out(b"debug_something called\n");
+// }
 
 // #[unsafe(no_mangle)]
 // unsafe extern "C" fn debug_loop(idx: i32) {

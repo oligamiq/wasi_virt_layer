@@ -393,6 +393,7 @@ impl Wasip1Op {
         fid: FunctionId,
         main_void_func_id: FunctionId,
         start_fn_id: FunctionId,
+        debug: bool,
     ) -> eyre::Result<()> {
         let fake_fn_id = module.add_func(&[], &[walrus::ValType::I32], |func, _| {
             func.func_body().i32_const(0).return_();
@@ -469,7 +470,7 @@ impl Wasip1Op {
                 // but since the main_void function is only called inside start_fn and through export,
                 // it is acceptable to modify it in this function.
                 module
-                    .connect_func_alt(main_void_func_id, fake_fn_id)
+                    .connect_func_alt(main_void_func_id, fake_fn_id, debug)
                     .wrap_err("Failed to rewrite main_void call in start")?;
             }
         } else if call_main_void > 1 {
@@ -478,7 +479,7 @@ impl Wasip1Op {
             );
         }
 
-        module.connect_func_alt(fid, main_void_func_id)?;
+        module.connect_func_alt(fid, main_void_func_id, debug)?;
 
         Ok(())
     }
@@ -491,6 +492,7 @@ impl Wasip1Op {
         wasm_mem: walrus::MemoryId,
         vfs_mem: walrus::MemoryId,
         is_reset_contain: Option<&Wasip1Op>,
+        debug: bool,
     ) -> eyre::Result<()> {
         let initializer = "__wasip1_vfs_thread_initializer"
             .get_fid(&module.exports)
@@ -504,37 +506,47 @@ impl Wasip1Op {
                 .wrap_err("Failed to remove __wasip1_vfs_thread_initializer export")?;
         }
 
-        module.connect_func_alt(fid, start_func_id)?;
+        module.connect_func_alt(fid, start_func_id, debug)?;
 
-        let pre_initializer = module
-            .add_func(&[], &[], |builder, _| {
-                let mut func_body = builder.func_body();
+        // let pre_ready_initializer = module
+        //     .add_func(&[], &[], |builder, _| {
+        //         let mut func_body = builder.func_body();
 
-                if let Some(reset) = is_reset_contain {
-                    if let Wasip1OpKind::Reset { mem_init, .. } = &reset.kind {
-                        for (offset, len, ptr) in mem_init {
-                            func_body
-                                .i32_const(*ptr as i32) // dst
-                                .i32_const(*offset) // src
-                                .i32_const(*len as i32) // len
-                                .memory_copy(wasm_mem, vfs_mem);
-                        }
-                    } else {
-                        unreachable!();
-                    }
-                }
+        //         if let Some(reset) = is_reset_contain {
+        //             if let Wasip1OpKind::Reset { mem_init, .. } = &reset.kind {
+        //                 for (offset, len, ptr) in mem_init {
+        //                     func_body
+        //                         .i32_const(*ptr as i32) // dst
+        //                         .i32_const(*offset) // src
+        //                         .i32_const(*len as i32) // len
+        //                         .memory_copy(wasm_mem, vfs_mem);
+        //                 }
+        //             } else {
+        //                 unreachable!();
+        //             }
+        //         }
 
-                Ok(())
-            })
-            .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
+        //         Ok(())
+        //     })
+        //     .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
 
         if let Some(before) = module.start {
-            let func = module.funcs.get_mut(before);
-            let mut body = func.kind.unwrap_local_mut().builder_mut().func_body();
-            body.call_at(0, pre_initializer);
-            if let Some(initializer) = initializer {
-                body.call(initializer);
+            let new_start = module.add_func(&[], &[], |builder, _| {
+                let mut body = builder.func_body();
+                // todo!();
+                // body.call(pre_ready_initializer);
+                body.call(before);
+                if let Some(initializer) = initializer {
+                    body.call(initializer);
+                }
+                Ok(())
+            })?;
+
+            if debug {
+                module.exports.add("__vfs_start_debug", before);
             }
+
+            module.start = Some(new_start);
         }
 
         Ok(())
@@ -546,6 +558,7 @@ impl Wasip1Op {
         wasm_mem: walrus::MemoryId,
         vfs_mem: walrus::MemoryId,
         is_reset_contain: Option<&Wasip1Op>,
+        debug: bool,
     ) -> eyre::Result<()> {
         // if matches!(self.kind, Wasip1OpKind::MainVoid) {
         //     self.main_void(module, self.fid)?;
@@ -556,7 +569,7 @@ impl Wasip1Op {
             start_func_id,
         } = self.kind
         {
-            self.main_void(module, self.fid, main_void_func_id, start_func_id)
+            self.main_void(module, self.fid, main_void_func_id, start_func_id, debug)
                 .wrap_err(
                     "Failed to implement main_void wasm memory etc before call main function",
                 )?;
@@ -568,6 +581,7 @@ impl Wasip1Op {
                 wasm_mem,
                 vfs_mem,
                 is_reset_contain,
+                debug,
             )
             .wrap_err("Failed to implement wasm memory etc before call main function")?;
         } else if let Wasip1OpKind::Skip = self.kind {

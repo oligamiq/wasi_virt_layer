@@ -179,8 +179,6 @@ import {
 	ConsoleStdout,
 	File,
 	OpenFile,
-	PreopenDirectory,
-	WASI,
 } from "@bjorn3/browser_wasi_shim";
 import { WASIFarm } from "@oligami/browser_wasi_shim-threads";
 

@@ -111,11 +111,7 @@ pub fn adjust_wasm(
                 .remove("__wasip1_vfs_wasi_thread_spawn_self")
                 .unwrap();
 
-            let debug_something_id = if debug {
-                Some("debug_something".get_fid(&module.exports)?)
-            } else {
-                None
-            };
+            let debug_something_id = "debug_something".get_fid(&module.exports).ok();
 
             use walrus::ValType::I32;
             let real_thread_spawn_fn_id = module
@@ -159,6 +155,7 @@ pub fn adjust_wasm(
                 .connect_func_alt(
                     ("wasip1-vfs", "__wasip1_vfs_self_wasi_thread_start"),
                     exporting_thread_starter_id,
+                    debug,
                 )
                 .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
 
@@ -193,14 +190,18 @@ pub fn adjust_wasm(
     }
 
     // todo!(); separate block system from environ
-    let check = block_func(&mut module, "environ_get")?;
-    let next_check = block_func(&mut module, "environ_sizes_get")?;
+    let check = block_func(&mut module, "environ_get", debug)?;
+    let next_check = block_func(&mut module, "environ_sizes_get", debug)?;
 
     if check != next_check {
         eyre::bail!("environ_get and environ_sizes_get are not the same");
     }
 
-    fn block_func(module: &mut walrus::Module, func_name: impl AsRef<str>) -> eyre::Result<bool> {
+    fn block_func(
+        module: &mut walrus::Module,
+        func_name: impl AsRef<str>,
+        debug: bool,
+    ) -> eyre::Result<bool> {
         let func_name = func_name.as_ref();
         let export_func_name = format!("__wasip1_vfs_self_{func_name}");
         let func_name = func_name.replace("_", "-");
@@ -218,6 +219,7 @@ pub fn adjust_wasm(
                     &format!("[static]wasip1.{func_name}-import"),
                 ),
                 &export_func_name,
+                debug,
             )?;
 
             return Ok(true);

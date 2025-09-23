@@ -160,7 +160,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
         println!("Generating single memory Merged Wasm...");
-        let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true, dwarf)?;
+        // let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true, dwarf)?;
+        let ret = building::optimize_wasm(
+            &ret,
+            // &["--multi-memory-lowering-with-bounds-checks"],
+            &["--multi-memory-lowering"],
+            true,
+            dwarf,
+        )?;
         tmp_files.push(ret.to_string());
         ret
     } else {

@@ -96,15 +96,21 @@ pub fn adjust_merged_wasm(
 
         ops.into_iter()
             .try_for_each(|op| {
-                op.replace(&mut module, memory_id, vfs_memory_id, reset_op.as_ref())
-                    .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))?;
+                op.replace(
+                    &mut module,
+                    memory_id,
+                    vfs_memory_id,
+                    reset_op.as_ref(),
+                    debug,
+                )
+                .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))?;
                 eyre::Ok(())
             })
             .wrap_err_with(|| eyre::eyre!("Failed to replace Wasm memory access on {wasm_name}"))?;
 
         reset_op
             .map(|op| {
-                op.replace(&mut module, memory_id, vfs_memory_id, None)
+                op.replace(&mut module, memory_id, vfs_memory_id, None, debug)
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))
             })
             .transpose()
@@ -135,12 +141,13 @@ pub fn adjust_merged_wasm(
         // threads
         if threads {
             module
-                .renew_call_fn(
+                .connect_func_alt(
                     (
                         "wasip1-vfs",
                         &format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
                     ),
                     &format!("__wasip1_vfs_wasi_thread_start_{wasm_name}"),
+                    debug,
                 )
                 .wrap_err_with(|| {
                     eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_start_{wasm_name}")
@@ -165,6 +172,7 @@ pub fn adjust_merged_wasm(
                         &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
                     ),
                     &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
+                    debug,
                 )
                 .wrap_err_with(|| {
                     eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_spawn_{wasm_name}")
