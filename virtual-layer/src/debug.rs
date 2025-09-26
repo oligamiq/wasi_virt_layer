@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 pub(crate) fn out(buf: &[u8]) {
     unsafe {
         let ciovec_arr = [wasip1::Ciovec {
@@ -156,6 +158,28 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
 
     let str = format!("This is a formatted message: {}, {}", 42, "hello");
     out(str.as_bytes());
+}
+
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_call_memory_grow(mem_idx: i32, key: i32, page_size: i32) {
+    out(b"debug_call_memory_grow: mem_idx=");
+    num_to_str(mem_idx, out);
+    out(b", key=");
+    num_to_str(key, out);
+    out(b", page_size=");
+    num_to_str(page_size, out);
+    out(b"\n");
+}
+
+#[unsafe(no_mangle)]
+unsafe extern "C" fn debug_call_memory_grow_pre(mem_idx: i32, key: i32, pre_page_size: i32) {
+    out(b"debug_call_memory_grow: mem_idx=");
+    num_to_str(mem_idx, out);
+    out(b", key=");
+    num_to_str(key, out);
+    out(b", pre_page_size=");
+    num_to_str(pre_page_size, out);
+    out(b"\n");
 }
 
 // #[unsafe(no_mangle)]

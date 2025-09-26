@@ -1,19 +1,23 @@
-use std::fs;
+use std::{fmt::format, fs};
 
 use camino::Utf8PathBuf;
 use eyre::Context as _;
 
 use crate::{
-    common::Wasip1SnapshotPreview1Func,
-    threads,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
+    common::Wasip1SnapshotPreview1Func, instrs::InstrRewrite, rewrite::TargetMemoryType, threads, util::{
+        CaminoUtilModule as _, ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilImport,
+        WalrusUtilModule,
+    }
 };
 
 pub fn adjust_target_wasm(
     path: &Utf8PathBuf,
     memory_hint: Option<usize>,
     threads: bool,
+    debug: bool,
     dwarf: bool,
+    mem_type: TargetMemoryType,
+    has_debug_call_memory_grow: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let name = path
         .get_file_main_name()
@@ -71,6 +75,82 @@ pub fn adjust_target_wasm(
             .map(|export| {
                 export.name = format!("__wasip1_vfs_wasi_thread_start_{name}");
             });
+
+        if matches!(mem_type, TargetMemoryType::Single) {
+            let memory_grow_alt_id = module
+                .add_import_func(
+                    "wasip1-vfs_single_memory",
+                    &format!("__wasip1_vfs_memory_grow_{name}_alt"),
+                    module.types.add(&[walrus::ValType::I32], &[walrus::ValType::I32]),
+                )
+                .0;
+
+            let grow_locker_id = format!("__wasip1_vfs_memory_grow_{name}_locker")
+                .get_fid(&module.exports)
+                .unwrap();
+
+            module
+                .funcs
+                .iter_local_mut()
+                .for_each(|(fid, func)| {
+                    func.builder_mut().func_body().rewrite(|instr| {
+                        if let Some(mem_grow) = instr.memory_grow_mut() {
+                            if mem_grow.memory == module.memories.iter().next().unwrap().id() {
+                                println!(
+                                    "Rewriting memory.grow to call locker function in {name}"
+                                );
+                                return Some((grow_locker_id, vec![mem_grow.arg]));
+                            }
+                        }
+                        None
+                    });
+                });
+        }
+
+        if debug && has_debug_call_memory_grow {
+            let func_ty = module.types.add(
+                &[
+                    walrus::ValType::I32,
+                    walrus::ValType::I32,
+                    walrus::ValType::I32,
+                ],
+                &[],
+            );
+            let (id, _) = module.add_import_func(
+                "wasip1-vfs_debug",
+                "debug_call_memory_grow_import",
+                func_ty,
+            );
+            let (id2, _) = module.add_import_func(
+                "wasip1-vfs_debug",
+                "debug_call_memory_grow_pre_import",
+                func_ty,
+            );
+
+            module
+                .gen_inspect_with_finalize(
+                    Some(id),
+                    Some(id2),
+                    &[walrus::ValType::I32],
+                    &[walrus::ValType::I32],
+                    &module.funcs.find_children_with(id).unwrap(),
+                    |instr| {
+                        if let walrus::ir::Instr::MemoryGrow(walrus::ir::MemoryGrow {
+                            memory: _,
+                            ..
+                        }) = instr
+                        {
+                            static mut I: i32 = 117;
+                            unsafe { I += 1 };
+                            println!("Rewriting memory.grow to call debug function");
+                            Some([1, unsafe { I }])
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .unwrap();
+        }
     }
 
     let new_path = path.with_extension("adjusted.wasm");

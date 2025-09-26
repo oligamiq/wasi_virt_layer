@@ -93,7 +93,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let print_debug = debug::has_debug(&walrus::Module::load(&ret, dwarf)?);
 
     println!("Adjusting VFS Wasm...");
-    let (ret, target_memory_type) =
+    let (ret, target_memory_type, has_debug_call_memory_grow) =
         adjust_wasm(&ret, &parsed_args.wasm, threads, print_debug, dwarf)
             .wrap_err("Failed to adjust Wasm")?;
 
@@ -132,8 +132,16 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .wrap_err("Failed to optimize Wasm")?;
             tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
-            let wasm = target::adjust_target_wasm(&wasm, memory_hint, threads, dwarf)
-                .wrap_err("Failed to adjust Wasm")?;
+            let wasm = target::adjust_target_wasm(
+                &wasm,
+                memory_hint,
+                threads,
+                print_debug,
+                dwarf,
+                target_memory_type,
+                has_debug_call_memory_grow,
+            )
+            .wrap_err("Failed to adjust Wasm")?;
             tmp_files.push(wasm.to_string());
             Ok((wasm, name))
         })
@@ -181,7 +189,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
         println!("Directing process {target_memory_type} memory Merged Wasm...");
-        let ret = director::director(&ret, &wasm_paths, dwarf)?;
+        let ret = director::director(&ret, &wasm_paths, print_debug, dwarf)?;
         tmp_files.push(ret.to_string());
         ret
     } else {

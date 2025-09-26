@@ -207,6 +207,22 @@ pub fn adjust_merged_wasm(
                 Ok(())
             })
             .collect::<eyre::Result<Vec<_>>>()?;
+
+        if debug {
+            module
+                .renew_call_fn(
+                    ("wasip1-vfs_debug", "debug_call_memory_grow_import"),
+                    "debug_call_memory_grow",
+                )
+                .unwrap();
+
+            module
+                .renew_call_fn(
+                    ("wasip1-vfs_debug", "debug_call_memory_grow_pre_import"),
+                    "debug_call_memory_grow_pre",
+                )
+                .unwrap();
+        }
     }
 
     // memory_init(memory, data)

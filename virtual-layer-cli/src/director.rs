@@ -8,6 +8,7 @@ use crate::util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule};
 pub fn director(
     path: &Utf8PathBuf,
     wasm: &[impl AsRef<Path>],
+    debug: bool,
     dwarf: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::load(path, dwarf)?;
@@ -88,6 +89,13 @@ pub fn director(
                 })
                 .to_eyre()
                 .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
+
+            if debug {
+                module.exports.add(
+                    &format!("__wasip1_vfs_{wasm_name}_memory_director_anchor"),
+                    fid,
+                );
+            }
         }
     }
 

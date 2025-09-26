@@ -11,6 +11,7 @@ mod binary_map;
 mod debug;
 mod initializer;
 pub mod memory;
+mod shared_global;
 mod transporter;
 mod wasi;
 mod wit;
@@ -83,6 +84,9 @@ pub mod __private {
         }
 
         pub use crate::wit::virtual_file_system;
+
+        #[cfg(all(feature = "threads", not(feature = "multi_memory")))]
+        pub use crate::shared_global::single_memory::__MEMORY_GROW_LOCK;
     }
 
     pub mod utils {

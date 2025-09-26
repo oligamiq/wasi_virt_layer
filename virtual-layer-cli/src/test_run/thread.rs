@@ -16,6 +16,8 @@ pub fn gen_threads_run(
         ("package.json", package_json()),
         ("worker_background_worker.ts", worker_background_worker_ts()),
         ("worker.ts", &worker_ts(wasm_name, mem_size)),
+        ("vite.config.ts", vite_config_ts()),
+        ("index.html", index_html()),
     ]
     .iter()
     .for_each(|(name, content)| {
@@ -32,48 +34,56 @@ pub fn gen_threads_run(
 
 fn common_ts() -> &'static str {
     r#"
-import { Worker, isMainThread, parentPort } from "node:worker_threads";
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+let _worker: any = null;
+const set_fake_worker = async () => {
+	if (
+		typeof process !== "undefined" &&
+		process.versions &&
+		process.versions.node
+	) {
+		_worker = _worker || (await import("node:worker_threads"));
+		const { Worker, isMainThread, parentPort } = _worker;
 
-class WorkerWrapper {
-	worker: Worker;
-	onmessage?: (event: unknown) => void;
-	constructor(path: string) {
-		this.worker = new Worker(path);
-		this.worker.on("message", (event) => {
-			this.onmessage?.(event);
-		});
-	}
-	postMessage(msg: unknown) {
-		this.worker.postMessage({
-			data: msg,
-		});
-	}
-	terminate() {
-		return this.worker.terminate();
-	}
-}
+		class WorkerWrapper {
+			worker: Worker;
+			onmessage?: (event: unknown) => void;
+			constructor(path: string) {
+				this.worker = new Worker(path);
+				this.worker.on("message", (event) => {
+					this.onmessage?.(event);
+				});
+			}
+			postMessage(msg: unknown) {
+				this.worker.postMessage({
+					data: msg,
+				});
+			}
+			terminate() {
+				return this.worker.terminate();
+			}
+		}
 
-const set_fake_worker = () => {
-	if (isMainThread) {
-		throw new Error("not main thread");
-	}
+		if (isMainThread) {
+			throw new Error("not main thread");
+		}
 
-	globalThis.postMessage = (msg: unknown) => {
-		parentPort.postMessage({
-			data: msg,
+		globalThis.postMessage = (msg: unknown) => {
+			parentPort.postMessage({
+				data: msg,
+			});
+		};
+		parentPort.on("message", (event) => {
+			// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+			(globalThis as any).onmessage?.(event);
 		});
-	};
-	parentPort.on("message", (event) => {
+
 		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-		(globalThis as any).onmessage?.(event);
-	});
-
-	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-	(globalThis as any).Worker = WorkerWrapper;
+		(globalThis as any).Worker = WorkerWrapper;
+	}
 };
 
 export { set_fake_worker };
-
 "#
     .trim()
 }
@@ -174,28 +184,83 @@ fn test_run_ts() -> &'static str {
     r#"
 // npx ts-node test_run.ts
 
-import { Worker } from "node:worker_threads";
-import {
-	ConsoleStdout,
-	File,
-	OpenFile,
-} from "@bjorn3/browser_wasi_shim";
-import { WASIFarm } from "@oligami/browser_wasi_shim-threads";
+import { ConsoleStdout, Fd, File, OpenFile } from "@bjorn3/browser_wasi_shim";
+import { WASIFarm, wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
 
-const farm = new WASIFarm(
-	new OpenFile(new File([])), // stdin
-	ConsoleStdout.lineBuffered((msg) => console.log(`[WASI stdout] ${msg}`)),
-	ConsoleStdout.lineBuffered((msg) => console.warn(`[WASI stderr] ${msg}`)),
-	[],
-);
+const isNode =
+	typeof process !== "undefined" && process.versions && process.versions.node;
 
-const worker = new Worker("./worker.ts");
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+let _worker: any = null;
 
-worker.postMessage({
-	data: {
+let farm: WASIFarm;
+if (!isNode) {
+    await import("@xterm/xterm/css/xterm.css");
+    const { FitAddon } = await import("xterm-addon-fit");
+    const { Terminal } = await import("@xterm/xterm");
+
+    wait_async_polyfill();
+
+	const term = new Terminal({
+		convertEol: true,
+	});
+	const terminalElement = document.getElementById("terminal");
+
+	if (!terminalElement) {
+		throw new Error("No terminal element found");
+	}
+
+	term.open(terminalElement);
+
+	const fitAddon = new FitAddon();
+	term.loadAddon(fitAddon);
+	fitAddon.fit();
+
+	class XtermStdio extends Fd {
+		term: Terminal;
+
+		constructor(term: Terminal) {
+			super();
+			this.term = term;
+		}
+		fd_write(data: Uint8Array) /*: {ret: number, nwritten: number}*/ {
+			const str = new TextDecoder().decode(data);
+			this.term.write(str);
+			console.log(str);
+			return { ret: 0, nwritten: data.byteLength };
+		}
+	}
+
+	farm = new WASIFarm(
+		new XtermStdio(term),
+		new XtermStdio(term),
+		new XtermStdio(term),
+		[],
+	);
+
+	const worker = new Worker("./worker.ts", { type: "module" });
+
+	worker.postMessage({
 		wasi_ref: farm.get_ref(),
-	},
-});
+	});
+} else {
+	_worker = _worker || (await import("node:worker_threads"));
+
+	farm = new WASIFarm(
+		new OpenFile(new File([])), // stdin
+		ConsoleStdout.lineBuffered((msg) => console.log(`[WASI stdout] ${msg}`)),
+		ConsoleStdout.lineBuffered((msg) => console.warn(`[WASI stderr] ${msg}`)),
+		[],
+	);
+
+	const worker = new _worker.Worker("./worker.ts");
+
+	worker.postMessage({
+		data: {
+			wasi_ref: farm.get_ref(),
+		},
+	});
+}
 "#
     .trim()
 }
@@ -206,7 +271,7 @@ import { thread_spawn_on_worker } from "@oligami/browser_wasi_shim-threads";
 import { set_fake_worker } from "./common.ts";
 import { custom_instantiate } from "./inst.ts";
 
-set_fake_worker();
+await set_fake_worker();
 
 globalThis.onmessage = (event) => {
 	thread_spawn_on_worker(
@@ -259,15 +324,19 @@ fn package_json() -> &'static str {
     r#"
 {
 	"scripts": {
-		"run": "ts-node test_run.ts"
+		"run": "ts-node test_run.ts",
+		"dev": "vite"
 	},
 	"type": "module",
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@oligami/browser_wasi_shim-threads": "^0.2.0"
+		"@oligami/browser_wasi_shim-threads": "^0.2.2",
+		"@xterm/xterm": "^5.5",
+		"xterm-addon-fit": "^0.8.0"
 	},
 	"devDependencies": {
-		"ts-node": "^10.9.2"
+		"ts-node": "^10.9.2",
+		"vite": "^7.1.7"
 	}
 }
 "#
@@ -276,12 +345,15 @@ fn package_json() -> &'static str {
 
 fn worker_background_worker_ts() -> &'static str {
     r#"
+import { wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
 // @ts-ignore
 import run from "./node_modules/@oligami/browser_wasi_shim-threads/dist/worker_background_worker.min.js";
 
 import { set_fake_worker } from "./common.ts";
 
-set_fake_worker();
+await set_fake_worker();
+
+wait_async_polyfill();
 
 run();
 "#
@@ -312,20 +384,29 @@ fn worker_ts(wasm_name: &str, mem_size: Vec<(u64, u64)>) -> String {
 
     format!(
         r#"
-import {{ readFileSync }} from "node:fs";
 import {{ WASIFarmAnimal }} from "@oligami/browser_wasi_shim-threads";
 import {{ set_fake_worker }} from "./common.ts";
 import {{ custom_instantiate }} from "./inst.ts";
 
-set_fake_worker();
+await set_fake_worker();
+
+const isNode =
+    typeof process !== "undefined" && process.versions && process.versions.node;
+// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+let _fs: any = null;
+async function fetchCompile(url) {{
+    if (isNode) {{
+        _fs = _fs || (await import("node:fs/promises"));
+        return WebAssembly.compile(await _fs.readFile(url));
+    }}
+    return fetch(url).then(WebAssembly.compileStreaming);
+}}
 
 globalThis.onmessage = async (message) => {{
 	const {{ wasi_ref }} = message.data;
 
 	const wasm_path = "./{wasm_name}.core.wasm";
-	const wasm = await WebAssembly.compile(
-		readFileSync(wasm_path) as BufferSource,
-	);
+	const wasm = await fetchCompile(wasm_path);
 
 	const args = ["bin", "arg1", "arg2"];
 	const env = ["FOO=bar"];
@@ -357,10 +438,42 @@ globalThis.onmessage = async (message) => {{
 	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 	wasi.start(root as any);
 
-    process.exit(0);
+    process?.exit(0);
 }};
 "#
     )
     .trim()
     .to_string()
+}
+
+fn vite_config_ts() -> &'static str {
+    r#"
+import { defineConfig } from "vite";
+
+export default defineConfig({
+	server: {
+		headers: {
+			"Cross-Origin-Embedder-Policy": "require-corp",
+			"Cross-Origin-Opener-Policy": "same-origin",
+		},
+	},
+});
+    "#
+    .trim()
+}
+
+fn index_html() -> &'static str {
+    r#"
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<div id="terminal"></div>
+
+<script type="module" src="./test_run.ts"></script>
+</body>
+</html>
+    "#
+    .trim()
 }

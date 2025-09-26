@@ -11,7 +11,7 @@ use crate::{
     threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT, WalrusFID,
-        WalrusUtilImport, WalrusUtilModule,
+        WalrusUtilFuncs as _, WalrusUtilImport, WalrusUtilModule,
     },
 };
 
@@ -24,7 +24,7 @@ pub fn adjust_wasm(
     threads: bool,
     debug: bool,
     dwarf: bool,
-) -> eyre::Result<(Utf8PathBuf, TargetMemoryType)> {
+) -> eyre::Result<(Utf8PathBuf, TargetMemoryType, bool)> {
     // let mut module = walrus::Module::load(path, dwarf)?;
     let mut module = walrus::Module::load(path, dwarf)?;
 
@@ -278,6 +278,52 @@ pub fn adjust_wasm(
         }
     }
 
+    let mut has_debug_call_memory_grow = false;
+
+    if threads {
+        if debug {
+            // module.memories.iter_mut().for_each(|memory| {
+            //     memory.initial = (memory.initial + memory.maximum.unwrap_or(memory.initial)) / 2;
+            // });
+
+            if let Some((id, id2)) = "debug_call_memory_grow"
+                .get_fid(&module.exports)
+                .ok()
+                .and_then(|id| {
+                    "debug_call_memory_grow_pre"
+                        .get_fid(&module.exports)
+                        .ok()
+                        .map(|id2| (id, id2))
+                })
+            {
+                has_debug_call_memory_grow = true;
+
+                module
+                    .gen_inspect_with_finalize(
+                        Some(id),
+                        Some(id2),
+                        &[walrus::ValType::I32],
+                        &[walrus::ValType::I32],
+                        &module.funcs.find_children_with(id).unwrap(),
+                        |instr| {
+                            if let walrus::ir::Instr::MemoryGrow(walrus::ir::MemoryGrow {
+                                memory: _,
+                                ..
+                            }) = instr
+                            {
+                                static mut Z: i32 = 17;
+                                unsafe { Z += 1 };
+                                Some([0, unsafe { Z }])
+                            } else {
+                                None
+                            }
+                        },
+                    )
+                    .unwrap();
+            }
+        }
+    }
+
     let new_path = path.with_extension("adjusted.wasm");
 
     if fs::metadata(&new_path).is_ok() {
@@ -288,7 +334,7 @@ pub fn adjust_wasm(
         .to_eyre()
         .wrap_err("Failed to emit wasm file")?;
 
-    Ok((new_path, target_memory_type))
+    Ok((new_path, target_memory_type, has_debug_call_memory_grow))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display)]

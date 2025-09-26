@@ -11,6 +11,7 @@
 - Static file system
 - Resolve threads export conflict
 - Feature Access time etc traits
+- Separate mode (connect function by javascript)
 
 # run example
 ```bash

@@ -69,7 +69,7 @@ export_process!(test_threads);
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
     environ: &[
-        "RUST_MIN_STACK=16777216",
+        // "RUST_MIN_STACK=16777216",
         "HOME=~/",
         // "RUST_BACKTRACE=full",
     ],
