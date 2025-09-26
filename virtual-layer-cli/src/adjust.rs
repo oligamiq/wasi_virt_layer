@@ -6,13 +6,16 @@ use eyre::{Context as _, ContextCompat};
 use crate::{
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
     instrs::InstrRewrite,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
+    rewrite::TargetMemoryType,
+    shared_global,
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusFID, WalrusUtilModule as _},
 };
 
 pub fn adjust_merged_wasm(
     path: &Utf8PathBuf,
     wasm_paths: &[impl AsRef<Path>],
     threads: bool,
+    mem_type: TargetMemoryType,
     debug: bool,
     dwarf: bool,
 ) -> eyre::Result<Utf8PathBuf> {
@@ -207,6 +210,62 @@ pub fn adjust_merged_wasm(
                 Ok(())
             })
             .collect::<eyre::Result<Vec<_>>>()?;
+
+        if matches!(mem_type, TargetMemoryType::Single) {
+            let names = module
+                .exports
+                .iter()
+                .filter_map(|export| match export.item {
+                    walrus::ExportItem::Function(fid) => {
+                        let name = export.name.strip_prefix("__wasip1_vfs_memory_grow_")?;
+                        let name = name.strip_suffix("_anchor")?;
+                        let num_str = name.rsplit("_locker_").nth(0)?;
+                        let num = num_str.parse::<usize>().ok()?;
+                        let wasm_name = name.strip_suffix(&format!("_locker_{num_str}"))?;
+
+                        Some((wasm_name.to_string(), num, fid, export.id()))
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+
+            for (wasm_name, num, fid, eid) in names {
+                use walrus::ir::*;
+
+                let mem_id = {
+                    let local = module.funcs.get(fid).kind.unwrap_local();
+                    if let walrus::ir::Instr::MemoryGrow(MemoryGrow { memory }) =
+                        local.block(local.entry_block()).get(0).unwrap().0
+                    {
+                        memory
+                    } else {
+                        return Err(eyre::eyre!("Failed to get memory id from locker function"));
+                    }
+                };
+
+                if !debug {
+                    module.funcs.delete(fid);
+                    module.exports.delete(eid);
+                }
+
+                let locker_id = shared_global::gen_custom_locker(&mut module, mem_id)
+                    .wrap_err("Failed to generate custom locker function")?;
+
+                module
+                    .renew_call_fn(
+                        (
+                            "wasip1-vfs_single_memory",
+                            &format!("__wasip1_vfs_memory_grow_{wasm_name}_locker_{num}"),
+                        ),
+                        locker_id,
+                    )
+                    .wrap_err_with(|| {
+                        eyre::eyre!(
+                            "Failed to connect __wasip1_vfs_memory_grow_{wasm_name}_locker_{num}"
+                        )
+                    })?;
+            }
+        }
 
         if debug {
             module

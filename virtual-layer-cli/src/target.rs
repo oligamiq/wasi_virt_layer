@@ -1,13 +1,16 @@
-use std::{fmt::format, fs};
+use std::fs;
 
 use camino::Utf8PathBuf;
 use eyre::Context as _;
 
 use crate::{
-    common::Wasip1SnapshotPreview1Func, instrs::InstrRewrite, rewrite::TargetMemoryType, threads, util::{
-        CaminoUtilModule as _, ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilImport,
+    common::Wasip1SnapshotPreview1Func,
+    rewrite::TargetMemoryType,
+    shared_global, threads,
+    util::{
+        CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilImport,
         WalrusUtilModule,
-    }
+    },
 };
 
 pub fn adjust_target_wasm(
@@ -77,34 +80,8 @@ pub fn adjust_target_wasm(
             });
 
         if matches!(mem_type, TargetMemoryType::Single) {
-            let memory_grow_alt_id = module
-                .add_import_func(
-                    "wasip1-vfs_single_memory",
-                    &format!("__wasip1_vfs_memory_grow_{name}_alt"),
-                    module.types.add(&[walrus::ValType::I32], &[walrus::ValType::I32]),
-                )
-                .0;
-
-            let grow_locker_id = format!("__wasip1_vfs_memory_grow_{name}_locker")
-                .get_fid(&module.exports)
-                .unwrap();
-
-            module
-                .funcs
-                .iter_local_mut()
-                .for_each(|(fid, func)| {
-                    func.builder_mut().func_body().rewrite(|instr| {
-                        if let Some(mem_grow) = instr.memory_grow_mut() {
-                            if mem_grow.memory == module.memories.iter().next().unwrap().id() {
-                                println!(
-                                    "Rewriting memory.grow to call locker function in {name}"
-                                );
-                                return Some((grow_locker_id, vec![mem_grow.arg]));
-                            }
-                        }
-                        None
-                    });
-                });
+            shared_global::lock_memory_grow(&mut module, &name)
+                .wrap_err("Failed to wrap memory.grow by lock instructions")?;
         }
 
         if debug && has_debug_call_memory_grow {

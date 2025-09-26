@@ -1,5 +1,6 @@
 use std::{
     borrow::Borrow,
+    collections::HashMap,
     fmt::Debug,
     path::{Path, PathBuf},
 };
@@ -312,6 +313,10 @@ pub(crate) trait WalrusUtilModule {
     ) -> eyre::Result<impl FnMut(&mut walrus::InstrSeqBuilder) -> eyre::Result<()> + 'static>;
 
     fn load(path: impl AsRef<Path>, dwarf: bool) -> eyre::Result<Self>
+    where
+        Self: Sized;
+
+    fn copy_func<A>(&mut self, from: impl WalrusFID<A>) -> eyre::Result<walrus::FunctionId>
     where
         Self: Sized;
 }
@@ -1184,6 +1189,117 @@ impl WalrusUtilModule for walrus::Module {
         }
 
         Ok(())
+    }
+
+    fn copy_func<A>(&mut self, from: impl WalrusFID<A>) -> eyre::Result<walrus::FunctionId>
+    where
+        Self: Sized,
+    {
+        let from = from.get_fid(self)?;
+
+        let func = self.funcs.get(from);
+        let ty = func.ty();
+        let types = self.types.get(ty);
+        let params = types.params().to_vec();
+        let results = types.results().to_vec();
+        let local = func.kind.unwrap_local();
+        let locals = local
+            .args
+            .iter()
+            .map(|ty| self.locals.get(*ty).ty())
+            .collect::<Vec<_>>();
+
+        let entry = local.entry_block();
+        let mut instrs = local
+            .read(|instr, (pos, id)| (pos, id, instr.clone()))?
+            .into_iter()
+            .into_group_map_by(|(_, id, _)| *id)
+            .into_iter()
+            .map(|(id, vec)| {
+                let instrs = vec
+                    .into_iter()
+                    .map(|(pos, _, instr)| (pos, instr))
+                    .sorted_by_key(|(pos, _)| *pos)
+                    .enumerate()
+                    .inspect(|(i, (pos, _))| assert_eq!(i, pos))
+                    .map(|(_, (_, instr))| instr)
+                    .collect::<Vec<_>>();
+
+                (id, instrs)
+            })
+            .collect::<HashMap<_, _>>();
+
+        let mut builder = FunctionBuilder::new(&mut self.types, &params, &results);
+
+        let locals = locals
+            .into_iter()
+            .map(|ty| self.locals.add(ty))
+            .collect::<Vec<_>>();
+
+        let seq_map = instrs
+            .keys()
+            .filter(|id| **id != entry)
+            .map(|id| (*id, builder.dangling_instr_seq(local.block(*id).ty).id()))
+            .collect::<HashMap<_, _>>();
+
+        let mut now_instrs = instrs.remove(&entry).unwrap();
+        let mut now_seq = builder.func_body();
+
+        use walrus::ir::*;
+
+        loop {
+            for instr in now_instrs.drain(..) {
+                match instr {
+                    Instr::Block(Block { seq }) => {
+                        now_seq.instr(Instr::Block(Block { seq: seq_map[&seq] }));
+                    }
+                    Instr::Loop(Loop { seq }) => {
+                        now_seq.instr(Instr::Loop(Loop { seq: seq_map[&seq] }));
+                    }
+                    Instr::Br(Br { block }) => {
+                        now_seq.instr(Instr::Br(Br {
+                            block: seq_map[&block],
+                        }));
+                    }
+                    Instr::BrIf(BrIf { block }) => {
+                        now_seq.instr(Instr::BrIf(BrIf {
+                            block: seq_map[&block],
+                        }));
+                    }
+                    Instr::IfElse(IfElse {
+                        consequent,
+                        alternative,
+                    }) => {
+                        now_seq.instr(Instr::IfElse(IfElse {
+                            consequent: seq_map[&consequent],
+                            alternative: seq_map[&alternative],
+                        }));
+                    }
+                    Instr::BrTable(BrTable { blocks, default }) => {
+                        now_seq.instr(Instr::BrTable(BrTable {
+                            blocks: blocks
+                                .iter()
+                                .map(|b| seq_map[b])
+                                .collect::<Vec<_>>()
+                                .into_boxed_slice(),
+                            default: seq_map[&default],
+                        }));
+                    }
+                    _ => {
+                        now_seq.instr(instr);
+                    }
+                }
+            }
+
+            if let Some((seq, instrs)) = instrs.drain().next() {
+                now_instrs = instrs;
+                now_seq = builder.instr_seq(seq_map[&seq]);
+            } else {
+                break;
+            }
+        }
+
+        Ok(builder.finish(locals, &mut self.funcs))
     }
 }
 

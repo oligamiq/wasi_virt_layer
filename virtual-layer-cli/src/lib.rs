@@ -18,6 +18,7 @@ pub mod instrs;
 pub mod is_valid;
 pub mod merge;
 pub mod rewrite;
+pub mod shared_global;
 pub mod target;
 pub mod test_run;
 pub mod threads;
@@ -162,8 +163,15 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     tmp_files.push(ret.to_string());
 
     println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(&ret, &wasm_paths, threads, print_debug, dwarf)
-        .wrap_err("Failed to adjust merged Wasm")?;
+    let ret = adjust::adjust_merged_wasm(
+        &ret,
+        &wasm_paths,
+        threads,
+        target_memory_type,
+        print_debug,
+        dwarf,
+    )
+    .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {

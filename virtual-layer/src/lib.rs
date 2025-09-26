@@ -11,6 +11,11 @@ mod binary_map;
 mod debug;
 mod initializer;
 pub mod memory;
+#[cfg(all(
+    target_arch = "wasm32",
+    feature = "threads",
+    not(feature = "multi_memory")
+))]
 mod shared_global;
 mod transporter;
 mod wasi;
@@ -84,9 +89,6 @@ pub mod __private {
         }
 
         pub use crate::wit::virtual_file_system;
-
-        #[cfg(all(feature = "threads", not(feature = "multi_memory")))]
-        pub use crate::shared_global::single_memory::__MEMORY_GROW_LOCK;
     }
 
     pub mod utils {
