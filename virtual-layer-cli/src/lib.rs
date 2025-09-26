@@ -197,7 +197,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
         println!("Directing process {target_memory_type} memory Merged Wasm...");
-        let ret = director::director(&ret, &wasm_paths, print_debug, dwarf)?;
+        let ret = director::director(&ret, &wasm_paths, threads, print_debug, dwarf)?;
         tmp_files.push(ret.to_string());
         ret
     } else {

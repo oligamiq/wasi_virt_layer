@@ -8,7 +8,7 @@ use toml_edit::{Document, DocumentMut, Item};
 
 use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
-    shared_global, threads,
+    threads,
     util::{
         CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT, WalrusFID,
         WalrusUtilFuncs as _, WalrusUtilImport, WalrusUtilModule,
@@ -281,11 +281,6 @@ pub fn adjust_wasm(
     let mut has_debug_call_memory_grow = false;
 
     if threads {
-        if matches!(target_memory_type, TargetMemoryType::Single) {
-            shared_global::lock_memory_grow(&mut module, "__wasip1_vfs")
-                .wrap_err("Failed to wrap memory.grow by lock instructions")?;
-        }
-
         if debug {
             // module.memories.iter_mut().for_each(|memory| {
             //     memory.initial = (memory.initial + memory.maximum.unwrap_or(memory.initial)) / 2;

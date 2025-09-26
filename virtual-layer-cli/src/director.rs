@@ -3,11 +3,14 @@ use std::{fs, path::Path};
 use camino::Utf8PathBuf;
 use eyre::{Context as _, ContextCompat};
 
-use crate::util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule};
+use crate::util::{
+    CaminoUtilModule as _, ResultUtil as _, WalrusFID as _, WalrusUtilFuncs, WalrusUtilModule,
+};
 
 pub fn director(
     path: &Utf8PathBuf,
     wasm: &[impl AsRef<Path>],
+    thread: bool,
     debug: bool,
     dwarf: bool,
 ) -> eyre::Result<Utf8PathBuf> {
@@ -97,6 +100,43 @@ pub fn director(
                 );
             }
         }
+    }
+
+    // shared global lock_memory_grow
+    if thread {
+        let global_set_alt = "__wasip1_vfs_memory_grow_global_alt_set".get_fid(&module.exports)?;
+        let global_get_alt = "__wasip1_vfs_memory_grow_global_alt_get".get_fid(&module.exports)?;
+
+        let global_id = module
+            .globals
+            .iter()
+            .last()
+            .map(|g| g.id())
+            .wrap_err_with(|| eyre::eyre!("Failed to get global ID"))?;
+
+        module
+            .funcs
+            .all_rewrite(
+                |instr, _| match instr {
+                    walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
+                        if *global == global_id =>
+                    {
+                        *instr = walrus::ir::Instr::Call(walrus::ir::Call {
+                            func: global_set_alt,
+                        });
+                    }
+                    walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
+                        if *global == global_id =>
+                    {
+                        *instr = walrus::ir::Instr::Call(walrus::ir::Call {
+                            func: global_get_alt,
+                        });
+                    }
+                    _ => {}
+                },
+                &[] as &[walrus::FunctionId],
+            )
+            .wrap_err_with(|| eyre::eyre!("Failed to rewrite global set/get"))?;
     }
 
     let new_path = path.with_extension("directed.wasm");

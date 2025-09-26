@@ -135,6 +135,22 @@ pub(crate) trait WalrusUtilFuncs {
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
+
+    fn all_rewrite<T>(
+        &mut self,
+        find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        exclude: &[impl Borrow<FunctionId>],
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
+
+    fn all_read<T>(
+        &self,
+        find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
+        exclude: &[impl Borrow<FunctionId>],
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
 }
 
 #[allow(dead_code)]
@@ -1405,6 +1421,41 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
                 }
             })
             .map(|fid| self.read(&mut find, fid))
+            .flatten_ok()
+            .collect()
+    }
+
+    fn all_read<T>(
+        &self,
+        mut find: impl FnMut(&ir::Instr, (usize, InstrSeqId)) -> T,
+        exclude: &[impl Borrow<FunctionId>],
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        let exclude = exclude.iter().map(|e| *e.borrow()).collect::<Vec<_>>();
+        self.iter_local()
+            .filter(|(fid, _)| !exclude.contains(fid))
+            .map(|(fid, _)| self.read(&mut find, fid))
+            .flatten_ok()
+            .collect()
+    }
+
+    fn all_rewrite<T>(
+        &mut self,
+        mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
+        exclude: &[impl Borrow<FunctionId>],
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        let exclude = exclude.iter().map(|e| *e.borrow()).collect::<Vec<_>>();
+        self.iter_local()
+            .filter(|(fid, _)| !exclude.contains(fid))
+            .map(|(fid, _)| fid)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .map(|fid| self.rewrite(&mut find, fid))
             .flatten_ok()
             .collect()
     }

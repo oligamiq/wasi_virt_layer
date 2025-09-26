@@ -6,7 +6,7 @@ use eyre::Context as _;
 use crate::{
     common::Wasip1SnapshotPreview1Func,
     rewrite::TargetMemoryType,
-    shared_global, threads,
+    threads,
     util::{
         CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilImport,
         WalrusUtilModule,
@@ -19,7 +19,7 @@ pub fn adjust_target_wasm(
     threads: bool,
     debug: bool,
     dwarf: bool,
-    mem_type: TargetMemoryType,
+    _mem_type: TargetMemoryType,
     has_debug_call_memory_grow: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let name = path
@@ -78,11 +78,6 @@ pub fn adjust_target_wasm(
             .map(|export| {
                 export.name = format!("__wasip1_vfs_wasi_thread_start_{name}");
             });
-
-        if matches!(mem_type, TargetMemoryType::Single) {
-            shared_global::lock_memory_grow(&mut module, &name)
-                .wrap_err("Failed to wrap memory.grow by lock instructions")?;
-        }
 
         if debug && has_debug_call_memory_grow {
             let func_ty = module.types.add(
