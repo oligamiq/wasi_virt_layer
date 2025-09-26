@@ -1252,19 +1252,56 @@ impl WalrusUtilModule for walrus::Module {
             .map(|ty| self.locals.add(ty))
             .collect::<Vec<_>>();
 
-        let seq_map = instrs
+        let body_id = builder.func_body_id();
+
+        let mut seq_map = instrs
             .keys()
             .filter(|id| **id != entry)
             .map(|id| (*id, builder.dangling_instr_seq(local.block(*id).ty).id()))
+            .chain(std::iter::once((entry, body_id)))
             .collect::<HashMap<_, _>>();
-
-        let mut now_instrs = instrs.remove(&entry).unwrap();
-        let mut now_seq = builder.func_body();
 
         use walrus::ir::*;
 
-        loop {
-            for instr in now_instrs.drain(..) {
+        for (seq, instrs) in instrs.drain() {
+            instrs[..]
+                .iter()
+                .map(|instr| match instr {
+                    Instr::Block(Block { seq }) => {
+                        vec![seq]
+                    }
+                    Instr::Loop(Loop { seq }) => {
+                        vec![seq]
+                    }
+                    Instr::Br(Br { block }) => {
+                        vec![block]
+                    }
+                    Instr::BrIf(BrIf { block }) => {
+                        vec![block]
+                    }
+                    Instr::IfElse(IfElse {
+                        alternative,
+                        consequent,
+                    }) => {
+                        vec![alternative, consequent]
+                    }
+                    Instr::BrTable(BrTable { blocks, default }) => blocks
+                        .iter()
+                        .chain(std::iter::once(default))
+                        .collect::<Vec<_>>(),
+                    _ => Vec::new(),
+                })
+                .flatten()
+                .for_each(|b| {
+                    if !seq_map.contains_key(&b) {
+                        let blank_seq = builder.dangling_instr_seq(local.block(*b).ty).id();
+                        seq_map.insert(*b, blank_seq);
+                    }
+                });
+
+            let mut now_seq = builder.instr_seq(seq_map[&seq]);
+
+            for instr in instrs {
                 match instr {
                     Instr::Block(Block { seq }) => {
                         now_seq.instr(Instr::Block(Block { seq: seq_map[&seq] }));
@@ -1305,13 +1342,6 @@ impl WalrusUtilModule for walrus::Module {
                         now_seq.instr(instr);
                     }
                 }
-            }
-
-            if let Some((seq, instrs)) = instrs.drain().next() {
-                now_instrs = instrs;
-                now_seq = builder.instr_seq(seq_map[&seq]);
-            } else {
-                break;
             }
         }
 

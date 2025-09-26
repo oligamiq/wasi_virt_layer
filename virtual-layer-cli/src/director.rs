@@ -137,6 +137,8 @@ pub fn director(
                 &[] as &[walrus::FunctionId],
             )
             .wrap_err_with(|| eyre::eyre!("Failed to rewrite global set/get"))?;
+
+        module.globals.delete(global_id);
     }
 
     let new_path = path.with_extension("directed.wasm");

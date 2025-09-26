@@ -31,3 +31,24 @@ pub fn gen_custom_locker(
 
     Ok(locker_id)
 }
+
+pub fn remove_gen_custom_locker_base(module: &mut walrus::Module) -> eyre::Result<()> {
+    let alt_id =
+        ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt").get_fid(&module.imports)?;
+    let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
+
+    module.funcs.delete(base_locker);
+    module.funcs.delete(alt_id);
+
+    module
+        .exports
+        .remove("__wasip1_vfs_memory_grow_locker")
+        .unwrap();
+
+    module
+        .imports
+        .remove("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
+        .unwrap();
+
+    Ok(())
+}

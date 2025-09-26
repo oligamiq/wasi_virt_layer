@@ -243,6 +243,9 @@ pub fn adjust_merged_wasm(
                 })
                 .collect::<eyre::Result<HashMap<_, _>>>()?;
 
+            shared_global::remove_gen_custom_locker_base(&mut module)
+                .wrap_err("Failed to remove base locker function")?;
+
             module.funcs.all_rewrite(
                 |instr, _| {
                     if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
