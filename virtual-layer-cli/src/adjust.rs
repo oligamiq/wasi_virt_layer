@@ -8,13 +8,11 @@ use camino::Utf8PathBuf;
 use eyre::{Context as _, ContextCompat};
 
 use crate::{
+    args::TargetMemoryType,
     common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
     instrs::InstrRewrite,
-    rewrite::TargetMemoryType,
     shared_global,
-    util::{
-        CaminoUtilModule as _, ResultUtil as _, WalrusFID, WalrusUtilFuncs, WalrusUtilModule as _,
-    },
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
 };
 
 pub fn adjust_merged_wasm(

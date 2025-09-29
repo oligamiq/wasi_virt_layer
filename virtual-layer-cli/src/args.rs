@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use clap::{Parser, command};
 use eyre::Context as _;
 
-use crate::{rewrite::TargetMemoryType, util::ResultUtil as _};
+use crate::util::ResultUtil as _;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -202,5 +202,23 @@ pub(super) mod analysis {
             return Err(format!("Invalid mapping format: '{}'", s));
         }
         Ok((parts[0].to_string(), parts[1].to_string()))
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display)]
+pub enum TargetMemoryType {
+    #[strum(ascii_case_insensitive)]
+    Single,
+    #[strum(ascii_case_insensitive)]
+    Multi,
+}
+
+impl TargetMemoryType {
+    pub fn is_multi(&self) -> bool {
+        matches!(self, TargetMemoryType::Multi)
+    }
+
+    pub fn is_single(&self) -> bool {
+        matches!(self, TargetMemoryType::Single)
     }
 }

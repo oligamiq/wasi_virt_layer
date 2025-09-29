@@ -3,7 +3,7 @@ use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
 use crate::{
-    rewrite::{TargetMemoryType, TomlRestorers, adjust_target_feature, get_target_feature},
+    config_checker::{FeatureChecker, HasFeature, TomlRestorers},
     util::{ResultUtil as _, WalrusUtilModule},
 };
 
@@ -11,9 +11,11 @@ pub mod adjust;
 pub mod args;
 pub mod building;
 pub mod common;
+pub mod config_checker;
 pub mod debug;
 pub mod director;
 pub mod down_color;
+pub mod generator;
 pub mod instrs;
 pub mod is_valid;
 pub mod merge;
@@ -46,44 +48,59 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         metadata_command.exec().unwrap()
     };
     let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package)?;
+    let vfs_name = building_crate.name.to_string();
 
     if let Some(target_memory_type) = parsed_args.target_memory_type {
-        toml_restores.push(adjust_target_feature(
+        let checker = FeatureChecker::new(
             &cargo_metadata,
             &building_crate,
-            target_memory_type == TargetMemoryType::Multi,
             "multi_memory",
-        )?);
+            "wasip1-virtual-layer",
+        );
+
+        if let Some(restorer) = checker.set(target_memory_type.is_multi())? {
+            toml_restores.push(restorer);
+        }
     }
 
+    let threads_feature_checker = FeatureChecker::new(
+        &cargo_metadata,
+        &building_crate,
+        "threads",
+        "wasip1-virtual-layer",
+    );
     if let Some(threads) = parsed_args.threads {
-        toml_restores.push(adjust_target_feature(
-            &cargo_metadata,
-            &building_crate,
-            threads,
-            "threads",
-        )?);
+        if let Some(restorer) = threads_feature_checker.set(threads)? {
+            toml_restores.push(restorer);
+        }
     }
 
     if let Some(dwarf) = parsed_args.dwarf {
-        toml_restores.push(rewrite::set_dwarf(&cargo_metadata, &building_crate, dwarf)?);
+        let checker = FeatureChecker::new_no_feature(
+            &cargo_metadata,
+            &building_crate,
+            "wasip1-virtual-layer",
+        );
+
+        toml_restores.push(checker.set_dwarf(dwarf)?);
     }
     let dwarf = parsed_args.dwarf.unwrap_or(false);
 
-    let threads = parsed_args
-        .threads
-        .unwrap_or(get_target_feature(&building_crate, "threads")?);
+    let threads = parsed_args.threads.unwrap_or(matches!(
+        threads_feature_checker.has()?,
+        HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
+    ));
 
-    println!("Compiling {}", building_crate.name);
+    println!("Compiling {vfs_name}");
 
     // todo!();
     let ret = building::build_vfs(
-        manifest_path.clone(),
-        &parsed_args.package,
-        building_crate.clone(),
+        manifest_path.as_ref(),
+        parsed_args.package.as_ref(),
+        &building_crate,
         threads,
     )
-    .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {}", building_crate.name))?;
+    .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {vfs_name}"))?;
 
     toml_restores.restore()?;
 
@@ -139,7 +156,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 threads,
                 print_debug,
                 dwarf,
-                target_memory_type,
                 has_debug_call_memory_grow,
             )
             .wrap_err("Failed to adjust Wasm")?;
@@ -174,7 +190,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     .wrap_err("Failed to adjust merged Wasm")?;
     tmp_files.push(ret.to_string());
 
-    let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
+    let ret = if target_memory_type.is_single() {
         println!("Generating single memory Merged Wasm...");
         // let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true, dwarf)?;
         let ret = building::optimize_wasm(
@@ -195,7 +211,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .wrap_err("Failed to optimize merged Wasm")?;
     tmp_files.push(ret.to_string());
 
-    let ret = if matches!(target_memory_type, TargetMemoryType::Single) {
+    let ret = if target_memory_type.is_single() {
         println!("Directing process {target_memory_type} memory Merged Wasm...");
         let ret = director::director(&ret, &wasm_paths, threads, print_debug, dwarf)?;
         tmp_files.push(ret.to_string());

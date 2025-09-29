@@ -41,9 +41,9 @@ impl<const T: usize, R: BufRead> Iterator for CustomReadIterator<T, R> {
 }
 
 pub fn build_vfs(
-    manifest_path: Option<String>,
-    package: &Option<String>,
-    building_crate: cargo_metadata::Package,
+    manifest_path: Option<&String>,
+    package: Option<&String>,
+    building_crate: &cargo_metadata::Package,
     threads: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut ret = None;
@@ -292,10 +292,13 @@ pub fn build_vfs(
     }
 
     Ok(ret.wrap_err(
-        r#"Failed to find Wasm file on build artifact. If you set `
+        r#"
+Failed to find Wasm file on build artifact. If you set `
 [lib]
 crate-type = ["cdylib"]
-` on Cargo.toml."#,
+` on Cargo.toml.
+"#
+        .trim(),
     )?)
 }
 

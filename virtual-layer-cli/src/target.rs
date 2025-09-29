@@ -5,7 +5,6 @@ use eyre::Context as _;
 
 use crate::{
     common::Wasip1SnapshotPreview1Func,
-    rewrite::TargetMemoryType,
     threads,
     util::{
         CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilImport,
@@ -19,7 +18,6 @@ pub fn adjust_target_wasm(
     threads: bool,
     debug: bool,
     dwarf: bool,
-    _mem_type: TargetMemoryType,
     has_debug_call_memory_grow: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let name = path
