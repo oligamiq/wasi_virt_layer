@@ -202,7 +202,7 @@ fn gen_exclude_set(module: &mut walrus::Module) -> eyre::Result<Vec<walrus::Func
     .chain(start.iter().copied().map(Ok))
     .collect::<eyre::Result<Vec<_>>>()?
     .into_iter()
-    .map(|fid| module.funcs.find_children_with(fid))
+    .map(|fid| module.funcs.find_children_with(fid, false))
     .flatten_ok()
     .try_collect::<_, Vec<_>, _>()
 }

@@ -12,6 +12,10 @@ pub fn gen_custom_locker(
     let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
 
     let locker_id = module.copy_func(base_locker)?;
+    module.exports.add(
+        &format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index()),
+        locker_id,
+    );
     let locker = module.funcs.get_mut(locker_id);
 
     use walrus::ir::*;
@@ -32,18 +36,38 @@ pub fn gen_custom_locker(
     Ok(locker_id)
 }
 
-pub fn remove_gen_custom_locker_base(module: &mut walrus::Module) -> eyre::Result<()> {
+pub fn remove_gen_custom_locker_base(module: &mut walrus::Module, debug: bool) -> eyre::Result<()> {
+    use walrus::ir::*;
+
     let alt_id =
         ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt").get_fid(&module.imports)?;
     let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
+    if !debug {
+        module.funcs.delete(base_locker);
+        module.funcs.delete(alt_id);
 
-    module.funcs.delete(base_locker);
-    module.funcs.delete(alt_id);
+        module
+            .exports
+            .remove("__wasip1_vfs_memory_grow_locker")
+            .unwrap();
+    } else {
+        let mem_id = module.memories.iter().next().unwrap().id();
 
-    module
-        .exports
-        .remove("__wasip1_vfs_memory_grow_locker")
-        .unwrap();
+        module
+            .funcs
+            .get_mut(base_locker)
+            .kind
+            .unwrap_local_mut()
+            .builder_mut()
+            .func_body()
+            .rewrite(|instr, _| {
+                if let Instr::Call(Call { func }) = instr {
+                    if *func == alt_id {
+                        *instr = Instr::MemoryGrow(MemoryGrow { memory: mem_id });
+                    }
+                }
+            })?;
+    }
 
     module
         .imports

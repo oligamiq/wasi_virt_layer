@@ -92,13 +92,23 @@ pub(crate) trait WalrusUtilImport: Debug {
 
 pub(crate) trait WalrusUtilFuncs {
     /// Find children flat functions
-    fn find_children(&self, fid: impl Borrow<FunctionId>) -> eyre::Result<Vec<FunctionId>>;
+    fn find_children(
+        &self,
+        fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<Vec<FunctionId>>;
 
     /// Find children flat functions with self
-    fn find_children_with(&self, fid: impl Borrow<FunctionId>) -> eyre::Result<Vec<FunctionId>> {
+    fn find_children_with(
+        &self,
+        fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<Vec<FunctionId>> {
         let fid = *fid.borrow();
-        let mut children = self.find_children(fid)?;
-        children.insert(0, fid);
+        let mut children = self.find_children(fid, allow_call_indirect)?;
+        if !children.contains(&fid) {
+            children.insert(0, fid);
+        }
         Ok(children)
     }
 
@@ -116,6 +126,7 @@ pub(crate) trait WalrusUtilFuncs {
         &mut self,
         find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
         fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
@@ -215,6 +226,7 @@ pub(crate) trait WalrusUtilModule {
     fn get_using_func<A>(
         &self,
         as_fn: impl WalrusFID<A>,
+        allow_call_indirect: bool,
     ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>>;
 
     fn renew_id_on_table<A, B>(
@@ -333,6 +345,19 @@ pub(crate) trait WalrusUtilModule {
         Self: Sized;
 
     fn copy_func<A>(&mut self, from: impl WalrusFID<A>) -> eyre::Result<walrus::FunctionId>
+    where
+        Self: Sized;
+
+    // This method copies functions by copying the functions called internally.
+    // It is used to rewrite the internal instructions of functions called under specific conditions.
+    // Note: that calls_indirect may throw errors.
+    fn nested_copy_func<A>(
+        &mut self,
+        from: impl WalrusFID<A>,
+        exclude: &[impl Borrow<FunctionId>],
+        allow_import_func: bool,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<walrus::FunctionId>
     where
         Self: Sized;
 }
@@ -484,7 +509,7 @@ impl WalrusUtilModule for walrus::Module {
                     .to_eyre()
                     .wrap_err_with(|| eyre::eyre!("Failed to get environ_sizes_get"))?;
 
-                let using_funcs = self.get_using_func(import_id)?;
+                let using_funcs = self.get_using_func(import_id, true)?;
 
                 let ret_mem_id = std::sync::Arc::new(std::sync::Mutex::new(None));
 
@@ -685,27 +710,38 @@ impl WalrusUtilModule for walrus::Module {
     fn get_using_func<A>(
         &self,
         as_fn: impl WalrusFID<A>,
+        allow_call_indirect: bool,
     ) -> eyre::Result<Vec<(FunctionId, InstrSeqId, usize)>> {
         let fid = as_fn.get_fid(self)?;
 
-        Ok(self
-            .funcs
+        self.funcs
             .iter_local()
-            .flat_map(|(id, func)| {
+            .map(|(id, func)| {
                 func.read(|instr, place| {
-                    if let walrus::ir::Instr::Call(walrus::ir::Call { func }) = instr {
-                        if fid == *func {
-                            return Some((id, place));
+                    use walrus::ir::*;
+                    match instr {
+                        Instr::Call(Call { func }) | Instr::ReturnCall(ReturnCall { func })
+                            if fid == *func =>
+                        {
+                            Ok(Some((id, place)))
                         }
+                        Instr::CallIndirect(CallIndirect { table: _, ty: _ })
+                            if !allow_call_indirect =>
+                        {
+                            eyre::bail!("call_indirect is not supported in get_using_func");
+                        }
+                        _ => Ok(None),
                     }
-                    None
                 })
-                .unwrap()
-                .into_iter()
-                .filter_map(|v| v)
-                .map(|(a, (b, c))| (a, c, b))
+                .and_then(|v| {
+                    v.into_iter()
+                        .filter_map_ok(|v| v)
+                        .map_ok(|(a, (b, c))| (a, c, b))
+                        .collect::<eyre::Result<Vec<_>>>()
+                })
             })
-            .collect::<Vec<_>>())
+            .flatten_ok()
+            .collect::<eyre::Result<Vec<_>>>()
     }
 
     fn renew_id_on_table<A, B>(
@@ -800,7 +836,7 @@ impl WalrusUtilModule for walrus::Module {
         let new_id = new.get_fid(self)?;
 
         for (id, _, _) in self
-            .get_using_func(old_id)
+            .get_using_func(old_id, true)
             .wrap_err("Failed to get using func")?
         {
             self.funcs
@@ -823,6 +859,16 @@ impl WalrusUtilModule for walrus::Module {
         if let walrus::FunctionKind::Import(import) = &self.funcs.get(old_id).kind {
             self.imports.delete(import.import);
         }
+        // renew export
+        self.exports
+            .iter_mut()
+            .filter(|export| match export.item {
+                walrus::ExportItem::Function(f) if f == old_id => true,
+                _ => false,
+            })
+            .for_each(|export| {
+                export.item = walrus::ExportItem::Function(new_id);
+            });
         self.funcs.delete(old_id);
 
         Ok(())
@@ -892,7 +938,7 @@ impl WalrusUtilModule for walrus::Module {
             eyre::bail!("Function type must be (i32, i32) -> ()");
         }
 
-        let ids = self.funcs.find_children_with(id)?;
+        let ids = self.funcs.find_children_with(id, false)?;
 
         let tables = self
             .funcs
@@ -902,6 +948,8 @@ impl WalrusUtilModule for walrus::Module {
                 fn_.read(|instr, pos| {
                     if let walrus::ir::Instr::CallIndirect(call) = instr {
                         Some((call.table, (fid, pos)))
+                    } else if let walrus::ir::Instr::ReturnCallIndirect(..) = instr {
+                        unimplemented!("return_call_indirect is not supported yet")
                     } else {
                         None
                     }
@@ -1020,7 +1068,7 @@ impl WalrusUtilModule for walrus::Module {
         let exclude = [inspector, finalize]
             .iter()
             .filter_map(|id| *id)
-            .map(|f| self.funcs.find_children_with(f))
+            .map(|f| self.funcs.find_children_with(f, false))
             .flatten_ok()
             .chain(exclude.iter().map(|id| Ok(*id.borrow())))
             .collect::<eyre::Result<std::collections::HashSet<_>>>()
@@ -1081,7 +1129,7 @@ impl WalrusUtilModule for walrus::Module {
         let ids = [inspector, finalize]
             .iter()
             .filter_map(|id| *id)
-            .map(|fid| self.funcs.find_children_with(fid))
+            .map(|fid| self.funcs.find_children_with(fid, false))
             .flatten_ok()
             .collect::<eyre::Result<std::collections::HashSet<_>>>()
             .wrap_err("Failed to find exclude functions")?;
@@ -1213,20 +1261,40 @@ impl WalrusUtilModule for walrus::Module {
     {
         let from = from.get_fid(self)?;
 
-        let func = self.funcs.get(from);
-        let ty = func.ty();
-        let types = self.types.get(ty);
-        let params = types.params().to_vec();
-        let results = types.results().to_vec();
-        let local = func.kind.unwrap_local();
-        let locals = local
+        let func_base = self.funcs.get(from);
+        let ty_base = func_base.ty();
+        let types_base = self.types.get(ty_base);
+        let params_base = types_base.params().to_vec();
+        let results_base = types_base.results().to_vec();
+        let local_func_base = func_base.kind.unwrap_local();
+
+        let local_ids_base = local_func_base
             .args
+            .iter()
+            .copied()
+            .chain(
+                local_func_base
+                    .read(|instr, _| match instr {
+                        walrus::ir::Instr::LocalGet(walrus::ir::LocalGet { local }) => Some(*local),
+                        walrus::ir::Instr::LocalSet(walrus::ir::LocalSet { local }) => Some(*local),
+                        walrus::ir::Instr::LocalTee(walrus::ir::LocalTee { local }) => Some(*local),
+                        _ => None,
+                    })?
+                    .into_iter()
+                    .filter_map(|x| x)
+                    .filter(|id| !local_func_base.args.contains(id))
+                    .collect::<std::collections::HashSet<_>>()
+                    .into_iter(),
+            )
+            .collect::<Vec<_>>();
+
+        let locals_base = local_ids_base
             .iter()
             .map(|ty| self.locals.get(*ty).ty())
             .collect::<Vec<_>>();
 
-        let entry = local.entry_block();
-        let mut instrs = local
+        let entry_base = local_func_base.entry_block();
+        let mut instrs_base = local_func_base
             .read(|instr, (pos, id)| (pos, id, instr.clone()))?
             .into_iter()
             .into_group_map_by(|(_, id, _)| *id)
@@ -1245,26 +1313,45 @@ impl WalrusUtilModule for walrus::Module {
             })
             .collect::<HashMap<_, _>>();
 
-        let mut builder = FunctionBuilder::new(&mut self.types, &params, &results);
+        let mut builder = FunctionBuilder::new(&mut self.types, &params_base, &results_base);
 
-        let locals = locals
-            .into_iter()
-            .map(|ty| self.locals.add(ty))
+        let new_locals = locals_base
+            .iter()
+            .map(|ty| self.locals.add(*ty))
             .collect::<Vec<_>>();
 
-        let body_id = builder.func_body_id();
+        let new_args = new_locals
+            .iter()
+            .copied()
+            .take(local_func_base.args.len())
+            .collect::<Vec<_>>();
 
-        let mut seq_map = instrs
+        let local_map = local_ids_base
+            .iter()
+            .zip(new_locals.iter())
+            .map(|(a, b)| (*a, *b))
+            .collect::<HashMap<_, _>>();
+
+        let new_body_id = builder.func_body_id();
+
+        let mut seq_map = instrs_base
             .keys()
-            .filter(|id| **id != entry)
-            .map(|id| (*id, builder.dangling_instr_seq(local.block(*id).ty).id()))
-            .chain(std::iter::once((entry, body_id)))
+            .filter(|id| **id != entry_base)
+            .map(|id| {
+                (
+                    *id,
+                    builder
+                        .dangling_instr_seq(local_func_base.block(*id).ty)
+                        .id(),
+                )
+            })
+            .chain(std::iter::once((entry_base, new_body_id)))
             .collect::<HashMap<_, _>>();
 
         use walrus::ir::*;
 
-        for (seq, instrs) in instrs.drain() {
-            instrs[..]
+        for (seq, instrs_base) in instrs_base.drain() {
+            instrs_base
                 .iter()
                 .map(|instr| match instr {
                     Instr::Block(Block { seq }) => {
@@ -1294,14 +1381,16 @@ impl WalrusUtilModule for walrus::Module {
                 .flatten()
                 .for_each(|b| {
                     if !seq_map.contains_key(&b) {
-                        let blank_seq = builder.dangling_instr_seq(local.block(*b).ty).id();
+                        let blank_seq = builder
+                            .dangling_instr_seq(local_func_base.block(*b).ty)
+                            .id();
                         seq_map.insert(*b, blank_seq);
                     }
                 });
 
             let mut now_seq = builder.instr_seq(seq_map[&seq]);
 
-            for instr in instrs {
+            for instr in instrs_base {
                 match instr {
                     Instr::Block(Block { seq }) => {
                         now_seq.instr(Instr::Block(Block { seq: seq_map[&seq] }));
@@ -1338,6 +1427,21 @@ impl WalrusUtilModule for walrus::Module {
                             default: seq_map[&default],
                         }));
                     }
+                    Instr::LocalGet(LocalGet { local }) => {
+                        now_seq.instr(Instr::LocalGet(LocalGet {
+                            local: local_map[&local],
+                        }));
+                    }
+                    Instr::LocalSet(LocalSet { local }) => {
+                        now_seq.instr(Instr::LocalSet(LocalSet {
+                            local: local_map[&local],
+                        }));
+                    }
+                    Instr::LocalTee(LocalTee { local }) => {
+                        now_seq.instr(Instr::LocalTee(LocalTee {
+                            local: local_map[&local],
+                        }));
+                    }
                     _ => {
                         now_seq.instr(instr);
                     }
@@ -1345,12 +1449,97 @@ impl WalrusUtilModule for walrus::Module {
             }
         }
 
-        Ok(builder.finish(locals, &mut self.funcs))
+        Ok(builder.finish(new_args, &mut self.funcs))
+    }
+
+    fn nested_copy_func<A>(
+        &mut self,
+        from: impl WalrusFID<A>,
+        exclude: &[impl Borrow<FunctionId>],
+        allow_import_func: bool,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<walrus::FunctionId>
+    where
+        Self: Sized,
+    {
+        let from = from.get_fid(self)?;
+        let exclude = exclude.iter().map(|e| *e.borrow()).collect::<Vec<_>>();
+
+        let mut fid_map: HashMap<FunctionId, FunctionId> = HashMap::new();
+
+        if exclude.contains(&from) {
+            return Ok(from);
+        }
+
+        let fids = self.funcs.find_children_with(from, allow_call_indirect)?;
+
+        for fid in fids {
+            if exclude.contains(&fid) {
+                continue;
+            }
+            if fid_map.contains_key(&fid) {
+                unreachable!();
+            }
+
+            let func = self.funcs.get(fid);
+            match &func.kind {
+                FunctionKind::Import(import) => {
+                    if !allow_import_func {
+                        let import = self.imports.get(import.import);
+                        eyre::bail!("Import function found: {:?}", import);
+                    }
+                    fid_map.insert(fid, fid);
+                }
+                FunctionKind::Local(_) => {
+                    let new_fid = self.copy_func(fid)?;
+                    fid_map.insert(fid, new_fid);
+                }
+                _ => {
+                    eyre::bail!("Unknown function kind: {:?}", func.kind);
+                }
+            }
+        }
+
+        for (old_fid, new_fid) in fid_map.iter() {
+            if *old_fid == from || exclude.contains(old_fid) || *new_fid == *old_fid {
+                continue;
+            }
+            let local = self.funcs.get_mut(*new_fid).kind.unwrap_local_mut();
+            local
+                .builder_mut()
+                .func_body()
+                .rewrite(|instr, _| {
+                    use walrus::ir::*;
+                    match instr {
+                        Instr::Call(Call { func, .. })
+                        | Instr::ReturnCall(ReturnCall { func, .. }) => {
+                            if *func == *old_fid {
+                                *func = fid_map[old_fid];
+                            }
+                        }
+                        Instr::CallIndirect(call) if !allow_call_indirect => {
+                            eyre::bail!("Call indirect found: {:?}", call);
+                        }
+                        Instr::ReturnCallIndirect(call) if !allow_call_indirect => {
+                            eyre::bail!("Return call indirect found: {:?}", call);
+                        }
+                        _ => {}
+                    }
+                    Ok(())
+                })
+                .wrap_err("Failed to renew function call")?;
+        }
+
+        Ok(fid_map[&from])
     }
 }
 
 impl WalrusUtilFuncs for walrus::ModuleFunctions {
-    fn find_children(&self, fid: impl Borrow<FunctionId>) -> eyre::Result<Vec<FunctionId>> {
+    fn find_children(
+        &self,
+        fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<Vec<FunctionId>> {
         let fid = *fid.borrow();
 
         let mut children = vec![];
@@ -1358,14 +1547,29 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
         while let Some(fid) = stack.pop() {
             match &self.get(fid).kind {
                 FunctionKind::Local(imported_function) => {
-                    imported_function.read(|instr, _place| {
-                        if let walrus::ir::Instr::Call(walrus::ir::Call { func }) = instr {
-                            if !children.contains(func) {
-                                children.push(*func);
-                                stack.push(*func);
+                    imported_function
+                        .read(|instr, _place| {
+                            use walrus::ir::*;
+                            match instr {
+                                Instr::Call(Call { func })
+                                | Instr::ReturnCall(ReturnCall { func, .. }) => {
+                                    if !children.contains(func) {
+                                        children.push(*func);
+                                        stack.push(*func);
+                                    }
+                                }
+                                Instr::CallIndirect(call) if !allow_call_indirect => {
+                                    eyre::bail!("Call indirect found: {:?}", call);
+                                }
+                                Instr::ReturnCallIndirect(call) if !allow_call_indirect => {
+                                    eyre::bail!("Return call indirect found: {:?}", call);
+                                }
+                                _ => {}
                             }
-                        }
-                    })?;
+                            Ok(())
+                        })?
+                        .into_iter()
+                        .collect::<eyre::Result<Vec<_>>>()?;
                 }
                 _ => {}
             }
@@ -1413,11 +1617,12 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
         &mut self,
         mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
         fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized,
     {
-        self.find_children_with(fid)?
+        self.find_children_with(fid, allow_call_indirect)?
             .into_iter()
             .filter(|fid| {
                 if let walrus::FunctionKind::Local(_) = self.get(*fid).kind {
@@ -1441,7 +1646,7 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     where
         Self: Sized,
     {
-        self.find_children_with(fid)?
+        self.find_children_with(fid, false)?
             .into_iter()
             .filter(|fid| {
                 if let walrus::FunctionKind::Local(_) = self.get(*fid).kind {
@@ -1803,6 +2008,30 @@ impl WalrusFIDAssister for ModuleExports {
         panic!("Module name is not stored in exports, cannot find by double name");
     }
 }
+
+// pub fn init_data_set(buff: &mut walrus::ModuleData, offset: u32, data: &[u8]) -> eyre::Result<()> {
+//     let data_ids = buff.iter().map(|data| data.id()).collect::<Vec<_>>();
+
+//     for id in data_ids {
+//         let data = buff.get_mut(id);
+//         if let walrus::DataKind::Active(walrus::ActiveData {
+//             memory: _,
+//             offset: walrus::ir::Value::I32(current_offset),
+//             ..
+//         }) = &data.kind
+//         {
+//             let current_offset = *current_offset as u32;
+//             if current_offset <= offset && offset < current_offset + data.value.len() as u32 {
+//                 let start = (offset - current_offset) as usize;
+//                 let end = std::cmp::min(start + data.value.len(), start + data.len());
+//                 data.value[start..end].copy_from_slice(&data[..(end - start)]);
+//                 return Ok(());
+//             }
+//         }
+//     }
+
+//     Ok(())
+// }
 
 #[cfg(test)]
 mod tests {

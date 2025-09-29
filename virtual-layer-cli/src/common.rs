@@ -453,6 +453,7 @@ impl Wasip1Op {
                             }
                         },
                         start_fn_id,
+                        false,
                     )
                     .wrap_err("Failed to read main_void calls")?;
             } else {

@@ -106,6 +106,7 @@ impl VirtualThread for DirectThreadPool {
         let builder = std::thread::Builder::new();
 
         root_spawn(builder, move || {
+            println!("Starting a new thread in {}", accessor.as_name(),);
             accessor.call_wasi_thread_start(runner, NonZero::new(thread_id));
         })
         .ok()?;

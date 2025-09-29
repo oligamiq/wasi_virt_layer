@@ -1,5 +1,7 @@
 #![allow(dead_code)]
 
+use core::cell::UnsafeCell;
+
 pub(crate) fn out(buf: &[u8]) {
     unsafe {
         let ciovec_arr = [wasip1::Ciovec {
@@ -28,7 +30,7 @@ pub(crate) fn out(buf: &[u8]) {
 // }
 
 #[inline(never)]
-fn num_to_str(n: i32, writer: impl Fn(&[u8])) {
+pub fn num_to_str(n: i32, writer: impl Fn(&[u8])) {
     if n == 0 {
         writer(&[b'0']);
         return;
@@ -160,27 +162,27 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
     out(str.as_bytes());
 }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn debug_call_memory_grow(mem_idx: i32, key: i32, page_size: i32) {
-    out(b"debug_call_memory_grow: mem_idx=");
-    num_to_str(mem_idx, out);
-    out(b", key=");
-    num_to_str(key, out);
-    out(b", page_size=");
-    num_to_str(page_size, out);
-    out(b"\n");
-}
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn debug_call_memory_grow(mem_idx: i32, key: i32, page_size: i32) {
+//     out(b"debug_call_memory_grow: mem_idx=");
+//     num_to_str(mem_idx, out);
+//     out(b", key=");
+//     num_to_str(key, out);
+//     out(b", page_size=");
+//     num_to_str(page_size, out);
+//     out(b"\n");
+// }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn debug_call_memory_grow_pre(mem_idx: i32, key: i32, pre_page_size: i32) {
-    out(b"debug_call_memory_grow: mem_idx=");
-    num_to_str(mem_idx, out);
-    out(b", key=");
-    num_to_str(key, out);
-    out(b", pre_page_size=");
-    num_to_str(pre_page_size, out);
-    out(b"\n");
-}
+// #[unsafe(no_mangle)]
+// unsafe extern "C" fn debug_call_memory_grow_pre(mem_idx: i32, key: i32, pre_page_size: i32) {
+//     out(b"debug_call_memory_grow: mem_idx=");
+//     num_to_str(mem_idx, out);
+//     out(b", key=");
+//     num_to_str(key, out);
+//     out(b", pre_page_size=");
+//     num_to_str(pre_page_size, out);
+//     out(b"\n");
+// }
 
 // #[unsafe(no_mangle)]
 // unsafe extern "C" fn debug_atomic_wait(ptr: *const i32, expression: *const i32, timeout_ns: i64) {
@@ -205,3 +207,16 @@ unsafe extern "C" fn debug_call_memory_grow_pre(mem_idx: i32, key: i32, pre_page
 //     num_to_str(idx, out);
 //     out(b"\n");
 // }
+
+thread_local! {
+    static IS_PRE_INIT: UnsafeCell<bool> = UnsafeCell::new(true);
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn debug_wasip1_vfs_pre_init() {
+    IS_PRE_INIT.with(|c| unsafe { *c.get() = false });
+}
+
+pub fn is_pre_init() -> bool {
+    IS_PRE_INIT.with(|c| unsafe { *c.get() })
+}

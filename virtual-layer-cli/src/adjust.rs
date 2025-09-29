@@ -12,7 +12,9 @@ use crate::{
     instrs::InstrRewrite,
     rewrite::TargetMemoryType,
     shared_global,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
+    util::{
+        CaminoUtilModule as _, ResultUtil as _, WalrusFID, WalrusUtilFuncs, WalrusUtilModule as _,
+    },
 };
 
 pub fn adjust_merged_wasm(
@@ -243,7 +245,7 @@ pub fn adjust_merged_wasm(
                 })
                 .collect::<eyre::Result<HashMap<_, _>>>()?;
 
-            shared_global::remove_gen_custom_locker_base(&mut module)
+            shared_global::remove_gen_custom_locker_base(&mut module, debug)
                 .wrap_err("Failed to remove base locker function")?;
 
             module.funcs.all_rewrite(
@@ -264,14 +266,14 @@ pub fn adjust_merged_wasm(
                     ("wasip1-vfs_debug", "debug_call_memory_grow_import"),
                     "debug_call_memory_grow",
                 )
-                .unwrap();
+                .ok();
 
             module
                 .renew_call_fn(
                     ("wasip1-vfs_debug", "debug_call_memory_grow_pre_import"),
                     "debug_call_memory_grow_pre",
                 )
-                .unwrap();
+                .ok();
         }
     }
 

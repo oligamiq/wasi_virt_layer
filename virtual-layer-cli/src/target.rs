@@ -105,7 +105,7 @@ pub fn adjust_target_wasm(
                     Some(id2),
                     &[walrus::ValType::I32],
                     &[walrus::ValType::I32],
-                    &module.funcs.find_children_with(id).unwrap(),
+                    &module.funcs.find_children_with(id, false).unwrap(),
                     |instr| {
                         if let walrus::ir::Instr::MemoryGrow(walrus::ir::MemoryGrow {
                             memory: _,
