@@ -106,7 +106,6 @@ impl VirtualThread for DirectThreadPool {
         let builder = std::thread::Builder::new();
 
         root_spawn(builder, move || {
-            println!("Starting a new thread in {}", accessor.as_name(),);
             accessor.call_wasi_thread_start(runner, NonZero::new(thread_id));
         })
         .ok()?;
@@ -134,9 +133,9 @@ macro_rules! export_thread {
                         match *self {
                             $(
                                 Self::[<__ $wasm>] => {
-                                    println!("Calling wasi_thread_start in {}", self.as_name());
-                                    println!("  thread_id: {:?}", thread_id);
-                                    println!("  data_ptr: {:?}", ptr);
+                                    // println!("Calling wasi_thread_start in {}", self.as_name());
+                                    // println!("  thread_id: {:?}", thread_id);
+                                    // println!("  data_ptr: {:?}", ptr);
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
                                             Some(id) => u32::from(id) as i32,
@@ -197,8 +196,8 @@ macro_rules! export_thread {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
 
-                    println!("Spawning a new thread in {}", ACCESSOR.as_name());
-                    println!("  data_ptr: {:?}", data_ptr);
+                    // println!("Spawning a new thread in {}", ACCESSOR.as_name());
+                    // println!("  data_ptr: {:?}", data_ptr);
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;
