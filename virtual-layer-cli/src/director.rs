@@ -130,21 +130,21 @@ pub fn director(
 
         let global_id = global.id();
 
-        let global_alt_pos = "__wasip1_vfs_memory_grow_global_alt_pos".get_fid(&module.exports)?;
-        let global_alt_pos = module.funcs.get(global_alt_pos).kind.unwrap_local();
-        let global_alt_pos = if let walrus::ir::Instr::Const(walrus::ir::Const {
-            value: walrus::ir::Value::I32(value),
-        }) = global_alt_pos
-            .block(global_alt_pos.entry_block())
-            .instrs
-            .first()
-            .unwrap()
-            .0
-        {
-            value
-        } else {
-            unreachable!()
-        };
+        // let global_alt_pos = "__wasip1_vfs_memory_grow_global_alt_pos".get_fid(&module.exports)?;
+        // let global_alt_pos = module.funcs.get(global_alt_pos).kind.unwrap_local();
+        // let global_alt_pos = if let walrus::ir::Instr::Const(walrus::ir::Const {
+        //     value: walrus::ir::Value::I32(value),
+        // }) = global_alt_pos
+        //     .block(global_alt_pos.entry_block())
+        //     .instrs
+        //     .first()
+        //     .unwrap()
+        //     .0
+        // {
+        //     value
+        // } else {
+        //     unreachable!()
+        // };
 
         // check global set in start section function
         let start_id = if let Some(id) = module.start {
@@ -171,7 +171,7 @@ pub fn director(
                             *instr = walrus::ir::Instr::Const(walrus::ir::Const {
                                 value: walrus::ir::Value::I32(init),
                             });
-                            println!("Rewrote global get to const i32 {init}");
+                            // println!("Rewrote global get to const i32 {init}");
                             0usize
                         }
                         _ => 0usize,
@@ -195,9 +195,9 @@ pub fn director(
             .i32_const(init)
             .call(global_init_alt_without_lock_once);
 
-        println!("global_alt_pos: {global_alt_pos}");
-        println!("init: {init}");
-        println!("init: {:?}", init.to_le_bytes().as_slice());
+        // println!("global_alt_pos: {global_alt_pos}");
+        // println!("init: {init}");
+        // println!("init: {:?}", init.to_le_bytes().as_slice());
 
         let lockers = module
             .exports
@@ -217,7 +217,7 @@ pub fn director(
 
         // The locker is locked at the point it is called. So we can replace
         for locker_id in lockers {
-            println!("Rewriting locker: {:?}", locker_id);
+            // println!("Rewriting locker: {:?}", locker_id);
             use walrus::ir::*;
             let new_locker =
                 // module.nested_copy_func(locker_id, &[] as &[FunctionId], false, false)?;
