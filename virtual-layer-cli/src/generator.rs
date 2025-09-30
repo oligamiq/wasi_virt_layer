@@ -211,6 +211,13 @@ impl GeneratorRunner {
         &self.path
     }
 
+    #[deprecated(
+        note = "Ensure this function is self-contained. This is a temporary measure for debugging purposes."
+    )]
+    pub const fn targets(&self) -> &Vec<WasmPath> {
+        &self.targets
+    }
+
     pub const fn ctx(&self) -> &GeneratorCtx {
         &self.ctx
     }

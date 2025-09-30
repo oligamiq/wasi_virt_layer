@@ -143,8 +143,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     println!("Adjusting VFS Wasm...");
     let (ret, target_memory_type, has_debug_call_memory_grow) = adjust_wasm(
         &ret,
-        &parsed_args
-            .wasm
+        &generator
+            .targets()
             .iter()
             .map(|p| p.name())
             .collect::<eyre::Result<Vec<_>>>()?,
@@ -167,8 +167,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
     println!("Preparing target Wasm...");
-    let (wasm_paths, wasm_names) = parsed_args
-        .wasm
+    let (wasm_paths, wasm_names) = generator
+        .targets()
         .iter()
         .zip(parsed_args.get_wasm_memory_hints())
         .map(|(old_wasm, memory_hint)| {
