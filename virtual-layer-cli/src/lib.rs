@@ -43,7 +43,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let vfs_package = parsed_args
         .get_package()
         .wrap_err("Failed to get package")?;
-    println!("vfs_package: {vfs_package:?}");
     let vfs_manifest_path = vfs_package.manifest_path().unwrap();
     let vfs_root_manifest_path = vfs_package.root_manifest_path().unwrap();
 
@@ -54,8 +53,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             &vfs_root_manifest_path,
             "wasip1-virtual-layer",
         );
-
-        println!("memory_type_checker: {memory_type_checker:?}");
 
         if let Some(target_memory_type) = parsed_args.target_memory_type {
             if let Some(restorer) = memory_type_checker.set(target_memory_type.is_multi())? {
