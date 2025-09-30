@@ -1,9 +1,12 @@
+use camino::Utf8PathBuf;
 use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
 
 use crate::{
+    args::TargetMemoryType,
     config_checker::{FeatureChecker, HasFeature, TomlRestorers},
+    generator::{GeneratorCtx, WasmPath},
     util::{ResultUtil as _, WalrusUtilModule},
 };
 
@@ -50,32 +53,51 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package)?;
     let vfs_name = building_crate.name.to_string();
 
-    if let Some(target_memory_type) = parsed_args.target_memory_type {
-        let checker = FeatureChecker::new(
+    let memory_type = {
+        let memory_type_checker = FeatureChecker::new(
             &cargo_metadata,
             &building_crate,
             "multi_memory",
             "wasip1-virtual-layer",
         );
 
-        if let Some(restorer) = checker.set(target_memory_type.is_multi())? {
-            toml_restores.push(restorer);
-        }
-    }
+        if let Some(target_memory_type) = parsed_args.target_memory_type {
+            if let Some(restorer) = memory_type_checker.set(target_memory_type.is_multi())? {
+                toml_restores.push(restorer);
+            }
 
-    let threads_feature_checker = FeatureChecker::new(
-        &cargo_metadata,
-        &building_crate,
-        "threads",
-        "wasip1-virtual-layer",
-    );
-    if let Some(threads) = parsed_args.threads {
-        if let Some(restorer) = threads_feature_checker.set(threads)? {
-            toml_restores.push(restorer);
+            target_memory_type
+        } else {
+            match memory_type_checker.has()? {
+                HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace => {
+                    TargetMemoryType::Multi
+                }
+                HasFeature::Disabled => TargetMemoryType::Single,
+            }
         }
-    }
+    };
 
-    if let Some(dwarf) = parsed_args.dwarf {
+    let threads = {
+        let threads_feature_checker = FeatureChecker::new(
+            &cargo_metadata,
+            &building_crate,
+            "threads",
+            "wasip1-virtual-layer",
+        );
+        if let Some(threads) = parsed_args.threads {
+            if let Some(restorer) = threads_feature_checker.set(threads)? {
+                toml_restores.push(restorer);
+            }
+            threads
+        } else {
+            matches!(
+                threads_feature_checker.has()?,
+                HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
+            )
+        }
+    };
+
+    let dwarf = if let Some(dwarf) = parsed_args.dwarf {
         let checker = FeatureChecker::new_no_feature(
             &cargo_metadata,
             &building_crate,
@@ -83,13 +105,46 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         );
 
         toml_restores.push(checker.set_dwarf(dwarf)?);
-    }
-    let dwarf = parsed_args.dwarf.unwrap_or(false);
 
-    let threads = parsed_args.threads.unwrap_or(matches!(
-        threads_feature_checker.has()?,
-        HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
-    ));
+        dwarf
+    } else {
+        false
+    };
+
+    let unstable_print_debug = {
+        let checker = FeatureChecker::new(
+            &cargo_metadata,
+            &building_crate,
+            "unstable_print_debug",
+            "wasip1-virtual-layer",
+        );
+
+        matches!(
+            checker.has()?,
+            HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
+        )
+    };
+
+    let generator = generator::GeneratorRunner::new(
+        GeneratorCtx {
+            threads,
+            dwarf,
+            vfs_name: vfs_name.clone(),
+            target_names: parsed_args
+                .wasm
+                .iter()
+                .map(|p| p.get_file_main_name().unwrap().to_string())
+                .collect(),
+            target_memory_type: memory_type,
+            unstable_print_debug,
+        },
+        WasmPath::new(
+            manifest_path
+                .as_ref()
+                .map(|p| Utf8PathBuf::from(p))
+                .unwrap_or(cargo_metadata.workspace_root.join("Cargo.toml")),
+        ),
+    );
 
     println!("Compiling {vfs_name}");
 
@@ -108,7 +163,16 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let ret =
         building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
-    let print_debug = debug::has_debug(&walrus::Module::load(&ret, dwarf)?);
+    let print_debug = matches!(
+        FeatureChecker::new(
+            &cargo_metadata,
+            &building_crate,
+            "unstable_print_debug",
+            "wasip1-virtual-layer",
+        )
+        .has()?,
+        HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
+    );
 
     println!("Adjusting VFS Wasm...");
     let (ret, target_memory_type, has_debug_call_memory_grow) =
