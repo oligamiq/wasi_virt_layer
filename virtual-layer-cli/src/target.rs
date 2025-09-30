@@ -5,37 +5,19 @@ use eyre::Context as _;
 
 use crate::{
     common::Wasip1SnapshotPreview1Func,
-    threads,
-    util::{
-        CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs as _, WalrusUtilImport,
-        WalrusUtilModule,
-    },
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
 };
 
 pub fn adjust_target_wasm(
     path: &Utf8PathBuf,
-    memory_hint: Option<usize>,
     threads: bool,
-    debug: bool,
     dwarf: bool,
-    has_debug_call_memory_grow: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let name = path
         .get_file_main_name()
         .unwrap_or_else(|| panic!("Failed to get file name from {path}"));
 
     let mut module = walrus::Module::load(path, dwarf)?;
-
-    if threads {
-        threads::remove_unused_threads_function(&mut module)
-            .wrap_err("Failed to remove unused threads function")?;
-    }
-
-    module.create_memory_anchor(&name, memory_hint)?;
-
-    module
-        .create_global_anchor(&name)
-        .wrap_err("Failed to create global anchor")?;
 
     let rewrite_exports = ["_start", "__main_void", "memory"];
 
@@ -76,51 +58,6 @@ pub fn adjust_target_wasm(
             .map(|export| {
                 export.name = format!("__wasip1_vfs_wasi_thread_start_{name}");
             });
-
-        if debug && has_debug_call_memory_grow {
-            let func_ty = module.types.add(
-                &[
-                    walrus::ValType::I32,
-                    walrus::ValType::I32,
-                    walrus::ValType::I32,
-                ],
-                &[],
-            );
-            let (id, _) = module.add_import_func(
-                "wasip1-vfs_debug",
-                "debug_call_memory_grow_import",
-                func_ty,
-            );
-            let (id2, _) = module.add_import_func(
-                "wasip1-vfs_debug",
-                "debug_call_memory_grow_pre_import",
-                func_ty,
-            );
-
-            module
-                .gen_inspect_with_finalize(
-                    Some(id),
-                    Some(id2),
-                    &[walrus::ValType::I32],
-                    &[walrus::ValType::I32],
-                    &module.funcs.find_children_with(id, false).unwrap(),
-                    |instr| {
-                        if let walrus::ir::Instr::MemoryGrow(walrus::ir::MemoryGrow {
-                            memory: _,
-                            ..
-                        }) = instr
-                        {
-                            static mut I: i32 = 117;
-                            unsafe { I += 1 };
-                            println!("Rewriting memory.grow to call debug function");
-                            Some([1, unsafe { I }])
-                        } else {
-                            None
-                        }
-                    },
-                )
-                .unwrap();
-        }
     }
 
     let new_path = path.with_extension("adjusted.wasm");

@@ -11,6 +11,7 @@ use crate::{
 pub mod adjust;
 pub mod args;
 pub mod building;
+pub mod check;
 pub mod common;
 pub mod config_checker;
 pub mod debug;
@@ -20,6 +21,8 @@ pub mod generator;
 pub mod instrs;
 pub mod is_valid;
 pub mod merge;
+pub mod patch_component;
+pub mod reset;
 pub mod rewrite;
 pub mod shared_global;
 pub mod target;
@@ -127,6 +130,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         unstable_print_debug,
         memory_type,
         toml_restores.clone(),
+        parsed_args.get_wasm_memory_hints(),
     )?;
     generator.definitely()?;
 
@@ -141,7 +145,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
     println!("Adjusting VFS Wasm...");
-    let (ret, target_memory_type, has_debug_call_memory_grow) = adjust_wasm(
+    let ret = adjust_wasm(
         &ret,
         &generator
             .targets()
@@ -184,15 +188,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 .wrap_err("Failed to optimize Wasm")?;
             tmp_files.push(wasm.to_string());
             println!("Adjusting target Wasm [{name}]...");
-            let wasm = target::adjust_target_wasm(
-                &wasm,
-                memory_hint,
-                threads,
-                unstable_print_debug,
-                dwarf,
-                has_debug_call_memory_grow,
-            )
-            .wrap_err("Failed to adjust Wasm")?;
+            let wasm =
+                target::adjust_target_wasm(&wasm, threads, unstable_print_debug)
+                    .wrap_err("Failed to adjust Wasm")?;
             tmp_files.push(wasm.to_string());
             Ok((wasm, name))
         })

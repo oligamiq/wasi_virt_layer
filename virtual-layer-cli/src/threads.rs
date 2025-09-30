@@ -2,54 +2,17 @@ use std::fs;
 
 use camino::Utf8PathBuf;
 use eyre::Context;
+use itertools::Itertools;
+use strum::VariantNames;
 
-use crate::util::{ResultUtil, WalrusUtilModule as _};
-
-pub fn remove_unused_threads_function(wasm: &mut walrus::Module) -> eyre::Result<()> {
-    // if wasm doesn't have wasi.thread-spawn on import,
-    // wasm's export `wasi_thread_start` should be removed
-
-    if !wasm
-        .imports
-        .iter()
-        .any(|i| i.module == "wasi" && i.name == "thread-spawn")
-    {
-        if wasm.exports.iter().any(|e| e.name == "wasi_thread_start") {
-            wasm.exports
-                .remove("wasi_thread_start")
-                .to_eyre()
-                .wrap_err("Failed to remove wasi_thread_start export")?;
-        } else {
-            log::warn!(
-                "wasi.thread-spawn is not imported, and wasi_thread_start is not exported. This expect multi-threaded Wasm. Is this non rust-lang wasm?"
-            );
-        }
-
-        // todo!() check memory id used on thread-spawn function
-        if let Some((mem, id)) = {
-            wasm.imports
-                .iter()
-                .filter_map(|e| match e.kind {
-                    walrus::ImportKind::Memory(mem) => Some((mem, e.id())),
-                    _ => None,
-                })
-                .find(|_| true)
-        } {
-            wasm.imports.delete(id);
-            wasm.memories
-                .iter_mut()
-                .find(|m| m.id() == mem)
-                .unwrap()
-                .import = None;
-        } else {
-            log::warn!(
-                "wasi.thread-spawn is not imported, and shared memory is not exported. This expect multi-threaded Wasm. Is this non rust-lang wasm?"
-            );
-        }
-    }
-
-    Ok(())
-}
+use crate::{
+    common::Wasip1SnapshotPreview1ThreadsFunc,
+    generator::{Generator, GeneratorCtx, ModuleExternal},
+    util::{
+        ResultUtil, THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _,
+        WalrusUtilModule as _,
+    },
+};
 
 pub fn adjust_core_wasm(
     path: &Utf8PathBuf,
@@ -132,4 +95,110 @@ pub fn adjust_core_wasm(
         .wrap_err("Failed to write temporary wasm file")?;
 
     Ok((new_path, mem_size))
+}
+
+fn gen_component_name(namespace: &str, name: &str) -> String {
+    format!("[static]{namespace}.{}-import", name.replace("_", "-"))
+}
+
+/// The thread spawn process itself within the VFS is also caught,
+/// but processing is performed to exclude only the root spawn from this.
+/// Relocate thread creation from root spawn to the outer layer
+#[derive(Debug, Default)]
+pub struct ThreadsSpawn;
+
+impl Generator for ThreadsSpawn {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        if !ctx.threads {
+            return Ok(());
+        }
+
+        let namespace = "wasip1-threads";
+        let root = THREADS_MODULE_ROOT;
+        let name = <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
+            .iter()
+            .exactly_one()
+            .wrap_err("Expected exactly one variant for Wasip1SnapshotPreview1ThreadsFunc")?; // thread-spawn
+
+        let component_name = gen_component_name(namespace, name);
+
+        module
+            .exports
+            .erase_with(&format!("{name}_import_anchor"), ctx.unstable_print_debug)?;
+
+        let real_thread_spawn_fn_id = (root, &component_name).get_fid(&module.imports)?;
+
+        let branch_fid = "__wasip1_vfs_is_root_spawn".get_fid(&module.exports)?;
+
+        let normal_thread_spawn_fn_id = ("wasi", "thread-spawn").get_fid(&module.imports)?;
+
+        let self_thread_spawn_fn_id =
+            "__wasip1_vfs_wasi_thread_spawn_self".get_fid(&module.exports)?;
+
+        module
+            .exports
+            .erase_with(self_thread_spawn_fn_id, ctx.unstable_print_debug)?;
+
+        use walrus::ValType::I32;
+        let real_thread_spawn_fn_id = module
+            .add_func(&[I32], &[I32], |builder, args| {
+                let mut body = builder.func_body();
+                body.call(branch_fid)
+                    .if_else(
+                        I32,
+                        |then| {
+                            then.local_get(args[0]) // pass the argument to thread-spawn
+                                .call(real_thread_spawn_fn_id);
+                        },
+                        |else_| {
+                            else_
+                                .local_get(args[0]) // pass the argument to thread-spawn
+                                .call(self_thread_spawn_fn_id); // call thread-spawn
+                        },
+                    )
+                    .return_();
+
+                Ok(())
+            })
+            .wrap_err("Failed to add real thread spawn function")?;
+
+        module
+            .renew_call_fn(normal_thread_spawn_fn_id, real_thread_spawn_fn_id)
+            .wrap_err("Failed to rewrite thread-spawn call")?;
+
+        let exporting_thread_starter_id = "wasi_thread_start".get_fid(&module.exports)?;
+
+        module
+            .connect_func_alt(
+                ("wasip1-vfs", "__wasip1_vfs_self_wasi_thread_start"),
+                exporting_thread_starter_id,
+                ctx.unstable_print_debug,
+            )
+            .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
+
+        module.exports.erase_with(
+            "__wasip1_vfs_self_wasi_thread_start_anchor",
+            ctx.unstable_print_debug,
+        )?;
+
+        if ctx.unstable_print_debug {
+            module
+                .exports
+                .add("real_thread_spawn_fn", real_thread_spawn_fn_id);
+        }
+
+        // __wasip1_vfs_self_wasi_thread_start
+        module
+            .renew_call_fn(
+                ("wasip1-vfs", "__wasip1_vfs_wasi_thread_start_entry"),
+                exporting_thread_starter_id,
+            )
+            .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
+
+        module
+            .exports
+            .erase_with(branch_fid, ctx.unstable_print_debug)?;
+
+        Ok(())
+    }
 }

@@ -90,6 +90,13 @@ pub(crate) trait WalrusUtilImport: Debug {
     }
 }
 
+pub(crate) trait WalrusUtilExport: Debug {
+    fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()>;
+    fn erase_with<A>(&mut self, as_fn: impl WalrusFID<A>, debug: bool) -> eyre::Result<()> {
+        if !debug { self.erase(as_fn) } else { Ok(()) }
+    }
+}
+
 pub(crate) trait WalrusUtilFuncs {
     /// Find children flat functions
     fn find_children(
@@ -210,12 +217,18 @@ pub(crate) trait WalrusUtilModule {
 
     /// get the memory id from target name
     /// and remove anchor
-    fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId>;
+    fn get_target_memory_id(
+        &mut self,
+        name: impl AsRef<str>,
+        remove: bool,
+    ) -> eyre::Result<MemoryId>;
+
+    fn find_used_memory_id(&self, memory_hint: Option<usize>) -> eyre::Result<MemoryId>;
 
     fn create_memory_anchor(
         &mut self,
         name: impl AsRef<str>,
-        memory_hint: Option<usize>,
+        memory_id: MemoryId,
     ) -> eyre::Result<()>;
 
     fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>>;
@@ -372,6 +385,28 @@ impl WalrusUtilImport for ModuleImports {
     }
 }
 
+impl WalrusUtilExport for ModuleExports {
+    fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()> {
+        let fid = as_fn.get_fid(self)?;
+
+        let export_id = self
+            .iter()
+            .find(|f| {
+                if let walrus::ExportItem::Function(f) = f.item {
+                    f == fid
+                } else {
+                    false
+                }
+            })
+            .map(|f| f.id())
+            .ok_or_else(|| eyre::eyre!("Export not found: {}", as_fn.as_str()))?;
+
+        self.delete(export_id);
+
+        Ok(())
+    }
+}
+
 impl WalrusUtilModule for walrus::Module {
     fn connect_func_with_is_delete<A, B>(
         &mut self,
@@ -436,57 +471,41 @@ impl WalrusUtilModule for walrus::Module {
     }
 
     /// if vfs, get vfs memory_id
-    fn get_target_memory_id(&mut self, name: impl AsRef<str>) -> eyre::Result<MemoryId> {
-        let anchor_name = format!("__wasip1_vfs_flag_{}_memory", name.as_ref());
-
-        let anchor_func_id = self
-            .exports
-            .get_func(&anchor_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("anchor {} not found", anchor_name))?;
-
-        self.exports
-            .remove(&anchor_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to remove anchor export"))?;
-
-        let anchor_body = &self.funcs.get(anchor_func_id).kind;
-        if let FunctionKind::Local(local_func) = anchor_body {
-            let entry_id = local_func.entry_block();
-            let func_body = local_func.block(entry_id);
-            let memory_id = func_body
-                .iter()
-                .map(|(block, _)| block)
-                .filter_map(|block| match block {
-                    ir::Instr::Load(ir::Load { memory, .. }) => Some(*memory),
-                    ir::Instr::Store(ir::Store { memory, .. }) => Some(*memory),
-                    _ => None,
-                })
-                .fold(Ok(Option::<MemoryId>::None), |a, b| match a? {
-                    Some(a) if a == b => Ok(Some(a)),
-                    None => Ok(Some(b)),
-                    Some(_) => Err(eyre::eyre!(
-                        "Anchor access double memory, cannot determine memory id"
-                    )),
-                })?
-                .ok_or_else(|| eyre::eyre!("Memory not found"));
-
-            memory_id
-        } else {
-            Err(eyre::eyre!(
-                "anchor (local function) {} not found",
-                anchor_name
-            ))
-        }
-    }
-
-    fn create_memory_anchor(
+    fn get_target_memory_id(
         &mut self,
         name: impl AsRef<str>,
-        memory_hint: Option<usize>,
-    ) -> eyre::Result<()> {
+        remove: bool,
+    ) -> eyre::Result<MemoryId> {
         let name = name.as_ref();
 
+        let anchor_func_id = format!("__wasip1_vfs_flag_{name}_memory").get_fid(&self.exports)?;
+
+        self.exports.erase_with(anchor_func_id, remove)?;
+
+        let anchor_body = &self.funcs.get(anchor_func_id).kind;
+
+        let local_func = anchor_body.unwrap_local();
+
+        let func_body = local_func.block(local_func.entry_block());
+        let memory_id = func_body
+            .iter()
+            .map(|(block, _)| block)
+            .filter_map(|block| match block {
+                ir::Instr::Load(ir::Load { memory, .. }) => Some(*memory),
+                ir::Instr::Store(ir::Store { memory, .. }) => Some(*memory),
+                _ => None,
+            })
+            .fold(Ok(Option::<MemoryId>::None), |a, b| match a? {
+                Some(a) if a == b => Ok(Some(a)),
+                None => Ok(Some(b)),
+                Some(_) => eyre::bail!("Anchor access double memory, cannot determine memory id"),
+            })?
+            .ok_or_else(|| eyre::eyre!("Memory not found"))?;
+
+        Ok(memory_id)
+    }
+
+    fn find_used_memory_id(&self, memory_hint: Option<usize>) -> eyre::Result<MemoryId> {
         let memories = self
             .memories
             .iter()
@@ -494,7 +513,7 @@ impl WalrusUtilModule for walrus::Module {
             .collect::<Vec<_>>();
 
         if memories.is_empty() {
-            return Err(eyre::eyre!("No memories found"));
+            eyre::bail!("No memories found");
         }
 
         // After calling environ_sizes_get,
@@ -503,11 +522,8 @@ impl WalrusUtilModule for walrus::Module {
         let memory_id = if memories.len() > 1 && memory_hint.is_none() {
             let gen_memory_id = || -> eyre::Result<MemoryId> {
                 // environ_sizes_get
-                let import_id = self
-                    .imports
-                    .get_func("wasi_snapshot_preview1", "environ_sizes_get")
-                    .to_eyre()
-                    .wrap_err_with(|| eyre::eyre!("Failed to get environ_sizes_get"))?;
+                let import_id =
+                    ("wasi_snapshot_preview1", "environ_sizes_get").get_fid(&self.imports)?;
 
                 let using_funcs = self.get_using_func(import_id, true)?;
 
@@ -602,6 +618,16 @@ impl WalrusUtilModule for walrus::Module {
         } else {
             memories[0]
         };
+
+        Ok(memory_id)
+    }
+
+    fn create_memory_anchor(
+        &mut self,
+        name: impl AsRef<str>,
+        memory_id: MemoryId,
+    ) -> eyre::Result<()> {
+        let name = name.as_ref();
 
         // unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
         //     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };

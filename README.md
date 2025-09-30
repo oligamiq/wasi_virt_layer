@@ -2,21 +2,19 @@
 - Support non-binary Wasm modules
 - Enable specifying multiple Wasm modules
 - Support self binary
-- Allow paths to Cargo.toml instead of paths to wasm
 - support flush sync to file system
-- adjust test_run.ts to use VFS
 - Fake global allocator and center allocator and merge with vfs
 - Access Time Trait
 - Multiple lfs file system (VFS)
 - Static file system
-- Resolve threads export conflict
 - Feature Access time etc traits
 - Separate mode (connect function by javascript)
+- threading vfs with non threading wasm
 
 # run example
 ```bash
 cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
-cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm -t single --no-tracing --threads false
+cargo r -r -- -p threads_vfs test_threads -t single --no-tracing --threads true
 ```
 
 # cannot

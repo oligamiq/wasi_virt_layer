@@ -4,6 +4,8 @@ use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 
 use crate::{
+    common::Wasip1SnapshotPreview1Func,
+    generator::{Generator, ModuleExternal},
     instrs::{InstrRead as _, InstrRewrite},
     util::{WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
 };
@@ -405,4 +407,159 @@ pub fn has_debug(module: &walrus::Module) -> bool {
         .exports
         .iter()
         .any(|export| EXCLUDE_NAMES.contains(&export.name.as_str()))
+}
+
+#[derive(Debug, Default)]
+pub struct DebugCallMemoryGrow {
+    has: Option<bool>,
+}
+
+impl Generator for DebugCallMemoryGrow {
+    fn pre_vfs(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        self.has = Some(false);
+
+        if !ctx.threads || !ctx.unstable_print_debug {
+            return Ok(());
+        }
+
+        if let Some((id, id2)) = "debug_call_memory_grow"
+            .get_fid(&module.exports)
+            .ok()
+            .and_then(|id| {
+                "debug_call_memory_grow_pre"
+                    .get_fid(&module.exports)
+                    .ok()
+                    .map(|id2| (id, id2))
+            })
+        {
+            self.has = Some(true);
+
+            module
+                .gen_inspect_with_finalize(
+                    Some(id),
+                    Some(id2),
+                    &[walrus::ValType::I32],
+                    &[walrus::ValType::I32],
+                    &module.funcs.find_children_with(id, false).unwrap(),
+                    |instr| {
+                        if let walrus::ir::Instr::MemoryGrow(walrus::ir::MemoryGrow {
+                            memory: _,
+                            ..
+                        }) = instr
+                        {
+                            static mut Z: i32 = 17;
+                            unsafe { Z += 1 };
+                            Some([0, unsafe { Z }])
+                        } else {
+                            None
+                        }
+                    },
+                )
+                .unwrap();
+        }
+
+        Ok(())
+    }
+
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &crate::generator::GeneratorCtx,
+        _: &ModuleExternal,
+    ) -> eyre::Result<()> {
+        let has = self.has.wrap_err("DebugCallMemoryGrow not initialized")?;
+        if !has {
+            return Ok(());
+        }
+
+        let func_ty = module.types.add(
+            &[
+                walrus::ValType::I32,
+                walrus::ValType::I32,
+                walrus::ValType::I32,
+            ],
+            &[],
+        );
+        let (id, _) =
+            module.add_import_func("wasip1-vfs_debug", "debug_call_memory_grow_import", func_ty);
+        let (id2, _) = module.add_import_func(
+            "wasip1-vfs_debug",
+            "debug_call_memory_grow_pre_import",
+            func_ty,
+        );
+
+        module
+            .gen_inspect_with_finalize(
+                Some(id),
+                Some(id2),
+                &[walrus::ValType::I32],
+                &[walrus::ValType::I32],
+                &module.funcs.find_children_with(id, false).unwrap(),
+                |instr| {
+                    if let walrus::ir::Instr::MemoryGrow(walrus::ir::MemoryGrow {
+                        memory: _, ..
+                    }) = instr
+                    {
+                        static mut I: i32 = 117;
+                        unsafe { I += 1 };
+                        println!("Rewriting memory.grow to call debug function");
+                        Some([1, unsafe { I }])
+                    } else {
+                        None
+                    }
+                },
+            )
+            .wrap_err("Failed to set debug_call_memory_grow")?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct DebugExportVFSFunctions;
+
+impl Generator for DebugExportVFSFunctions {
+    fn pre_vfs(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        if !ctx.unstable_print_debug {
+            return Ok(());
+        }
+
+        for wasm_name in &ctx.target_names {
+            module
+                .exports
+                .iter()
+                .filter(|export| {
+                    export
+                        .name
+                        .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
+                })
+                .filter(|export| {
+                    <Wasip1SnapshotPreview1Func as strum::VariantNames>::VARIANTS.contains(
+                        &export
+                            .name
+                            .as_str()
+                            .trim_start_matches(&format!("__wasip1_vfs_{wasm_name}_")),
+                    )
+                })
+                .filter_map(|export| match export.item {
+                    walrus::ExportItem::Function(fid) => Some((export.name.clone(), fid)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .for_each(|(name, old_fid)| {
+                    module.exports.add(&format!("debug_{name}"), old_fid);
+                });
+        }
+
+        Ok(())
+    }
 }
