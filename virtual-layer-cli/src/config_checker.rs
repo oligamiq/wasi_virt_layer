@@ -1,7 +1,6 @@
 use std::fs;
 
 use camino::Utf8PathBuf;
-use cargo_metadata::{Metadata, Package};
 use eyre::Context as _;
 use toml_edit::{Document, DocumentMut, Item};
 
@@ -107,37 +106,38 @@ pub enum HasFeature {
     EnabledOnWorkspace,
 }
 
+#[derive(Debug)]
 pub struct FeatureChecker<'a, 'b, 'c, 'd> {
     feature: Option<&'a str>,
-    metadata: &'b Metadata,
-    building_crate: &'c Package,
+    manifest_path: &'b Utf8PathBuf,
+    root_manifest_path: &'c Utf8PathBuf,
     crate_name: &'d str,
 }
 
 impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
     pub const fn new(
-        metadata: &'b Metadata,
-        building_crate: &'c Package,
         feature: &'a str,
+        manifest_path: &'b Utf8PathBuf,
+        root_manifest_path: &'c Utf8PathBuf,
         crate_name: &'d str,
     ) -> Self {
         Self {
-            metadata,
             feature: Some(feature),
-            building_crate,
+            manifest_path,
+            root_manifest_path,
             crate_name,
         }
     }
 
     pub const fn new_no_feature(
-        metadata: &'b Metadata,
-        building_crate: &'c Package,
+        manifest_path: &'b Utf8PathBuf,
+        root_manifest_path: &'c Utf8PathBuf,
         crate_name: &'d str,
     ) -> Self {
         Self {
-            metadata,
+            manifest_path,
             feature: None,
-            building_crate,
+            root_manifest_path,
             crate_name,
         }
     }
@@ -153,8 +153,8 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
     }
 
     fn read_manifest<T: std::str::FromStr<Err = toml_edit::TomlError>>(&self) -> eyre::Result<T> {
-        let file_data = fs::read_to_string(&self.building_crate.manifest_path)
-            .wrap_err("Failed to read manifest file")?;
+        let file_data =
+            fs::read_to_string(&self.manifest_path).wrap_err("Failed to read manifest file")?;
         let doc = file_data
             .parse::<T>()
             .wrap_err("Failed to parse manifest file")?;
@@ -164,9 +164,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
     fn read_workspace_manifest<T: std::str::FromStr<Err = toml_edit::TomlError>>(
         &self,
     ) -> eyre::Result<T> {
-        let manifest_path = self.metadata.workspace_root.join("Cargo.toml");
-
-        let file_data = fs::read_to_string(&manifest_path)
+        let file_data = fs::read_to_string(&self.root_manifest_path)
             .wrap_err("Failed to read workspace manifest file")?;
         let doc = file_data
             .parse::<T>()
@@ -254,8 +252,8 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
     pub fn set(&self, on: bool) -> eyre::Result<Option<TomlRestorer>> {
         let Self {
             feature,
-            metadata,
-            building_crate,
+            manifest_path,
+            root_manifest_path,
             crate_name,
         } = self;
 
@@ -269,10 +267,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
         let (path, data) = match (now, on) {
             (HasFeature::Disabled, true) | (HasFeature::EnabledOnNormal, false) => {
                 Self::set_table(crate_setting, feature, on)?;
-                (building_crate.manifest_path.clone(), doc)
-                // let doc = doc.to_string();
-                // std::fs::write(&manifest_path, &doc).wrap_err("Failed to write manifest file")?;
-                // Ok(TomlRestorer::new(&manifest_path.into(), file_data, doc))
+                (manifest_path.to_owned(), doc)
             }
             (HasFeature::EnabledOnWorkspace, false) => {
                 log::warn!(
@@ -284,12 +279,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
 
                 Self::set_table(crate_setting, feature, on)?;
 
-                (metadata.workspace_root.join("Cargo.toml"), doc)
-                // let doc = doc.to_string();
-                // std::fs::write(&manifest_path, &doc)
-                //     .wrap_err("Failed to write workspace manifest file")?;
-
-                // Ok(TomlRestorer::new(&manifest_path.into(), file_data, doc))
+                (root_manifest_path.to_owned(), doc)
             }
             _ => {
                 return Ok(None);
@@ -332,18 +322,15 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
             Ok(())
         }
 
-        if self.metadata.workspace_members.first().is_some() {
+        if self.manifest_path != self.root_manifest_path {
             let mut doc = self.read_workspace_manifest::<DocumentMut>()?;
             set(&mut doc, on)?;
 
-            return TomlRestorer::with_write(
-                &self.metadata.workspace_root.join("Cargo.toml"),
-                doc.to_string(),
-            );
+            return TomlRestorer::with_write(&self.root_manifest_path, doc.to_string());
         }
 
         let mut doc = self.read_manifest::<DocumentMut>()?;
         set(&mut doc, on)?;
-        return TomlRestorer::with_write(&self.building_crate.manifest_path, doc.to_string());
+        return TomlRestorer::with_write(&self.manifest_path, doc.to_string());
     }
 }

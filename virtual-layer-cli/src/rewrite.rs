@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::fs;
 
 use camino::Utf8PathBuf;
 use eyre::Context as _;
@@ -9,8 +9,8 @@ use crate::{
     common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
     threads,
     util::{
-        CORE_MODULE_ROOT, CaminoUtilModule as _, ResultUtil as _, THREADS_MODULE_ROOT, WalrusFID,
-        WalrusUtilFuncs as _, WalrusUtilImport, WalrusUtilModule,
+        CORE_MODULE_ROOT, ResultUtil as _, THREADS_MODULE_ROOT, WalrusFID, WalrusUtilFuncs as _,
+        WalrusUtilImport, WalrusUtilModule,
     },
 };
 
@@ -19,7 +19,7 @@ use crate::{
 /// embedding __wasip1_vfs_flag_{name}_memory
 pub fn adjust_wasm(
     path: &Utf8PathBuf,
-    wasm: &[impl AsRef<Path>],
+    wasm_names: &[impl AsRef<str>],
     threads: bool,
     debug: bool,
     dwarf: bool,
@@ -47,9 +47,8 @@ pub fn adjust_wasm(
     }
 
     // check use import_wasm!
-    for wasm in wasm {
-        let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
-
+    for wasm_name in wasm_names {
+        let wasm_name = wasm_name.as_ref();
         if !module
             .exports
             .iter()
@@ -246,8 +245,8 @@ pub fn adjust_wasm(
     module.exports.delete(eid);
 
     if debug {
-        for wasm in wasm {
-            let wasm_name = wasm.as_ref().get_file_main_name().unwrap();
+        for wasm_name in wasm_names {
+            let wasm_name = wasm_name.as_ref();
 
             module
                 .exports

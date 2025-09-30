@@ -4,23 +4,27 @@ use camino::Utf8PathBuf;
 use clap::{Parser, command};
 use eyre::Context as _;
 
-use crate::util::ResultUtil as _;
+use crate::{generator::WasmPath, util::ResultUtil as _};
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
 pub struct Args {
     /// Path to the wasip1 wasm file
-    pub wasm: Vec<Utf8PathBuf>,
+    /// This allow 4 patterns:
+    /// 1. only manifest path, like `./Cargo.toml` or `./some/dir/Cargo.toml`
+    /// 2. only package name, like `my_package`
+    /// 3. manifest path and package name, like `./Cargo.toml::my_package` or `./some/dir/Cargo.toml::my_package`
+    /// 4. direct path to wasm file, like `./target/wasm32-wasi/release/my_crate.wasm`
+    pub wasm: Vec<WasmPath>,
+
+    #[arg(short, long)]
+    package: Option<WasmPath>,
 
     /// Memory hints for the wasm files.
     /// If the target Wasm file fails to detect the memory used
     /// when handling the wasip1 instruction, you can use this to specify it.
     #[arg(long)]
-    pub wasm_memory_hint: Vec<usize>,
-
-    /// Path to the Cargo.toml file
-    #[arg(long)]
-    pub manifest_path: Option<String>,
+    wasm_memory_hint: Vec<isize>,
 
     /// Output directory for the generated files
     #[arg(long, default_value = "./dist")]
@@ -42,10 +46,6 @@ pub struct Args {
     // transpile options
     #[command(flatten)]
     pub transpile_opts: TranspileOpts,
-
-    /// Package name to build
-    #[arg(short, long)]
-    pub package: Option<String>,
 
     /// If wasm run on multiple threads, enable thread support
     /// This will change the crate feature flags to enable multi-threading.
@@ -78,8 +78,27 @@ impl Args {
         parsed
     }
 
-    pub fn get_manifest_path(&self) -> &'_ Option<String> {
-        &self.manifest_path
+    pub fn get_wasm_memory_hints(&self) -> Vec<Option<usize>> {
+        self.wasm_memory_hint
+            .iter()
+            .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
+            .chain(std::iter::repeat(None))
+            .take(self.wasm.len())
+            .collect()
+    }
+
+    pub fn get_package(&self) -> eyre::Result<WasmPath> {
+        Ok(self.package.clone())
+            .transpose()
+            .unwrap_or_else(|| WasmPath::with_maybe_none())
+    }
+
+    pub fn get_manifest_path(&self) -> Option<&Utf8PathBuf> {
+        self.package.as_ref().and_then(|p| p.manifest_path())
+    }
+
+    pub fn get_package_name(&self) -> Option<String> {
+        self.package.clone().and_then(|p| p.name().ok())
     }
 
     pub fn transpile_to_js(

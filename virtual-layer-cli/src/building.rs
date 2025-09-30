@@ -42,7 +42,6 @@ impl<const T: usize, R: BufRead> Iterator for CustomReadIterator<T, R> {
 
 pub fn build_vfs(
     manifest_path: Option<&String>,
-    package: Option<&String>,
     building_crate: &cargo_metadata::Package,
     threads: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
@@ -67,10 +66,8 @@ pub fn build_vfs(
         if threads {
             args.insert(0, "+nightly");
         }
-        if let Some(package_name) = package {
-            args.push("--package");
-            args.push(package_name);
-        }
+        args.push("--package");
+        args.push(&building_crate.name);
         if let Some(ref manifest_path) = manifest_path {
             args.push("--manifest-path");
             args.push(&manifest_path);

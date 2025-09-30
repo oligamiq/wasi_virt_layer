@@ -1,4 +1,3 @@
-use camino::Utf8PathBuf;
 use eyre::{Context, ContextCompat};
 use rewrite::adjust_wasm;
 use util::CaminoUtilModule as _;
@@ -6,7 +5,6 @@ use util::CaminoUtilModule as _;
 use crate::{
     args::TargetMemoryType,
     config_checker::{FeatureChecker, HasFeature, TomlRestorers},
-    generator::{GeneratorCtx, WasmPath},
     util::{ResultUtil as _, WalrusUtilModule},
 };
 
@@ -42,24 +40,22 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let out_dir = &parsed_args.out_dir;
 
-    let manifest_path = parsed_args.get_manifest_path();
-    let cargo_metadata = {
-        let mut metadata_command = cargo_metadata::MetadataCommand::new();
-        if let Some(manifest_path) = manifest_path {
-            metadata_command.manifest_path(manifest_path);
-        }
-        metadata_command.exec().unwrap()
-    };
-    let building_crate = building::get_building_crate(&cargo_metadata, &parsed_args.package)?;
-    let vfs_name = building_crate.name.to_string();
+    let vfs_package = parsed_args
+        .get_package()
+        .wrap_err("Failed to get package")?;
+    println!("vfs_package: {vfs_package:?}");
+    let vfs_manifest_path = vfs_package.manifest_path().unwrap();
+    let vfs_root_manifest_path = vfs_package.root_manifest_path().unwrap();
 
     let memory_type = {
         let memory_type_checker = FeatureChecker::new(
-            &cargo_metadata,
-            &building_crate,
             "multi_memory",
+            &vfs_manifest_path,
+            &vfs_root_manifest_path,
             "wasip1-virtual-layer",
         );
+
+        println!("memory_type_checker: {memory_type_checker:?}");
 
         if let Some(target_memory_type) = parsed_args.target_memory_type {
             if let Some(restorer) = memory_type_checker.set(target_memory_type.is_multi())? {
@@ -79,9 +75,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let threads = {
         let threads_feature_checker = FeatureChecker::new(
-            &cargo_metadata,
-            &building_crate,
             "threads",
+            &vfs_manifest_path,
+            &vfs_root_manifest_path,
             "wasip1-virtual-layer",
         );
         if let Some(threads) = parsed_args.threads {
@@ -99,8 +95,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let dwarf = if let Some(dwarf) = parsed_args.dwarf {
         let checker = FeatureChecker::new_no_feature(
-            &cargo_metadata,
-            &building_crate,
+            &vfs_manifest_path,
+            &vfs_root_manifest_path,
             "wasip1-virtual-layer",
         );
 
@@ -113,9 +109,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let unstable_print_debug = {
         let checker = FeatureChecker::new(
-            &cargo_metadata,
-            &building_crate,
             "unstable_print_debug",
+            &vfs_manifest_path,
+            &vfs_root_manifest_path,
             "wasip1-virtual-layer",
         );
 
@@ -125,59 +121,41 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         )
     };
 
-    let generator = generator::GeneratorRunner::new(
-        GeneratorCtx {
-            threads,
-            dwarf,
-            vfs_name: vfs_name.clone(),
-            target_names: parsed_args
-                .wasm
-                .iter()
-                .map(|p| p.get_file_main_name().unwrap().to_string())
-                .collect(),
-            target_memory_type: memory_type,
-            unstable_print_debug,
-        },
-        WasmPath::new(
-            manifest_path
-                .as_ref()
-                .map(|p| Utf8PathBuf::from(p))
-                .unwrap_or(cargo_metadata.workspace_root.join("Cargo.toml")),
-        ),
-    );
-
-    println!("Compiling {vfs_name}");
-
-    // todo!();
-    let ret = building::build_vfs(
-        manifest_path.as_ref(),
-        parsed_args.package.as_ref(),
-        &building_crate,
+    let package = parsed_args.get_package()?;
+    let mut generator = generator::GeneratorRunner::new(
+        package,
+        parsed_args.wasm.clone(),
         threads,
-    )
-    .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {vfs_name}"))?;
+        dwarf,
+        unstable_print_debug,
+        memory_type,
+        toml_restores.clone(),
+    )?;
+    generator.definitely()?;
+
+    let vfs_name = generator.ctx().vfs_name.clone();
 
     toml_restores.restore()?;
+
+    let ret = generator.path().path()?.clone();
 
     println!("Optimizing VFS Wasm...");
     let ret =
         building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
-    let print_debug = matches!(
-        FeatureChecker::new(
-            &cargo_metadata,
-            &building_crate,
-            "unstable_print_debug",
-            "wasip1-virtual-layer",
-        )
-        .has()?,
-        HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
-    );
-
     println!("Adjusting VFS Wasm...");
-    let (ret, target_memory_type, has_debug_call_memory_grow) =
-        adjust_wasm(&ret, &parsed_args.wasm, threads, print_debug, dwarf)
-            .wrap_err("Failed to adjust Wasm")?;
+    let (ret, target_memory_type, has_debug_call_memory_grow) = adjust_wasm(
+        &ret,
+        &parsed_args
+            .wasm
+            .iter()
+            .map(|p| p.name())
+            .collect::<eyre::Result<Vec<_>>>()?,
+        threads,
+        unstable_print_debug,
+        dwarf,
+    )
+    .wrap_err("Failed to adjust Wasm")?;
 
     println!("Optimizing VFS Wasm...");
     let ret =
@@ -195,15 +173,10 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let (wasm_paths, wasm_names) = parsed_args
         .wasm
         .iter()
-        .zip(
-            parsed_args
-                .wasm_memory_hint
-                .iter()
-                .map(|h| Some(*h))
-                .chain(std::iter::repeat(None)),
-        )
+        .zip(parsed_args.get_wasm_memory_hints())
         .map(|(old_wasm, memory_hint)| {
-            let file_name = old_wasm.file_name().unwrap();
+            let file_name = old_wasm.name().unwrap();
+            let old_wasm = old_wasm.path()?;
             let wasm = format!("{out_dir}/{file_name}");
             std::fs::copy(old_wasm, &wasm)
                 .wrap_err_with(|| eyre::eyre!("Failed to find Wasm file {old_wasm}"))?;
@@ -218,7 +191,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 &wasm,
                 memory_hint,
                 threads,
-                print_debug,
+                unstable_print_debug,
                 dwarf,
                 has_debug_call_memory_grow,
             )
@@ -248,7 +221,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         &wasm_paths,
         threads,
         target_memory_type,
-        print_debug,
+        unstable_print_debug,
         dwarf,
     )
     .wrap_err("Failed to adjust merged Wasm")?;
@@ -277,7 +250,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let ret = if target_memory_type.is_single() {
         println!("Directing process {target_memory_type} memory Merged Wasm...");
-        let ret = director::director(&ret, &wasm_paths, threads, print_debug, dwarf)?;
+        let ret = director::director(&ret, &wasm_paths, threads, unstable_print_debug, dwarf)?;
         tmp_files.push(ret.to_string());
         ret
     } else {
@@ -292,7 +265,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     println!("Translating Component to JS...");
     let binary = std::fs::read(&component).wrap_err("Failed to read component")?;
     let transpiled = parsed_args
-        .transpile_to_js(&binary, &building_crate.name)
+        .transpile_to_js(&binary, &vfs_name)
         .wrap_err("Failed to transpile to JS")?;
 
     let mut core_wasm = None;
@@ -346,7 +319,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     tmp_files.push(core_wasm.to_string());
 
-    let (core_wasm_opt, mem_size) = if threads || print_debug {
+    let (core_wasm_opt, mem_size) = if threads || unstable_print_debug {
         let (core_wasm_opt_adjusted_opt, mem_size) = if threads {
             println!("Adjusting core Wasm...");
             let (core_wasm_opt_adjusted, mem_size) =
@@ -363,7 +336,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             (core_wasm_opt, None)
         };
 
-        if print_debug {
+        if unstable_print_debug {
             let core_wasm_opt_adjusted_opt_debug =
                 core_wasm_opt_adjusted_opt.with_extension("debug.wasm");
 
