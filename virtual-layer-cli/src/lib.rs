@@ -37,7 +37,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     let parsed_args = args::Args::new(args);
 
-    let out_dir = camino::Utf8PathBuf::from(&parsed_args.out_dir);
+    let out_dir = &parsed_args.out_dir;
 
     let manifest_path = parsed_args.get_manifest_path();
     let cargo_metadata = {

@@ -24,7 +24,7 @@ pub struct Args {
 
     /// Output directory for the generated files
     #[arg(long, default_value = "./dist")]
-    pub out_dir: String,
+    pub out_dir: Utf8PathBuf,
 
     /// Target memory type
     /// Change crate feature flags based on the target memory type
