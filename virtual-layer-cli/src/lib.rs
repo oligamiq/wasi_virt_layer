@@ -36,7 +36,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .init();
     color_eyre::install()?;
 
-    let mut tmp_files = Vec::new();
+    // let mut tmp_files = Vec::new();
     let mut toml_restores = TomlRestorers::new();
 
     let parsed_args = args::Args::new(args);
@@ -132,255 +132,260 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         toml_restores.clone(),
         parsed_args.get_wasm_memory_hints(),
     )?;
-    generator.definitely()?;
+    generator
+        .run_layers_to_component(&parsed_args.out_dir)
+        .wrap_err("Failed to run layers to component")?;
 
-    let vfs_name = generator.ctx().vfs_name.clone();
+    generator
+        .component_to_files(&parsed_args)
+        .wrap_err("Failed to run component to files")?;
 
-    toml_restores.restore()?;
+    // let vfs_name = generator.ctx().vfs_name.clone();
 
-    let ret = generator.path().path()?.clone();
+    // toml_restores.restore()?;
 
-    println!("Optimizing VFS Wasm...");
-    let ret =
-        building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
+    // let ret = generator.path().path()?.clone();
 
-    println!("Adjusting VFS Wasm...");
-    let ret = adjust_wasm(
-        &ret,
-        &generator
-            .targets()
-            .iter()
-            .map(|p| p.name())
-            .collect::<eyre::Result<Vec<_>>>()?,
-        threads,
-        unstable_print_debug,
-        dwarf,
-    )
-    .wrap_err("Failed to adjust Wasm")?;
+    // println!("Optimizing VFS Wasm...");
+    // let ret =
+    //     building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
-    println!("Optimizing VFS Wasm...");
-    let ret =
-        building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
+    // println!("Adjusting VFS Wasm...");
+    // let ret = adjust_wasm(
+    //     &ret,
+    //     &generator
+    //         .targets()
+    //         .iter()
+    //         .map(|p| p.name())
+    //         .collect::<eyre::Result<Vec<_>>>()?,
+    //     threads,
+    //     unstable_print_debug,
+    //     dwarf,
+    // )
+    // .wrap_err("Failed to adjust Wasm")?;
 
-    println!("Generated VFS: {ret}");
+    // println!("Optimizing VFS Wasm...");
+    // let ret =
+    //     building::optimize_wasm(&ret, &[], false, dwarf).wrap_err("Failed to optimize Wasm")?;
 
-    println!("Remove existing output directory...");
-    if std::fs::metadata(&out_dir).is_ok() {
-        std::fs::remove_dir_all(&out_dir).expect("Failed to remove existing directory");
-    }
-    std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
+    // println!("Generated VFS: {ret}");
 
-    println!("Preparing target Wasm...");
-    let (wasm_paths, wasm_names) = generator
-        .targets()
-        .iter()
-        .zip(parsed_args.get_wasm_memory_hints())
-        .map(|(old_wasm, memory_hint)| {
-            let file_name = old_wasm.name().unwrap();
-            let old_wasm = old_wasm.path()?;
-            let wasm = format!("{out_dir}/{file_name}");
-            std::fs::copy(old_wasm, &wasm)
-                .wrap_err_with(|| eyre::eyre!("Failed to find Wasm file {old_wasm}"))?;
-            let name = old_wasm.get_file_main_name().unwrap();
-            println!("Optimizing target Wasm [{name}]...");
-            tmp_files.push(wasm.to_string());
-            let wasm = building::optimize_wasm(&wasm.into(), &[], false, dwarf)
-                .wrap_err("Failed to optimize Wasm")?;
-            tmp_files.push(wasm.to_string());
-            println!("Adjusting target Wasm [{name}]...");
-            let wasm =
-                target::adjust_target_wasm(&wasm, threads, unstable_print_debug)
-                    .wrap_err("Failed to adjust Wasm")?;
-            tmp_files.push(wasm.to_string());
-            Ok((wasm, name))
-        })
-        .collect::<eyre::Result<(Vec<_>, Vec<_>)>>()?;
+    // println!("Remove existing output directory...");
+    // if std::fs::metadata(&out_dir).is_ok() {
+    //     std::fs::remove_dir_all(&out_dir).expect("Failed to remove existing directory");
+    // }
+    // std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
-    println!("Merging Wasm...");
+    // println!("Preparing target Wasm...");
+    // let (wasm_paths, wasm_names) = generator
+    //     .targets()
+    //     .iter()
+    //     .zip(parsed_args.get_wasm_memory_hints())
+    //     .map(|(old_wasm, memory_hint)| {
+    //         let file_name = old_wasm.name().unwrap();
+    //         let old_wasm = old_wasm.path()?;
+    //         let wasm = format!("{out_dir}/{file_name}");
+    //         std::fs::copy(old_wasm, &wasm)
+    //             .wrap_err_with(|| eyre::eyre!("Failed to find Wasm file {old_wasm}"))?;
+    //         let name = old_wasm.get_file_main_name().unwrap();
+    //         println!("Optimizing target Wasm [{name}]...");
+    //         tmp_files.push(wasm.to_string());
+    //         let wasm = building::optimize_wasm(&wasm.into(), &[], false, dwarf)
+    //             .wrap_err("Failed to optimize Wasm")?;
+    //         tmp_files.push(wasm.to_string());
+    //         println!("Adjusting target Wasm [{name}]...");
+    //         let wasm = target::adjust_target_wasm(&wasm, threads, unstable_print_debug)
+    //             .wrap_err("Failed to adjust Wasm")?;
+    //         tmp_files.push(wasm.to_string());
+    //         Ok((wasm, name))
+    //     })
+    //     .collect::<eyre::Result<(Vec<_>, Vec<_>)>>()?;
 
-    let output = format!("{out_dir}/merged.wasm");
-    if std::fs::metadata(&output).is_ok() {
-        std::fs::remove_file(&output).expect("Failed to remove existing file");
-    }
-    merge::merge(&ret, &wasm_paths, &output, dwarf).wrap_err("Failed to merge Wasm")?;
-    tmp_files.push(output.clone());
+    // println!("Merging Wasm...");
 
-    println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&output.clone().into(), &[], false, dwarf)
-        .wrap_err("Failed to optimize merged Wasm")?;
-    tmp_files.push(ret.to_string());
+    // let output = format!("{out_dir}/merged.wasm");
+    // if std::fs::metadata(&output).is_ok() {
+    //     std::fs::remove_file(&output).expect("Failed to remove existing file");
+    // }
+    // merge::merge(&ret, &wasm_paths, &output, dwarf).wrap_err("Failed to merge Wasm")?;
+    // tmp_files.push(output.clone());
 
-    println!("Adjusting Merged Wasm...");
-    let ret = adjust::adjust_merged_wasm(
-        &ret,
-        &wasm_paths,
-        threads,
-        target_memory_type,
-        unstable_print_debug,
-        dwarf,
-    )
-    .wrap_err("Failed to adjust merged Wasm")?;
-    tmp_files.push(ret.to_string());
+    // println!("Optimizing Merged Wasm...");
+    // let ret = building::optimize_wasm(&output.clone().into(), &[], false, dwarf)
+    //     .wrap_err("Failed to optimize merged Wasm")?;
+    // tmp_files.push(ret.to_string());
 
-    let ret = if target_memory_type.is_single() {
-        println!("Generating single memory Merged Wasm...");
-        // let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true, dwarf)?;
-        let ret = building::optimize_wasm(
-            &ret,
-            // &["--multi-memory-lowering-with-bounds-checks"],
-            &["--multi-memory-lowering"],
-            true,
-            dwarf,
-        )?;
-        tmp_files.push(ret.to_string());
-        ret
-    } else {
-        ret
-    };
+    // println!("Adjusting Merged Wasm...");
+    // let ret = adjust::adjust_merged_wasm(
+    //     &ret,
+    //     &wasm_paths,
+    //     threads,
+    //     target_memory_type,
+    //     unstable_print_debug,
+    //     dwarf,
+    // )
+    // .wrap_err("Failed to adjust merged Wasm")?;
+    // tmp_files.push(ret.to_string());
 
-    println!("Optimizing Merged Wasm...");
-    let ret = building::optimize_wasm(&ret, &[], false, dwarf)
-        .wrap_err("Failed to optimize merged Wasm")?;
-    tmp_files.push(ret.to_string());
+    // let ret = if target_memory_type.is_single() {
+    //     println!("Generating single memory Merged Wasm...");
+    //     // let ret = building::optimize_wasm(&ret, &["--multi-memory-lowering"], true, dwarf)?;
+    //     let ret = building::optimize_wasm(
+    //         &ret,
+    //         // &["--multi-memory-lowering-with-bounds-checks"],
+    //         &["--multi-memory-lowering"],
+    //         true,
+    //         dwarf,
+    //     )?;
+    //     tmp_files.push(ret.to_string());
+    //     ret
+    // } else {
+    //     ret
+    // };
 
-    let ret = if target_memory_type.is_single() {
-        println!("Directing process {target_memory_type} memory Merged Wasm...");
-        let ret = director::director(&ret, &wasm_paths, threads, unstable_print_debug, dwarf)?;
-        tmp_files.push(ret.to_string());
-        ret
-    } else {
-        ret
-    };
+    // println!("Optimizing Merged Wasm...");
+    // let ret = building::optimize_wasm(&ret, &[], false, dwarf)
+    //     .wrap_err("Failed to optimize merged Wasm")?;
+    // tmp_files.push(ret.to_string());
 
-    println!("Translating Wasm to Component...");
-    let component = building::wasm_to_component(&ret, &wasm_names)
-        .wrap_err("Failed to translate Wasm to Component")?;
-    tmp_files.push(component.to_string());
+    // let ret = if target_memory_type.is_single() {
+    //     println!("Directing process {target_memory_type} memory Merged Wasm...");
+    //     let ret = director::director(&ret, &wasm_paths, threads, unstable_print_debug, dwarf)?;
+    //     tmp_files.push(ret.to_string());
+    //     ret
+    // } else {
+    //     ret
+    // };
 
-    println!("Translating Component to JS...");
-    let binary = std::fs::read(&component).wrap_err("Failed to read component")?;
-    let transpiled = parsed_args
-        .transpile_to_js(&binary, &vfs_name)
-        .wrap_err("Failed to transpile to JS")?;
+    // println!("Translating Wasm to Component...");
+    // let component = building::wasm_to_component(&ret, &wasm_names)
+    //     .wrap_err("Failed to translate Wasm to Component")?;
+    // tmp_files.push(component.to_string());
 
-    let mut core_wasm = None;
-    let mut core_wasm_name = None;
-    for (name, data) in transpiled.files.iter() {
-        let name = camino::Utf8PathBuf::from(name);
-        let file_name = out_dir.join(&name);
-        if std::fs::metadata(&file_name).is_ok() {
-            std::fs::remove_file(&file_name)
-                .wrap_err_with(|| eyre::eyre!("Failed to remove existing file: {file_name}"))?;
-        }
-        if name.as_str().ends_with(".core.wasm") {
-            let file_name = camino::Utf8PathBuf::from(file_name);
-            std::fs::write(&file_name, &data)
-                .wrap_err_with(|| eyre::eyre!("Failed to write core wasm file: {file_name}"))?;
-            core_wasm = Some(file_name);
-            core_wasm_name = Some(name);
-        } else {
-            if let Some(parent) = name.parent() {
-                if !parent.as_str().is_empty() {
-                    let dir = name.ancestors().nth(1).wrap_err_with(|| {
-                        eyre::eyre!("Failed to get parent directory: {}", name)
-                    })?;
-                    let joined_dir = out_dir.join(dir);
-                    if !std::fs::metadata(&joined_dir).is_ok() {
-                        if dir.as_str() != "interfaces" {
-                            log::warn!("Creating directory: {joined_dir}");
-                        }
-                        std::fs::create_dir_all(&joined_dir).wrap_err_with(|| {
-                            eyre::eyre!("Failed to create directory: {joined_dir}")
-                        })?;
-                    }
-                }
-            }
-            std::fs::write(&file_name, &data)
-                .wrap_err_with(|| eyre::eyre!("Failed to write transpiled file: {file_name}"))?;
-        }
-    }
+    // println!("Translating Component to JS...");
+    // let binary = std::fs::read(&component).wrap_err("Failed to read component")?;
+    // let transpiled = parsed_args
+    //     .transpile_to_js(&binary, &vfs_name)
+    //     .wrap_err("Failed to transpile to JS")?;
 
-    let core_wasm = core_wasm
-        .as_ref()
-        .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
+    // let mut core_wasm = None;
+    // let mut core_wasm_name = None;
+    // for (name, data) in transpiled.files.iter() {
+    //     let name = camino::Utf8PathBuf::from(name);
+    //     let file_name = out_dir.join(&name);
+    //     if std::fs::metadata(&file_name).is_ok() {
+    //         std::fs::remove_file(&file_name)
+    //             .wrap_err_with(|| eyre::eyre!("Failed to remove existing file: {file_name}"))?;
+    //     }
+    //     if name.as_str().ends_with(".core.wasm") {
+    //         let file_name = camino::Utf8PathBuf::from(file_name);
+    //         std::fs::write(&file_name, &data)
+    //             .wrap_err_with(|| eyre::eyre!("Failed to write core wasm file: {file_name}"))?;
+    //         core_wasm = Some(file_name);
+    //         core_wasm_name = Some(name);
+    //     } else {
+    //         if let Some(parent) = name.parent() {
+    //             if !parent.as_str().is_empty() {
+    //                 let dir = name.ancestors().nth(1).wrap_err_with(|| {
+    //                     eyre::eyre!("Failed to get parent directory: {}", name)
+    //                 })?;
+    //                 let joined_dir = out_dir.join(dir);
+    //                 if !std::fs::metadata(&joined_dir).is_ok() {
+    //                     if dir.as_str() != "interfaces" {
+    //                         log::warn!("Creating directory: {joined_dir}");
+    //                     }
+    //                     std::fs::create_dir_all(&joined_dir).wrap_err_with(|| {
+    //                         eyre::eyre!("Failed to create directory: {joined_dir}")
+    //                     })?;
+    //                 }
+    //             }
+    //         }
+    //         std::fs::write(&file_name, &data)
+    //             .wrap_err_with(|| eyre::eyre!("Failed to write transpiled file: {file_name}"))?;
+    //     }
+    // }
 
-    let core_wasm_name = core_wasm_name
-        .as_ref()
-        .ok_or_else(|| eyre::eyre!("Failed to find core wasm name"))?;
+    // let core_wasm = core_wasm
+    //     .as_ref()
+    //     .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
-    println!("Optimizing core Wasm...");
-    let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false, dwarf)
-        .wrap_err("Failed to optimize core Wasm")?;
+    // let core_wasm_name = core_wasm_name
+    //     .as_ref()
+    //     .ok_or_else(|| eyre::eyre!("Failed to find core wasm name"))?;
 
-    tmp_files.push(core_wasm.to_string());
+    // println!("Optimizing core Wasm...");
+    // let core_wasm_opt = building::optimize_wasm(&core_wasm.into(), &[], false, dwarf)
+    //     .wrap_err("Failed to optimize core Wasm")?;
 
-    let (core_wasm_opt, mem_size) = if threads || unstable_print_debug {
-        let (core_wasm_opt_adjusted_opt, mem_size) = if threads {
-            println!("Adjusting core Wasm...");
-            let (core_wasm_opt_adjusted, mem_size) =
-                threads::adjust_core_wasm(&core_wasm_opt, threads, dwarf)
-                    .wrap_err("Failed to adjust core Wasm")?;
-            println!("Optimizing core Wasm...");
-            let core_wasm_opt_adjusted_opt =
-                building::optimize_wasm(&core_wasm_opt_adjusted, &[], false, dwarf)
-                    .wrap_err("Failed to optimize core Wasm")?;
-            tmp_files.push(core_wasm_opt.to_string());
-            tmp_files.push(core_wasm_opt_adjusted.to_string());
-            (core_wasm_opt_adjusted_opt, mem_size)
-        } else {
-            (core_wasm_opt, None)
-        };
+    // tmp_files.push(core_wasm.to_string());
 
-        if unstable_print_debug {
-            let core_wasm_opt_adjusted_opt_debug =
-                core_wasm_opt_adjusted_opt.with_extension("debug.wasm");
+    // let (core_wasm_opt, mem_size) = if threads || unstable_print_debug {
+    //     let (core_wasm_opt_adjusted_opt, mem_size) = if threads {
+    //         println!("Adjusting core Wasm...");
+    //         let (core_wasm_opt_adjusted, mem_size) =
+    //             threads::adjust_core_wasm(&core_wasm_opt, threads, dwarf)
+    //                 .wrap_err("Failed to adjust core Wasm")?;
+    //         println!("Optimizing core Wasm...");
+    //         let core_wasm_opt_adjusted_opt =
+    //             building::optimize_wasm(&core_wasm_opt_adjusted, &[], false, dwarf)
+    //                 .wrap_err("Failed to optimize core Wasm")?;
+    //         tmp_files.push(core_wasm_opt.to_string());
+    //         tmp_files.push(core_wasm_opt_adjusted.to_string());
+    //         (core_wasm_opt_adjusted_opt, mem_size)
+    //     } else {
+    //         (core_wasm_opt, None)
+    //     };
 
-            tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
+    //     if unstable_print_debug {
+    //         let core_wasm_opt_adjusted_opt_debug =
+    //             core_wasm_opt_adjusted_opt.with_extension("debug.wasm");
 
-            let mut module = walrus::Module::load(&core_wasm_opt_adjusted_opt, dwarf)?;
+    //         tmp_files.push(core_wasm_opt_adjusted_opt.to_string());
 
-            debug::generate_debug_call_function(&mut module)
-                .wrap_err("Failed to generate debug_call_function")?;
+    //         let mut module = walrus::Module::load(&core_wasm_opt_adjusted_opt, dwarf)?;
 
-            module
-                .emit_wasm_file(&core_wasm_opt_adjusted_opt_debug)
-                .to_eyre()
-                .wrap_err("Failed to write temporary wasm file")?;
+    //         debug::generate_debug_call_function(&mut module)
+    //             .wrap_err("Failed to generate debug_call_function")?;
 
-            let mut module = walrus::Module::load(&core_wasm_opt_adjusted_opt_debug, dwarf)?;
+    //         module
+    //             .emit_wasm_file(&core_wasm_opt_adjusted_opt_debug)
+    //             .to_eyre()
+    //             .wrap_err("Failed to write temporary wasm file")?;
 
-            debug::generate_debug_call_function_last(&mut module)
-                .wrap_err("Failed to generate debug_blind_print_etc_flag")?;
+    //         let mut module = walrus::Module::load(&core_wasm_opt_adjusted_opt_debug, dwarf)?;
 
-            module
-                .emit_wasm_file(&core_wasm_opt_adjusted_opt_debug)
-                .to_eyre()
-                .wrap_err("Failed to write temporary wasm file")?;
+    //         debug::generate_debug_call_function_last(&mut module)
+    //             .wrap_err("Failed to generate debug_blind_print_etc_flag")?;
 
-            (core_wasm_opt_adjusted_opt_debug, mem_size)
-        } else {
-            (core_wasm_opt_adjusted_opt, mem_size)
-        }
-    } else {
-        (core_wasm_opt, Some(Vec::new()))
-    };
+    //         module
+    //             .emit_wasm_file(&core_wasm_opt_adjusted_opt_debug)
+    //             .to_eyre()
+    //             .wrap_err("Failed to write temporary wasm file")?;
 
-    for tmp_file in tmp_files {
-        std::fs::remove_file(&tmp_file)
-            .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
-    }
+    //         (core_wasm_opt_adjusted_opt_debug, mem_size)
+    //     } else {
+    //         (core_wasm_opt_adjusted_opt, mem_size)
+    //     }
+    // } else {
+    //     (core_wasm_opt, Some(Vec::new()))
+    // };
 
-    std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
+    // for tmp_file in tmp_files {
+    //     std::fs::remove_file(&tmp_file)
+    //         .wrap_err_with(|| eyre::eyre!("Failed to remove tmp file: {tmp_file}"))?;
+    // }
 
-    let name = core_wasm_name
-        .get_file_main_name()
-        .wrap_err("Failed to get core wasm main name")?;
+    // std::fs::rename(&core_wasm_opt, &core_wasm).expect("Failed to rename file");
 
-    if let Some(mem_size) = mem_size {
-        test_run::thread::gen_threads_run(name, mem_size, &out_dir);
-    } else {
-        test_run::gen_test_run(name, out_dir);
-    }
+    // let name = core_wasm_name
+    //     .get_file_main_name()
+    //     .wrap_err("Failed to get core wasm main name")?;
+
+    // if let Some(mem_size) = mem_size {
+    //     test_run::thread::gen_threads_run(name, mem_size, &out_dir);
+    // } else {
+    //     test_run::gen_test_run(name, out_dir);
+    // }
 
     Ok(())
 }

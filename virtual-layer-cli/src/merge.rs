@@ -8,6 +8,7 @@ pub fn merge(
     vfs: &Utf8PathBuf,
     wasm: &[impl AsRef<Path>],
     output: impl AsRef<Path>,
+    threads: bool,
     dwarf: bool,
 ) -> eyre::Result<()> {
     let custom_section = {
@@ -32,6 +33,10 @@ pub fn merge(
     };
 
     let mut merge_cmd = std::process::Command::new("wasm-merge");
+
+    // if threads {
+    //     merge_cmd.arg("--enable-threads");
+    // }
 
     if dwarf {
         merge_cmd.arg("--debuginfo");

@@ -43,7 +43,7 @@ pub fn adjust_core_wasm(
 
                     mem.import = Some(id);
 
-                    (mem.initial, mem.maximum.unwrap_or(0))
+                    (mem.initial, mem.maximum.unwrap_or(mem.initial))
                 })
                 .collect::<Vec<_>>()
         };

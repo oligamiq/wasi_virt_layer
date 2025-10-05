@@ -26,7 +26,7 @@ pub fn adjust_merged_wasm(
     let mut module = walrus::Module::load(path, dwarf)?;
 
     let vfs_memory_id = module
-        .get_target_memory_id("vfs")
+        .get_target_memory_id("vfs", true)
         .wrap_err("Failed to get memory id")?;
 
     #[allow(unused)]
@@ -62,7 +62,7 @@ pub fn adjust_merged_wasm(
         }
 
         let memory_id = module
-            .get_target_memory_id(&wasm_name)
+            .get_target_memory_id(&wasm_name, true)
             .wrap_err("Failed to get memory id")?;
 
         let globals = module
