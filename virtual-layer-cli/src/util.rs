@@ -480,7 +480,7 @@ impl WalrusUtilModule for walrus::Module {
 
         let anchor_func_id = format!("__wasip1_vfs_flag_{name}_memory").get_fid(&self.exports)?;
 
-        self.exports.erase_with(anchor_func_id, remove)?;
+        self.exports.erase_with(anchor_func_id, !remove)?;
 
         let anchor_body = &self.funcs.get(anchor_func_id).kind;
 
@@ -669,13 +669,14 @@ impl WalrusUtilModule for walrus::Module {
     }
 
     fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>> {
-        let anchor_name = format!("__wasip1_vfs_flag_{}_global", name.as_ref());
+        let name = name.as_ref();
+        let anchor_name = format!("__wasip1_vfs_flag_{name}_global");
 
         let anchor_func_id = self
             .exports
             .get_func(&anchor_name)
             .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("anchor {} not found", anchor_name))?;
+            .wrap_err_with(|| eyre::eyre!("anchor {anchor_name} not found"))?;
 
         self.exports
             .remove(&anchor_name)
@@ -698,13 +699,14 @@ impl WalrusUtilModule for walrus::Module {
             Ok(global_ids)
         } else {
             Err(eyre::eyre!(
-                "anchor (local function) {} not found",
-                anchor_name
+                "anchor (local function) {anchor_name} not found",
             ))
         }
     }
 
     fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()> {
+        let name = name.as_ref();
+
         let global_ids = self
             .globals
             .iter()
@@ -728,7 +730,7 @@ impl WalrusUtilModule for walrus::Module {
         })?;
 
         self.exports
-            .add(&format!("__wasip1_vfs_flag_{}_global", name.as_ref()), id);
+            .add(&format!("__wasip1_vfs_flag_{name}_global"), id);
 
         Ok(())
     }

@@ -1,11 +1,8 @@
-use eyre::{Context, ContextCompat};
-use rewrite::adjust_wasm;
-use util::CaminoUtilModule as _;
+use eyre::Context;
 
 use crate::{
     args::TargetMemoryType,
     config_checker::{FeatureChecker, HasFeature, TomlRestorers},
-    util::{ResultUtil as _, WalrusUtilModule},
 };
 
 pub mod adjust;
@@ -20,6 +17,7 @@ pub mod down_color;
 pub mod generator;
 pub mod instrs;
 pub mod is_valid;
+pub mod memory;
 pub mod merge;
 pub mod patch_component;
 pub mod reset;
@@ -40,8 +38,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let mut toml_restores = TomlRestorers::new();
 
     let parsed_args = args::Args::new(args);
-
-    let out_dir = &parsed_args.out_dir;
 
     let vfs_package = parsed_args
         .get_package()
@@ -128,6 +124,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         threads,
         dwarf,
         unstable_print_debug,
+        parsed_args.no_transpile,
         memory_type,
         toml_restores.clone(),
         parsed_args.get_wasm_memory_hints(),

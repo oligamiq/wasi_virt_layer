@@ -37,11 +37,7 @@ pub struct Args {
 
     /// Disable transpile to JS, you can use jco to transpile wasm to js.
     #[arg(long, default_value = "false")]
-    pub no_transpile: Option<bool>,
-
-    /// Disable transpile to Component, you can use wasm-tools component to transpile wasm to component.
-    #[arg(long, default_value = "false")]
-    pub no_component: bool,
+    pub no_transpile: bool,
 
     // transpile options
     #[command(flatten)]
@@ -136,7 +132,7 @@ impl Args {
             },
         )
         .to_eyre()
-        .wrap_err_with(|| eyre::eyre!("Failed to transpile to JS "))
+        .wrap_err("Failed to transpile to JS. Consider the no_transpile option.")
     }
 }
 

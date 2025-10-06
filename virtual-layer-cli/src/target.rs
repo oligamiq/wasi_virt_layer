@@ -5,14 +5,10 @@ use eyre::Context as _;
 
 use crate::{
     common::Wasip1SnapshotPreview1Func,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilImport, WalrusUtilModule},
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule},
 };
 
-pub fn adjust_target_wasm(
-    path: &Utf8PathBuf,
-    threads: bool,
-    dwarf: bool,
-) -> eyre::Result<Utf8PathBuf> {
+pub fn adjust_target_wasm(path: &Utf8PathBuf, dwarf: bool) -> eyre::Result<Utf8PathBuf> {
     let name = path
         .get_file_main_name()
         .unwrap_or_else(|| panic!("Failed to get file name from {path}"));
@@ -40,25 +36,6 @@ pub fn adjust_target_wasm(
         .for_each(|import| {
             import.name = format!("__wasip1_vfs_{name}_{}", import.name);
         });
-
-    // threads
-    if threads {
-        module
-            .imports
-            .find_mut(("wasi", "thread-spawn"))
-            .ok()
-            .map(|import| {
-                import.name = format!("__wasip1_vfs_wasi_thread_spawn_{name}");
-            });
-
-        module
-            .exports
-            .iter_mut()
-            .find(|export| export.name == "wasi_thread_start")
-            .map(|export| {
-                export.name = format!("__wasip1_vfs_wasi_thread_start_{name}");
-            });
-    }
 
     let new_path = path.with_extension("adjusted.wasm");
 

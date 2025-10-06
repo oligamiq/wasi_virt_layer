@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, path, str::FromStr};
+use std::{collections::HashMap, fs, str::FromStr};
 
 use camino::Utf8PathBuf;
 use eyre::{Context as _, ContextCompat};
@@ -23,6 +23,7 @@ pub struct GeneratorCtx {
     pub unstable_print_debug: bool,
     pub dwarf: bool,
     pub threads: bool,
+    pub no_transpile: bool,
 }
 
 pub trait Generator: std::fmt::Debug + std::any::Any {
@@ -256,6 +257,7 @@ impl GeneratorRunner {
         threads: bool,
         dwarf: bool,
         unstable_print_debug: bool,
+        no_transpile: bool,
         memory_type: TargetMemoryType,
         toml_restorers: TomlRestorers,
         memory_hint: Vec<Option<usize>>,
@@ -279,6 +281,7 @@ impl GeneratorRunner {
                 unstable_print_debug,
                 dwarf,
                 threads,
+                no_transpile,
                 vfs_used_memory_id: None,
                 target_used_memory_id: None,
             },
@@ -375,6 +378,7 @@ impl GeneratorRunner {
         .with_opt(&mut self.path, dwarf)?;
 
         println!("Adjusting target Wasm...");
+
         for target in self.targets.iter_mut() {
             let target_name = target.name()?;
             (|path: &mut WasmPath| {
@@ -387,19 +391,10 @@ impl GeneratorRunner {
                                 name: target_name.clone(),
                             },
                         )
-                        .wrap_err("Failed in pre_target")
-                })
-                .wrap_run(path, dwarf)
-            })
-            .with_opt(target, dwarf)?;
-        }
+                        .wrap_err("Failed in pre_target")?;
 
-        self.ctx.target_used_memory_id = mem_holder.used_target_memory_id.take();
+                    self.ctx.target_used_memory_id = mem_holder.used_target_memory_id.clone();
 
-        for target in self.targets.iter_mut() {
-            let target_name = target.name()?;
-            (|path: &mut WasmPath| {
-                (|module: &mut walrus::Module| {
                     Self::run_pre_target(
                         &mut self.generators,
                         &self.ctx,
@@ -490,6 +485,11 @@ impl GeneratorRunner {
             .wrap_run(path, dwarf)
         })
         .with_opt(&mut self.path, dwarf)?;
+
+        if self.ctx.no_transpile {
+            println!("Skipping transpiling Component to JS as per --no-transpile flag...");
+            return Ok(());
+        }
 
         Ok(())
     }
@@ -610,6 +610,8 @@ impl Generator for MemoryIDVisitor {
         module: &mut walrus::Module,
         _: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
+        println!("Finding VFS memory id...");
+
         let id = module
             .get_target_memory_id("vfs", false)
             .wrap_err("Failed to get target memory id")?;

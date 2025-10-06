@@ -188,33 +188,6 @@ pub fn adjust_merged_wasm(
     }
 
     if threads {
-        module
-            .memories
-            .iter_mut()
-            // .skip(1)
-            .map(|mem| {
-                let id = mem.id();
-                let mem_id = module
-                    .imports
-                    .iter()
-                    .find_map(|import| match import.kind {
-                        walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
-                        _ => None,
-                    })
-                    .wrap_err("Failed to find memory import id")?;
-
-                module.imports.delete(mem_id);
-                mem.import = None;
-
-                // Translating component requires WasmFeatures::Threads
-                // but we cannot enable it because it in other crates.
-                // So, we set shared to false here temporarily.
-                mem.shared = false;
-
-                Ok(())
-            })
-            .collect::<eyre::Result<Vec<_>>>()?;
-
         if matches!(mem_type, TargetMemoryType::Single) {
             use walrus::ir::*;
 

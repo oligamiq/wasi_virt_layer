@@ -3,6 +3,37 @@ use crate::{
     util::{WalrusFID as _, WalrusUtilModule as _},
 };
 
+// 0: Failed to load Wasm file: ./dist\threads_vfs.core.opt.adjusted.wasm
+// 1: failed to parse global section
+// 2: malformed mutability -- or shared globals require the shared-everything-threads proposal (at offset 0x49f)
+//
+// The Globals causing errors during memory expansion are those generated
+// by wasm-opt --multi-memory-lowering,
+// so for now we will only address these.
+// When a newly created thread is executed,
+// it will use the always-executable VFS code and memory,
+// which are based on an address that never changes,
+// and perform operations on them atomically.
+// Operations on Global variables are replaced,
+// and before memory unification,
+// memory.grow is modified to be an atomic operation.
+// Since this Global variable should only be modified internally,
+// this approach should be sufficient.
+// module
+//     .globals
+//     .iter()
+//     .map(|g| g.id())
+//     .collect::<Vec<_>>()
+//     .iter()
+//     .for_each(|g| {
+//         let g = module.globals.get_mut(*g);
+//         if let walrus::GlobalKind::Local(_) = g.kind {
+//             if g.mutable {
+//                 g.shared = true;
+//             }
+//         }
+//     });
+
 pub fn gen_custom_locker(
     module: &mut walrus::Module,
     mem_id: walrus::MemoryId,

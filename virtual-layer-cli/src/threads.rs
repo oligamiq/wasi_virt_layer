@@ -1,101 +1,15 @@
-use std::fs;
-
-use camino::Utf8PathBuf;
 use eyre::Context;
 use itertools::Itertools;
 use strum::VariantNames;
 
 use crate::{
     common::Wasip1SnapshotPreview1ThreadsFunc,
-    generator::{Generator, GeneratorCtx, ModuleExternal},
+    generator::{Generator, GeneratorCtx},
     util::{
-        ResultUtil, THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _,
+        THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _,
         WalrusUtilModule as _,
     },
 };
-
-pub fn adjust_core_wasm(
-    path: &Utf8PathBuf,
-    threads: bool,
-    dwarf: bool,
-) -> eyre::Result<(Utf8PathBuf, Option<Vec<(u64, u64)>>)> {
-    let mut module = walrus::Module::load(path, dwarf)?;
-
-    let mem_size = if threads {
-        module.memories.iter_mut().for_each(|mem| {
-            mem.shared = true;
-        });
-
-        let mem_size = {
-            module
-                .memories
-                .iter_mut()
-                .enumerate()
-                .map(|(count, mem)| {
-                    let id = module.imports.add(
-                        "env",
-                        &mem.name.clone().unwrap_or_else(|| match count {
-                            0 => "memory".to_string(),
-                            n => format!("memory{n}"),
-                        }),
-                        walrus::ImportKind::Memory(mem.id()),
-                    );
-
-                    mem.import = Some(id);
-
-                    (mem.initial, mem.maximum.unwrap_or(mem.initial))
-                })
-                .collect::<Vec<_>>()
-        };
-        Some(mem_size)
-    } else {
-        None
-    };
-
-    // 0: Failed to load Wasm file: ./dist\threads_vfs.core.opt.adjusted.wasm
-    // 1: failed to parse global section
-    // 2: malformed mutability -- or shared globals require the shared-everything-threads proposal (at offset 0x49f)
-    //
-    // The Globals causing errors during memory expansion are those generated
-    // by wasm-opt --multi-memory-lowering,
-    // so for now we will only address these.
-    // When a newly created thread is executed,
-    // it will use the always-executable VFS code and memory,
-    // which are based on an address that never changes,
-    // and perform operations on them atomically.
-    // Operations on Global variables are replaced,
-    // and before memory unification,
-    // memory.grow is modified to be an atomic operation.
-    // Since this Global variable should only be modified internally,
-    // this approach should be sufficient.
-    // module
-    //     .globals
-    //     .iter()
-    //     .map(|g| g.id())
-    //     .collect::<Vec<_>>()
-    //     .iter()
-    //     .for_each(|g| {
-    //         let g = module.globals.get_mut(*g);
-    //         if let walrus::GlobalKind::Local(_) = g.kind {
-    //             if g.mutable {
-    //                 g.shared = true;
-    //             }
-    //         }
-    //     });
-
-    let new_path = path.with_extension("adjusted.wasm");
-
-    if fs::metadata(&new_path).is_ok() {
-        fs::remove_file(&new_path).wrap_err("Failed to remove existing file")?;
-    }
-
-    module
-        .emit_wasm_file(new_path.clone())
-        .to_eyre()
-        .wrap_err("Failed to write temporary wasm file")?;
-
-    Ok((new_path, mem_size))
-}
 
 fn gen_component_name(namespace: &str, name: &str) -> String {
     format!("[static]{namespace}.{}-import", name.replace("_", "-"))
@@ -198,6 +112,37 @@ impl Generator for ThreadsSpawn {
         module
             .exports
             .erase_with(branch_fid, ctx.unstable_print_debug)?;
+
+        Ok(())
+    }
+
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+        external: &crate::generator::ModuleExternal,
+    ) -> eyre::Result<()> {
+        if !ctx.threads {
+            return Ok(());
+        }
+
+        let name = &external.name;
+
+        module
+            .imports
+            .find_mut(("wasi", "thread-spawn"))
+            .ok()
+            .map(|import| {
+                import.name = format!("__wasip1_vfs_wasi_thread_spawn_{name}");
+            });
+
+        module
+            .exports
+            .iter_mut()
+            .find(|export| export.name == "wasi_thread_start")
+            .map(|export| {
+                export.name = format!("__wasip1_vfs_wasi_thread_start_{name}");
+            });
 
         Ok(())
     }
