@@ -1,6 +1,7 @@
 use std::{collections::HashMap, fs, str::FromStr};
 
 use camino::Utf8PathBuf;
+use compact_str::ToCompactString as _;
 use eyre::{Context as _, ContextCompat};
 use itertools::Itertools;
 use walrus::MemoryId;
@@ -10,7 +11,7 @@ use crate::{
     building,
     config_checker::TomlRestorers,
     merge,
-    util::{CaminoUtilModule as _, LString, ResultUtil, WalrusUtilModule},
+    util::{CaminoUtilModule as _, LString, LStringHolder, ResultUtil, WalrusUtilModule},
 };
 
 #[derive(Debug)]
@@ -264,6 +265,7 @@ pub struct GeneratorRunner {
     pub targets: Box<[WasmPath]>,
     pub toml_restorers: Option<TomlRestorers>,
     pub memory_hint: HashMap<LString, usize>,
+    pub lstring_holder: LStringHolder,
 }
 
 pub(crate) trait WrapRunner<T> {
@@ -367,10 +369,16 @@ impl GeneratorRunner {
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
     ) -> eyre::Result<Self> {
-        let target_names = targets
-            .iter()
-            .map(|t| Ok(t.name()?.into()))
-            .collect::<eyre::Result<Box<[LString]>>>()?;
+        let target_names = core::iter::once(Ok(path.name()?.to_compact_string()))
+            .chain(targets.iter().map(|t| Ok(t.name()?.to_compact_string())))
+            .collect::<eyre::Result<Box<_>>>()?;
+
+        let lstring_holder = LStringHolder::new(target_names);
+        let mut lstring_holder_iter = lstring_holder.iter();
+        let vfs_name = lstring_holder_iter
+            .next()
+            .ok_or_else(|| eyre::eyre!("Failed to get VFS name"))?;
+        let target_names = lstring_holder_iter.collect::<Box<_>>();
 
         let memory_hint = memory_hint
             .into_iter()
@@ -381,7 +389,7 @@ impl GeneratorRunner {
         Ok(Self {
             generators: Vec::new(),
             ctx: GeneratorCtx {
-                vfs_name: path.name()?.into(),
+                vfs_name: vfs_name,
                 target_names,
                 target_memory_type: memory_type,
                 unstable_print_debug,
@@ -397,6 +405,7 @@ impl GeneratorRunner {
             targets,
             toml_restorers: Some(toml_restorers),
             memory_hint,
+            lstring_holder,
         })
     }
 

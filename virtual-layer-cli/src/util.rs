@@ -3,7 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::atomic::AtomicUsize,
 };
 
 use eyre::{Context as _, ContextCompat as _};
@@ -2065,9 +2065,62 @@ impl WalrusFIDAssister for ModuleExports {
 //     Ok(())
 // }
 
+#[derive(Debug)]
+pub struct LStringHolder(&'static [compact_str::CompactString], &'static AtomicUsize);
+
+impl LStringHolder {
+    pub fn new(strings: Box<[compact_str::CompactString]>) -> Self {
+        let count = Box::leak(Box::new(AtomicUsize::new(0)));
+
+        let strings = Box::leak(strings);
+        LStringHolder(strings, count)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = LString> {
+        self.0.iter().map(|s| LString::new(s.as_str(), self.1))
+    }
+}
+
+impl Drop for LStringHolder {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = Box::from_raw(self.0 as *const _ as *mut [compact_str::CompactString]);
+            let count = self.1.load(std::sync::atomic::Ordering::SeqCst);
+            let _ = Box::from_raw(self.1 as *const _ as *mut AtomicUsize);
+            if count != 0 {
+                panic!(
+                    "LStringHolder dropped while there are still {count} LString instances alive"
+                );
+            }
+        }
+    }
+}
+
 /// Literal String
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct LString(Arc<str>);
+#[derive(Clone)]
+pub struct LString(&'static str, &'static AtomicUsize);
+impl LString {
+    pub fn new(s: &'static str, counter: &'static AtomicUsize) -> Self {
+        counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        LString(s, counter)
+    }
+}
+impl Drop for LString {
+    fn drop(&mut self) {
+        self.1.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+impl std::hash::Hash for LString {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (self.0 as *const str).hash(state);
+    }
+}
+impl PartialEq for LString {
+    fn eq(&self, other: &Self) -> bool {
+        (self.0 as *const str) == (other.0 as *const str)
+    }
+}
+impl Eq for LString {}
 impl std::fmt::Debug for LString {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.0)
@@ -2086,21 +2139,6 @@ impl AsRef<str> for LString {
 impl Borrow<str> for LString {
     fn borrow(&self) -> &str {
         &self.0
-    }
-}
-impl From<&str> for LString {
-    fn from(s: &str) -> Self {
-        LString(s.into())
-    }
-}
-impl From<String> for LString {
-    fn from(s: String) -> Self {
-        LString(s.into())
-    }
-}
-impl From<Box<str>> for LString {
-    fn from(s: Box<str>) -> Self {
-        LString(s.into())
     }
 }
 
