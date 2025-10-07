@@ -25,15 +25,6 @@ pub fn adjust_merged_wasm(
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::load(path, dwarf)?;
 
-    let vfs_memory_id = module
-        .get_target_memory_id("vfs", true)
-        .wrap_err("Failed to get memory id")?;
-
-    #[allow(unused)]
-    let vfs_globals = module
-        .get_global_anchor("vfs")
-        .wrap_err("Failed to get global anchor")?;
-
     let mut manager = VFSExternalMemoryManager::new(vfs_memory_id, &module);
 
     for wasm_path in wasm_paths {
@@ -268,7 +259,7 @@ pub fn adjust_merged_wasm(
         })
         .collect::<eyre::Result<Vec<_>>>()?;
 
-    manager
+    let mem_id = manager
         .flush(&mut module)
         .wrap_err("Failed to flush memory")?;
 

@@ -68,20 +68,19 @@ pub struct Wasip1Op {
     pub kind: Wasip1OpKind,
 }
 
+/// To enable the reset function,
+/// a memory area shall be provided
+/// to retain memory information at startup.
 pub struct VFSExternalMemoryManager {
-    pub vfs_memory_id: walrus::MemoryId,
     pub external_size: usize,
     pub current_size: usize, // * 64KiB
 }
 
 impl VFSExternalMemoryManager {
-    pub fn new(vfs_memory_id: walrus::MemoryId, module: &walrus::Module) -> Self {
-        let current_size = module.memories.get(vfs_memory_id).initial as usize;
-
+    pub const fn new() -> Self {
         Self {
-            vfs_memory_id,
             external_size: 0,
-            current_size,
+            current_size: 0,
         }
     }
 
@@ -92,23 +91,18 @@ impl VFSExternalMemoryManager {
         ptr
     }
 
-    pub fn flush(mut self, module: &mut walrus::Module) -> eyre::Result<()> {
-        let external_size = (0..100)
+    pub fn flush(mut self, module: &mut walrus::Module) -> eyre::Result<MemoryId> {
+        let external_size = (0..=0x10000)
             .find(|i| *i * 64 * 1024 >= self.external_size)
             .ok_or_else(|| eyre::eyre!("Failed to find external size"))?;
 
         self.current_size += external_size;
 
-        let memory = module.memories.get_mut(self.vfs_memory_id);
-        memory.initial = self.current_size as u64;
-        match (memory.maximum, memory.initial) {
-            (Some(max), init) if max < init => {
-                memory.maximum = Some(init);
-            }
-            _ => {}
-        }
+        let mem_id = module
+            .memories
+            .add_local(true, false, self.current_size as u64, None, None);
 
-        Ok(())
+        Ok(mem_id)
     }
 }
 
