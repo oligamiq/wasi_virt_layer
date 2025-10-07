@@ -10,15 +10,16 @@ use crate::{
     building,
     config_checker::TomlRestorers,
     merge,
-    util::{CaminoUtilModule as _, ResultUtil, WalrusUtilModule},
+    util::{CaminoUtilModule as _, LString, ResultUtil, WalrusUtilModule},
 };
 
 #[derive(Debug)]
 pub struct GeneratorCtx {
-    pub vfs_name: String,
-    pub target_names: Vec<String>,
+    pub vfs_name: LString,
+    pub target_names: Vec<LString>,
     pub vfs_used_memory_id: Option<MemoryId>,
-    pub target_used_memory_id: Option<Vec<MemoryId>>,
+    pub target_used_memory_id: Option<HashMap<LString, MemoryId>>,
+    pub target_used_global_id: Option<HashMap<LString, Vec<walrus::GlobalId>>>,
     pub target_memory_type: TargetMemoryType,
     pub unstable_print_debug: bool,
     pub dwarf: bool,
@@ -90,7 +91,12 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
 
 #[derive(Debug)]
 pub struct ModuleExternal {
-    pub name: String,
+    pub name: LString,
+}
+impl ModuleExternal {
+    pub fn new(name: &LString) -> Self {
+        Self { name: name.clone() }
+    }
 }
 
 #[derive(Debug)]
@@ -100,7 +106,7 @@ pub struct GeneratorRunner {
     pub path: WasmPath,
     pub targets: Vec<WasmPath>,
     pub toml_restorers: Option<TomlRestorers>,
-    pub memory_hint: HashMap<String, usize>,
+    pub memory_hint: HashMap<LString, usize>,
 }
 
 impl GeneratorRunner {
@@ -201,6 +207,7 @@ pub(crate) trait EndWithOpt<T> {
     where
         Self: Sized;
 
+    #[allow(dead_code)]
     fn with_opt_args(
         self,
         path: &mut WasmPath,
@@ -262,21 +269,22 @@ impl GeneratorRunner {
         toml_restorers: TomlRestorers,
         memory_hint: Vec<Option<usize>>,
     ) -> eyre::Result<Self> {
+        let target_names = targets
+            .iter()
+            .map(|t| Ok(t.name()?.into()))
+            .collect::<eyre::Result<Vec<LString>>>()?;
+
         let memory_hint = memory_hint
             .into_iter()
-            .zip(targets.iter().map(|t| t.name()))
-            .map(|(hint, name)| Ok((name?, hint)))
-            .filter_map_ok(|(name, hint)| Some((name, hint?)))
-            .collect::<eyre::Result<HashMap<_, _>>>()?;
+            .zip(target_names.iter().cloned())
+            .filter_map(|(hint, name)| hint.map(|h| (name, h)))
+            .collect::<HashMap<_, _>>();
 
         Ok(Self {
             generators: Vec::new(),
             ctx: GeneratorCtx {
-                vfs_name: path.name()?,
-                target_names: targets
-                    .iter()
-                    .map(|t| t.name())
-                    .collect::<eyre::Result<_>>()?,
+                vfs_name: path.name()?.into(),
+                target_names,
                 target_memory_type: memory_type,
                 unstable_print_debug,
                 dwarf,
@@ -284,6 +292,7 @@ impl GeneratorRunner {
                 no_transpile,
                 vfs_used_memory_id: None,
                 target_used_memory_id: None,
+                target_used_global_id: None,
             },
             path,
             targets,
@@ -379,31 +388,18 @@ impl GeneratorRunner {
 
         println!("Adjusting target Wasm...");
 
-        for target in self.targets.iter_mut() {
-            let target_name = target.name()?;
+        for (target, target_name) in self.targets.iter_mut().zip(self.ctx.target_names.clone()) {
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
+                    let external = ModuleExternal::new(&target_name);
                     mem_holder
-                        .pre_target(
-                            module,
-                            &self.ctx,
-                            &ModuleExternal {
-                                name: target_name.clone(),
-                            },
-                        )
+                        .pre_target(module, &self.ctx, &external)
                         .wrap_err("Failed in pre_target")?;
 
                     self.ctx.target_used_memory_id = mem_holder.used_target_memory_id.clone();
 
-                    Self::run_pre_target(
-                        &mut self.generators,
-                        &self.ctx,
-                        module,
-                        &ModuleExternal {
-                            name: target_name.clone(),
-                        },
-                    )
-                    .wrap_err("Failed in run_pre_target")
+                    Self::run_pre_target(&mut self.generators, &self.ctx, module, &external)
+                        .wrap_err("Failed in run_pre_target")
                 })
                 .wrap_run(path, dwarf)
             })
@@ -599,9 +595,9 @@ impl GeneratorRunner {
 
 #[derive(Debug, Default, Clone)]
 struct MemoryIDVisitor {
-    pub memory_hint: HashMap<String, usize>,
+    pub memory_hint: HashMap<LString, usize>,
     pub used_vfs_memory_id: Option<MemoryId>,
-    pub used_target_memory_id: Option<Vec<MemoryId>>,
+    pub used_target_memory_id: Option<HashMap<LString, MemoryId>>,
 }
 
 impl Generator for MemoryIDVisitor {
@@ -631,7 +627,9 @@ impl Generator for MemoryIDVisitor {
         module
             .create_memory_anchor(&external.name, id)
             .wrap_err("Failed to create memory anchor")?;
-        self.used_target_memory_id.get_or_insert_default().push(id);
+        self.used_target_memory_id
+            .get_or_insert_default()
+            .insert(external.name.clone(), id);
         Ok(())
     }
 
@@ -650,7 +648,10 @@ impl Generator for MemoryIDVisitor {
             let id = module
                 .get_target_memory_id(wasm, true)
                 .wrap_err("Failed to find used memory id after combine")?;
-            self.used_target_memory_id.as_mut().unwrap().push(id);
+            self.used_target_memory_id
+                .as_mut()
+                .unwrap()
+                .insert(wasm.clone(), id);
         }
 
         Ok(())
@@ -682,6 +683,10 @@ impl Generator for MemorySizeVisitor {
 
         Ok(())
     }
+}
+
+pub struct GlobalIdVisitor {
+    pub global_id: Option<walrus::GlobalId>,
 }
 
 #[derive(Debug, Clone)]

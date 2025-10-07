@@ -100,12 +100,12 @@ impl Args {
     pub fn transpile_to_js(
         &self,
         component: &[u8],
-        name: &str,
+        name: impl AsRef<str>,
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
         js_component_bindgen::transpile(
             component,
             js_component_bindgen::TranspileOpts {
-                name: name.to_string(),
+                name: name.as_ref().to_string(),
                 no_typescript: self.transpile_opts.no_typescript,
                 instantiation: self.transpile_opts.instantiation.clone().0,
                 import_bindings: self.transpile_opts.import_bindings.clone(),

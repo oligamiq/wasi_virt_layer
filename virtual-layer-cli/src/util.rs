@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use eyre::{Context as _, ContextCompat as _};
@@ -2060,6 +2061,45 @@ impl WalrusFIDAssister for ModuleExports {
 
 //     Ok(())
 // }
+
+/// Literal String
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct LString(Arc<str>);
+impl std::fmt::Debug for LString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+impl std::fmt::Display for LString {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+impl AsRef<str> for LString {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+impl Borrow<str> for LString {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+impl From<&str> for LString {
+    fn from(s: &str) -> Self {
+        LString(s.into())
+    }
+}
+impl From<String> for LString {
+    fn from(s: String) -> Self {
+        LString(s.into())
+    }
+}
+impl From<Box<str>> for LString {
+    fn from(s: Box<str>) -> Self {
+        LString(s.into())
+    }
+}
 
 #[cfg(test)]
 mod tests {
