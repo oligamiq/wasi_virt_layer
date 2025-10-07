@@ -232,7 +232,7 @@ pub(crate) trait WalrusUtilModule {
         memory_id: MemoryId,
     ) -> eyre::Result<()>;
 
-    fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>>;
+    fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Box<[GlobalId]>>;
 
     fn create_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<()>;
 
@@ -251,7 +251,10 @@ pub(crate) trait WalrusUtilModule {
     where
         Self: Sized;
 
-    fn fid_pos_on_table<A>(&self, as_fn: impl WalrusFID<A>) -> eyre::Result<Vec<(TableId, usize)>>;
+    fn fid_pos_on_table<A>(
+        &self,
+        as_fn: impl WalrusFID<A>,
+    ) -> eyre::Result<Box<[(TableId, usize)]>>;
 
     fn renew_call_fn<A, B>(
         &mut self,
@@ -669,7 +672,7 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Vec<GlobalId>> {
+    fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Box<[GlobalId]>> {
         let name = name.as_ref();
         let anchor_name = format!("__wasip1_vfs_flag_{name}_global");
 
@@ -695,7 +698,7 @@ impl WalrusUtilModule for walrus::Module {
                     ir::Instr::GlobalSet(ir::GlobalSet { global, .. }) => Some(*global),
                     _ => None,
                 })
-                .collect::<Vec<_>>();
+                .collect::<Box<_>>();
 
             Ok(global_ids)
         } else {
@@ -821,7 +824,7 @@ impl WalrusUtilModule for walrus::Module {
         Ok(())
     }
 
-    fn fid_pos_on_table<A>(&self, fid: impl WalrusFID<A>) -> eyre::Result<Vec<(TableId, usize)>> {
+    fn fid_pos_on_table<A>(&self, fid: impl WalrusFID<A>) -> eyre::Result<Box<[(TableId, usize)]>> {
         let fid = fid.get_fid(self)?;
 
         let mut positions = vec![];
@@ -850,7 +853,7 @@ impl WalrusUtilModule for walrus::Module {
                 }
             }
         }
-        Ok(positions)
+        Ok(positions.into_boxed_slice())
     }
 
     fn renew_call_fn<A, B>(

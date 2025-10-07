@@ -16,10 +16,11 @@ use crate::{
 #[derive(Debug)]
 pub struct GeneratorCtx {
     pub vfs_name: LString,
-    pub target_names: Vec<LString>,
+    pub target_names: Box<[LString]>,
     pub vfs_used_memory_id: Option<MemoryId>,
+    pub vfs_used_global_id: Option<Box<[walrus::GlobalId]>>,
     pub target_used_memory_id: Option<HashMap<LString, MemoryId>>,
-    pub target_used_global_id: Option<HashMap<LString, Vec<walrus::GlobalId>>>,
+    pub target_used_global_id: Option<HashMap<LString, Box<[walrus::GlobalId]>>>,
     pub target_memory_type: TargetMemoryType,
     pub unstable_print_debug: bool,
     pub dwarf: bool,
@@ -88,6 +89,162 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
         Ok(())
     }
 }
+impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        for generator in self {
+            generator.pre_vfs(module, ctx)?;
+        }
+        Ok(())
+    }
+
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+        external: &ModuleExternal,
+    ) -> eyre::Result<()> {
+        for generator in self {
+            generator.pre_target(module, ctx, external)?;
+        }
+        Ok(())
+    }
+
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for generator in self {
+            generator.post_combine(module, ctx)?;
+        }
+        Ok(())
+    }
+
+    fn post_lower_memory(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for generator in self {
+            generator.post_lower_memory(module, ctx)?;
+        }
+        Ok(())
+    }
+
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for generator in self {
+            generator.post_components(module, ctx)?;
+        }
+        Ok(())
+    }
+
+    fn post_all_optimize(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for generator in self {
+            generator.post_all_optimize(module, ctx)?;
+        }
+        Ok(())
+    }
+}
+impl Generator for Box<dyn Generator + 'static> {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        (**self).pre_vfs(module, ctx)
+    }
+
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+        external: &ModuleExternal,
+    ) -> eyre::Result<()> {
+        (**self).pre_target(module, ctx, external)
+    }
+
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_combine(module, ctx)
+    }
+
+    fn post_lower_memory(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_lower_memory(module, ctx)
+    }
+
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_components(module, ctx)
+    }
+
+    fn post_all_optimize(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_all_optimize(module, ctx)
+    }
+}
+impl<'a> Generator for &'a mut (dyn Generator + 'a) {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        (**self).pre_vfs(module, ctx)
+    }
+
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+        external: &ModuleExternal,
+    ) -> eyre::Result<()> {
+        (**self).pre_target(module, ctx, external)
+    }
+
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_combine(module, ctx)
+    }
+
+    fn post_lower_memory(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_lower_memory(module, ctx)
+    }
+
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_components(module, ctx)
+    }
+
+    fn post_all_optimize(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        (**self).post_all_optimize(module, ctx)
+    }
+}
 
 #[derive(Debug)]
 pub struct ModuleExternal {
@@ -104,68 +261,9 @@ pub struct GeneratorRunner {
     pub generators: Vec<Box<dyn Generator + 'static>>,
     pub ctx: GeneratorCtx,
     pub path: WasmPath,
-    pub targets: Vec<WasmPath>,
+    pub targets: Box<[WasmPath]>,
     pub toml_restorers: Option<TomlRestorers>,
     pub memory_hint: HashMap<LString, usize>,
-}
-
-impl GeneratorRunner {
-    pub fn run_pre_vfs(
-        generators: &mut Vec<Box<dyn Generator + 'static>>,
-        ctx: &GeneratorCtx,
-        module: &mut walrus::Module,
-    ) -> eyre::Result<()> {
-        for generator in generators {
-            generator.pre_vfs(module, ctx)?;
-        }
-        Ok(())
-    }
-
-    pub fn run_pre_target(
-        generators: &mut Vec<Box<dyn Generator + 'static>>,
-        ctx: &GeneratorCtx,
-        module: &mut walrus::Module,
-        external: &ModuleExternal,
-    ) -> eyre::Result<()> {
-        for generator in generators {
-            generator.pre_target(module, ctx, external)?;
-        }
-        Ok(())
-    }
-
-    pub fn run_post_combine(
-        generators: &mut Vec<Box<dyn Generator + 'static>>,
-        ctx: &GeneratorCtx,
-        module: &mut walrus::Module,
-    ) -> eyre::Result<()> {
-        for generator in generators {
-            generator.post_combine(module, ctx)?;
-        }
-        Ok(())
-    }
-
-    /// Only called if the target memory type is `Single`.
-    pub fn run_post_lower_memory(
-        generators: &mut Vec<Box<dyn Generator + 'static>>,
-        ctx: &GeneratorCtx,
-        module: &mut walrus::Module,
-    ) -> eyre::Result<()> {
-        for generator in generators {
-            generator.post_lower_memory(module, ctx)?;
-        }
-        Ok(())
-    }
-
-    pub fn run_post_components(
-        generators: &mut Vec<Box<dyn Generator + 'static>>,
-        ctx: &GeneratorCtx,
-        module: &mut walrus::Module,
-    ) -> eyre::Result<()> {
-        for generator in generators {
-            generator.post_components(module, ctx)?;
-        }
-        Ok(())
-    }
 }
 
 pub(crate) trait WrapRunner<T> {
@@ -260,19 +358,19 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
 impl GeneratorRunner {
     pub fn new(
         path: WasmPath,
-        targets: Vec<WasmPath>,
+        targets: Box<[WasmPath]>,
         threads: bool,
         dwarf: bool,
         unstable_print_debug: bool,
         no_transpile: bool,
         memory_type: TargetMemoryType,
         toml_restorers: TomlRestorers,
-        memory_hint: Vec<Option<usize>>,
+        memory_hint: Box<[Option<usize>]>,
     ) -> eyre::Result<Self> {
         let target_names = targets
             .iter()
             .map(|t| Ok(t.name()?.into()))
-            .collect::<eyre::Result<Vec<LString>>>()?;
+            .collect::<eyre::Result<Box<[LString]>>>()?;
 
         let memory_hint = memory_hint
             .into_iter()
@@ -291,6 +389,7 @@ impl GeneratorRunner {
                 threads,
                 no_transpile,
                 vfs_used_memory_id: None,
+                vfs_used_global_id: None,
                 target_used_memory_id: None,
                 target_used_global_id: None,
             },
@@ -334,7 +433,7 @@ impl GeneratorRunner {
     #[deprecated(
         note = "Ensure this function is self-contained. This is a temporary measure for debugging purposes."
     )]
-    pub const fn targets(&self) -> &Vec<WasmPath> {
+    pub const fn targets(&self) -> &Box<[WasmPath]> {
         &self.targets
     }
 
@@ -362,10 +461,14 @@ impl GeneratorRunner {
             .restore()
             .wrap_err("Failed to restore toml files")?;
 
-        let mut mem_holder = MemoryIDVisitor {
+        let mut mem_id_visitor = MemoryIDVisitor {
             memory_hint: self.memory_hint.clone(),
             used_vfs_memory_id: None,
             used_target_memory_id: None,
+        };
+        let mut global_id_visitor = GlobalIdVisitor {
+            vfs_global_id: None,
+            global_id: None,
         };
 
         let dwarf = self.ctx.dwarf;
@@ -373,13 +476,17 @@ impl GeneratorRunner {
         println!("Adjusting VFS Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
-                mem_holder
+                mem_id_visitor
+                    .pre_vfs(module, &self.ctx)
+                    .wrap_err("Failed in pre_vfs")?;
+                global_id_visitor
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
 
-                self.ctx.vfs_used_memory_id = mem_holder.used_vfs_memory_id;
+                self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id;
 
-                Self::run_pre_vfs(&mut self.generators, &self.ctx, module)
+                self.generators
+                    .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in run_pre_vfs")
             })
             .wrap_run(path, dwarf)
@@ -392,13 +499,17 @@ impl GeneratorRunner {
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
-                    mem_holder
+                    mem_id_visitor
+                        .pre_target(module, &self.ctx, &external)
+                        .wrap_err("Failed in pre_target")?;
+                    global_id_visitor
                         .pre_target(module, &self.ctx, &external)
                         .wrap_err("Failed in pre_target")?;
 
-                    self.ctx.target_used_memory_id = mem_holder.used_target_memory_id.clone();
+                    self.ctx.target_used_memory_id = mem_id_visitor.used_target_memory_id.clone();
 
-                    Self::run_pre_target(&mut self.generators, &self.ctx, module, &external)
+                    self.generators
+                        .pre_target(module, &self.ctx, &external)
                         .wrap_err("Failed in run_pre_target")
                 })
                 .wrap_run(path, dwarf)
@@ -429,14 +540,21 @@ impl GeneratorRunner {
         println!("Adjusting Merged Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
-                mem_holder
+                mem_id_visitor
+                    .post_combine(module, &self.ctx)
+                    .wrap_err("Failed in post_combine")?;
+                global_id_visitor
                     .post_combine(module, &self.ctx)
                     .wrap_err("Failed in post_combine")?;
 
-                self.ctx.vfs_used_memory_id = mem_holder.used_vfs_memory_id.take();
-                self.ctx.target_used_memory_id = mem_holder.used_target_memory_id.take();
+                self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id.take();
+                self.ctx.target_used_memory_id = mem_id_visitor.used_target_memory_id.take();
 
-                Self::run_post_combine(&mut self.generators, &self.ctx, module)
+                self.ctx.vfs_used_global_id = global_id_visitor.vfs_global_id.take();
+                self.ctx.target_used_global_id = global_id_visitor.global_id.take();
+
+                self.generators
+                    .post_combine(module, &self.ctx)
                     .wrap_err("Failed in run_post_combine")
             })
             .wrap_run(path, dwarf)
@@ -455,7 +573,8 @@ impl GeneratorRunner {
 
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
-                    Self::run_post_lower_memory(&mut self.generators, &self.ctx, module)
+                    self.generators
+                        .post_lower_memory(module, &self.ctx)
                         .wrap_err("Failed in run_post_lower_memory")
                 })
                 .wrap_run(path, dwarf)
@@ -475,7 +594,8 @@ impl GeneratorRunner {
         println!("Adjusting component Merged Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
-                Self::run_post_components(&mut self.generators, &self.ctx, module)
+                self.generators
+                    .post_components(module, &self.ctx)
                     .wrap_err("Failed in run_post_components")
             })
             .wrap_run(path, dwarf)
@@ -493,7 +613,7 @@ impl GeneratorRunner {
     pub fn component_to_files(
         &mut self,
         parsed_args: &args::Args,
-    ) -> eyre::Result<(String, Vec<(u64, u64)>)> {
+    ) -> eyre::Result<(String, Box<[(u64, u64)]>)> {
         let dwarf = self.ctx.dwarf;
         let out_dir = &parsed_args.out_dir;
 
@@ -660,7 +780,7 @@ impl Generator for MemoryIDVisitor {
 
 #[derive(Debug, Default, Clone)]
 struct MemorySizeVisitor {
-    mem_size: Option<Vec<(u64, u64)>>,
+    mem_size: Option<Box<[(u64, u64)]>>,
 }
 
 impl Generator for MemorySizeVisitor {
@@ -678,15 +798,64 @@ impl Generator for MemorySizeVisitor {
                     mem.maximum.unwrap_or(mem.initial) as u64,
                 )
             })
-            .collect::<Vec<_>>();
+            .collect::<Box<_>>();
         self.mem_size = Some(mem_size);
 
         Ok(())
     }
 }
 
-pub struct GlobalIdVisitor {
-    pub global_id: Option<walrus::GlobalId>,
+#[derive(Debug, Default)]
+struct GlobalIdVisitor {
+    vfs_global_id: Option<Box<[walrus::GlobalId]>>,
+    global_id: Option<HashMap<LString, Box<[walrus::GlobalId]>>>,
+}
+impl Generator for GlobalIdVisitor {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, _: &GeneratorCtx) -> eyre::Result<()> {
+        module
+            .create_global_anchor("vfs")
+            .wrap_err("Failed to create global anchor")?;
+
+        Ok(())
+    }
+
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &GeneratorCtx,
+        external: &ModuleExternal,
+    ) -> eyre::Result<()> {
+        module
+            .create_global_anchor(&external.name)
+            .wrap_err("Failed to create global anchor")?;
+
+        Ok(())
+    }
+
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        self.global_id = Some(HashMap::new());
+
+        let vfs_globals = module
+            .get_global_anchor("vfs")
+            .wrap_err("Failed to get global anchor for vfs")?;
+        self.vfs_global_id = Some(vfs_globals);
+
+        for wasm in &ctx.target_names {
+            let globals = module
+                .get_global_anchor(wasm)
+                .wrap_err_with(|| format!("Failed to get global anchor for {wasm}"))?;
+            self.global_id
+                .as_mut()
+                .unwrap()
+                .insert(wasm.clone(), globals);
+        }
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

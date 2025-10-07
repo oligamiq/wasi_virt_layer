@@ -74,13 +74,13 @@ impl Args {
         parsed
     }
 
-    pub fn get_wasm_memory_hints(&self) -> Vec<Option<usize>> {
+    pub fn get_wasm_memory_hints(&self) -> Box<[Option<usize>]> {
         self.wasm_memory_hint
             .iter()
             .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
             .chain(std::iter::repeat(None))
             .take(self.wasm.len())
-            .collect()
+            .collect::<Box<_>>()
     }
 
     pub fn get_package(&self) -> eyre::Result<WasmPath> {

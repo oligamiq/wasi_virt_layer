@@ -120,7 +120,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let package = parsed_args.get_package()?;
     let mut generator = generator::GeneratorRunner::new(
         package,
-        parsed_args.wasm.clone(),
+        parsed_args.wasm.clone().into_boxed_slice(),
         threads,
         dwarf,
         unstable_print_debug,
