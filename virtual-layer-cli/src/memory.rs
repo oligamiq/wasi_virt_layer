@@ -16,6 +16,21 @@ impl Generator for TemporaryRefugeMemory {
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
+        // Remove memory exports outside of VFS.
+        // Connect all non-VFS ABIs to VFS and hide them.
+        let mem_export_id = module
+            .exports
+            .iter()
+            .filter(|export|
+                matches!(export.item, walrus::ExportItem::Memory(mem) if ctx.vfs_used_memory_id.as_ref().unwrap() != &mem)
+            )
+            .map(|export| export.id())
+            .collect::<Vec<_>>();
+
+        for id in mem_export_id {
+            module.exports.delete(id);
+        }
+
         if !ctx.threads {
             return Ok(());
         }

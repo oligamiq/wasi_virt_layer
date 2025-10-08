@@ -9,7 +9,7 @@ use eyre::{Context as _, ContextCompat};
 
 use crate::{
     args::TargetMemoryType,
-    common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1ABIFunc},
+    common::{VFSExternalMemoryManager, Wasip1ABIFunc, Wasip1Op, Wasip1OpKind},
     instrs::InstrRewrite,
     shared_global,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
@@ -100,11 +100,6 @@ pub fn adjust_merged_wasm(
         //         export.name = format!("_{wasm_name}_start").into();
         //     })
         //     .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
-
-        // rm memory export
-        module
-            .exports
-            .delete(module.exports.get_exported_memory(memory_id).unwrap().id());
 
         // threads
         if threads {
