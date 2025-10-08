@@ -12,7 +12,6 @@ pub mod check;
 pub mod common;
 pub mod config_checker;
 pub mod debug;
-pub mod director;
 pub mod down_color;
 pub mod generator;
 pub mod instrs;

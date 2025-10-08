@@ -6,8 +6,8 @@ use crate::{
     common::Wasip1ThreadsABIFunc,
     generator::{Generator, GeneratorCtx},
     util::{
-        THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _,
-        WalrusUtilModule as _,
+        NAMESPACE, THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _,
+        WalrusUtilImport as _, WalrusUtilModule as _,
     },
 };
 
@@ -84,7 +84,7 @@ impl Generator for ThreadsSpawn {
 
         module
             .connect_func_alt(
-                ("wasip1-vfs", "__wasip1_vfs_self_wasi_thread_start"),
+                (NAMESPACE, "__wasip1_vfs_self_wasi_thread_start"),
                 exporting_thread_starter_id,
                 ctx.unstable_print_debug,
             )
@@ -104,7 +104,7 @@ impl Generator for ThreadsSpawn {
         // __wasip1_vfs_self_wasi_thread_start
         module
             .renew_call_fn(
-                ("wasip1-vfs", "__wasip1_vfs_wasi_thread_start_entry"),
+                (NAMESPACE, "__wasip1_vfs_wasi_thread_start_entry"),
                 exporting_thread_starter_id,
             )
             .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;

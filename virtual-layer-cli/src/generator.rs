@@ -582,6 +582,13 @@ impl GeneratorRunner {
 
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
+                    mem_id_visitor
+                        .post_lower_memory(module, &self.ctx)
+                        .wrap_err("Failed in post_lower_memory")?;
+
+                    self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id.take();
+                    self.ctx.target_used_memory_id = mem_id_visitor.used_target_memory_id.take();
+
                     self.generators
                         .post_lower_memory(module, &self.ctx)
                         .wrap_err("Failed in run_post_lower_memory")
@@ -782,6 +789,21 @@ impl Generator for MemoryIDVisitor {
                 .unwrap()
                 .insert(wasm.clone(), id);
         }
+
+        Ok(())
+    }
+
+    fn post_lower_memory(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        let id = module
+            .get_memory_id()
+            .to_eyre()
+            .wrap_err("Failed to get single memory id after lowering")?;
+        self.used_vfs_memory_id = Some(id);
+        self.used_target_memory_id = None;
 
         Ok(())
     }

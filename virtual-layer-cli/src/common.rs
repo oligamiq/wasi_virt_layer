@@ -124,38 +124,7 @@ pub enum Wasip1OpKind {
         // so use this
         start_section_id: Option<walrus::FunctionId>,
     },
-    MemoryTrap {},
     Skip,
-}
-
-macro_rules! assert_ptr {
-    ($ptr:expr) => {
-        if { $ptr } != walrus::ValType::I32 {
-            let ptr = $ptr;
-            eyre::bail!("Invalid pointer type, expected i32. Got {ptr}");
-        }
-    };
-}
-
-macro_rules! check_len {
-    ($params:expr, $len:expr) => {
-        if { $params.len() } != { $len } {
-            let len = $len;
-            eyre::bail!(
-                "Invalid params length, expected {len}. Got {}",
-                { $params }.len()
-            );
-        }
-    };
-}
-
-macro_rules! assert_len {
-    ($len:expr) => {
-        if { $len } != walrus::ValType::I32 {
-            let len = $len;
-            eyre::bail!("Invalid length type, expected i32. Got {len}");
-        }
-    };
 }
 
 impl Wasip1Op {
@@ -292,7 +261,6 @@ impl Wasip1Op {
                     start_section_id,
                 }
             }
-            _ if name.starts_with("memory_trap") => Wasip1OpKind::MemoryTrap {},
             _ if name.starts_with("memory_director") => Wasip1OpKind::Skip {},
             _ if name.starts_with("wasi_thread_start") => Wasip1OpKind::Skip {},
             _ => eyre::bail!("Invalid import name: {name}"),
@@ -563,20 +531,6 @@ impl Wasip1Op {
                             }
 
                             body.return_();
-                        }
-                        Wasip1OpKind::MemoryTrap { .. } => {
-                            body.local_get(arg_locals[0])
-                                .i32_const(0) // fake value
-                                .store(
-                                    wasm_mem,
-                                    ir::StoreKind::I32_8 { atomic: false },
-                                    ir::MemArg {
-                                        align: 0,
-                                        offset: 0,
-                                    },
-                                )
-                                .i32_const(0) // fake return value
-                                .return_();
                         }
                         Wasip1OpKind::Skip => {
                             unreachable!();

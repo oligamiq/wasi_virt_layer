@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use camino::Utf8PathBuf;
 use clap::{Parser, command};
+use compact_str::CompactString;
 use eyre::Context as _;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
@@ -93,7 +94,7 @@ impl Args {
         self.package.as_ref().and_then(|p| p.manifest_path())
     }
 
-    pub fn get_package_name(&self) -> Option<String> {
+    pub fn get_package_name(&self) -> Option<CompactString> {
         self.package.clone().and_then(|p| p.name().ok())
     }
 

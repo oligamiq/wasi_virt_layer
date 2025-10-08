@@ -563,3 +563,30 @@ impl Generator for DebugExportVFSFunctions {
         Ok(())
     }
 }
+
+#[derive(Debug, Default)]
+pub struct DebugBase;
+
+impl Generator for DebugBase {
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        if !ctx.unstable_print_debug {
+            return Ok(());
+        }
+
+        if let Some(id) = "debug_wasip1_vfs_pre_init".get_fid(&module.exports).ok() {
+            let start = module.funcs.get_mut(module.start.unwrap());
+            start
+                .kind
+                .unwrap_local_mut()
+                .builder_mut()
+                .func_body()
+                .call(id);
+        }
+
+        Ok(())
+    }
+}
