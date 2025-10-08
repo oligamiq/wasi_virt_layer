@@ -42,12 +42,70 @@ use crate::{
 pub struct SharedGlobal;
 
 impl Generator for SharedGlobal {
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
+            return Ok(());
+        }
+
+        if !ctx.threads {
+            return Ok(());
+        }
+
+        use std::collections::{HashMap, HashSet};
+        use walrus::ir::*;
+
+        let used_mem_id = module
+            .funcs
+            .all_read(
+                |instr, _| {
+                    if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
+                        Some(*memory)
+                    } else {
+                        None
+                    }
+                },
+                &[] as &[walrus::FunctionId],
+            )?
+            .into_iter()
+            .filter_map(|v| v)
+            .collect::<HashSet<_>>();
+
+        let lockers = used_mem_id
+            .into_iter()
+            .map(|mem_id| {
+                Self::gen_custom_locker(module, mem_id)
+                    .wrap_err("Failed to generate custom locker function")
+                    .map(|locker_id| (mem_id, locker_id))
+            })
+            .collect::<eyre::Result<HashMap<_, _>>>()?;
+
+        Self::remove_gen_custom_locker_base(module, ctx.unstable_print_debug)
+            .wrap_err("Failed to remove base locker function")?;
+
+        module.funcs.all_rewrite(
+            |instr, _| {
+                if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
+                    *instr = Instr::Call(Call {
+                        func: lockers.get(memory).unwrap().to_owned(),
+                    });
+                }
+            },
+            &lockers.values().cloned().collect::<Vec<_>>(),
+        )?;
+
+        Ok(())
+    }
+
     fn post_lower_memory(
         &mut self,
         module: &mut walrus::Module,
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
-        if matches!(ctx.target_memory_type, TargetMemoryType::Multi) {
+        if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
             return Ok(());
         }
 
@@ -216,59 +274,25 @@ impl Generator for SharedGlobal {
     }
 }
 
-pub fn gen_custom_locker(
-    module: &mut walrus::Module,
-    mem_id: walrus::MemoryId,
-) -> eyre::Result<walrus::FunctionId> {
-    let alt_id =
-        ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt").get_fid(&module.imports)?;
-    let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
+impl SharedGlobal {
+    fn gen_custom_locker(
+        module: &mut walrus::Module,
+        mem_id: walrus::MemoryId,
+    ) -> eyre::Result<walrus::FunctionId> {
+        let alt_id = ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
+            .get_fid(&module.imports)?;
+        let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
 
-    let locker_id = module.copy_func(base_locker)?;
-    module.exports.add(
-        &format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index()),
-        locker_id,
-    );
-    let locker = module.funcs.get_mut(locker_id);
+        let locker_id = module.copy_func(base_locker)?;
+        module.exports.add(
+            &format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index()),
+            locker_id,
+        );
+        let locker = module.funcs.get_mut(locker_id);
 
-    use walrus::ir::*;
+        use walrus::ir::*;
 
-    locker
-        .kind
-        .unwrap_local_mut()
-        .builder_mut()
-        .func_body()
-        .rewrite(|instr, _| {
-            if let Instr::Call(Call { func }) = instr {
-                if *func == alt_id {
-                    *instr = Instr::MemoryGrow(MemoryGrow { memory: mem_id });
-                }
-            }
-        })?;
-
-    Ok(locker_id)
-}
-
-pub fn remove_gen_custom_locker_base(module: &mut walrus::Module, debug: bool) -> eyre::Result<()> {
-    use walrus::ir::*;
-
-    let alt_id =
-        ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt").get_fid(&module.imports)?;
-    let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
-    if !debug {
-        module.funcs.delete(base_locker);
-        module.funcs.delete(alt_id);
-
-        module
-            .exports
-            .remove("__wasip1_vfs_memory_grow_locker")
-            .unwrap();
-    } else {
-        let mem_id = module.memories.iter().next().unwrap().id();
-
-        module
-            .funcs
-            .get_mut(base_locker)
+        locker
             .kind
             .unwrap_local_mut()
             .builder_mut()
@@ -280,12 +304,48 @@ pub fn remove_gen_custom_locker_base(module: &mut walrus::Module, debug: bool) -
                     }
                 }
             })?;
+
+        Ok(locker_id)
     }
 
-    module
-        .imports
-        .remove("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
-        .unwrap();
+    fn remove_gen_custom_locker_base(module: &mut walrus::Module, debug: bool) -> eyre::Result<()> {
+        use walrus::ir::*;
 
-    Ok(())
+        let alt_id = ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
+            .get_fid(&module.imports)?;
+        let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
+        if !debug {
+            module.funcs.delete(base_locker);
+            module.funcs.delete(alt_id);
+
+            module
+                .exports
+                .remove("__wasip1_vfs_memory_grow_locker")
+                .unwrap();
+        } else {
+            let mem_id = module.memories.iter().next().unwrap().id();
+
+            module
+                .funcs
+                .get_mut(base_locker)
+                .kind
+                .unwrap_local_mut()
+                .builder_mut()
+                .func_body()
+                .rewrite(|instr, _| {
+                    if let Instr::Call(Call { func }) = instr {
+                        if *func == alt_id {
+                            *instr = Instr::MemoryGrow(MemoryGrow { memory: mem_id });
+                        }
+                    }
+                })?;
+        }
+
+        module
+            .imports
+            .remove("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
+            .unwrap();
+
+        Ok(())
+    }
 }

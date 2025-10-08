@@ -1,17 +1,12 @@
-use std::{
-    collections::{HashMap, HashSet},
-    fs,
-    path::Path,
-};
+use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
 use eyre::{Context as _, ContextCompat};
 
 use crate::{
     args::TargetMemoryType,
-    common::{VFSExternalMemoryManager, Wasip1ABIFunc, Wasip1Op, Wasip1OpKind},
+    common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind},
     instrs::InstrRewrite,
-    shared_global,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
 };
 
@@ -102,67 +97,6 @@ pub fn adjust_merged_wasm(
         //     .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
     }
 
-    if threads {
-        if matches!(mem_type, TargetMemoryType::Single) {
-            use walrus::ir::*;
-
-            let used_mem_id = module
-                .funcs
-                .all_read(
-                    |instr, _| {
-                        if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
-                            Some(*memory)
-                        } else {
-                            None
-                        }
-                    },
-                    &[] as &[walrus::FunctionId],
-                )?
-                .into_iter()
-                .filter_map(|v| v)
-                .collect::<HashSet<_>>();
-
-            let lockers = used_mem_id
-                .into_iter()
-                .map(|mem_id| {
-                    shared_global::gen_custom_locker(&mut module, mem_id)
-                        .wrap_err("Failed to generate custom locker function")
-                        .map(|locker_id| (mem_id, locker_id))
-                })
-                .collect::<eyre::Result<HashMap<_, _>>>()?;
-
-            shared_global::remove_gen_custom_locker_base(&mut module, debug)
-                .wrap_err("Failed to remove base locker function")?;
-
-            module.funcs.all_rewrite(
-                |instr, _| {
-                    if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
-                        *instr = Instr::Call(Call {
-                            func: lockers.get(memory).unwrap().to_owned(),
-                        });
-                    }
-                },
-                &lockers.values().cloned().collect::<Vec<_>>(),
-            )?;
-        }
-
-        if debug {
-            module
-                .renew_call_fn(
-                    ("wasip1-vfs_debug", "debug_call_memory_grow_import"),
-                    "debug_call_memory_grow",
-                )
-                .ok();
-
-            module
-                .renew_call_fn(
-                    ("wasip1-vfs_debug", "debug_call_memory_grow_pre_import"),
-                    "debug_call_memory_grow_pre",
-                )
-                .ok();
-        }
-    }
-
     // memory_init(memory, data)
     // fn(&mut self, Id<Memory>, Id<Data>)
     // data_drop(&mut self, data: DataId)
@@ -187,21 +121,7 @@ pub fn adjust_merged_wasm(
         .flush(&mut module)
         .wrap_err("Failed to flush memory")?;
 
-    // rename vfs memory to "memory"
-    // because this memory is used by wit-bindgen
-    // and the name is hardcoded in the generated code
-    module
-        .exports
-        .iter_mut()
-        .find(|export| match export.item {
-            walrus::ExportItem::Memory(memory) => memory == vfs_memory_id,
-            _ => false,
-        })
-        .map(|export| {
-            export.name = "memory".into();
-        })
-        .unwrap();
-
+    // If there are any leftover exports created to connect your own imports and ABI, delete them.
     module
         .exports
         .iter()

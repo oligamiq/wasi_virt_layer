@@ -517,6 +517,32 @@ impl Generator for DebugCallMemoryGrow {
 
         Ok(())
     }
+
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        if !ctx.unstable_print_debug {
+            return Ok(());
+        }
+
+        module
+            .renew_call_fn(
+                ("wasip1-vfs_debug", "debug_call_memory_grow_import"),
+                "debug_call_memory_grow",
+            )
+            .ok();
+
+        module
+            .renew_call_fn(
+                ("wasip1-vfs_debug", "debug_call_memory_grow_pre_import"),
+                "debug_call_memory_grow_pre",
+            )
+            .ok();
+
+        Ok(())
+    }
 }
 
 #[derive(Debug, Default)]
