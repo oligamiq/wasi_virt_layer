@@ -3,7 +3,7 @@ use itertools::Itertools;
 use strum::VariantNames;
 
 use crate::{
-    common::Wasip1SnapshotPreview1ThreadsFunc,
+    common::Wasip1ThreadsABIFunc,
     generator::{Generator, GeneratorCtx},
     util::{
         THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _,
@@ -29,10 +29,10 @@ impl Generator for ThreadsSpawn {
 
         let namespace = "wasip1-threads";
         let root = THREADS_MODULE_ROOT;
-        let name = <Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS
+        let name = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
             .iter()
             .exactly_one()
-            .wrap_err("Expected exactly one variant for Wasip1SnapshotPreview1ThreadsFunc")?; // thread-spawn
+            .wrap_err("Expected exactly one variant for Wasip1ThreadsABIFunc")?; // thread-spawn
 
         let component_name = gen_component_name(namespace, name);
 

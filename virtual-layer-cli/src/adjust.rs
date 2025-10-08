@@ -9,7 +9,7 @@ use eyre::{Context as _, ContextCompat};
 
 use crate::{
     args::TargetMemoryType,
-    common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1SnapshotPreview1Func},
+    common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind, Wasip1ABIFunc},
     instrs::InstrRewrite,
     shared_global,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
@@ -29,28 +29,6 @@ pub fn adjust_merged_wasm(
 
     for wasm_path in wasm_paths {
         let wasm_name = wasm_path.as_ref().get_file_main_name().unwrap();
-
-        for name in <Wasip1SnapshotPreview1Func as strum::VariantNames>::VARIANTS.iter() {
-            let export_name = format!("__wasip1_vfs_{wasm_name}_{name}");
-
-            if module
-                .imports
-                .find("wasi_snapshot_preview1", name)
-                .is_some()
-            {
-                module
-                    .connect_func_without_remove(("wasi_snapshot_preview1", name), &export_name)
-                    .wrap_err_with(|| eyre::eyre!("Failed to connect {name}"))?;
-            } else {
-                if module.exports.get_func(&export_name).is_ok() {
-                    module
-                        .exports
-                        .remove(&export_name)
-                        .to_eyre()
-                        .wrap_err_with(|| eyre::eyre!("Failed to remove {name} export"))?;
-                }
-            }
-        }
 
         let mut ops = module
             .imports

@@ -6,7 +6,7 @@ use strum::VariantNames;
 
 use crate::{
     args::TargetMemoryType,
-    common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
+    common::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
     threads,
     util::{
         CORE_MODULE_ROOT, ResultUtil as _, THREADS_MODULE_ROOT, WalrusFID, WalrusUtilFuncs as _,

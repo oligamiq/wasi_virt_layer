@@ -3,7 +3,7 @@ use strum::VariantNames;
 
 use crate::{
     args::TargetMemoryType,
-    common::{Wasip1SnapshotPreview1Func, Wasip1SnapshotPreview1ThreadsFunc},
+    common::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, GeneratorCtx, ModuleExternal},
     util::ResultUtil as _,
 };
@@ -14,9 +14,9 @@ pub struct CheckUseLibrary;
 impl Generator for CheckUseLibrary {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         // If you're using the library, anchors should be generated automatically.
-        if !<Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
+        if !<Wasip1ABIFunc as VariantNames>::VARIANTS
             .iter()
-            .chain(<Wasip1SnapshotPreview1ThreadsFunc as VariantNames>::VARIANTS)
+            .chain(<Wasip1ThreadsABIFunc as VariantNames>::VARIANTS)
             .any(|name| {
                 module
                     .exports

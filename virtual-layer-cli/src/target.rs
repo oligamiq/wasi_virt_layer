@@ -4,7 +4,7 @@ use camino::Utf8PathBuf;
 use eyre::Context as _;
 
 use crate::{
-    common::Wasip1SnapshotPreview1Func,
+    common::Wasip1ABIFunc,
     util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule},
 };
 
@@ -29,8 +29,7 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf, dwarf: bool) -> eyre::Result<Utf8P
         .imports
         .iter_mut()
         .filter(|import| {
-            <Wasip1SnapshotPreview1Func as strum::VariantNames>::VARIANTS
-                .contains(&import.name.as_str())
+            <Wasip1ABIFunc as strum::VariantNames>::VARIANTS.contains(&import.name.as_str())
                 && import.module == "wasi_snapshot_preview1"
         })
         .for_each(|import| {

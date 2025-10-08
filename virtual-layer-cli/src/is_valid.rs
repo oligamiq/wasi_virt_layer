@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use eyre::{Context as _, ContextCompat};
 use strum::EnumMessage;
 
-use crate::{common::Wasip1SnapshotPreview1Func, util::ResultUtil as _};
+use crate::{common::Wasip1ABIFunc, util::ResultUtil as _};
 
 pub fn is_valid_wasm_for_component(
     wasm_bytes: &[u8],
@@ -94,10 +94,10 @@ pub enum Wasip1SnapshotPreview1Exporter {
     ExportPoll,
 }
 
-use Wasip1SnapshotPreview1Func::*;
+use Wasip1ABIFunc::*;
 impl Wasip1SnapshotPreview1Exporter {
-    const EXPORT_ENV: &'static [Wasip1SnapshotPreview1Func] = &[EnvironSizesGet, EnvironGet];
-    const EXPORT_FS: &'static [Wasip1SnapshotPreview1Func] = &[
+    const EXPORT_ENV: &'static [Wasip1ABIFunc] = &[EnvironSizesGet, EnvironGet];
+    const EXPORT_FS: &'static [Wasip1ABIFunc] = &[
         FdAdvise,
         FdAllocate,
         FdDatasync,
@@ -130,16 +130,16 @@ impl Wasip1SnapshotPreview1Exporter {
         PathSymlink,
         PathUnlinkFile,
     ];
-    const EXPORT_ARGS: &'static [Wasip1SnapshotPreview1Func] = &[ArgsGet, ArgsSizesGet];
-    const EXPORT_SOCKS: &'static [Wasip1SnapshotPreview1Func] =
+    const EXPORT_ARGS: &'static [Wasip1ABIFunc] = &[ArgsGet, ArgsSizesGet];
+    const EXPORT_SOCKS: &'static [Wasip1ABIFunc] =
         &[SockAccept, SockRecv, SockSend, SockShutdown];
-    const EXPORT_CLOCK: &'static [Wasip1SnapshotPreview1Func] = &[ClockTimeGet, ClockResGet];
-    const EXPORT_RANDOM: &'static [Wasip1SnapshotPreview1Func] = &[RandomGet];
-    const EXPORT_PROCESS: &'static [Wasip1SnapshotPreview1Func] = &[ProcExit];
-    const EXPORT_SCHED: &'static [Wasip1SnapshotPreview1Func] = &[SchedYield];
-    const EXPORT_POLL: &'static [Wasip1SnapshotPreview1Func] = &[PollOneoff];
+    const EXPORT_CLOCK: &'static [Wasip1ABIFunc] = &[ClockTimeGet, ClockResGet];
+    const EXPORT_RANDOM: &'static [Wasip1ABIFunc] = &[RandomGet];
+    const EXPORT_PROCESS: &'static [Wasip1ABIFunc] = &[ProcExit];
+    const EXPORT_SCHED: &'static [Wasip1ABIFunc] = &[SchedYield];
+    const EXPORT_POLL: &'static [Wasip1ABIFunc] = &[PollOneoff];
 
-    pub const fn variants(self) -> &'static [Wasip1SnapshotPreview1Func] {
+    pub const fn variants(self) -> &'static [Wasip1ABIFunc] {
         match self {
             Wasip1SnapshotPreview1Exporter::ExportEnv => Self::EXPORT_ENV,
             Wasip1SnapshotPreview1Exporter::ExportFs => Self::EXPORT_FS,
@@ -154,7 +154,7 @@ impl Wasip1SnapshotPreview1Exporter {
     }
 
     pub fn from_variant(
-        func: &Wasip1SnapshotPreview1Func,
+        func: &Wasip1ABIFunc,
     ) -> Option<Wasip1SnapshotPreview1Exporter> {
         use strum::IntoEnumIterator;
 

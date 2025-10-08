@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fs, str::FromStr};
 
 use camino::Utf8PathBuf;
-use compact_str::ToCompactString as _;
+use compact_str::{CompactString, ToCompactString as _};
 use eyre::{Context as _, ContextCompat};
 use itertools::Itertools;
 use walrus::MemoryId;
@@ -622,7 +622,7 @@ impl GeneratorRunner {
     pub fn component_to_files(
         &mut self,
         parsed_args: &args::Args,
-    ) -> eyre::Result<(String, Box<[(u64, u64)]>)> {
+    ) -> eyre::Result<(CompactString, Box<[(u64, u64)]>)> {
         let dwarf = self.ctx.dwarf;
         let out_dir = &parsed_args.out_dir;
 
@@ -919,9 +919,9 @@ impl FromStr for WasmPath {
 }
 
 impl WasmPath {
-    pub fn name(&self) -> eyre::Result<String> {
+    pub fn name(&self) -> eyre::Result<CompactString> {
         match self {
-            WasmPath::Maybe { package, .. } => Ok(package.clone()),
+            WasmPath::Maybe { package, .. } => Ok(package.to_compact_string()),
             WasmPath::Definitely(path) => path
                 .get_file_main_name()
                 .ok_or_else(|| eyre::eyre!("Failed to get file name from {path}")),

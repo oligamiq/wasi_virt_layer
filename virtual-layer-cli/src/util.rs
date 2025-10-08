@@ -6,6 +6,7 @@ use std::{
     sync::atomic::AtomicUsize,
 };
 
+use compact_str::{CompactString, ToCompactString as _};
 use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 use walrus::{ir::InstrSeqId, *};
@@ -1729,11 +1730,11 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
 }
 
 pub trait CaminoUtilModule {
-    fn get_file_main_name(&self) -> Option<String>;
+    fn get_file_main_name(&self) -> Option<CompactString>;
 }
 
 impl CaminoUtilModule for camino::Utf8Path {
-    fn get_file_main_name(&self) -> Option<String> {
+    fn get_file_main_name(&self) -> Option<CompactString> {
         let binding = self.file_name().unwrap().split(".").collect::<Vec<_>>();
         let file_name_poss = binding.iter().rev();
         let mut file_name = None;
@@ -1745,18 +1746,18 @@ impl CaminoUtilModule for camino::Utf8Path {
             break;
         }
 
-        file_name.map(|s| s.to_string())
+        file_name.map(|s| s.to_compact_string())
     }
 }
 
 impl CaminoUtilModule for PathBuf {
-    fn get_file_main_name(&self) -> Option<String> {
+    fn get_file_main_name(&self) -> Option<CompactString> {
         camino::Utf8Path::new(self.to_str().unwrap()).get_file_main_name()
     }
 }
 
 impl CaminoUtilModule for Path {
-    fn get_file_main_name(&self) -> Option<String> {
+    fn get_file_main_name(&self) -> Option<CompactString> {
         camino::Utf8Path::new(self.to_str().unwrap()).get_file_main_name()
     }
 }

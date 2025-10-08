@@ -4,7 +4,7 @@ use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 
 use crate::{
-    common::Wasip1SnapshotPreview1Func,
+    common::Wasip1ABIFunc,
     generator::{Generator, ModuleExternal},
     instrs::{InstrRead as _, InstrRewrite},
     util::{WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
@@ -542,7 +542,7 @@ impl Generator for DebugExportVFSFunctions {
                         .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
                 })
                 .filter(|export| {
-                    <Wasip1SnapshotPreview1Func as strum::VariantNames>::VARIANTS.contains(
+                    <Wasip1ABIFunc as strum::VariantNames>::VARIANTS.contains(
                         &export
                             .name
                             .as_str()

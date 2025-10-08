@@ -7,7 +7,7 @@ use crate::util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs, WalrusUtilModule}
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
 )]
 #[strum(serialize_all = "snake_case")]
-pub enum Wasip1SnapshotPreview1Func {
+pub enum Wasip1ABIFunc {
     EnvironSizesGet,
     EnvironGet,
     ProcExit,
@@ -59,7 +59,7 @@ pub enum Wasip1SnapshotPreview1Func {
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
 )]
 #[strum(serialize_all = "snake_case")]
-pub enum Wasip1SnapshotPreview1ThreadsFunc {
+pub enum Wasip1ThreadsABIFunc {
     ThreadSpawn,
 }
 
@@ -108,24 +108,6 @@ impl VFSExternalMemoryManager {
 
 #[derive(Debug)]
 pub enum Wasip1OpKind {
-    MemoryStoreLe {
-        offset: walrus::ValType,
-        value: walrus::ValType,
-    },
-    MemoryCopy {
-        offset: walrus::ValType,
-        src: walrus::ValType,
-        len: walrus::ValType,
-    },
-    MemoryCopyTo {
-        offset: walrus::ValType,
-        src: walrus::ValType,
-        len: walrus::ValType,
-    },
-    MemoryLoadLe {
-        offset: walrus::ValType,
-        result: walrus::ValType,
-    },
     MainVoid {
         main_void_func_id: FunctionId,
         start_func_id: FunctionId,
@@ -206,64 +188,6 @@ impl Wasip1Op {
         let ty = module.types.get(func.ty());
 
         let kind = match name {
-            _ if name.starts_with("memory_store_le") => {
-                fn memory_store_le(params: &[ValType]) -> eyre::Result<Wasip1OpKind> {
-                    check_len!(params, 2);
-                    assert_ptr!(params[0]);
-                    Ok(Wasip1OpKind::MemoryStoreLe {
-                        offset: params[0],
-                        value: params[1],
-                    })
-                }
-                memory_store_le(ty.params())
-                    .wrap_err_with(|| eyre::eyre!("Invalid memory_store_le params"))?
-            }
-            _ if name.starts_with("memory_copy_from") => {
-                fn memory_copy(params: &[ValType]) -> eyre::Result<Wasip1OpKind> {
-                    check_len!(params, 3);
-                    assert_ptr!(params[0]);
-                    assert_ptr!(params[1]);
-                    assert_len!(params[2]);
-                    Ok(Wasip1OpKind::MemoryCopy {
-                        offset: params[0],
-                        src: params[1],
-                        len: params[2],
-                    })
-                }
-                memory_copy(ty.params())
-                    .wrap_err_with(|| eyre::eyre!("Invalid memory_copy params"))?
-            }
-            _ if name.starts_with("memory_copy_to") => {
-                fn memory_copy_to(params: &[ValType]) -> eyre::Result<Wasip1OpKind> {
-                    check_len!(params, 3);
-                    assert_ptr!(params[0]);
-                    assert_ptr!(params[1]);
-                    assert_len!(params[2]);
-                    Ok(Wasip1OpKind::MemoryCopyTo {
-                        offset: params[0],
-                        src: params[1],
-                        len: params[2],
-                    })
-                }
-                memory_copy_to(ty.params())
-                    .wrap_err_with(|| eyre::eyre!("Invalid memory_copy_to params"))?
-            }
-            _ if name.starts_with("memory_load_le") => {
-                fn memory_load_le(
-                    params: &[ValType],
-                    results: &[ValType],
-                ) -> eyre::Result<Wasip1OpKind> {
-                    check_len!(params, 1);
-                    assert_ptr!(params[0]);
-                    check_len!(results, 1);
-                    Ok(Wasip1OpKind::MemoryLoadLe {
-                        offset: params[0],
-                        result: results[0],
-                    })
-                }
-                memory_load_le(ty.params(), ty.results())
-                    .wrap_err_with(|| eyre::eyre!("Invalid memory_load_le params"))?
-            }
             _ if name.starts_with("__main_void") => {
                 let main_void_func_id = module
                     .exports
@@ -595,53 +519,6 @@ impl Wasip1Op {
                     let mut body = body.func_body();
 
                     match &kind {
-                        Wasip1OpKind::MemoryStoreLe { value, .. } => {
-                            if *value != walrus::ValType::I32 {
-                                todo!("Unimplemented value type: {value} yet");
-                            }
-
-                            body.local_get(arg_locals[0])
-                                .local_get(arg_locals[1])
-                                .store(
-                                    wasm_mem,
-                                    ir::StoreKind::I32 { atomic: false },
-                                    ir::MemArg {
-                                        align: 0,
-                                        offset: 0,
-                                    },
-                                )
-                                .return_();
-                        }
-                        Wasip1OpKind::MemoryCopy { .. } => {
-                            body.local_get(arg_locals[0])
-                                .local_get(arg_locals[1])
-                                .local_get(arg_locals[2])
-                                .memory_copy(vfs_mem, wasm_mem)
-                                .return_();
-                        }
-                        Wasip1OpKind::MemoryCopyTo { .. } => {
-                            body.local_get(arg_locals[0])
-                                .local_get(arg_locals[1])
-                                .local_get(arg_locals[2])
-                                .memory_copy(wasm_mem, vfs_mem)
-                                .return_();
-                        }
-                        Wasip1OpKind::MemoryLoadLe { result, .. } => {
-                            if *result != walrus::ValType::I32 {
-                                todo!("Unimplemented value type: {result} yet");
-                            }
-
-                            body.local_get(arg_locals[0])
-                                .load(
-                                    wasm_mem,
-                                    ir::LoadKind::I32 { atomic: false },
-                                    ir::MemArg {
-                                        offset: 0,
-                                        align: 0,
-                                    },
-                                )
-                                .return_();
-                        }
                         Wasip1OpKind::MainVoid { .. } => unreachable!(),
                         Wasip1OpKind::Start { .. } => unreachable!(),
                         Wasip1OpKind::Reset {

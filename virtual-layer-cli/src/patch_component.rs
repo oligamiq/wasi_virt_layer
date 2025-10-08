@@ -1,7 +1,7 @@
 use strum::VariantNames;
 
 use crate::{
-    common::Wasip1SnapshotPreview1Func,
+    common::Wasip1ABIFunc,
     generator::{Generator, ModuleExternal},
     util::{CORE_MODULE_ROOT, WalrusUtilExport as _, WalrusUtilImport as _},
 };
@@ -22,7 +22,7 @@ impl Generator for PatchComponent {
         module: &mut walrus::Module,
         _: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
-        for (name, (namespace, root)) in <Wasip1SnapshotPreview1Func as VariantNames>::VARIANTS
+        for (name, (namespace, root)) in <Wasip1ABIFunc as VariantNames>::VARIANTS
             .iter()
             .zip(core::iter::repeat(("wasip1", CORE_MODULE_ROOT)))
         {
