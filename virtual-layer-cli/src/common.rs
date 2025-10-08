@@ -124,7 +124,6 @@ pub enum Wasip1OpKind {
         // so use this
         start_section_id: Option<walrus::FunctionId>,
     },
-    Skip,
 }
 
 impl Wasip1Op {
@@ -261,8 +260,6 @@ impl Wasip1Op {
                     start_section_id,
                 }
             }
-            _ if name.starts_with("memory_director") => Wasip1OpKind::Skip {},
-            _ if name.starts_with("wasi_thread_start") => Wasip1OpKind::Skip {},
             _ => eyre::bail!("Invalid import name: {name}"),
         };
 
@@ -471,7 +468,6 @@ impl Wasip1Op {
                 debug,
             )
             .wrap_err("Failed to implement wasm memory etc before call main function")?;
-        } else if let Wasip1OpKind::Skip = self.kind {
         } else {
             let Self { fid, kind } = self;
 
@@ -531,9 +527,6 @@ impl Wasip1Op {
                             }
 
                             body.return_();
-                        }
-                        Wasip1OpKind::Skip => {
-                            unreachable!();
                         }
                     }
                 })
