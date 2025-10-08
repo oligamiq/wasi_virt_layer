@@ -26,7 +26,7 @@ pub mod target;
 pub mod test_run;
 pub mod threads;
 pub mod util;
-pub mod wasip1_connect;
+pub mod abi_connect;
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
     env_logger::Builder::new()

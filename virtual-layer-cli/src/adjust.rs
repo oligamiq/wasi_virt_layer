@@ -100,47 +100,6 @@ pub fn adjust_merged_wasm(
         //         export.name = format!("_{wasm_name}_start").into();
         //     })
         //     .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
-
-        // threads
-        if threads {
-            module
-                .connect_func_alt(
-                    (
-                        "wasip1-vfs",
-                        &format!("__wasip1_vfs_{wasm_name}_wasi_thread_start"),
-                    ),
-                    &format!("__wasip1_vfs_wasi_thread_start_{wasm_name}"),
-                    debug,
-                )
-                .wrap_err_with(|| {
-                    eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_start_{wasm_name}")
-                })?;
-
-            module
-                .exports
-                .remove(&format!(
-                    "__wasip1_vfs_{wasm_name}_wasi_thread_start_anchor"
-                ))
-                .to_eyre()
-                .wrap_err_with(|| {
-                    eyre::eyre!(
-                        "Failed to remove __wasip1_vfs_{wasm_name}_wasi_thread_start_anchor export"
-                    )
-                })?;
-
-            module
-                .connect_func_alt(
-                    (
-                        "wasi",
-                        &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
-                    ),
-                    &format!("__wasip1_vfs_wasi_thread_spawn_{wasm_name}"),
-                    debug,
-                )
-                .wrap_err_with(|| {
-                    eyre::eyre!("Failed to connect __wasip1_vfs_wasi_thread_spawn_{wasm_name}")
-                })?;
-        }
     }
 
     if threads {

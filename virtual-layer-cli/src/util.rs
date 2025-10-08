@@ -190,7 +190,7 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         import: impl WalrusFID<A>,
         export: impl WalrusFID<B>,
-        is_delete: bool,
+        is_debug: bool,
     ) -> eyre::Result<()>;
 
     fn connect_func_without_remove<A, B>(
@@ -1265,25 +1265,23 @@ impl WalrusUtilModule for walrus::Module {
         export: impl WalrusFID<B>,
         is_debug: bool,
     ) -> eyre::Result<()> {
-        let export = export.get_fid(&self.exports)?;
-        self.renew_call_fn(import, export)?;
+        let err_msg = || {
+            format!(
+                "Function types do not match on connect func alt: {} -> {}",
+                import.as_str(),
+                export.as_str()
+            )
+        };
+        let export = export
+            .get_fid(&self.exports)
+            .wrap_err("Export function not found")
+            .wrap_err_with(err_msg)?;
 
-        if !is_debug {
-            let eid = self
-                .exports
-                .iter()
-                .find(|e| {
-                    if let walrus::ExportItem::Function(f) = e.item {
-                        f == export
-                    } else {
-                        false
-                    }
-                })
-                .map(|e| e.id())
-                .unwrap();
+        self.renew_call_fn(import, export)
+            .wrap_err("Failed to renew call function")
+            .wrap_err_with(err_msg)?;
 
-            self.exports.delete(eid);
-        }
+        self.exports.erase_with(export, is_debug)?;
 
         Ok(())
     }

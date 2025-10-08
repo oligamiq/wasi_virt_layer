@@ -35,3 +35,39 @@ impl Generator for ConnectWasip1ABI {
         Ok(())
     }
 }
+
+#[derive(Debug, Default)]
+pub struct ConnectWasip1ThreadsABI;
+
+impl Generator for ConnectWasip1ThreadsABI {
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        if ctx.threads {
+            for wasm in &ctx.target_names {
+                module.connect_func_alt(
+                    (
+                        "wasip1-vfs",
+                        &format!("__wasip1_vfs_{wasm}_wasi_thread_start"),
+                    ),
+                    &format!("__wasip1_vfs_wasi_thread_start_{wasm}"),
+                    ctx.unstable_print_debug,
+                )?;
+
+                module.exports.erase_with(
+                    &format!("__wasip1_vfs_{wasm}_wasi_thread_start_anchor"),
+                    ctx.unstable_print_debug,
+                )?;
+
+                module.connect_func_alt(
+                    ("wasi", &format!("__wasip1_vfs_wasi_thread_spawn_{wasm}")),
+                    &format!("__wasip1_vfs_wasi_thread_spawn_{wasm}"),
+                    ctx.unstable_print_debug,
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
