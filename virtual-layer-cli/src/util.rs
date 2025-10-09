@@ -2117,7 +2117,7 @@ impl std::hash::Hash for LString {
 }
 impl PartialEq for LString {
     fn eq(&self, other: &Self) -> bool {
-        (self.0 as *const str) == (other.0 as *const str)
+        std::ptr::addr_eq(self.0 as *const _, other.0 as *const _)
     }
 }
 impl Eq for LString {}

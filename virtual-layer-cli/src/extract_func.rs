@@ -4,7 +4,7 @@ use walrus::*;
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
-    util::{NAMESPACE, WalrusFID, WalrusUtilExport as _, WalrusUtilModule as _},
+    util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport as _, WalrusUtilModule as _},
 };
 
 /// To enable the reset function,
@@ -134,44 +134,47 @@ impl Generator for ResetFunc {
 
                 let start_section_id = module.start.clone();
 
-                module.replace_imported_func(reset, |(builder, _)| {
-                    let mut body = builder.func_body();
+                module
+                    .replace_imported_func(reset, |(builder, _)| {
+                        let mut body = builder.func_body();
 
-                    for (id, value) in global.iter() {
-                        body.const_(*value).global_set(*id);
-                    }
-                    for (start, end) in zero_range.iter() {
-                        // ptr
-                        body.i32_const(*start)
-                            // value
-                            .i32_const(0);
-
-                        // len
-                        if let Some(end) = end {
-                            body.i32_const(*end - *start);
-                        } else {
-                            body.memory_size(wasm_mem);
-
-                            // asserter.as_mut().unwrap()(&mut body).unwrap();
-
-                            body.i32_const(64 * 1024)
-                                .binop(ir::BinaryOp::I32Mul)
-                                .i32_const(*start)
-                                .binop(ir::BinaryOp::I32Sub);
+                        for (id, value) in global.iter() {
+                            body.const_(*value).global_set(*id);
                         }
-                        body.memory_fill(wasm_mem);
-                    }
-                    for (mem_offset, mem_len, mem_ptr) in mem_init.iter() {
-                        body.i32_const(*mem_offset) // dst
-                            .i32_const(*mem_ptr as i32) // src
-                            .i32_const(*mem_len as i32) // len
-                            .memory_copy(vfs_mem, wasm_mem);
-                    }
+                        for (start, end) in zero_range.iter() {
+                            // ptr
+                            body.i32_const(*start)
+                                // value
+                                .i32_const(0);
 
-                    if let Some(start_section_id) = start_section_id {
-                        body.call(start_section_id);
-                    }
-                });
+                            // len
+                            if let Some(end) = end {
+                                body.i32_const(*end - *start);
+                            } else {
+                                body.memory_size(wasm_mem);
+
+                                // asserter.as_mut().unwrap()(&mut body).unwrap();
+
+                                body.i32_const(64 * 1024)
+                                    .binop(ir::BinaryOp::I32Mul)
+                                    .i32_const(*start)
+                                    .binop(ir::BinaryOp::I32Sub);
+                            }
+                            body.memory_fill(wasm_mem);
+                        }
+                        for (mem_offset, mem_len, mem_ptr) in mem_init.iter() {
+                            body.i32_const(*mem_offset) // dst
+                                .i32_const(*mem_ptr as i32) // src
+                                .i32_const(*mem_len as i32) // len
+                                .memory_copy(vfs_mem, wasm_mem);
+                        }
+
+                        if let Some(start_section_id) = start_section_id {
+                            body.call(start_section_id);
+                        }
+                    })
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to replace reset function for {wasm}"))?;
 
                 let mut func_body = module
                     .funcs

@@ -43,7 +43,7 @@ impl Generator for ConnectWasip1ABI {
                     .get_fid(&module.imports)
                     .ok()
                 {
-                    module.connect_func_alt(import_id, &export_name, ctx.unstable_print_debug);
+                    module.connect_func_alt(import_id, &export_name, ctx.unstable_print_debug)?;
                 } else {
                     module
                         .exports

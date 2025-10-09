@@ -1,7 +1,7 @@
 use eyre::Context as _;
 use walrus::*;
 
-use crate::util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs, WalrusUtilModule};
+use crate::util::{ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule};
 
 #[derive(
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
@@ -231,13 +231,7 @@ impl Wasip1Op {
         Ok(())
     }
 
-    pub fn replace(
-        self,
-        module: &mut walrus::Module,
-        wasm_mem: walrus::MemoryId,
-        vfs_mem: walrus::MemoryId,
-        debug: bool,
-    ) -> eyre::Result<()> {
+    pub fn replace(self, module: &mut walrus::Module, debug: bool) -> eyre::Result<()> {
         if let Wasip1OpKind::MainVoid {
             main_void_func_id,
             start_func_id,

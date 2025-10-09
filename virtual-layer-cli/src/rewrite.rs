@@ -2,28 +2,13 @@ use std::fs;
 
 use camino::Utf8PathBuf;
 use eyre::Context as _;
-use strum::VariantNames;
 
-use crate::{
-    args::TargetMemoryType,
-    common::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
-    threads,
-    util::{
-        CORE_MODULE_ROOT, ResultUtil as _, THREADS_MODULE_ROOT, WalrusFID, WalrusUtilFuncs as _,
-        WalrusUtilImport, WalrusUtilModule,
-    },
-};
+use crate::util::{CORE_MODULE_ROOT, ResultUtil as _, WalrusUtilModule};
 
 /// wasip1 import to adjust to wit
 /// block vfs-wasm's environ_sizes_get etc
 /// embedding __wasip1_vfs_flag_{name}_memory
-pub fn adjust_wasm(
-    path: &Utf8PathBuf,
-    wasm_names: &[impl AsRef<str>],
-    threads: bool,
-    debug: bool,
-    dwarf: bool,
-) -> eyre::Result<Utf8PathBuf> {
+pub fn adjust_wasm(path: &Utf8PathBuf, debug: bool, dwarf: bool) -> eyre::Result<Utf8PathBuf> {
     // let mut module = walrus::Module::load(path, dwarf)?;
     let mut module = walrus::Module::load(path, dwarf)?;
 

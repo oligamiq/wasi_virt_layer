@@ -1,31 +1,25 @@
 use std::{fs, path::Path};
 
 use camino::Utf8PathBuf;
-use eyre::{Context as _, ContextCompat};
+use eyre::Context as _;
 
 use crate::{
-    args::TargetMemoryType,
-    common::{VFSExternalMemoryManager, Wasip1Op, Wasip1OpKind},
-    instrs::InstrRewrite,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilFuncs, WalrusUtilModule as _},
+    common::Wasip1Op,
+    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule as _},
 };
 
 pub fn adjust_merged_wasm(
     path: &Utf8PathBuf,
     wasm_paths: &[impl AsRef<Path>],
-    threads: bool,
-    mem_type: TargetMemoryType,
     debug: bool,
     dwarf: bool,
 ) -> eyre::Result<Utf8PathBuf> {
     let mut module = walrus::Module::load(path, dwarf)?;
 
-    let mut manager = VFSExternalMemoryManager::new();
-
     for wasm_path in wasm_paths {
         let wasm_name = wasm_path.as_ref().get_file_main_name().unwrap();
 
-        let mut ops = module
+        let ops = module
             .imports
             .iter()
             .filter(|import| import.module == "wasip1-vfs")
@@ -45,7 +39,7 @@ pub fn adjust_merged_wasm(
 
         ops.into_iter()
             .try_for_each(|op| {
-                op.replace(&mut module, memory_id, vfs_memory_id, debug)
+                op.replace(&mut module, debug)
                     .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))?;
                 eyre::Ok(())
             })

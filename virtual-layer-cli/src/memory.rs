@@ -193,12 +193,15 @@ impl Generator for MemoryBridge {
                 assert_len!(params[2]); // len
                 check_len!(ty.results(), 0);
 
-                module.replace_imported_func(id, |(body, args)| {
-                    body.local_get(args[0])
-                        .local_get(args[1])
-                        .local_get(args[2])
-                        .memory_copy(vfs_mem, wasm_mem);
-                });
+                module
+                    .replace_imported_func(id, |(body, args)| {
+                        body.local_get(args[0])
+                            .local_get(args[1])
+                            .local_get(args[2])
+                            .memory_copy(vfs_mem, wasm_mem);
+                    })
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to replace memory_copy_from"))?;
             }
 
             if let Some(id) = (NAMESPACE, &with_name(wasm, "memory_copy_to"))
@@ -215,12 +218,15 @@ impl Generator for MemoryBridge {
                 assert_len!(params[2]); // len
                 check_len!(ty.results(), 0);
 
-                module.replace_imported_func(id, |(body, args)| {
-                    body.local_get(args[0])
-                        .local_get(args[1])
-                        .local_get(args[2])
-                        .memory_copy(wasm_mem, vfs_mem);
-                });
+                module
+                    .replace_imported_func(id, |(body, args)| {
+                        body.local_get(args[0])
+                            .local_get(args[1])
+                            .local_get(args[2])
+                            .memory_copy(wasm_mem, vfs_mem);
+                    })
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to replace memory_copy_to"))?;
             }
         }
 
@@ -266,19 +272,22 @@ impl Generator for MemoryTrap {
 
                 let wasm_mem = ctx.target_used_memory_id.as_ref().unwrap()[wasm];
 
-                module.replace_imported_func(id, |(body, args)| {
-                    body.local_get(args[0])
-                        .i32_const(0)
-                        .store(
-                            wasm_mem,
-                            ir::StoreKind::I32_8 { atomic: false },
-                            ir::MemArg {
-                                align: 0,
-                                offset: 0,
-                            },
-                        )
-                        .i32_const(0);
-                });
+                module
+                    .replace_imported_func(id, |(body, args)| {
+                        body.local_get(args[0])
+                            .i32_const(0)
+                            .store(
+                                wasm_mem,
+                                ir::StoreKind::I32_8 { atomic: false },
+                                ir::MemArg {
+                                    align: 0,
+                                    offset: 0,
+                                },
+                            )
+                            .i32_const(0);
+                    })
+                    .to_eyre()
+                    .wrap_err_with(|| eyre::eyre!("Failed to replace memory_trap"))?;
             }
         }
 
