@@ -35,49 +35,21 @@ pub fn adjust_merged_wasm(
                     .starts_with(&format!("__wasip1_vfs_{wasm_name}_"))
             })
             .map(|import| {
-                let op = Wasip1Op::parse(
-                    &module,
-                    import,
-                    &wasm_name,
-                    &mut manager,
-                    memory_id,
-                    globals.clone(),
-                )
-                .wrap_err("Failed to parse import")?;
+                let op = Wasip1Op::parse(&module, import, &wasm_name)
+                    .wrap_err("Failed to parse import")?;
 
                 Ok(op)
             })
             .collect::<eyre::Result<Vec<_>>>()
             .wrap_err("Failed to collect imports")?;
 
-        let reset_op = ops
-            .iter()
-            .enumerate()
-            .find(|(_, op)| matches!(op.kind, Wasip1OpKind::Reset { .. }))
-            .map(|(reset_op_i, _)| reset_op_i)
-            .map(|reset_op_i| ops.remove(reset_op_i));
-
         ops.into_iter()
             .try_for_each(|op| {
-                op.replace(
-                    &mut module,
-                    memory_id,
-                    vfs_memory_id,
-                    reset_op.as_ref(),
-                    debug,
-                )
-                .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))?;
+                op.replace(&mut module, memory_id, vfs_memory_id, debug)
+                    .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))?;
                 eyre::Ok(())
             })
             .wrap_err_with(|| eyre::eyre!("Failed to replace Wasm memory access on {wasm_name}"))?;
-
-        reset_op
-            .map(|op| {
-                op.replace(&mut module, memory_id, vfs_memory_id, None, debug)
-                    .wrap_err_with(|| eyre::eyre!("Failed to replace import on {wasm_name}"))
-            })
-            .transpose()
-            .wrap_err("Failed to implement reset wasm memory etc before call main function")?;
 
         module
             .exports
@@ -86,60 +58,7 @@ pub fn adjust_merged_wasm(
             .wrap_err_with(|| {
                 eyre::eyre!("Failed to remove __start_anchor export on {wasm_name}.")
             })?;
-
-        // module
-        //     .exports
-        //     .iter_mut()
-        //     .find(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
-        //     .map(|export| {
-        //         export.name = format!("_{wasm_name}_start").into();
-        //     })
-        //     .ok_or_else(|| eyre::eyre!("Failed to get __start_anchor export on {wasm_name}."))?;
     }
-
-    // memory_init(memory, data)
-    // fn(&mut self, Id<Memory>, Id<Data>)
-    // data_drop(&mut self, data: DataId)
-    // so we remove all data_drop sections.
-    module
-        .funcs
-        .iter_mut()
-        .map(|func| {
-            match &mut func.kind {
-                walrus::FunctionKind::Local(l) => {
-                    l.builder_mut()
-                        .func_body()
-                        .retain(|instr, _| !instr.is_data_drop());
-                }
-                _ => {}
-            }
-            Ok(())
-        })
-        .collect::<eyre::Result<Vec<_>>>()?;
-
-    let mem_id = manager
-        .flush(&mut module)
-        .wrap_err("Failed to flush memory")?;
-
-    // If there are any leftover exports created to connect your own imports and ABI, delete them.
-    module
-        .exports
-        .iter()
-        .filter_map(|export| match export.item {
-            walrus::ExportItem::Function(fid) if export.name.starts_with("__wasip1_vfs_self_") => {
-                Some((export.id(), fid))
-            }
-            _ => None,
-        })
-        .collect::<Vec<_>>()
-        .iter()
-        .copied()
-        .for_each(|(id, fid)| {
-            if !debug {
-                module.funcs.delete(fid);
-                module.exports.delete(id);
-            }
-        });
 
     let new_path = path.with_extension("adjusted.wasm");
 

@@ -8,6 +8,7 @@ use crate::{
     util::{WalrusFID as _, WalrusUtilFuncs as _, WalrusUtilModule as _},
 };
 
+/// https://github.com/WebAssembly/binaryen/issues/7916
 /// 0: Failed to load Wasm file: ./dist\threads_vfs.core.opt.adjusted.wasm
 /// 1: failed to parse global section
 /// 2: malformed mutability -- or shared globals require the shared-everything-threads proposal (at offset 0x49f)

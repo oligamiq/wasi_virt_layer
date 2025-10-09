@@ -3,10 +3,7 @@ use std::fs;
 use camino::Utf8PathBuf;
 use eyre::Context as _;
 
-use crate::{
-    common::Wasip1ABIFunc,
-    util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule},
-};
+use crate::util::{CaminoUtilModule as _, ResultUtil as _, WalrusUtilModule};
 
 pub fn adjust_target_wasm(path: &Utf8PathBuf, dwarf: bool) -> eyre::Result<Utf8PathBuf> {
     let name = path
@@ -15,7 +12,7 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf, dwarf: bool) -> eyre::Result<Utf8P
 
     let mut module = walrus::Module::load(path, dwarf)?;
 
-    let rewrite_exports = ["_start", "__main_void", "memory"];
+    let rewrite_exports = ["__main_void"];
 
     module
         .exports
@@ -23,17 +20,6 @@ pub fn adjust_target_wasm(path: &Utf8PathBuf, dwarf: bool) -> eyre::Result<Utf8P
         .filter(|export| rewrite_exports.contains(&export.name.as_str()))
         .for_each(|export| {
             export.name = format!("__wasip1_vfs_{}_{}", &name, export.name);
-        });
-
-    module
-        .imports
-        .iter_mut()
-        .filter(|import| {
-            <Wasip1ABIFunc as strum::VariantNames>::VARIANTS.contains(&import.name.as_str())
-                && import.module == "wasi_snapshot_preview1"
-        })
-        .for_each(|import| {
-            import.name = format!("__wasip1_vfs_{name}_{}", import.name);
         });
 
     let new_path = path.with_extension("adjusted.wasm");

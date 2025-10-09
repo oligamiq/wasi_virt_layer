@@ -11,6 +11,22 @@ use crate::{
 pub struct TemporaryRefugeMemory;
 
 impl Generator for TemporaryRefugeMemory {
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &GeneratorCtx,
+        external: &crate::generator::ModuleExternal,
+    ) -> eyre::Result<()> {
+        module
+            .exports
+            .iter_mut()
+            .find(|export| export.name == "memory")
+            .unwrap()
+            .name = format!("__wasip1_vfs_{}_memory", external.name);
+
+        Ok(())
+    }
+
     fn post_combine(
         &mut self,
         module: &mut walrus::Module,
@@ -30,6 +46,22 @@ impl Generator for TemporaryRefugeMemory {
         for id in mem_export_id {
             module.exports.delete(id);
         }
+
+        // rename vfs memory export to memory
+        module
+            .memories
+            .get_mut(ctx.vfs_used_memory_id.unwrap())
+            .name = Some("memory".to_string());
+        module
+            .exports
+            .get_mut(
+                module
+                    .exports
+                    .get_exported_memory(ctx.vfs_used_memory_id.unwrap())
+                    .unwrap()
+                    .id(),
+            )
+            .name = "memory".to_string();
 
         if !ctx.threads {
             return Ok(());

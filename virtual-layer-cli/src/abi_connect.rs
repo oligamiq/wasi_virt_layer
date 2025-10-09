@@ -11,6 +11,26 @@ use crate::{
 pub struct ConnectWasip1ABI;
 
 impl Generator for ConnectWasip1ABI {
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &crate::generator::GeneratorCtx,
+        external: &crate::generator::ModuleExternal,
+    ) -> eyre::Result<()> {
+        module
+            .imports
+            .iter_mut()
+            .filter(|import| {
+                <Wasip1ABIFunc as strum::VariantNames>::VARIANTS.contains(&import.name.as_str())
+                    && import.module == "wasi_snapshot_preview1"
+            })
+            .for_each(|import| {
+                import.name = format!("__wasip1_vfs_{}_{}", external.name, import.name);
+            });
+
+        Ok(())
+    }
+
     fn post_combine(
         &mut self,
         module: &mut walrus::Module,

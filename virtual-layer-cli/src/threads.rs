@@ -147,3 +147,44 @@ impl Generator for ThreadsSpawn {
         Ok(())
     }
 }
+
+/// https://github.com/rust-lang/rust/issues/146843
+/// thread spawn is broken on wasm32-wasip1-threads for building library
+#[derive(Debug, Default)]
+pub struct ThreadsSpawnPatch;
+
+impl Generator for ThreadsSpawnPatch {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        let initializer = "__wasip1_vfs_thread_initializer"
+            .get_fid(&module.exports)
+            .ok();
+
+        if let Some(_) = initializer {
+            module
+                .exports
+                .erase_with(initializer.unwrap(), ctx.unstable_print_debug)?;
+        }
+
+        let old_start = module.start;
+        let new_start = module.add_func(&[], &[], |builder, _| {
+            let mut body = builder.func_body();
+            if let Some(old_start) = old_start {
+                body.call(old_start);
+            }
+            if let Some(initializer) = initializer {
+                body.call(initializer);
+            }
+            Ok(())
+        })?;
+
+        module.start = Some(new_start);
+
+        if ctx.unstable_print_debug {
+            if let Some(old_start) = old_start {
+                module.exports.add("__vfs_old_start", old_start);
+            }
+        }
+
+        Ok(())
+    }
+}

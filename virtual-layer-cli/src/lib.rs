@@ -19,7 +19,7 @@ pub mod is_valid;
 pub mod memory;
 pub mod merge;
 pub mod patch_component;
-pub mod reset;
+pub mod extract_func;
 pub mod rewrite;
 pub mod shared_global;
 pub mod target;

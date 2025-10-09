@@ -247,3 +247,23 @@ macro_rules! export_thread {
         }
     };
 }
+
+// If a thread exists, it may be invoked multiple times.
+// `Reset` is a process that must not be invoked multiple times.
+#[cfg(feature = "threads")]
+#[cfg(target_os = "wasi")]
+mod reset_on_thread {
+    static INIT: std::sync::Once = std::sync::Once::new();
+
+    #[link(wasm_import_module = "wasip1-vfs")]
+    unsafe extern "C" {
+        fn __wasip1_vfs_reset_on_thread_once();
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn __wasip1_vfs_reset_on_thread() {
+        INIT.call_once(|| {
+            unsafe { __wasip1_vfs_reset_on_thread_once() };
+        });
+    }
+}

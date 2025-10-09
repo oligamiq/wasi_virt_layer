@@ -68,44 +68,6 @@ pub struct Wasip1Op {
     pub kind: Wasip1OpKind,
 }
 
-/// To enable the reset function,
-/// a memory area shall be provided
-/// to retain memory information at startup.
-pub struct VFSExternalMemoryManager {
-    pub external_size: usize,
-    pub current_size: usize, // * 64KiB
-}
-
-impl VFSExternalMemoryManager {
-    pub const fn new() -> Self {
-        Self {
-            external_size: 0,
-            current_size: 0,
-        }
-    }
-
-    pub fn alloc(&mut self, size: usize) -> usize {
-        let ptr = self.current_size * 64 * 1024 + self.external_size;
-        self.external_size += size;
-
-        ptr
-    }
-
-    pub fn flush(mut self, module: &mut walrus::Module) -> eyre::Result<MemoryId> {
-        let external_size = (0..=0x10000)
-            .find(|i| *i * 64 * 1024 >= self.external_size)
-            .ok_or_else(|| eyre::eyre!("Failed to find external size"))?;
-
-        self.current_size += external_size;
-
-        let mem_id = module
-            .memories
-            .add_local(true, false, self.current_size as u64, None, None);
-
-        Ok(mem_id)
-    }
-}
-
 #[derive(Debug)]
 pub enum Wasip1OpKind {
     MainVoid {
@@ -116,14 +78,6 @@ pub enum Wasip1OpKind {
     Start {
         start_func_id: FunctionId,
     },
-    Reset {
-        global: Box<[(walrus::GlobalId, walrus::ir::Value)]>,
-        zero_range: Box<[(i32, Option<i32>)]>,
-        mem_init: Box<[(i32, usize, usize)]>,
-        // automatically call this with constructed wasm module,
-        // so use this
-        start_section_id: Option<walrus::FunctionId>,
-    },
 }
 
 impl Wasip1Op {
@@ -131,9 +85,6 @@ impl Wasip1Op {
         module: &walrus::Module,
         import: &walrus::Import,
         wasm_name: impl AsRef<str>,
-        mem_manager: &mut VFSExternalMemoryManager,
-        wasm_mem: walrus::MemoryId,
-        wasm_global: Vec<walrus::GlobalId>,
     ) -> eyre::Result<Self> {
         let name = import.name.as_str();
         let wasm_name = wasm_name.as_ref();
@@ -150,10 +101,6 @@ impl Wasip1Op {
         } else {
             eyre::bail!("Invalid import kind");
         };
-
-        let func = module.funcs.get(import_fn_id);
-
-        let ty = module.types.get(func.ty());
 
         let kind = match name {
             _ if name.starts_with("__main_void") => {
@@ -172,92 +119,6 @@ impl Wasip1Op {
                 Wasip1OpKind::MainVoid {
                     main_void_func_id,
                     start_func_id,
-                }
-            }
-            _ if name.starts_with("_start") => {
-                let start_func_id = module
-                    .exports
-                    .get_func(&format!("__wasip1_vfs_{wasm_name}__start"))
-                    .to_eyre()
-                    .wrap_err_with(|| eyre::eyre!("Failed to get start function"))?;
-
-                Wasip1OpKind::Start { start_func_id }
-            }
-            _ if name.starts_with("reset") => {
-                log::warn!("Table segment is not supported yet on reset operation");
-
-                let global = module
-                    .globals
-                    .iter()
-                    .filter(|g| wasm_global.contains(&g.id()))
-                    .filter(|global| global.mutable)
-                    .filter_map(|global| {
-                        if let GlobalKind::Local(ConstExpr::Value(v)) = global.kind {
-                            Some((global.id(), v.clone()))
-                        } else {
-                            log::warn!("Global segment {:?} is not a value, we support only local variables", global.kind);
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-
-                let data_range = module
-                    .data
-                    .iter()
-                    .filter_map(|data| {
-                        match data.kind {
-                            walrus::DataKind::Active { memory, offset } if memory == wasm_mem => {
-                                if let ConstExpr::Value(v) = offset {
-                                    if let ir::Value::I32(offset) = v {
-                                        Some((offset, data.value.len()))
-                                    } else {
-                                        log::warn!(
-                                            "Data segment {:?} is not i32, we support only i32",
-                                            offset
-                                        );
-                                        None
-                                    }
-                                } else {
-                                    log::warn!(
-                                        "Data segment {:?} is not a value, we support only i32",
-                                        offset
-                                    );
-                                    None
-                                }
-                            }
-                            // Passive is across memories so ignore on now
-                            _ => None,
-                        }
-                    })
-                    .collect::<Vec<_>>();
-
-                let zero_range = std::iter::once(Some(0i32))
-                    .chain(
-                        data_range
-                            .iter()
-                            .flat_map(|(offset, len)| [Some(*offset), Some(*offset + *len as i32)]),
-                    )
-                    .chain(std::iter::once(None))
-                    .collect::<Vec<_>>()
-                    .chunks(2)
-                    .map(|chunk| (chunk[0].unwrap(), chunk[1]))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-
-                let mem_init = data_range
-                    .into_iter()
-                    .map(|(offset, len)| (offset, len, mem_manager.alloc(len)))
-                    .collect::<Vec<_>>()
-                    .into_boxed_slice();
-
-                let start_section_id = module.start;
-
-                Wasip1OpKind::Reset {
-                    global,
-                    zero_range,
-                    mem_init,
-                    start_section_id,
                 }
             }
             _ => eyre::bail!("Invalid import name: {name}"),
@@ -325,38 +186,40 @@ impl Wasip1Op {
                 log::warn!(
                     "main_void is not called directly in start function, but called in nested function. we replaced once call to a fake function that returns 0."
                 );
-                module
-                    .funcs
-                    .flat_rewrite(
-                        |instr, _| {
-                            if let walrus::ir::Instr::Call(c) = instr {
-                                if c.func == main_void_func_id {
-                                    c.func = fake_fn_id;
-                                }
-                            }
-                        },
-                        start_fn_id,
-                        false,
-                    )
-                    .wrap_err("Failed to read main_void calls")?;
             } else {
                 if call_count > 1 {
                     log::warn!(
-                        "main_void is not called directly in start function, but called in nested function. main_void called multiple times in start function, rust's default is once."
+                        "main_void is not called directly in start function, and called in nested function. main_void called multiple times in start function, rust's default is once."
                     );
                 } else {
                     log::warn!(
                         "main_void is not called in nested start function, we think call_indirect is used. we replaced all calls to a fake function that returns 0."
                     );
+                    // Strictly speaking, it should be limited to functions called within start_fn,
+                    // but since the main_void function is only called inside start_fn and through export,
+                    // it is acceptable to modify it in this function.
+                    module
+                        .connect_func_alt(main_void_func_id, fake_fn_id, debug)
+                        .wrap_err("Failed to rewrite main_void call in start")?;
                 }
-
-                // Strictly speaking, it should be limited to functions called within start_fn,
-                // but since the main_void function is only called inside start_fn and through export,
-                // it is acceptable to modify it in this function.
-                module
-                    .connect_func_alt(main_void_func_id, fake_fn_id, debug)
-                    .wrap_err("Failed to rewrite main_void call in start")?;
             }
+            let copied_start_fn_id =
+                module.nested_copy_func(start_fn_id, &[] as &[FunctionId], true, true)?;
+            module
+                .funcs
+                .flat_rewrite(
+                    |instr, _| {
+                        if let walrus::ir::Instr::Call(c) = instr {
+                            if c.func == main_void_func_id {
+                                c.func = fake_fn_id;
+                            }
+                        }
+                    },
+                    copied_start_fn_id,
+                    false,
+                )
+                .wrap_err("Failed to read main_void calls")?;
+            module.connect_func_alt(start_fn_id, copied_start_fn_id, debug)?;
         } else if call_main_void > 1 {
             log::warn!(
                 "main_void called multiple times in start function, rust's default is once. we replaced all calls to a fake function that returns 0."
@@ -368,86 +231,13 @@ impl Wasip1Op {
         Ok(())
     }
 
-    pub fn start(
-        &self,
-        module: &mut walrus::Module,
-        fid: FunctionId,
-        start_func_id: FunctionId,
-        wasm_mem: walrus::MemoryId,
-        vfs_mem: walrus::MemoryId,
-        is_reset_contain: Option<&Wasip1Op>,
-        debug: bool,
-    ) -> eyre::Result<()> {
-        let initializer = "__wasip1_vfs_thread_initializer"
-            .get_fid(&module.exports)
-            .ok();
-
-        if let Some(_) = initializer {
-            module
-                .exports
-                .remove("__wasip1_vfs_thread_initializer")
-                .to_eyre()
-                .wrap_err("Failed to remove __wasip1_vfs_thread_initializer export")?;
-        }
-
-        module.connect_func_alt(fid, start_func_id, debug)?;
-
-        // let pre_ready_initializer = module
-        //     .add_func(&[], &[], |builder, _| {
-        //         let mut func_body = builder.func_body();
-
-        //         if let Some(reset) = is_reset_contain {
-        //             if let Wasip1OpKind::Reset { mem_init, .. } = &reset.kind {
-        //                 for (offset, len, ptr) in mem_init {
-        //                     func_body
-        //                         .i32_const(*ptr as i32) // dst
-        //                         .i32_const(*offset) // src
-        //                         .i32_const(*len as i32) // len
-        //                         .memory_copy(wasm_mem, vfs_mem);
-        //                 }
-        //             } else {
-        //                 unreachable!();
-        //             }
-        //         }
-
-        //         Ok(())
-        //     })
-        //     .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
-
-        if let Some(before) = module.start {
-            let new_start = module.add_func(&[], &[], |builder, _| {
-                let mut body = builder.func_body();
-                // todo!();
-                // body.call(pre_ready_initializer);
-                body.call(before);
-                if let Some(initializer) = initializer {
-                    body.call(initializer);
-                }
-                Ok(())
-            })?;
-
-            if debug {
-                module.exports.add("__vfs_start_debug", before);
-            }
-
-            module.start = Some(new_start);
-        }
-
-        Ok(())
-    }
-
     pub fn replace(
         self,
         module: &mut walrus::Module,
         wasm_mem: walrus::MemoryId,
         vfs_mem: walrus::MemoryId,
-        is_reset_contain: Option<&Wasip1Op>,
         debug: bool,
     ) -> eyre::Result<()> {
-        // if matches!(self.kind, Wasip1OpKind::MainVoid) {
-        //     self.main_void(module, self.fid)?;
-        // }
-
         if let Wasip1OpKind::MainVoid {
             main_void_func_id,
             start_func_id,
@@ -457,81 +247,6 @@ impl Wasip1Op {
                 .wrap_err(
                     "Failed to implement main_void wasm memory etc before call main function",
                 )?;
-        } else if let Wasip1OpKind::Start { start_func_id } = self.kind {
-            self.start(
-                module,
-                self.fid,
-                start_func_id,
-                wasm_mem,
-                vfs_mem,
-                is_reset_contain,
-                debug,
-            )
-            .wrap_err("Failed to implement wasm memory etc before call main function")?;
-        } else {
-            let Self { fid, kind } = self;
-
-            // let mut asserter = if matches!(kind, Wasip1OpKind::Reset { .. }) {
-            //     let mem_size = module.memories.get(wasm_mem).initial as i32;
-            //     Some(module.assert_i32_const(mem_sizey)?)
-            // } else {
-            //     None
-            // };
-
-            module
-                .replace_imported_func(fid, |(body, arg_locals)| {
-                    let mut body = body.func_body();
-
-                    match &kind {
-                        Wasip1OpKind::MainVoid { .. } => unreachable!(),
-                        Wasip1OpKind::Start { .. } => unreachable!(),
-                        Wasip1OpKind::Reset {
-                            global,
-                            zero_range,
-                            mem_init,
-                            start_section_id,
-                        } => {
-                            for (id, value) in global.iter() {
-                                body.const_(*value).global_set(*id);
-                            }
-                            for (start, end) in zero_range.iter() {
-                                // ptr
-                                body.i32_const(*start)
-                                    // value
-                                    .i32_const(0);
-
-                                // len
-                                if let Some(end) = end {
-                                    body.i32_const(*end - *start);
-                                } else {
-                                    body.memory_size(wasm_mem);
-
-                                    // asserter.as_mut().unwrap()(&mut body).unwrap();
-
-                                    body.i32_const(64 * 1024)
-                                        .binop(ir::BinaryOp::I32Mul)
-                                        .i32_const(*start)
-                                        .binop(ir::BinaryOp::I32Sub);
-                                }
-                                body.memory_fill(wasm_mem);
-                            }
-                            for (mem_offset, mem_len, mem_ptr) in mem_init.iter() {
-                                body.i32_const(*mem_offset) // dst
-                                    .i32_const(*mem_ptr as i32) // src
-                                    .i32_const(*mem_len as i32) // len
-                                    .memory_copy(vfs_mem, wasm_mem);
-                            }
-
-                            if let Some(start_section_id) = start_section_id {
-                                body.call(*start_section_id);
-                            }
-
-                            body.return_();
-                        }
-                    }
-                })
-                .to_eyre()
-                .wrap_err_with(|| eyre::eyre!("Failed to replace function: {kind:?}"))?;
         }
 
         Ok(())
