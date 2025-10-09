@@ -157,7 +157,12 @@ impl Generator for CheckUnusedThreads {
 pub struct IsRustWasm;
 
 impl Generator for IsRustWasm {
-    fn pre_vfs(&mut self, module: &mut walrus::Module, _: &GeneratorCtx) -> eyre::Result<()> {
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &GeneratorCtx,
+        external: &ModuleExternal,
+    ) -> eyre::Result<()> {
         if !["_start", "__main_void"]
             .iter()
             .all(|name| !module.exports.iter().any(|e| e.name == *name))
@@ -166,7 +171,8 @@ impl Generator for IsRustWasm {
                 .all(|name| !module.customs.iter().any(|(_, c)| c.name() == *name))
         {
             log::error!(
-                "This wasm file is not built by rust toolchain, or you forget to export _start or main_void function. If you use `cdylib` or `rlib`, please change to `bin` or `lib`.\nIf you use other language, create an issue."
+                "This file: {} is not built by rust toolchain, or you forget to export _start or main_void function. If you use `cdylib` or `rlib`, please change to `bin` or `lib`.\nIf you use other language, create an issue.",
+                external.name
             );
         }
 
