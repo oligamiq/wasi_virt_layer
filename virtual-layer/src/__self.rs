@@ -39,7 +39,7 @@ impl WasmAccess for __self {
         unreachable!();
     }
 
-    fn reset() {
+    fn _reset() {
         unreachable!();
     }
 

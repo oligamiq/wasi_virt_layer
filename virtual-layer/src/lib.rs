@@ -6,7 +6,7 @@
 // use core::sync::atomic;
 
 mod __self;
-mod binary_map;
+mod utils;
 #[cfg(all(feature = "unstable_print_debug", target_os = "wasi"))]
 mod debug;
 mod initializer;
@@ -92,6 +92,6 @@ pub mod __private {
     }
 
     pub mod utils {
-        pub use crate::binary_map::StaticArrayBuilder;
+        pub use crate::utils::StaticArrayBuilder;
     }
 }

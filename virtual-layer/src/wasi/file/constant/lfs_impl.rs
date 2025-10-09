@@ -37,17 +37,7 @@ impl<
         data: *const u8,
         data_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        #[cfg(not(feature = "multi_memory"))]
-        {
-            StdIo::write_direct::<Wasm>(data, data_len)
-        }
-        #[cfg(feature = "multi_memory")]
-        {
-            let mut buf = alloc::vec::Vec::with_capacity(data_len);
-            unsafe { buf.set_len(data_len) };
-            Wasm::memcpy_to(&mut buf, data);
-            StdIo::write(&buf)
-        }
+        StdIo::write_direct::<Wasm>(data, data_len)
     }
 
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
@@ -55,17 +45,7 @@ impl<
         data: *const u8,
         data_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        #[cfg(not(feature = "multi_memory"))]
-        {
-            StdIo::write_direct::<Wasm>(data, data_len)
-        }
-        #[cfg(feature = "multi_memory")]
-        {
-            let mut buf = alloc::vec::Vec::with_capacity(data_len);
-            unsafe { buf.set_len(data_len) };
-            Wasm::memcpy_to(&mut buf, data);
-            StdIo::write(&buf)
-        }
+        StdIo::ewrite_direct::<Wasm>(data, data_len)
     }
 
     fn is_dir(&self, inode: Self::Inode) -> bool {
@@ -287,19 +267,7 @@ impl<
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        #[cfg(not(feature = "multi_memory"))]
-        {
-            StdIo::read_direct::<Wasm>(buf, buf_len)
-        }
-
-        #[cfg(feature = "multi_memory")]
-        {
-            let mut buf_vec = alloc::vec::Vec::with_capacity(buf_len);
-            unsafe { buf_vec.set_len(buf_len) };
-            let read = StdIo::read(&mut buf_vec)?;
-            Wasm::memcpy(buf, &buf_vec);
-            Ok(read)
-        }
+        StdIo::read_direct::<Wasm>(buf, buf_len)
     }
 
     fn path_open_raw<Wasm: WasmAccess>(

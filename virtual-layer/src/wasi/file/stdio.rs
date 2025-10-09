@@ -48,14 +48,16 @@ pub trait StdIO {
     fn read_direct<Wasm: WasmAccess>(buf: *mut u8, len: usize) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            let mut buffer = {
-                let mut vec = alloc::vec::Vec::with_capacity(len);
-                unsafe { vec.set_len(len) };
-                vec
+            use crate::utils::alloc_buff;
+
+            let (_, size) = unsafe {
+                alloc_buff(len, |b| {
+                    let size = Self::read(b)?;
+                    Wasm::memcpy(buf, &b[..size]);
+                    Ok(size)
+                })
             };
-            Self::read(&mut buffer)?;
-            Wasm::memcpy(buf, &buffer);
-            Ok(buffer.len())
+            size
         }
 
         #[cfg(not(feature = "alloc"))]

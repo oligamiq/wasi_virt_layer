@@ -121,7 +121,7 @@ macro_rules! import_wasm {
                 }
 
                 #[inline(always)]
-                fn reset()
+                fn _reset()
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
@@ -401,14 +401,18 @@ pub trait WasmAccess: Copy {
 
     /// utility internal
     #[cfg(feature = "alloc")]
-    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> Vec<T>
+    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> Box<[T]>
     where
         Self: Sized,
     {
-        let mut vec = Vec::<T>::with_capacity(len);
-        unsafe { vec.set_len(len) };
-        Self::memcpy_to(&mut vec, ptr);
-        vec
+        use crate::utils::alloc_buff;
+
+        let (buff, _) = unsafe {
+            alloc_buff(len, |b| {
+                Self::memcpy_to(b, ptr);
+            })
+        };
+        buff
     }
 
     #[cfg(not(feature = "multi_memory"))]
@@ -437,22 +441,38 @@ pub trait WasmAccess: Copy {
 
     /// memory reset to memory which instantiate
     /// function's roll
-    /// - other memory fill zeroed
+    /// - memory fill zeroed
     /// - reset global variables
     /// - memory copied from data-segment
     /// if you call this function,
     /// virtual file system's memory isn't changed
-    /// _start is not called
-    ///
-    /// to call this function after first _start.
-    /// After this, _start must be called before main is called.
-    fn reset();
+    fn _reset();
 
     /// Calls the initialization function provided.
-    /// If you are using the main function of the same TRAIT,
+    /// If you are using the _main function of the same TRAIT,
     /// RUST's main function will not be automatically executed during initialization.
     ///
-    /// if you want to use reset, call this function first otherwise
+    /// Examples include:
+    /// ```ignore
+    /// import_wasm!(my_wasm);
+    ///
+    /// fn main() {
+    ///   my_wasm::_reset();
+    ///   my_wasm::_start();
+    ///   my_wasm::_main();
+    /// }
+    /// ```
+    /// Other:
+    /// ```ignore
+    /// import_wasm!(my_wasm);
+    ///
+    /// fn init() {
+    ///   my_wasm::_reset();
+    ///   my_wasm::_start();
+    /// }
+    /// fn main() {
+    ///   my_wasm::_main();
+    /// }
     fn _start();
 }
 
@@ -674,7 +694,7 @@ impl WasmAccess for WasmAccessFaker {
     }
 
     #[inline(always)]
-    fn reset() {}
+    fn _reset() {}
 
     #[inline(always)]
     fn _start() {}

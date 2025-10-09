@@ -136,12 +136,17 @@ pub trait Wasip1FileTrait {
     ) -> Result<usize, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            let mut array = alloc::vec::Vec::with_capacity(buf_len);
-            unsafe { array.set_len(buf_len) };
-            let nread = self.pread(&mut array, offset)?;
-            Wasm::memcpy(buf_ptr, &array[..nread]);
+            use crate::utils::alloc_buff;
 
-            Ok(nread)
+            let (_, nread) = unsafe {
+                alloc_buff(buf_len, |b| {
+                    let nread = self.pread(b, offset)?;
+                    Wasm::memcpy(buf_ptr, &b[..nread]);
+                    Ok(nread)
+                })
+            };
+
+            nread
         }
 
         #[cfg(not(feature = "alloc"))]
