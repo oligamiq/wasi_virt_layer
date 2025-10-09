@@ -677,16 +677,9 @@ impl WalrusUtilModule for walrus::Module {
         let name = name.as_ref();
         let anchor_name = format!("__wasip1_vfs_flag_{name}_global");
 
-        let anchor_func_id = self
-            .exports
-            .get_func(&anchor_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("anchor {anchor_name} not found"))?;
+        let anchor_func_id = anchor_name.get_fid(&self.exports)?;
 
-        self.exports
-            .remove(&anchor_name)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to remove anchor export"))?;
+        self.exports.erase(anchor_func_id)?;
 
         let anchor_body = &self.funcs.get(anchor_func_id).kind;
         if let FunctionKind::Local(local_func) = anchor_body {
@@ -696,7 +689,8 @@ impl WalrusUtilModule for walrus::Module {
                 .iter()
                 .map(|(block, _)| block)
                 .filter_map(|block| match block {
-                    ir::Instr::GlobalSet(ir::GlobalSet { global, .. }) => Some(*global),
+                    ir::Instr::GlobalSet(ir::GlobalSet { global, .. })
+                    | ir::Instr::GlobalGet(ir::GlobalGet { global, .. }) => Some(*global),
                     _ => None,
                 })
                 .collect::<Box<_>>();
@@ -715,18 +709,30 @@ impl WalrusUtilModule for walrus::Module {
         let global_ids = self
             .globals
             .iter()
-            .map(|global| (global.id(), global.ty))
+            .map(|global| (global.id(), global.ty, global.mutable))
             .collect::<Vec<_>>();
-        let id = self.add_func(&[], &[], |builder, _| {
+
+        let results = global_ids
+            .iter()
+            .filter(|(_, _, mutable)| !*mutable)
+            .map(|(_, ty, _)| ty)
+            .cloned()
+            .collect::<Vec<_>>();
+
+        let id = self.add_func(&[], &results, |builder, _| {
             let mut func_body = builder.func_body();
 
-            for (id, ty) in global_ids.iter() {
-                func_body
-                    .const_(
-                        ty.normal()
-                            .wrap_err_with(|| eyre::eyre!("Failed to get global type"))?,
-                    )
-                    .global_set(*id);
+            for (id, ty, mutable) in global_ids.iter() {
+                if *mutable {
+                    func_body
+                        .const_(
+                            ty.normal()
+                                .wrap_err_with(|| eyre::eyre!("Failed to get global type"))?,
+                        )
+                        .global_set(*id);
+                } else {
+                    func_body.global_get(*id);
+                }
             }
 
             func_body.return_();
@@ -2097,7 +2103,6 @@ impl Drop for LStringHolder {
 }
 
 /// Literal String
-#[derive(Clone)]
 pub struct LString(&'static str, &'static AtomicUsize);
 impl LString {
     pub fn new(s: &'static str, counter: &'static AtomicUsize) -> Self {
@@ -2108,6 +2113,12 @@ impl LString {
 impl Drop for LString {
     fn drop(&mut self) {
         self.1.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+impl Clone for LString {
+    fn clone(&self) -> Self {
+        self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        LString(self.0, self.1)
     }
 }
 impl std::hash::Hash for LString {
