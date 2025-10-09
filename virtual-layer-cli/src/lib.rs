@@ -8,25 +8,17 @@ use crate::{
 pub mod adjust;
 pub mod args;
 pub mod building;
-pub mod check;
 pub mod common;
 pub mod config_checker;
-pub mod debug;
 pub mod down_color;
 pub mod generator;
 pub mod instrs;
 pub mod is_valid;
-pub mod memory;
 pub mod merge;
-pub mod patch_component;
-pub mod extract_func;
 pub mod rewrite;
-pub mod shared_global;
 pub mod target;
 pub mod test_run;
-pub mod threads;
 pub mod util;
-pub mod abi_connect;
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
     env_logger::Builder::new()

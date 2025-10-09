@@ -1,3 +1,12 @@
+pub mod abi_connect;
+pub mod check;
+pub mod debug;
+pub mod memory;
+pub mod patch_component;
+pub mod shared_global;
+pub mod special_func;
+pub mod threads;
+
 use std::{collections::HashMap, fs, str::FromStr};
 
 use camino::Utf8PathBuf;
