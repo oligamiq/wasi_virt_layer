@@ -65,7 +65,7 @@ const FILES: NormalFILES = ConstFiles!([(
 )]);
 
 plug_thread!(DirectThreadPool, self, test_threads);
-plug_process!(test_threads);
+plug_process!(self, test_threads);
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
     environ: &[
@@ -97,5 +97,5 @@ mod fs {
     plug_fs!(@const, {
         #[allow(static_mut_refs)]
         unsafe { &mut VIRTUAL_FILE_SYSTEM }
-    }, test_threads);
+    }, test_threads, self);
 }

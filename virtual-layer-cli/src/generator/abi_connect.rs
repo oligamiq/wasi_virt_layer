@@ -11,26 +11,39 @@ use crate::{
 pub struct ConnectWasip1ABI;
 
 impl Generator for ConnectWasip1ABI {
+    /// todo!();
+    /// It must be placed before the patch_component.
     fn pre_vfs(
         &mut self,
         module: &mut walrus::Module,
         ctx: &super::GeneratorCtx,
     ) -> eyre::Result<()> {
         for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-            let export_name = format!("__wasip1_vfs___self_{import}");
+            let export = format!("__wasip1_vfs___self_{import}")
+                .get_fid(&module.exports)
+                .ok();
+
             if let Some(import_id) = (
-                CORE_MODULE_ROOT,
-                &format!("[static]wasip1.{}-import", import.replace("_", "-")),
+                // CORE_MODULE_ROOT,
+                // &format!("[static]wasip1.{}-import", import.replace("_", "-")),
+                "wasi_snapshot_preview1",
+                import,
             )
                 .get_fid(&module.imports)
                 .ok()
             {
-                module.connect_func_alt(import_id, &export_name, ctx.unstable_print_debug)?;
+                if let Some(export) = export {
+                    module.connect_func_alt(import_id, export, ctx.unstable_print_debug)?;
+                } else {
+                    log::warn!("No export found for Wasip1 ABI import self: {import}");
+                }
             } else {
-                module
-                    .exports
-                    .erase_with(&export_name, ctx.unstable_print_debug)
-                    .ok();
+                if let Some(export) = export {
+                    module
+                        .exports
+                        .erase_with(export, ctx.unstable_print_debug)
+                        .ok();
+                }
             }
         }
 

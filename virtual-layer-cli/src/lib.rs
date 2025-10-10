@@ -116,6 +116,36 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         toml_restores.clone(),
         parsed_args.get_wasm_memory_hints(),
     )?;
+
+    {
+        use crate::generator::{
+            abi_connect, check, debug, memory, patch_component, shared_global, special_func,
+            threads,
+        };
+        generator::add_generators_by_type!(
+            generator,
+            check::IsRustWasm,
+            check::CheckUseLibrary,
+            check::CheckVFSMemoryType,
+            check::CheckUnusedThreads,
+            threads::ThreadsSpawn,
+            threads::ThreadsSpawnPatch,
+            special_func::ResetFunc,
+            special_func::StartFunc,
+            special_func::MainVoidFunc,
+            shared_global::SharedGlobal,
+            memory::TemporaryRefugeMemory,
+            memory::MemoryBridge,
+            memory::MemoryTrap,
+            abi_connect::ConnectWasip1ABI,
+            abi_connect::ConnectWasip1ThreadsABI,
+            debug::DebugBase,
+            debug::DebugCallMemoryGrow,
+            debug::DebugExportVFSFunctions,
+            patch_component::PatchComponent,
+        );
+    }
+
     generator
         .run_layers_to_component(&parsed_args.out_dir)
         .wrap_err("Failed to run layers to component")?;

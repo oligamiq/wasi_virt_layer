@@ -36,7 +36,8 @@ macro_rules! plug_process {
                 pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _proc_exit>](
                     code: i32
                 ) -> ! {
-                    <$ty as $crate::process::ProcessExit>::proc_exit::<$wasm>(code)
+                    $crate::__as_t!(@as_t, $wasm);
+                    <$ty as $crate::process::ProcessExit>::proc_exit::<T>(code)
                 }
             )*
         }

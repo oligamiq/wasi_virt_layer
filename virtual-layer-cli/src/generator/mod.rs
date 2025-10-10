@@ -113,7 +113,9 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
 impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         for generator in self {
-            generator.pre_vfs(module, ctx)?;
+            generator.pre_vfs(module, ctx).wrap_err_with(|| {
+                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+            })?;
         }
         Ok(())
     }
@@ -125,7 +127,11 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
         external: &ModuleExternal,
     ) -> eyre::Result<()> {
         for generator in self {
-            generator.pre_target(module, ctx, external)?;
+            generator
+                .pre_target(module, ctx, external)
+                .wrap_err_with(|| {
+                    eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+                })?;
         }
         Ok(())
     }
@@ -136,7 +142,9 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for generator in self {
-            generator.post_combine(module, ctx)?;
+            generator.post_combine(module, ctx).wrap_err_with(|| {
+                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+            })?;
         }
         Ok(())
     }
@@ -147,7 +155,9 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for generator in self {
-            generator.post_lower_memory(module, ctx)?;
+            generator.post_lower_memory(module, ctx).wrap_err_with(|| {
+                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+            })?;
         }
         Ok(())
     }
@@ -158,7 +168,9 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for generator in self {
-            generator.post_components(module, ctx)?;
+            generator.post_components(module, ctx).wrap_err_with(|| {
+                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+            })?;
         }
         Ok(())
     }
@@ -169,7 +181,9 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for generator in self {
-            generator.post_all_optimize(module, ctx)?;
+            generator.post_all_optimize(module, ctx).wrap_err_with(|| {
+                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+            })?;
         }
         Ok(())
     }
@@ -1221,3 +1235,15 @@ pub fn merge(
 
     Ok(())
 }
+
+macro_rules! _add_generators_by_type {
+    ($runner:expr, $($ty:ty),* $(,)?) => {
+        $(
+            if let Some(_) = $runner.get_generator_ref::<$ty>().ok() {
+                panic!("Generator of type {} already exists", std::any::type_name::<$ty>());
+            }
+            $runner.add_generator(<$ty>::default());
+        )*
+    };
+}
+pub(crate) use _add_generators_by_type as add_generators_by_type;
