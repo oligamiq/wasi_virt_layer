@@ -6,7 +6,6 @@
 // use core::sync::atomic;
 
 mod __self;
-mod utils;
 #[cfg(all(feature = "unstable_print_debug", target_os = "wasi"))]
 mod debug;
 mod initializer;
@@ -18,6 +17,7 @@ pub mod memory;
 ))]
 mod shared_global;
 mod transporter;
+mod utils;
 mod wasi;
 mod wit;
 
@@ -28,12 +28,12 @@ pub mod wasip1;
 extern crate alloc;
 
 pub mod prelude {
-    #[cfg(feature = "threads")]
-    pub use crate::export_thread;
     pub use crate::memory::WasmAccess;
+    #[cfg(feature = "threads")]
+    pub use crate::plug_thread;
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
     pub use crate::wasi::file::constant::vfs::Wasip1ConstVFS;
-    pub use crate::{ConstFiles, export_env, export_fs, import_wasm};
+    pub use crate::{ConstFiles, import_wasm, plug_env, plug_fs};
 }
 
 #[cfg(feature = "threads")]

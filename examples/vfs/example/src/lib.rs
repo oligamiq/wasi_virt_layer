@@ -1,7 +1,7 @@
 use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasip1_virtual_layer::{export_process, file::*, prelude::*};
+use wasip1_virtual_layer::{file::*, plug_process, prelude::*};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -45,7 +45,7 @@ impl Guest for Hello {
         test_wasm_opt::_start();
     }
     fn main() {
-        test_wasm_opt::reset();
+        test_wasm_opt::_reset();
         test_wasm_opt::_start();
         test_wasm_opt::_main();
     }
@@ -53,7 +53,7 @@ impl Guest for Hello {
 
 export!(Hello);
 
-export_process!(test_wasm_opt);
+plug_process!(test_wasm_opt);
 
 struct VirtualEnvState {
     environ: Vec<String>,
@@ -75,7 +75,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-export_env!(@static, &mut VIRTUAL_ENV.lock(), test_wasm_opt, self);
+plug_env!(@static, &mut VIRTUAL_ENV.lock(), test_wasm_opt, self);
 
 const FILE_COUNT: usize = 10;
 
@@ -112,7 +112,7 @@ mod fs {
     static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
         Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
-    export_fs!(@const, {
+    plug_fs!(@const, {
         #[allow(static_mut_refs)]
         unsafe { &mut VIRTUAL_FILE_SYSTEM }
     }, test_wasm_opt);

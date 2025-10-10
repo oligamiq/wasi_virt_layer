@@ -29,6 +29,8 @@ use crate::{
 pub struct GeneratorCtx {
     pub vfs_name: LString,
     pub target_names: Box<[LString]>,
+    /// Including one's own WASI ABI
+    pub target_names_with_self: Box<[LString]>,
     /// only pre_vfs, post_combine, post_lower_memory
     pub vfs_used_memory_id: Option<MemoryId>,
     /// only post_combine
@@ -387,16 +389,23 @@ impl GeneratorRunner {
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
     ) -> eyre::Result<Self> {
-        let target_names = core::iter::once(Ok(path.name()?.to_compact_string()))
+        let target_names_with_self = core::iter::once(Ok(path.name()?.to_compact_string()))
             .chain(targets.iter().map(|t| Ok(t.name()?.to_compact_string())))
+            .chain(core::iter::once(Ok(CompactString::const_new("__self"))))
             .collect::<eyre::Result<Box<_>>>()?;
 
-        let lstring_holder = LStringHolder::new(target_names);
+        let lstring_holder = LStringHolder::new(target_names_with_self);
         let mut lstring_holder_iter = lstring_holder.iter();
         let vfs_name = lstring_holder_iter
             .next()
             .ok_or_else(|| eyre::eyre!("Failed to get VFS name"))?;
-        let target_names = lstring_holder_iter.collect::<Box<_>>();
+        let target_names_with_self = lstring_holder_iter.collect::<Box<_>>();
+
+        let target_names = target_names_with_self
+            .iter()
+            .take(targets.len())
+            .cloned()
+            .collect::<Box<_>>();
 
         let memory_hint = memory_hint
             .into_iter()
@@ -409,6 +418,7 @@ impl GeneratorRunner {
             ctx: GeneratorCtx {
                 vfs_name: vfs_name,
                 target_names,
+                target_names_with_self,
                 target_memory_type: memory_type,
                 unstable_print_debug,
                 dwarf,

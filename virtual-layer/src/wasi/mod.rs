@@ -12,7 +12,55 @@ macro_rules! __as_t {
         type T = $crate::__private::__self;
     };
 
+    (@as_t, __self) => {
+        type T = $crate::__private::__self;
+    };
+
     (@as_t, $wasm:ty) => {
         type T = $wasm;
     };
+
+    (@as_ident, self) => {
+        __self
+    };
+
+    (@as_ident, __self) => {
+        __self
+    };
+
+    (@as_ident, $wasm:ident) => {
+        $wasm
+    };
+
+    (@through, $($wasm:tt),* => $callback:path, $($ex:tt)*) => {
+        $crate::__as_t!(@through_inner; $($wasm),*; => $callback, $($ex)*);
+    };
+
+    (@through_inner; $(,)? ; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
+        $callback!($($ex)*, $($tail),*);
+    };
+
+    (@through_inner; self, $($left:ident),*; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
+        $crate::__as_t!(@through_inner; $($left),*; $($tail),*, __self => $callback, $($ex)*);
+    };
+
+    (@through_inner; $pop:ident $(,)? $($left:ident),*; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
+        $crate::__as_t!(@through_inner; $($left),*; $($tail),*, $pop => $callback, $($ex)*);
+    };
+
+    // (@through, self => $callback:path, $($ex:tt)*) => {
+    //     $callback!($($ex)*, __self, $crate::__private::__self);
+    // };
+
+    // (@through, $wasm:ident => $callback:path, $($ex:tt)*) => {
+    //     $callback!($($ex)*, $wasm, $wasm);
+    // };
+
+    // (@through, self => $callback:path) => {
+    //     $callback!(__self, $crate::__private::__self);
+    // };
+
+    // (@through, $wasm:ident => $callback:path) => {
+    //     $callback!($wasm, $wasm);
+    // };
 }

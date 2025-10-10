@@ -431,7 +431,7 @@ pub trait WasmAccess: Copy {
     /// that wraps __main_void.
     /// This does not apply if it's used as a library.
     ///
-    /// Using this and export_env,
+    /// Using this and plug_env,
     /// it is possible to override arguments, for example, to call
     /// If this function name is main, same name with rust generated main on test and error
     fn _main() -> wasip1::Errno;

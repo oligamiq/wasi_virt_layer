@@ -27,7 +27,7 @@ use crate::memory::WasmAccess;
 /// const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
 ///     environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
 /// };
-/// export_env!(@block, @const, VirtualEnvTy, test_wasm);
+/// plug_env!(@block, @const, VirtualEnvTy, test_wasm);
 /// ```
 ///
 /// ```rust
@@ -53,69 +53,69 @@ use crate::memory::WasmAccess;
 ///   environ.push("HOME=~/".into());
 ///   Mutex::new(VirtualEnvState { environ })
 /// });
-/// export_env!(@through, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+/// plug_env!(@through, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
 /// ```
 #[macro_export]
-macro_rules! export_env {
+macro_rules! plug_env {
     (@const, $ty:ty, $($wasm:tt),*) => {
-        $(
-            $crate::export_env!(@inner, @const, $ty, $wasm);
-        )*
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @const, $ty);
     };
 
     (@static, $state:expr, $($wasm:tt),*) => {
-        $(
-            $crate::export_env!(@inner, @static, $state, $wasm);
-        )*
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @static, $state);
     };
 
-    (@inner, @const, $ty:ty, $wasm:ty) => {
+    (@inner, @const, $ty:ty, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
-            #[unsafe(no_mangle)]
-            #[cfg(target_os = "wasi")]
-            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
-                environ_count: *mut $crate::__private::wasip1::Size,
-                environ_buf_size: *mut $crate::__private::wasip1::Size,
-            ) -> $crate::__private::wasip1::Errno {
-                $crate::__as_t!(@as_t, $wasm);
-                $crate::__private::inner::env::environ_sizes_get_const_inner::<$ty, T>(environ_count, environ_buf_size)
-            }
+            $(
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
+                    environ_count: *mut $crate::__private::wasip1::Size,
+                    environ_buf_size: *mut $crate::__private::wasip1::Size,
+                ) -> $crate::__private::wasip1::Errno {
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::__private::inner::env::environ_sizes_get_const_inner::<$ty, T>(environ_count, environ_buf_size)
+                }
 
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
-                environ: *mut *const u8,
-                environ_buf: *mut u8,
-            ) -> $crate::__private::wasip1::Errno {
-                $crate::__as_t!(@as_t, $wasm);
-                $crate::__private::inner::env::environ_get_const_inner::<$ty, T>(environ, environ_buf)
-            }
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
+                    environ: *mut *const u8,
+                    environ_buf: *mut u8,
+                ) -> $crate::__private::wasip1::Errno {
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::__private::inner::env::environ_get_const_inner::<$ty, T>(environ, environ_buf)
+                }
+            )*
         }
     };
 
-    (@inner, @static, $state:expr, $wasm:ty) => {
+    (@inner, @static, $state:expr, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
-                environ_count: *mut $crate::__private::wasip1::Size,
-                environ_buf_size: *mut $crate::__private::wasip1::Size,
-            ) -> $crate::__private::wasip1::Errno {
-                $crate::__as_t!(@as_t, $wasm);
-                let state = $state;
-                $crate::__private::inner::env::environ_sizes_get_inner::<T>(state, environ_count, environ_buf_size)
-            }
+            $(
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
+                    environ_count: *mut $crate::__private::wasip1::Size,
+                    environ_buf_size: *mut $crate::__private::wasip1::Size,
+                ) -> $crate::__private::wasip1::Errno {
+                    $crate::__as_t!(@as_t, $wasm);
+                    let state = $state;
+                    $crate::__private::inner::env::environ_sizes_get_inner::<T>(state, environ_count, environ_buf_size)
+                }
 
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
-                environ: *mut *const u8,
-                environ_buf: *mut u8,
-            ) -> $crate::__private::wasip1::Errno {
-                $crate::__as_t!(@as_t, $wasm);
-                let state = $state;
-                $crate::__private::inner::env::environ_get_inner::<T>(state, environ, environ_buf)
-            }
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
+                    environ: *mut *const u8,
+                    environ_buf: *mut u8,
+                ) -> $crate::__private::wasip1::Errno {
+                    $crate::__as_t!(@as_t, $wasm);
+                    let state = $state;
+                    $crate::__private::inner::env::environ_get_inner::<T>(state, environ, environ_buf)
+                }
+            )*
         }
     };
 }

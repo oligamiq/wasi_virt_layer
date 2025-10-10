@@ -26,19 +26,19 @@ pub mod is_valid {
         .filter_map(|v| v.inspect_err(|e| {
             log::error!("Invalid import: {e}");
         }).ok())
-        .map(|v| (Wasip1SnapshotPreview1Exporter::from_variant(&v).unwrap(), v))
-        .fold(HashMap::<_, Vec<_>>::new(), |mut acc, (exporter, v)| {
+        .map(|v| (Wasip1ABIPlugger::from_variant(&v).unwrap(), v))
+        .fold(HashMap::<_, Vec<_>>::new(), |mut acc, (plugger, v)| {
             acc
-                .entry(exporter)
+                .entry(plugger)
                 .or_default()
                 .push(v);
             acc
         })
         .into_iter()
         .map(|(name, variants)| {
-            // println!("Extra imports remain. You must use the `{name}!` macro exporter to export these functions.");
+            // println!("Extra imports remain. You must use the `{name}!` macro plugger to export these functions.");
             log::error!(
-                "Extra imports remain. You must use the `{name}!` macro exporter to export these functions: {}{}",
+                "Extra imports remain. You must use the `{name}!` macro plugger to export these functions: {}{}",
                 variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "),
                 format!("\nExtra message: {}", name.get_message().unwrap_or(""))
             );
@@ -67,25 +67,25 @@ pub mod is_valid {
         strum::EnumMessage,
     )]
     #[strum(serialize_all = "snake_case")]
-    pub enum Wasip1SnapshotPreview1Exporter {
-        ExportArgs,
-        ExportEnv,
+    pub enum Wasip1ABIPlugger {
+        PlugArgs,
+        PlugEnv,
         #[strum(
-            message = "Export Fs is complex and difficult so you should see the documentation for more details."
+            message = "Plug Fs is complex and difficult so you should see the documentation for more details."
         )]
-        ExportFs,
-        #[strum(message = "Export Socks but this is not implemented")]
-        ExportSocks,
-        #[strum(message = "Export Clock but this is not implemented")]
-        ExportClock,
-        #[strum(message = "Export Random but this is not implemented")]
-        ExportRandom,
-        #[strum(message = "Export Process is default so this message should not be shown")]
-        ExportProcess,
-        #[strum(message = "Export Sched but this is not implemented")]
-        ExportSched,
-        #[strum(message = "Export Poll but this is not implemented")]
-        ExportPoll,
+        PlugFs,
+        #[strum(message = "Plug Socks but this is not implemented")]
+        PlugSocks,
+        #[strum(message = "Plug Clock but this is not implemented")]
+        PlugClock,
+        #[strum(message = "Plug Random but this is not implemented")]
+        PlugRandom,
+        #[strum(message = "Plug Process is default so this message should not be shown")]
+        PlugProcess,
+        #[strum(message = "Plug Sched but this is not implemented")]
+        PlugSched,
+        #[strum(message = "Plug Poll but this is not implemented")]
+        PlugPoll,
     }
 
     use std::collections::HashMap;
@@ -96,9 +96,9 @@ pub mod is_valid {
     use crate::util::ResultUtil as _;
 
     use super::{Wasip1ABIFunc, Wasip1ABIFunc::*};
-    impl Wasip1SnapshotPreview1Exporter {
-        const EXPORT_ENV: &'static [Wasip1ABIFunc] = &[EnvironSizesGet, EnvironGet];
-        const EXPORT_FS: &'static [Wasip1ABIFunc] = &[
+    impl Wasip1ABIPlugger {
+        const PLUG_ENV: &'static [Wasip1ABIFunc] = &[EnvironSizesGet, EnvironGet];
+        const PLUG_FS: &'static [Wasip1ABIFunc] = &[
             FdAdvise,
             FdAllocate,
             FdDatasync,
@@ -131,35 +131,35 @@ pub mod is_valid {
             PathSymlink,
             PathUnlinkFile,
         ];
-        const EXPORT_ARGS: &'static [Wasip1ABIFunc] = &[ArgsGet, ArgsSizesGet];
-        const EXPORT_SOCKS: &'static [Wasip1ABIFunc] =
+        const PLUG_ARGS: &'static [Wasip1ABIFunc] = &[ArgsGet, ArgsSizesGet];
+        const PLUG_SOCKS: &'static [Wasip1ABIFunc] =
             &[SockAccept, SockRecv, SockSend, SockShutdown];
-        const EXPORT_CLOCK: &'static [Wasip1ABIFunc] = &[ClockTimeGet, ClockResGet];
-        const EXPORT_RANDOM: &'static [Wasip1ABIFunc] = &[RandomGet];
-        const EXPORT_PROCESS: &'static [Wasip1ABIFunc] = &[ProcExit];
-        const EXPORT_SCHED: &'static [Wasip1ABIFunc] = &[SchedYield];
-        const EXPORT_POLL: &'static [Wasip1ABIFunc] = &[PollOneoff];
+        const PLUG_CLOCK: &'static [Wasip1ABIFunc] = &[ClockTimeGet, ClockResGet];
+        const PLUG_RANDOM: &'static [Wasip1ABIFunc] = &[RandomGet];
+        const PLUG_PROCESS: &'static [Wasip1ABIFunc] = &[ProcExit];
+        const PLUG_SCHED: &'static [Wasip1ABIFunc] = &[SchedYield];
+        const PLUG_POLL: &'static [Wasip1ABIFunc] = &[PollOneoff];
 
         pub const fn variants(self) -> &'static [Wasip1ABIFunc] {
             match self {
-                Wasip1SnapshotPreview1Exporter::ExportEnv => Self::EXPORT_ENV,
-                Wasip1SnapshotPreview1Exporter::ExportFs => Self::EXPORT_FS,
-                Wasip1SnapshotPreview1Exporter::ExportArgs => Self::EXPORT_ARGS,
-                Wasip1SnapshotPreview1Exporter::ExportSocks => Self::EXPORT_SOCKS,
-                Wasip1SnapshotPreview1Exporter::ExportClock => Self::EXPORT_CLOCK,
-                Wasip1SnapshotPreview1Exporter::ExportRandom => Self::EXPORT_RANDOM,
-                Wasip1SnapshotPreview1Exporter::ExportProcess => Self::EXPORT_PROCESS,
-                Wasip1SnapshotPreview1Exporter::ExportSched => Self::EXPORT_SCHED,
-                Wasip1SnapshotPreview1Exporter::ExportPoll => Self::EXPORT_POLL,
+                Wasip1ABIPlugger::PlugEnv => Self::PLUG_ENV,
+                Wasip1ABIPlugger::PlugFs => Self::PLUG_FS,
+                Wasip1ABIPlugger::PlugArgs => Self::PLUG_ARGS,
+                Wasip1ABIPlugger::PlugSocks => Self::PLUG_SOCKS,
+                Wasip1ABIPlugger::PlugClock => Self::PLUG_CLOCK,
+                Wasip1ABIPlugger::PlugRandom => Self::PLUG_RANDOM,
+                Wasip1ABIPlugger::PlugProcess => Self::PLUG_PROCESS,
+                Wasip1ABIPlugger::PlugSched => Self::PLUG_SCHED,
+                Wasip1ABIPlugger::PlugPoll => Self::PLUG_POLL,
             }
         }
 
-        pub fn from_variant(func: &Wasip1ABIFunc) -> Option<Wasip1SnapshotPreview1Exporter> {
+        pub fn from_variant(func: &Wasip1ABIFunc) -> Option<Wasip1ABIPlugger> {
             use strum::IntoEnumIterator;
 
-            for exporter in Self::iter() {
-                if exporter.variants().contains(func) {
-                    return Some(exporter);
+            for plugger in Self::iter() {
+                if plugger.variants().contains(func) {
+                    return Some(plugger);
                 }
             }
             None

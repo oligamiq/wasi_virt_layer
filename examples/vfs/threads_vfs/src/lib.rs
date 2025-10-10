@@ -1,5 +1,5 @@
 use const_struct::const_struct;
-use wasip1_virtual_layer::{export_process, file::*, prelude::*, thread::DirectThreadPool};
+use wasip1_virtual_layer::{file::*, plug_process, prelude::*, thread::DirectThreadPool};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -64,8 +64,8 @@ const FILES: NormalFILES = ConstFiles!([(
     ],
 )]);
 
-export_thread!(DirectThreadPool, self, test_threads);
-export_process!(test_threads);
+plug_thread!(DirectThreadPool, self, test_threads);
+plug_process!(test_threads);
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
     environ: &[
@@ -74,7 +74,7 @@ const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
         // "RUST_BACKTRACE=full",
     ],
 };
-export_env!(@const, VirtualEnvTy, self, test_threads);
+plug_env!(@const, VirtualEnvTy, self, test_threads);
 
 #[cfg(test)]
 mod tests {
@@ -94,7 +94,7 @@ mod fs {
     static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
         Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
-    export_fs!(@const, {
+    plug_fs!(@const, {
         #[allow(static_mut_refs)]
         unsafe { &mut VIRTUAL_FILE_SYSTEM }
     }, test_threads);

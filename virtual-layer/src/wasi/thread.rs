@@ -115,14 +115,18 @@ impl VirtualThread for DirectThreadPool {
 }
 
 #[macro_export]
-macro_rules! export_thread {
-    ($pool:tt, $($wasm:tt),*) => {
+macro_rules! plug_thread {
+    ($pool:tt, $($wasm:ident),*) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_thread, @inner, $pool);
+    };
+
+    (@inner, $pool:tt, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
             #[allow(non_camel_case_types)]
             #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
             pub(crate) enum ThreadAccessor {
                 $(
-                    [<__ $wasm>],
+                    $wasm,
                 )*
             }
 
@@ -132,7 +136,7 @@ macro_rules! export_thread {
                     {
                         match *self {
                             $(
-                                Self::[<__ $wasm>] => {
+                                Self::$wasm => {
                                     // println!("Calling wasi_thread_start in {}", self.as_name());
                                     // println!("  thread_id: {:?}", thread_id);
                                     // println!("  data_ptr: {:?}", ptr);
@@ -157,7 +161,7 @@ macro_rules! export_thread {
                 fn as_name(&self) -> &'static str {
                     match *self {
                         $(
-                            Self::[<__ $wasm>] => {
+                            Self::$wasm => {
                                 $crate::__as_t!(@as_t, $wasm);
                                 <T as $crate::memory::WasmAccess>::NAME
                             }
@@ -194,7 +198,7 @@ macro_rules! export_thread {
                     data_ptr: $crate::__private::inner::thread::ThreadRunner,
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
-                    const ACCESSOR: ThreadAccessor = ThreadAccessor::[<__ $wasm>];
+                    const ACCESSOR: ThreadAccessor = ThreadAccessor::$wasm;
 
                     // println!("Spawning a new thread in {}", ACCESSOR.as_name());
                     // println!("  data_ptr: {:?}", data_ptr);
@@ -212,23 +216,8 @@ macro_rules! export_thread {
                     }
                 }
 
-                $crate::export_thread!(@sched_yield, $pool, $wasm);
+                $crate::plug_thread!(@sched_yield, $pool, $wasm);
             )*
-        }
-    };
-
-    (@sched_yield, $pool:tt, self) => {
-        $crate::__private::paste::paste! {
-            #[unsafe(no_mangle)]
-            #[cfg(target_os = "wasi")]
-            pub unsafe extern "C" fn __wasip1_vfs_self_sched_yield(
-            ) -> $crate::__private::wasip1::Errno {
-                use $crate::thread::VirtualThread;
-
-                #[allow(unused_mut)]
-                let mut pool = $pool;
-                pool.sched_yield::<$crate::__private::__self>()
-            }
         }
     };
 
@@ -242,7 +231,8 @@ macro_rules! export_thread {
 
                 #[allow(unused_mut)]
                 let mut pool = $pool;
-                pool.sched_yield::<$wasm>()
+                $crate::__as_t!(@as_t, $wasm);
+                pool.sched_yield::<T>()
             }
         }
     };

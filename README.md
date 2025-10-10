@@ -10,6 +10,7 @@
 - Feature Access time etc traits
 - Separate mode (connect function by javascript)
 - threading vfs with non threading wasm
+- valider with error on threads
 
 # run example
 ```bash

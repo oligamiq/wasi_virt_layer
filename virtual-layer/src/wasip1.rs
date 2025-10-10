@@ -1,3 +1,8 @@
+/// Copy from wasi crate
+/// Using them directly causes
+/// link errors when not targeting wasi,
+/// so I'm copying them after omitting those parts.
+
 /// Special `Dircookie` value indicating the start of a directory.
 pub const DIRCOOKIE_START: Dircookie = 0;
 

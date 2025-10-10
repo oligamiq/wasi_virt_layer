@@ -21,19 +21,24 @@ impl ProcessExit for DefaultProcess {
 }
 
 #[macro_export]
-macro_rules! export_process {
-    ($wasm:ident) => {
-        $crate::export_process!($crate::process::DefaultProcess, $wasm);
+macro_rules! plug_process {
+    ($($wasm:ident),*) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_process, @inner);
     };
-    ($ty:ty, $wasm:ident) => {
+    (@inner, $($wasm:ident),*) => {
+        $crate::plug_process!($crate::process::DefaultProcess, $($wasm),*);
+    };
+    ($ty:ty, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
-            #[unsafe(no_mangle)]
-            #[cfg(target_os = "wasi")]
-            pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _proc_exit>](
-                code: i32
-            ) -> ! {
-                <$ty as $crate::process::ProcessExit>::proc_exit::<$wasm>(code)
-            }
+            $(
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _proc_exit>](
+                    code: i32
+                ) -> ! {
+                    <$ty as $crate::process::ProcessExit>::proc_exit::<$wasm>(code)
+                }
+            )*
         }
     };
 }
