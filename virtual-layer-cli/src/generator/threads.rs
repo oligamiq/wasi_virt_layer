@@ -47,7 +47,7 @@ impl Generator for ThreadsSpawn {
         let normal_thread_spawn_fn_id = ("wasi", "thread-spawn").get_fid(&module.imports)?;
 
         let self_thread_spawn_fn_id =
-            "__wasip1_vfs_wasi_thread_spawn_self".get_fid(&module.exports)?;
+            "__wasip1_vfs_wasi_thread_spawn___self".get_fid(&module.exports)?;
 
         module
             .exports
@@ -84,14 +84,14 @@ impl Generator for ThreadsSpawn {
 
         module
             .connect_func_alt(
-                (NAMESPACE, "__wasip1_vfs_self_wasi_thread_start"),
+                (NAMESPACE, "__wasip1_vfs___self_wasi_thread_start"),
                 exporting_thread_starter_id,
                 ctx.unstable_print_debug,
             )
             .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
 
         module.exports.erase_with(
-            "__wasip1_vfs_self_wasi_thread_start_anchor",
+            "__wasip1_vfs___self_wasi_thread_start_anchor",
             ctx.unstable_print_debug,
         )?;
 

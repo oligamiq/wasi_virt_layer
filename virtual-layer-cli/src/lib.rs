@@ -5,14 +5,13 @@ use crate::{
     config_checker::{FeatureChecker, HasFeature, TomlRestorers},
 };
 
+pub mod abi;
 pub mod args;
 pub mod compile;
 pub mod config_checker;
 pub mod down_color;
 pub mod generator;
 pub mod instrs;
-pub mod abi;
-pub mod rewrite;
 pub mod test_run;
 pub mod util;
 
