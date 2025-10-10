@@ -1,7 +1,7 @@
 use strum::VariantNames;
 
 use crate::{
-    common::Wasip1ABIFunc,
+    abi::Wasip1ABIFunc,
     generator::Generator,
     util::{CORE_MODULE_ROOT, WalrusUtilExport as _, WalrusUtilImport as _},
 };

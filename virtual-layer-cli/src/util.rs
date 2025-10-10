@@ -366,9 +366,11 @@ pub(crate) trait WalrusUtilModule {
     where
         Self: Sized;
 
-    // This method copies functions by copying the functions called internally.
-    // It is used to rewrite the internal instructions of functions called under specific conditions.
-    // Note: that calls_indirect may throw errors.
+    /// This method copies functions by copying the functions called internally.
+    /// It is used to rewrite the internal instructions of functions called under specific conditions.
+    /// Note: that calls_indirect may throw errors.
+    /// If you include yourself in the exclude list, only the function being called will be copied.
+    /// Note: that even if a function not included in the exclude list is called, that call will not be updated.
     fn nested_copy_func<A>(
         &mut self,
         from: impl WalrusFID<A>,
@@ -376,6 +378,14 @@ pub(crate) trait WalrusUtilModule {
         allow_import_func: bool,
         allow_call_indirect: bool,
     ) -> eyre::Result<walrus::FunctionId>
+    where
+        Self: Sized;
+
+    fn renew_export<A, B>(
+        &mut self,
+        old: impl WalrusFID<A>,
+        new: impl WalrusFID<B>,
+    ) -> eyre::Result<()>
     where
         Self: Sized;
 }
@@ -1504,10 +1514,6 @@ impl WalrusUtilModule for walrus::Module {
 
         let mut fid_map: HashMap<FunctionId, FunctionId> = HashMap::new();
 
-        if exclude.contains(&from) {
-            return Ok(from);
-        }
-
         let fids = self.funcs.find_children_with(from, allow_call_indirect)?;
 
         for fid in fids {
@@ -1538,9 +1544,11 @@ impl WalrusUtilModule for walrus::Module {
         }
 
         for (old_fid, new_fid) in fid_map.iter() {
-            if *old_fid == from || exclude.contains(old_fid) || *new_fid == *old_fid {
+            // If included in the exclude list, it is normally ignored; however, in its own case, it is rewritten.
+            if (old_fid == new_fid || exclude.contains(new_fid)) && *new_fid != from {
                 continue;
             }
+
             let local = self.funcs.get_mut(*new_fid).kind.unwrap_local_mut();
             local
                 .builder_mut()
@@ -1550,8 +1558,8 @@ impl WalrusUtilModule for walrus::Module {
                     match instr {
                         Instr::Call(Call { func, .. })
                         | Instr::ReturnCall(ReturnCall { func, .. }) => {
-                            if *func == *old_fid {
-                                *func = fid_map[old_fid];
+                            if let Some(new_func) = fid_map.get(func) {
+                                *func = *new_func;
                             }
                         }
                         Instr::CallIndirect(call) if !allow_call_indirect => {
@@ -1568,6 +1576,30 @@ impl WalrusUtilModule for walrus::Module {
         }
 
         Ok(fid_map[&from])
+    }
+
+    fn renew_export<A, B>(
+        &mut self,
+        old: impl WalrusFID<A>,
+        new: impl WalrusFID<B>,
+    ) -> eyre::Result<()>
+    where
+        Self: Sized,
+    {
+        let old_id = old.get_fid(self)?;
+        let new_id = new.get_fid(self)?;
+
+        self.check_function_type(old_id, new_id)
+            .wrap_err("Function types do not match on renew export")?;
+
+        self.exports
+            .iter_mut()
+            .filter(|export| matches!(export.item, walrus::ExportItem::Function(f) if f == old_id))
+            .for_each(|export| {
+                export.item = walrus::ExportItem::Function(new_id);
+            });
+
+        Ok(())
     }
 }
 

@@ -2,8 +2,8 @@ use eyre::Context as _;
 use strum::VariantNames;
 
 use crate::{
+    abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
     args::TargetMemoryType,
-    common::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, GeneratorCtx, ModuleExternal},
     util::ResultUtil as _,
 };

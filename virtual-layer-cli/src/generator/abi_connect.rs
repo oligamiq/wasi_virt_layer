@@ -1,7 +1,5 @@
 use crate::{
-    common::Wasip1ABIFunc,
-    generator::Generator,
-    util::{WalrusFID, WalrusUtilExport, WalrusUtilModule},
+    abi::Wasip1ABIFunc, generator::Generator, util::{WalrusFID, WalrusUtilExport, WalrusUtilModule}
 };
 
 /// Connect Wasip1 ABI

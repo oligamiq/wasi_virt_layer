@@ -3,7 +3,7 @@ use itertools::Itertools;
 use strum::VariantNames;
 
 use crate::{
-    common::Wasip1ThreadsABIFunc,
+    abi::Wasip1ThreadsABIFunc,
     generator::{Generator, GeneratorCtx},
     util::{
         NAMESPACE, THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _,

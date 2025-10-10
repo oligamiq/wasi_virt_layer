@@ -374,9 +374,6 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
     }
 }
 
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
-
 pub trait WasmAccess: Copy {
     const NAME: &'static str;
 

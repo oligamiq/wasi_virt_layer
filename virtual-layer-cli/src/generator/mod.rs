@@ -17,20 +17,29 @@ use walrus::MemoryId;
 
 use crate::{
     args::{self, TargetMemoryType},
-    building,
+    compile,
     config_checker::TomlRestorers,
-    merge,
-    util::{CaminoUtilModule as _, LString, LStringHolder, ResultUtil, WalrusUtilModule},
+    util::{
+        CaminoUtilModule as _, LString, LStringHolder, ResultUtil, WalrusFID as _,
+        WalrusUtilExport as _, WalrusUtilModule,
+    },
 };
 
 #[derive(Debug)]
 pub struct GeneratorCtx {
     pub vfs_name: LString,
     pub target_names: Box<[LString]>,
+    /// only pre_vfs, post_combine, post_lower_memory
     pub vfs_used_memory_id: Option<MemoryId>,
+    /// only post_combine
     pub vfs_used_global_id: Option<Box<[walrus::GlobalId]>>,
+    /// only pre_target, post_combine, post_lower_memory
     pub target_used_memory_id: Option<HashMap<LString, MemoryId>>,
+    /// only post_combine
     pub target_used_global_id: Option<HashMap<LString, Box<[walrus::GlobalId]>>>,
+    /// not start section.
+    /// only post_combine.
+    pub start_func_id: Option<HashMap<LString, walrus::FunctionId>>,
     pub target_memory_type: TargetMemoryType,
     pub unstable_print_debug: bool,
     pub dwarf: bool,
@@ -336,7 +345,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let result = (self)(path).wrap_err("Failed to run with with_opt")?;
 
         println!("Optimizing Wasm...");
-        let new_path = building::optimize_wasm(path.path()?, &[], false, dwarf)
+        let new_path = compile::optimize_wasm(path.path()?, &[], false, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
 
         path.set_path(new_path)?;
@@ -357,7 +366,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let result = (self)(path).wrap_err("Failed to run with with_opt_args")?;
 
         println!("Optimizing Wasm... with args: {}", args.iter().join(" "));
-        let new_path = building::optimize_wasm(path.path()?, args, require_update, dwarf)
+        let new_path = compile::optimize_wasm(path.path()?, args, require_update, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
 
         path.set_path(new_path)?;
@@ -409,6 +418,7 @@ impl GeneratorRunner {
                 vfs_used_global_id: None,
                 target_used_memory_id: None,
                 target_used_global_id: None,
+                start_func_id: None,
             },
             path,
             targets,
@@ -538,7 +548,7 @@ impl GeneratorRunner {
         println!("Combining Wasm modules...");
         let output = format!("{out_dir}/merged.wasm");
         (|path: &mut WasmPath| {
-            merge::merge(
+            merge(
                 path.path()?,
                 &self
                     .targets
@@ -564,12 +574,18 @@ impl GeneratorRunner {
                 global_id_visitor
                     .post_combine(module, &self.ctx)
                     .wrap_err("Failed in post_combine")?;
+                let mut start_func_id_visitor = StartFuncIdVisitor::default();
+                start_func_id_visitor
+                    .post_combine(module, &self.ctx)
+                    .wrap_err("Failed in post_combine")?;
 
                 self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id.take();
                 self.ctx.target_used_memory_id = mem_id_visitor.used_target_memory_id.take();
 
                 self.ctx.vfs_used_global_id = global_id_visitor.vfs_global_id.take();
                 self.ctx.target_used_global_id = global_id_visitor.global_id.take();
+
+                self.ctx.start_func_id = start_func_id_visitor.start_func_id.take();
 
                 self.generators
                     .post_combine(module, &self.ctx)
@@ -581,7 +597,7 @@ impl GeneratorRunner {
 
         if self.ctx.target_memory_type == TargetMemoryType::Single {
             println!("Generating single memory Merged Wasm...");
-            let optimized_path = building::optimize_wasm(
+            let optimized_path = compile::optimize_wasm(
                 self.path.path()?,
                 &["--multi-memory-lowering"],
                 true,
@@ -608,7 +624,7 @@ impl GeneratorRunner {
         }
 
         println!("Translating Wasm to Component...");
-        let component = building::wasm_to_component(self.path.path()?, &self.ctx.target_names)
+        let component = compile::wasm_to_component(self.path.path()?, &self.ctx.target_names)
             .wrap_err("Failed to translate Wasm to Component")?;
         self.path.set_path(component)?;
 
@@ -898,6 +914,39 @@ impl Generator for GlobalIdVisitor {
     }
 }
 
+/// To be used from both `special_func`'s `main_void` and `start`,
+/// it must be prepared in `ctx`.
+#[derive(Debug, Default)]
+struct StartFuncIdVisitor {
+    start_func_id: Option<HashMap<LString, walrus::FunctionId>>,
+}
+
+impl Generator for StartFuncIdVisitor {
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for wasm in &ctx.target_names {
+            let export = format!("__wasip1_vfs_{wasm}__start").get_fid(&module.exports)?;
+            self.start_func_id
+                .get_or_insert_default()
+                .insert(wasm.clone(), export);
+
+            module
+                .exports
+                .erase_with(export, ctx.unstable_print_debug)?;
+
+            module.exports.erase_with(
+                &format!("__wasip1_vfs_{wasm}__start_anchor"),
+                ctx.unstable_print_debug,
+            )?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum WasmPath {
     Maybe {
@@ -993,7 +1042,7 @@ impl WasmPath {
             metadata_command.manifest_path(&manifest_path);
             metadata_command.exec().unwrap()
         };
-        let building_crate = building::get_building_crate(&cargo_metadata, &None)?;
+        let building_crate = compile::get_building_crate(&cargo_metadata, &None)?;
 
         Ok(Self::Maybe {
             manifest_path,
@@ -1006,7 +1055,7 @@ impl WasmPath {
             let metadata_command = cargo_metadata::MetadataCommand::new();
             metadata_command.exec().unwrap()
         };
-        let building_crate = building::get_building_crate(&cargo_metadata, &Some(package.clone()))?;
+        let building_crate = compile::get_building_crate(&cargo_metadata, &Some(package.clone()))?;
 
         Ok(Self::Maybe {
             manifest_path: building_crate.manifest_path,
@@ -1019,7 +1068,7 @@ impl WasmPath {
             let metadata_command = cargo_metadata::MetadataCommand::new();
             metadata_command.exec().unwrap()
         };
-        let building_crate = building::get_building_crate(&cargo_metadata, &None)?;
+        let building_crate = compile::get_building_crate(&cargo_metadata, &None)?;
 
         Ok(Self::Maybe {
             manifest_path: building_crate.manifest_path,
@@ -1049,11 +1098,11 @@ impl WasmPath {
                 metadata_command.exec().unwrap()
             };
             let building_crate =
-                building::get_building_crate(&cargo_metadata, &Some(package.clone()))?;
+                compile::get_building_crate(&cargo_metadata, &Some(package.clone()))?;
             let vfs_name = building_crate.name.to_string();
 
             let path =
-                building::build_vfs(Some(&manifest_path.to_string()), &building_crate, threads)
+                compile::build_vfs(Some(&manifest_path.to_string()), &building_crate, threads)
                     .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {vfs_name}"))?;
             *self = WasmPath::Definitely(path);
         }
@@ -1077,4 +1126,88 @@ impl WasmPath {
         *self = WasmPath::Definitely(path);
         Ok(())
     }
+}
+
+pub fn merge(
+    vfs: &Utf8PathBuf,
+    wasm: &[impl AsRef<std::path::Path>],
+    output: impl AsRef<std::path::Path>,
+    threads: bool,
+    dwarf: bool,
+) -> eyre::Result<()> {
+    let custom_section = {
+        let mut vfs_module = walrus::Module::load(vfs, dwarf)?;
+        let custom_section_names = vfs_module
+            .customs
+            .iter()
+            .map(|(_, section)| section.name().to_string())
+            .filter(|name| name.starts_with("component-type:"))
+            .collect::<Vec<_>>();
+        // let custom_section = vfs_module
+        //     .customs.delete(custom_section_names)
+        let custom_section = custom_section_names
+            .iter()
+            .map(|id| {
+                let section = vfs_module.customs.remove_raw(id);
+                section.unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        custom_section
+    };
+
+    let mut merge_cmd = std::process::Command::new("wasm-merge");
+
+    // if threads {
+    //     merge_cmd.arg("--enable-threads");
+    // }
+
+    if dwarf {
+        merge_cmd.arg("--debuginfo");
+    }
+
+    merge_cmd.arg(vfs).arg("wasi_snapshot_preview1");
+
+    for wasm in wasm {
+        merge_cmd.arg(wasm.as_ref()).arg(format!(
+            "wasip1_vfs_{}",
+            wasm.as_ref().get_file_main_name().unwrap()
+        ));
+    }
+
+    merge_cmd
+        .arg("--output")
+        .arg(output.as_ref())
+        // .arg("--rename-export-conflicts")
+        .arg("--enable-multimemory")
+        .arg("--enable-threads");
+
+    let result = merge_cmd
+        .spawn()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => eyre::eyre!(
+                "wasm-merge command not found. Please install wasm-merge from https://github.com/WebAssembly/binaryen/releases/latest"
+            ),
+            _ => e.into(),
+        })?
+        .wait()
+        .expect("Failed to wait for wasm-merge command");
+
+    if !result.success() {
+        return Err(eyre::eyre!("wasm-merge command failed"));
+    }
+
+    let mut module = walrus::Module::load(output.as_ref(), dwarf)?;
+    for section in custom_section {
+        module.customs.add(section);
+    }
+
+    // to output
+    fs::remove_file(output.as_ref()).expect("Failed to remove existing file");
+
+    module
+        .emit_wasm_file(output.as_ref())
+        .expect("Failed to emit wasm file");
+
+    Ok(())
 }

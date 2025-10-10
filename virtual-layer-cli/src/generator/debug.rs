@@ -4,7 +4,7 @@ use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 
 use crate::{
-    common::Wasip1ABIFunc,
+    abi::Wasip1ABIFunc,
     generator::{Generator, ModuleExternal},
     instrs::{InstrRead as _, InstrRewrite},
     util::{WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
