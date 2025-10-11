@@ -142,6 +142,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             debug::DebugBase,
             debug::DebugCallMemoryGrow,
             debug::DebugExportVFSFunctions,
+            debug::DebugCallFunctionSmallScale,
+            debug::DebugCallFunctionMain,
             patch_component::PatchComponent,
         );
     }

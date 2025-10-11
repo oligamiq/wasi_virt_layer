@@ -8,7 +8,10 @@ use crate::{
 };
 
 #[derive(Debug, Default)]
-pub struct TemporaryRefugeMemory;
+pub struct TemporaryRefugeMemory {
+    imported_memories: Vec<walrus::MemoryId>,
+    shared_memories: Vec<walrus::MemoryId>,
+}
 
 impl Generator for TemporaryRefugeMemory {
     fn pre_target(
@@ -66,9 +69,6 @@ impl Generator for TemporaryRefugeMemory {
         if !ctx.threads {
             return Ok(());
         }
-        if ctx.target_memory_type == TargetMemoryType::Multi {
-            return Ok(());
-        }
 
         let mut is_first = false;
 
@@ -83,6 +83,7 @@ impl Generator for TemporaryRefugeMemory {
                 });
 
                 if let Some(mem_id) = mem_id {
+                    self.imported_memories.push(id);
                     module.imports.delete(mem_id);
                     mem.import = None;
                 }
@@ -98,6 +99,7 @@ impl Generator for TemporaryRefugeMemory {
                         );
                     }
 
+                    self.shared_memories.push(id);
                     mem.shared = false;
                 }
 
@@ -122,17 +124,21 @@ impl Generator for TemporaryRefugeMemory {
             .iter_mut()
             .enumerate()
             .for_each(|(count, mem)| {
-                mem.shared = true;
-                let import_id = module.imports.add(
-                    "env",
-                    &mem.name.clone().unwrap_or_else(|| match count {
-                        0 => "memory".to_string(),
-                        n => format!("memory{n}"),
-                    }),
-                    walrus::ImportKind::Memory(mem.id()),
-                );
+                if self.imported_memories.contains(&mem.id()) {
+                    let import_id = module.imports.add(
+                        "env",
+                        &mem.name.clone().unwrap_or_else(|| match count {
+                            0 => "memory".to_string(),
+                            n => format!("memory{n}"),
+                        }),
+                        walrus::ImportKind::Memory(mem.id()),
+                    );
 
-                mem.import = Some(import_id);
+                    mem.import = Some(import_id);
+                }
+                if self.shared_memories.contains(&mem.id()) {
+                    mem.shared = true;
+                }
             });
 
         Ok(())

@@ -19,7 +19,7 @@ parking_lot = "0.12.3"
 
 [dependencies.wasip1-virtual-layer]
 workspace = true
-features = ["std", "threads", "unstable_print_debug"]
+features = ["std", "threads", "unstable_print_debug", "multi_memory"]
 # features = ["std", "threads"]
 
 [lib]

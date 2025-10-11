@@ -616,3 +616,42 @@ impl Generator for DebugBase {
         Ok(())
     }
 }
+
+#[derive(Debug, Default)]
+pub struct DebugCallFunctionSmallScale;
+
+impl Generator for DebugCallFunctionSmallScale {
+    fn post_all_optimize(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &super::GeneratorCtx,
+    ) -> eyre::Result<bool> {
+        if !ctx.unstable_print_debug {
+            return Ok(false);
+        }
+
+        generate_debug_call_function(module).wrap_err("Failed to generate debug_call_function")?;
+
+        Ok(true)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct DebugCallFunctionMain;
+
+impl Generator for DebugCallFunctionMain {
+    fn post_all_optimize(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &super::GeneratorCtx,
+    ) -> eyre::Result<bool> {
+        if !ctx.unstable_print_debug {
+            return Ok(false);
+        }
+
+        generate_debug_call_function_last(module)
+            .wrap_err("Failed to generate debug_call_function_last")?;
+
+        Ok(true)
+    }
+}

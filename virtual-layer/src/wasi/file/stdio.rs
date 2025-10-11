@@ -1,6 +1,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::Size;
 
+#[allow(unused_imports)]
 use crate::memory::WasmAccess;
 use crate::transporter::Wasip1Transporter;
 

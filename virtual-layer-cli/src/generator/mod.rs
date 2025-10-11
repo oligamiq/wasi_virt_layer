@@ -101,13 +101,14 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
     /// Operations performed after last optimizations.
     /// Generating debug functions is a delicate process,
     /// so in this case, output once per structure.
+    /// Return true if there are changes.
     #[allow(unused_variables)]
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        Ok(())
+    ) -> eyre::Result<bool> {
+        Ok(false)
     }
 }
 impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
@@ -179,13 +180,14 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
         &mut self,
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<bool> {
+        let mut changed = false;
         for generator in self {
-            generator.post_all_optimize(module, ctx).wrap_err_with(|| {
+            changed |= generator.post_all_optimize(module, ctx).wrap_err_with(|| {
                 eyre::eyre!(format!("Failed to run post_all_optimize for {generator:?}"))
             })?;
         }
-        Ok(())
+        Ok(changed)
     }
 }
 impl Generator for Box<dyn Generator + 'static> {
@@ -230,7 +232,7 @@ impl Generator for Box<dyn Generator + 'static> {
         &mut self,
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<bool> {
         (**self).post_all_optimize(module, ctx)
     }
 }
@@ -276,7 +278,7 @@ impl<'a> Generator for &'a mut (dyn Generator + 'a) {
         &mut self,
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
+    ) -> eyre::Result<bool> {
         (**self).post_all_optimize(module, ctx)
     }
 }
@@ -329,6 +331,9 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
             .to_eyre()
             .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
 
+        std::fs::remove_file(old_path)
+            .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+
         path.set_path(new_path)?;
 
         Ok(result)
@@ -361,8 +366,12 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let result = (self)(path).wrap_err("Failed to run with with_opt")?;
 
         println!("Optimizing Wasm...");
-        let new_path = compile::optimize_wasm(path.path()?, &[], false, dwarf)
+        let old_path = path.path()?;
+        let new_path = compile::optimize_wasm(old_path, &[], false, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
+
+        std::fs::remove_file(old_path)
+            .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
 
         path.set_path(new_path)?;
 
@@ -584,8 +593,9 @@ impl GeneratorRunner {
         self.ctx.target_used_memory_id = None;
         let output = format!("{out_dir}/merged.wasm");
         (|path: &mut WasmPath| {
+            let old_path = path.path()?;
             merge(
-                path.path()?,
+                old_path,
                 &self
                     .targets
                     .iter()
@@ -596,6 +606,9 @@ impl GeneratorRunner {
                 dwarf,
             )
             .wrap_err("Failed to combine Wasm modules")?;
+
+            std::fs::remove_file(old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
 
             path.set_path(output.into())
         })
@@ -668,8 +681,11 @@ impl GeneratorRunner {
         }
 
         println!("Translating Wasm to Component...");
-        let component = compile::wasm_to_component(self.path.path()?, &self.ctx.target_names)
+        let old_path = self.path.path()?;
+        let component = compile::wasm_to_component(old_path, &self.ctx.target_names)
             .wrap_err("Failed to translate Wasm to Component")?;
+        std::fs::remove_file(old_path)
+            .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
         self.path.set_path(component)?;
 
         if self.ctx.no_transpile {
@@ -689,7 +705,8 @@ impl GeneratorRunner {
 
         println!("Translating Component to JS...");
         let core_wasm_path = (|path: &mut WasmPath| {
-            let binary = std::fs::read(path.path()?).wrap_err("Failed to read component")?;
+            let old_path = path.path()?;
+            let binary = std::fs::read(old_path).wrap_err("Failed to read component")?;
             let transpiled = parsed_args
                 .transpile_to_js(&binary, &self.ctx.vfs_name)
                 .wrap_err("Failed to transpile to JS")?;
@@ -736,6 +753,8 @@ impl GeneratorRunner {
                 .as_ref()
                 .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
+            std::fs::remove_file(old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
             path.set_path(core_wasm.clone())?;
 
             Ok(core_wasm.clone())
@@ -757,11 +776,22 @@ impl GeneratorRunner {
         .with_opt(&mut self.path, dwarf)?;
 
         println!("Final optimizing Merged Wasm...");
-        for generator in &mut self.generators {
+        let mut i = 0;
+        while i < self.generators.len() {
             (|module: &mut walrus::Module| {
-                generator
-                    .post_all_optimize(module, &self.ctx)
-                    .wrap_err("Failed in post_all_optimize")
+                loop {
+                    if self.generators[i]
+                        .post_all_optimize(module, &self.ctx)
+                        .wrap_err("Failed in post_all_optimize")?
+                    {
+                        i += 1;
+                        return Ok(());
+                    }
+                    i += 1;
+                    if i >= self.generators.len() {
+                        return Ok(());
+                    }
+                }
             })
             .wrap_run(&mut self.path, dwarf)?;
         }
