@@ -3,9 +3,8 @@ use strum::VariantNames;
 
 use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
-    args::TargetMemoryType,
     generator::{Generator, GeneratorCtx, ModuleExternal},
-    util::ResultUtil as _,
+    util::{ResultUtil as _, WalrusUtilModule},
 };
 
 #[derive(Debug, Default)]
@@ -51,21 +50,7 @@ pub struct CheckVFSMemoryType;
 
 impl Generator for CheckVFSMemoryType {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        let (target_memory_type, eid) = module
-            .exports
-            .iter()
-            .find(|e| e.name == "__wasip1_vfs_flag_vfs_multi_memory")
-            .map(|e| Ok((TargetMemoryType::Multi, e.id())))
-            .unwrap_or(
-                module
-                    .exports
-                    .iter()
-                    .find(|e| e.name == "__wasip1_vfs_flag_vfs_single_memory")
-                    .map(|e| Ok((TargetMemoryType::Single, e.id())))
-                    .unwrap_or(Err(eyre::eyre!("No target memory type found"))),
-            )?;
-
-        module.exports.delete(eid);
+        let target_memory_type = module.get_memory_type(false)?;
 
         if ctx.target_memory_type != target_memory_type {
             eyre::bail!(

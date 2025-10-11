@@ -3,6 +3,7 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     path::{Path, PathBuf},
+    str::FromStr,
     sync::atomic::AtomicUsize,
 };
 
@@ -11,7 +12,10 @@ use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 use walrus::{ir::InstrSeqId, *};
 
-use crate::instrs::{InstrRead, InstrRewrite as _};
+use crate::{
+    args::TargetMemoryType,
+    instrs::{InstrRead, InstrRewrite as _},
+};
 
 #[allow(dead_code)]
 pub(crate) trait WalrusUtilImport: Debug {
@@ -219,19 +223,40 @@ pub(crate) trait WalrusUtilModule {
 
     /// get the memory id from target name
     /// and remove anchor
-    fn get_target_memory_id(
+    fn get_memory_anchor(&mut self, name: impl AsRef<str>, remove: bool) -> eyre::Result<MemoryId> {
+        self.get_memory_anchor_with_info::<String>(name, remove)
+            .map(|(mem_id, _)| mem_id)
+    }
+
+    fn get_memory_anchor_with_info<T: ToString + std::str::FromStr>(
         &mut self,
         name: impl AsRef<str>,
         remove: bool,
-    ) -> eyre::Result<MemoryId>;
+    ) -> eyre::Result<(MemoryId, Option<T>)>
+    where
+        <T as std::str::FromStr>::Err: Debug;
 
     fn find_used_memory_id(&self, memory_hint: Option<usize>) -> eyre::Result<MemoryId>;
 
+    /// create memory anchor function
     fn create_memory_anchor(
         &mut self,
         name: impl AsRef<str>,
         memory_id: MemoryId,
+    ) -> eyre::Result<MemoryId> {
+        self.create_memory_anchor_with_info(name, memory_id, None::<String>)?;
+
+        Ok(memory_id)
+    }
+
+    fn create_memory_anchor_with_info(
+        &mut self,
+        name: impl AsRef<str>,
+        memory_id: MemoryId,
+        with_info: Option<impl ToString + FromStr>,
     ) -> eyre::Result<()>;
+
+    fn get_memory_type(&mut self, is_remove: bool) -> eyre::Result<TargetMemoryType>;
 
     fn get_global_anchor(&mut self, name: impl AsRef<str>) -> eyre::Result<Box<[GlobalId]>>;
 
@@ -388,6 +413,16 @@ pub(crate) trait WalrusUtilModule {
     ) -> eyre::Result<()>
     where
         Self: Sized;
+
+    fn save_info(
+        &mut self,
+        salt: impl AsRef<str>,
+        info: impl ToString + FromStr,
+    ) -> eyre::Result<()>;
+
+    fn load_info<T: ToString + FromStr>(&mut self, salt: impl AsRef<str>) -> eyre::Result<T>
+    where
+        <T as std::str::FromStr>::Err: Debug;
 }
 
 impl WalrusUtilImport for ModuleImports {
@@ -486,14 +521,32 @@ impl WalrusUtilModule for walrus::Module {
     }
 
     /// if vfs, get vfs memory_id
-    fn get_target_memory_id(
+    fn get_memory_anchor_with_info<T: ToString + std::str::FromStr>(
         &mut self,
         name: impl AsRef<str>,
         remove: bool,
-    ) -> eyre::Result<MemoryId> {
+    ) -> eyre::Result<(MemoryId, Option<T>)>
+    where
+        <T as std::str::FromStr>::Err: Debug,
+    {
         let name = name.as_ref();
 
-        let anchor_func_id = format!("__wasip1_vfs_flag_{name}_memory").get_fid(&self.exports)?;
+        let anchor_name = self
+            .exports
+            .iter()
+            .find_map(|export| {
+                if matches!(export.item, walrus::ExportItem::Function(_))
+                    && export
+                        .name
+                        .starts_with(&format!("__wasip1_vfs_flag_{name}_memory"))
+                {
+                    Some(export.name.clone())
+                } else {
+                    None
+                }
+            })
+            .ok_or_else(|| eyre::eyre!("Memory anchor function not found"))?;
+        let anchor_func_id = anchor_name.get_fid(&self.exports).unwrap();
 
         self.exports.erase_with(anchor_func_id, !remove)?;
 
@@ -517,7 +570,25 @@ impl WalrusUtilModule for walrus::Module {
             })?
             .ok_or_else(|| eyre::eyre!("Memory not found"))?;
 
-        Ok(memory_id)
+        let anchor_name_ex = anchor_name
+            .strip_prefix(&format!("__wasip1_vfs_flag_{name}_memory"))
+            .unwrap();
+        let with_info = if anchor_name_ex.starts_with("_with_") {
+            Some(
+                anchor_name_ex
+                    .strip_prefix("_with_")
+                    .unwrap()
+                    .parse::<T>()
+                    .map_err(|e| eyre::eyre!("{e:?}"))
+                    .wrap_err_with(|| {
+                        eyre::eyre!("Failed to parse memory anchor info: {anchor_name_ex}")
+                    })?,
+            )
+        } else {
+            None
+        };
+
+        Ok((memory_id, with_info))
     }
 
     fn find_used_memory_id(&self, memory_hint: Option<usize>) -> eyre::Result<MemoryId> {
@@ -637,10 +708,11 @@ impl WalrusUtilModule for walrus::Module {
         Ok(memory_id)
     }
 
-    fn create_memory_anchor(
+    fn create_memory_anchor_with_info(
         &mut self,
         name: impl AsRef<str>,
         memory_id: MemoryId,
+        with_info: Option<impl ToString + FromStr>,
     ) -> eyre::Result<()> {
         let name = name.as_ref();
 
@@ -677,8 +749,15 @@ impl WalrusUtilModule for walrus::Module {
             Ok(())
         })?;
 
-        self.exports
-            .add(&format!("__wasip1_vfs_flag_{name}_memory"), id);
+        let ex_name = if let Some(with_info) = with_info {
+            format!(
+                "__wasip1_vfs_flag_{name}_memory_with_{}",
+                with_info.to_string()
+            )
+        } else {
+            format!("__wasip1_vfs_flag_{name}_memory")
+        };
+        self.exports.add(&ex_name, id);
 
         Ok(())
     }
@@ -1603,6 +1682,68 @@ impl WalrusUtilModule for walrus::Module {
             });
 
         Ok(())
+    }
+
+    fn get_memory_type(&mut self, is_remove: bool) -> eyre::Result<TargetMemoryType> {
+        let (target_memory_type, eid) = self
+            .exports
+            .iter()
+            .find(|e| e.name == "__wasip1_vfs_flag_vfs_multi_memory")
+            .map(|e| Ok((TargetMemoryType::Multi, e.id())))
+            .unwrap_or(
+                self.exports
+                    .iter()
+                    .find(|e| e.name == "__wasip1_vfs_flag_vfs_single_memory")
+                    .map(|e| Ok((TargetMemoryType::Single, e.id())))
+                    .unwrap_or(Err(eyre::eyre!("No target memory type found"))),
+            )?;
+
+        if is_remove {
+            self.exports.delete(eid);
+        }
+
+        Ok(target_memory_type)
+    }
+
+    fn save_info(
+        &mut self,
+        key: impl AsRef<str>,
+        info: impl ToString + FromStr,
+    ) -> eyre::Result<()> {
+        let blank_fn = self.add_func(&[], &[], |builder, _| {
+            builder.func_body().unreachable();
+            Ok(())
+        })?;
+
+        let name = format!(
+            "__wasip1_vfs_flag_info_{}_{}",
+            key.as_ref(),
+            info.to_string()
+        );
+
+        self.exports.add(&name, blank_fn);
+
+        Ok(())
+    }
+
+    fn load_info<T: ToString + FromStr>(&mut self, key: impl AsRef<str>) -> eyre::Result<T>
+    where
+        <T as std::str::FromStr>::Err: Debug,
+    {
+        let name = format!("__wasip1_vfs_flag_info_{}_", key.as_ref());
+        let export = self
+            .exports
+            .iter()
+            .find(|e| e.name.starts_with(&name))
+            .ok_or_else(|| eyre::eyre!("No info found"))?;
+        let info_str = &export.name[name.len()..];
+        let info = info_str
+            .parse::<T>()
+            .map_err(|e| eyre::eyre!("Failed to parse info: {:?}", e))?;
+
+        self.exports.delete(export.id());
+
+        Ok(info)
     }
 }
 

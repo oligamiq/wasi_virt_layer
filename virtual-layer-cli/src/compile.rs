@@ -450,7 +450,7 @@ pub fn wasm_to_component(
     abi::is_valid::is_valid_wasm_for_component(&wasm, wasm_names)?;
 
     let mut encoder = wit_component::ComponentEncoder::default()
-        .validate(false)
+        .validate(true)
         .reject_legacy_names(false);
 
     encoder = encoder

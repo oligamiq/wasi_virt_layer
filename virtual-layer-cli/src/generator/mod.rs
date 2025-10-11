@@ -7,7 +7,7 @@ pub mod shared_global;
 pub mod special_func;
 pub mod threads;
 
-use std::{collections::HashMap, fs, str::FromStr};
+use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
 
 use camino::Utf8PathBuf;
 use compact_str::{CompactString, ToCompactString as _};
@@ -47,6 +47,196 @@ pub struct GeneratorCtx {
     pub dwarf: bool,
     pub threads: bool,
     pub no_transpile: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct ComponentCtx {
+    vfs_name: Option<LString>,
+    target_names: Option<Box<[LString]>>,
+    target_memory_type: Option<TargetMemoryType>,
+    unstable_print_debug: Option<bool>,
+    dwarf: bool,
+    threads: Option<bool>,
+}
+
+struct CompressNames {
+    names: Box<[String]>,
+}
+
+impl ToString for CompressNames {
+    fn to_string(&self) -> String {
+        self.names
+            .iter()
+            .map(|s| {
+                let len = s.len();
+                let len_len = len.to_string().len();
+                format!("{:09}{}{}", len_len, len, s)
+            })
+            .join("")
+    }
+}
+
+impl FromStr for CompressNames {
+    type Err = eyre::Report;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut names = Vec::new();
+        let mut rest = s;
+        while !rest.is_empty() {
+            let len_len = &rest[0..9];
+            let len_len: usize = len_len[len_len
+                .chars()
+                .position(|c| c != '0')
+                .unwrap_or(len_len.chars().count() - 1)..]
+                .parse()
+                .wrap_err_with(|| format!("Failed to parse length of length: {len_len}"))?;
+            rest = rest.get(9..).unwrap();
+            let len: usize = rest
+                .get(0..len_len)
+                .ok_or_else(|| eyre::eyre!("Failed to get length"))?
+                .parse()
+                .wrap_err_with(|| format!("Failed to parse length: {rest}"))?;
+            rest = rest.get(len_len..).unwrap();
+            let name = rest
+                .get(0..len)
+                .ok_or_else(|| eyre::eyre!("Failed to get name"))?;
+            names.push(name.to_string());
+            rest = rest.get(len..).unwrap();
+        }
+        Ok(Self {
+            names: names.into_boxed_slice(),
+        })
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct ComponentCtxVisitor {
+    vfs_name: Option<CompactString>,
+    target_names: Option<Box<[CompactString]>>,
+    target_memory_type: Option<TargetMemoryType>,
+    unstable_print_debug: Option<bool>,
+    dwarf: Option<bool>,
+    threads: Option<bool>,
+}
+
+impl ComponentCtxVisitor {
+    pub fn new(
+        vfs_name: LString,
+        target_names: Box<[LString]>,
+        target_memory_type: TargetMemoryType,
+        unstable_print_debug: bool,
+        dwarf: bool,
+        threads: bool,
+    ) -> Self {
+        Self {
+            vfs_name: Some(vfs_name.to_compact_string()),
+            target_names: Some(
+                target_names
+                    .into_iter()
+                    .map(|s| s.to_compact_string())
+                    .collect(),
+            ),
+            target_memory_type: Some(target_memory_type),
+            unstable_print_debug: Some(unstable_print_debug),
+            dwarf: Some(dwarf),
+            threads: Some(threads),
+        }
+    }
+}
+
+impl Generator for ComponentCtxVisitor {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        let vfs_name = ctx.vfs_name.to_compact_string();
+        let target_names = CompressNames {
+            names: ctx
+                .target_names
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<Box<_>>(),
+        };
+        let target_memory_type = ctx.target_memory_type;
+        let unstable_print_debug = ctx.unstable_print_debug;
+        let dwarf = ctx.dwarf;
+        let threads = ctx.threads;
+        module.save_info("vfs_name", vfs_name.to_string())?;
+        module.save_info("target_names", target_names)?;
+        module.save_info("target_memory_type", target_memory_type)?;
+        module.save_info("unstable_print_debug", unstable_print_debug)?;
+        module.save_info("dwarf", dwarf)?;
+        module.save_info("threads", threads)?;
+        Ok(())
+    }
+
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &ComponentCtx,
+    ) -> eyre::Result<()> {
+        let vfs_name = module.load_info::<String>("vfs_name")?;
+        let target_names = module.load_info::<CompressNames>("target_names")?;
+        let target_memory_type = module.load_info::<TargetMemoryType>("target_memory_type")?;
+        let unstable_print_debug = module.load_info::<bool>("unstable_print_debug")?;
+        let dwarf = module.load_info::<bool>("dwarf")?;
+        let threads = module.load_info::<bool>("threads")?;
+        self.vfs_name = Some(vfs_name.to_compact_string());
+        self.target_names = Some(
+            target_names
+                .names
+                .into_iter()
+                .map(|s| s.to_compact_string())
+                .collect(),
+        );
+        self.target_memory_type = Some(target_memory_type);
+        self.unstable_print_debug = Some(unstable_print_debug);
+        self.dwarf = Some(dwarf);
+        self.threads = Some(threads);
+
+        Ok(())
+    }
+}
+
+impl ComponentCtx {
+    pub fn new(
+        vfs_name: LString,
+        target_names: Box<[LString]>,
+        target_memory_type: TargetMemoryType,
+        unstable_print_debug: bool,
+        dwarf: bool,
+        threads: bool,
+    ) -> Self {
+        Self {
+            vfs_name: Some(vfs_name),
+            target_names: Some(target_names),
+            target_memory_type: Some(target_memory_type),
+            unstable_print_debug: Some(unstable_print_debug),
+            dwarf,
+            threads: Some(threads),
+        }
+    }
+
+    pub fn vfs_name(&self) -> &LString {
+        self.vfs_name.as_ref().unwrap()
+    }
+
+    pub fn target_names(&self) -> &Box<[LString]> {
+        self.target_names.as_ref().unwrap()
+    }
+
+    pub fn target_memory_type(&self) -> TargetMemoryType {
+        self.target_memory_type.unwrap()
+    }
+
+    pub fn unstable_print_debug(&self) -> bool {
+        self.unstable_print_debug.unwrap()
+    }
+
+    pub fn dwarf(&self) -> bool {
+        self.dwarf
+    }
+
+    pub fn threads(&self) -> bool {
+        self.threads.unwrap()
+    }
 }
 
 pub trait Generator: std::fmt::Debug + std::any::Any {
@@ -93,7 +283,7 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
     fn post_components(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<()> {
         Ok(())
     }
@@ -106,7 +296,7 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<bool> {
         Ok(false)
     }
@@ -166,7 +356,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     fn post_components(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<()> {
         for generator in self {
             generator.post_components(module, ctx).wrap_err_with(|| {
@@ -179,7 +369,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<bool> {
         let mut changed = false;
         for generator in self {
@@ -223,7 +413,7 @@ impl Generator for Box<dyn Generator + 'static> {
     fn post_components(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<()> {
         (**self).post_components(module, ctx)
     }
@@ -231,7 +421,7 @@ impl Generator for Box<dyn Generator + 'static> {
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<bool> {
         (**self).post_all_optimize(module, ctx)
     }
@@ -269,7 +459,7 @@ impl<'a> Generator for &'a mut (dyn Generator + 'a) {
     fn post_components(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<()> {
         (**self).post_components(module, ctx)
     }
@@ -277,7 +467,7 @@ impl<'a> Generator for &'a mut (dyn Generator + 'a) {
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        ctx: &ComponentCtx,
     ) -> eyre::Result<bool> {
         (**self).post_all_optimize(module, ctx)
     }
@@ -302,6 +492,14 @@ pub struct GeneratorRunner {
     pub toml_restorers: Option<TomlRestorers>,
     pub memory_hint: HashMap<LString, usize>,
     pub lstring_holder: LStringHolder,
+}
+
+#[derive(Debug)]
+pub struct ComponentRunner {
+    pub generators: Vec<Box<dyn Generator + 'static>>,
+    pub ctx: Option<ComponentCtx>,
+    pub path: WasmPath,
+    pub lstring_holder: Option<LStringHolder>,
 }
 
 pub(crate) trait WrapRunner<T> {
@@ -439,7 +637,7 @@ impl GeneratorRunner {
         Ok(Self {
             generators: Vec::new(),
             ctx: GeneratorCtx {
-                vfs_name: vfs_name,
+                vfs_name,
                 target_names,
                 target_names_with_self,
                 target_memory_type: memory_type,
@@ -514,7 +712,10 @@ impl GeneratorRunner {
         Ok(())
     }
 
-    pub fn run_layers_to_component(&mut self, out_dir: &Utf8PathBuf) -> eyre::Result<()> {
+    pub fn run_layers_to_component(
+        mut self,
+        out_dir: &Utf8PathBuf,
+    ) -> eyre::Result<ComponentRunner> {
         self.definitely()?;
 
         let toml_restorers = self
@@ -544,6 +745,15 @@ impl GeneratorRunner {
         }
         std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
 
+        let mut component_ctx_visitor = ComponentCtxVisitor::new(
+            self.ctx.vfs_name.clone(),
+            self.ctx.target_names.clone(),
+            self.ctx.target_memory_type,
+            self.ctx.unstable_print_debug,
+            self.ctx.dwarf,
+            self.ctx.threads,
+        );
+
         println!("Adjusting VFS Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
@@ -555,6 +765,10 @@ impl GeneratorRunner {
                     .wrap_err("Failed in pre_vfs")?;
 
                 self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id;
+
+                component_ctx_visitor
+                    .pre_vfs(module, &self.ctx)
+                    .wrap_err("Failed in pre_vfs")?;
 
                 self.generators
                     .pre_vfs(module, &self.ctx)
@@ -686,29 +900,75 @@ impl GeneratorRunner {
             .wrap_err("Failed to translate Wasm to Component")?;
         std::fs::remove_file(old_path)
             .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
-        self.path.set_path(component)?;
 
-        if self.ctx.no_transpile {
-            println!("Skipping transpile Component to JS as per --no-transpile flag...");
-            return Ok(());
+        let new_component = format!("{out_dir}/{}.component.wasm", self.ctx.vfs_name);
+        std::fs::rename(&component, &new_component)
+            .wrap_err_with(|| format!("Failed to rename file {component} to {new_component}"))?;
+
+        self.path.set_path(Utf8PathBuf::from(new_component))?;
+
+        Ok(ComponentRunner::with_generators(self.path, self.generators))
+    }
+}
+
+impl ComponentRunner {
+    pub fn new(path: WasmPath) -> Self {
+        Self {
+            generators: Vec::new(),
+            ctx: None,
+            path,
+            lstring_holder: None,
         }
-
-        Ok(())
     }
 
+    pub fn with_generators(path: WasmPath, generators: Vec<Box<dyn Generator + 'static>>) -> Self {
+        Self {
+            generators,
+            ctx: None,
+            path,
+            lstring_holder: None,
+        }
+    }
+
+    pub fn add_generator<G: Generator + 'static>(&mut self, generator: G) {
+        self.generators.push(Box::new(generator));
+    }
+
+    pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
+        fn downcast_ref<T: 'static>(b: &dyn std::any::Any) -> Option<&'_ T> {
+            if b.is::<T>() {
+                Some(b.downcast_ref::<T>().unwrap())
+            } else {
+                None
+            }
+        }
+
+        self.generators
+            .iter()
+            .map(|g| g.as_ref())
+            .find_map(|g| downcast_ref::<T>(g))
+            .wrap_err_with(|| {
+                eyre::eyre!("Failed to get generator: {}", core::any::type_name::<T>())
+            })
+            .wrap_err_with(|| eyre::eyre!("Available generators: {:?}", self.generators))
+    }
+
+    /// return is_threads, core_name, mem_size
     pub fn component_to_files(
         &mut self,
         parsed_args: &args::Args,
-    ) -> eyre::Result<(CompactString, Box<[(u64, u64)]>)> {
-        let dwarf = self.ctx.dwarf;
+        dwarf: bool,
+    ) -> eyre::Result<(bool, CompactString, HashMap<CompactString, (u64, u64)>)> {
         let out_dir = &parsed_args.out_dir;
+
+        let name = self.path.name()?;
 
         println!("Translating Component to JS...");
         let core_wasm_path = (|path: &mut WasmPath| {
             let old_path = path.path()?;
             let binary = std::fs::read(old_path).wrap_err("Failed to read component")?;
             let transpiled = parsed_args
-                .transpile_to_js(&binary, &self.ctx.vfs_name)
+                .transpile_to_js(&binary, &name)
                 .wrap_err("Failed to transpile to JS")?;
 
             let mut core_wasm = None;
@@ -762,18 +1022,57 @@ impl GeneratorRunner {
         .with_opt(&mut self.path, dwarf)?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
-        self.add_generator(mem_size_visitor);
+        self.generators.push(Box::new(mem_size_visitor));
 
         println!("Adjusting component Merged Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
+                let mut visitor = ComponentCtxVisitor::default();
+                visitor
+                    .post_components(
+                        module,
+                        &ComponentCtx {
+                            dwarf,
+                            ..Default::default()
+                        },
+                    )
+                    .wrap_err("Failed in post_components")?;
+                let lstring_holder = LStringHolder::new(
+                    visitor
+                        .target_names
+                        .unwrap()
+                        .into_iter()
+                        .chain(core::iter::once(visitor.vfs_name.unwrap()))
+                        .collect::<Box<_>>(),
+                );
+                self.lstring_holder = Some(lstring_holder);
+                let mut lstring_holder_iter = self.lstring_holder.as_ref().unwrap().iter();
+                self.ctx = Some(ComponentCtx {
+                    vfs_name: Some(lstring_holder_iter.next().unwrap()),
+                    target_names: Some(lstring_holder_iter.collect::<Box<_>>()),
+                    target_memory_type: Some(visitor.target_memory_type.unwrap()),
+                    unstable_print_debug: Some(visitor.unstable_print_debug.unwrap()),
+                    dwarf: visitor.dwarf.unwrap(),
+                    threads: Some(visitor.threads.unwrap()),
+                });
+
                 self.generators
-                    .post_components(module, &self.ctx)
+                    .post_components(module, self.ctx.as_ref().unwrap())
                     .wrap_err("Failed in run_post_components")
             })
             .wrap_run(path, dwarf)
         })
         .with_opt(&mut self.path, dwarf)?;
+
+        let dwarf = {
+            let new_dwarf = self.ctx.as_ref().unwrap().dwarf;
+            if dwarf && !new_dwarf {
+                log::warn!(
+                    "Dwarf was disabled in component processing, you should re-run with --dwarf"
+                );
+            }
+            new_dwarf
+        };
 
         println!("Final optimizing Merged Wasm...");
         let mut i = 0;
@@ -781,7 +1080,7 @@ impl GeneratorRunner {
             (|module: &mut walrus::Module| {
                 loop {
                     if self.generators[i]
-                        .post_all_optimize(module, &self.ctx)
+                        .post_all_optimize(module, self.ctx.as_ref().unwrap())
                         .wrap_err("Failed in post_all_optimize")?
                     {
                         i += 1;
@@ -805,6 +1104,7 @@ impl GeneratorRunner {
         })?;
 
         Ok((
+            self.ctx.as_ref().unwrap().threads(),
             core_wasm_path
                 .get_file_main_name()
                 .ok_or_else(|| eyre::eyre!("Failed to get file name"))?,
@@ -832,7 +1132,7 @@ impl Generator for MemoryIDVisitor {
         println!("Finding VFS memory id...");
 
         let id = module
-            .get_target_memory_id("vfs", false)
+            .get_memory_anchor("vfs", false)
             .wrap_err("Failed to get target memory id")?;
         self.used_vfs_memory_id = Some(id);
         Ok(())
@@ -862,14 +1162,14 @@ impl Generator for MemoryIDVisitor {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         let id = module
-            .get_target_memory_id("vfs", true)
+            .get_memory_anchor("vfs", true)
             .wrap_err("Failed to find used memory id after combine")?;
         self.used_vfs_memory_id = Some(id);
 
         self.used_target_memory_id.get_or_insert_default().clear();
         for wasm in &ctx.target_names {
             let id = module
-                .get_target_memory_id(wasm, true)
+                .get_memory_anchor(wasm, true)
                 .wrap_err("Failed to find used memory id after combine")?;
             self.used_target_memory_id
                 .as_mut()
@@ -898,25 +1198,33 @@ impl Generator for MemoryIDVisitor {
 
 #[derive(Debug, Default, Clone)]
 struct MemorySizeVisitor {
-    mem_size: Option<Box<[(u64, u64)]>>,
+    mem_size: Option<HashMap<CompactString, (u64, u64)>>,
 }
 
 impl Generator for MemorySizeVisitor {
     fn post_components(
         &mut self,
         module: &mut walrus::Module,
-        _: &GeneratorCtx,
+        _: &ComponentCtx,
     ) -> eyre::Result<()> {
         let mem_size = module
             .memories
             .iter()
+            .filter(|mem| mem.import.is_some())
             .map(|mem| {
                 (
-                    mem.initial as u64,
-                    mem.maximum.unwrap_or(mem.initial) as u64,
+                    module
+                        .imports
+                        .get(mem.import.unwrap())
+                        .name
+                        .to_compact_string(),
+                    (
+                        mem.initial as u64,
+                        mem.maximum.unwrap_or(mem.initial) as u64,
+                    ),
                 )
             })
-            .collect::<Box<_>>();
+            .collect::<HashMap<_, _>>();
         self.mem_size = Some(mem_size);
 
         Ok(())
@@ -1016,6 +1324,7 @@ pub enum WasmPath {
         package: String,
     },
     Definitely(Utf8PathBuf),
+    Component(Utf8PathBuf),
 }
 
 impl FromStr for WasmPath {
@@ -1064,7 +1373,7 @@ impl WasmPath {
     pub fn name(&self) -> eyre::Result<CompactString> {
         match self {
             WasmPath::Maybe { package, .. } => Ok(package.to_compact_string()),
-            WasmPath::Definitely(path) => path
+            WasmPath::Definitely(path) | WasmPath::Component(path) => path
                 .get_file_main_name()
                 .ok_or_else(|| eyre::eyre!("Failed to get file name from {path}")),
         }
@@ -1073,7 +1382,7 @@ impl WasmPath {
     pub fn manifest_path(&self) -> Option<&Utf8PathBuf> {
         match self {
             WasmPath::Maybe { manifest_path, .. } => Some(manifest_path),
-            WasmPath::Definitely(_) => None,
+            WasmPath::Definitely(_) | WasmPath::Component(_) => None,
         }
     }
 
@@ -1087,7 +1396,7 @@ impl WasmPath {
                 };
                 Some(cargo_metadata.workspace_root.join("Cargo.toml"))
             }
-            WasmPath::Definitely(_) => None,
+            WasmPath::Definitely(_) | WasmPath::Component(_) => None,
         }
     }
 
@@ -1145,6 +1454,25 @@ impl WasmPath {
         if !fs::metadata(&path).is_ok() {
             eyre::bail!("Wasm file does not exist: {path}");
         }
+
+        let mut file =
+            fs::File::open(&path).wrap_err_with(|| format!("Failed to open wasm file: {path}"))?;
+        let mut magic = [0u8; 8];
+        file.read_exact(&mut magic)
+            .wrap_err_with(|| format!("Failed to read magic number from wasm file: {path}"))?;
+        if !magic.starts_with(b"\0asm") {
+            eyre::bail!("Wasm file does not have valid magic number: {path}");
+        }
+        let version = &magic[4..8];
+        // https://github.com/WebAssembly/component-model/blob/main/design/mvp/Binary.md#component-definitions
+        if version == [0x0D, 0x00, 0x01, 0x00] {
+            return Ok(Self::Component(path));
+        }
+        // https://webassembly.github.io/spec/core/binary/modules.html#binary-module
+        if version != [0x01, 0x00, 0x00, 0x00] {
+            eyre::bail!("Wasm file does not have valid version: {path}");
+        }
+
         Ok(Self::Definitely(path))
     }
 
@@ -1177,7 +1505,7 @@ impl WasmPath {
             WasmPath::Maybe { .. } => {
                 eyre::bail!("WasmPath is not definitely set: {self:?}")
             }
-            WasmPath::Definitely(p) => Ok(p),
+            WasmPath::Definitely(p) | WasmPath::Component(p) => Ok(p),
         }
     }
 

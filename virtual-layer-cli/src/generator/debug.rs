@@ -624,9 +624,9 @@ impl Generator for DebugCallFunctionSmallScale {
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &super::GeneratorCtx,
+        ctx: &super::ComponentCtx,
     ) -> eyre::Result<bool> {
-        if !ctx.unstable_print_debug {
+        if !ctx.unstable_print_debug() {
             return Ok(false);
         }
 
@@ -643,9 +643,9 @@ impl Generator for DebugCallFunctionMain {
     fn post_all_optimize(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &super::GeneratorCtx,
+        ctx: &super::ComponentCtx,
     ) -> eyre::Result<bool> {
-        if !ctx.unstable_print_debug {
+        if !ctx.unstable_print_debug() {
             return Ok(false);
         }
 

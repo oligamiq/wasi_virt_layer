@@ -1,16 +1,135 @@
+use std::{collections::HashMap, str::FromStr};
+
 use eyre::{Context as _, ContextCompat as _};
 use walrus::ir;
 
 use crate::{
     args::TargetMemoryType,
-    generator::{Generator, GeneratorCtx},
-    util::{LString, NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport},
+    generator::{ComponentCtx, Generator, GeneratorCtx},
+    util::{LString, NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule},
 };
 
 #[derive(Debug, Default)]
 pub struct TemporaryRefugeMemory {
-    imported_memories: Vec<walrus::MemoryId>,
-    shared_memories: Vec<walrus::MemoryId>,
+    pub memory_count: usize,
+}
+
+impl TemporaryRefugeMemory {
+    pub fn ready_component_and_transpile(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        let mut is_first = false;
+
+        let mut imported_memories = Vec::new();
+        let mut shared_memories = Vec::new();
+
+        let mut mem_names = HashMap::new();
+
+        module
+            .memories
+            .iter_mut()
+            .map(|mem| {
+                let id = mem.id();
+
+                if let Some(mem_id) = mem.import {
+                    imported_memories.push(id);
+                    let import = module.imports.get(mem_id);
+                    let name = import.name.clone();
+                    module.imports.delete(mem_id);
+                    mem.import = None;
+                    if mem_names.values().any(|s| *s == name) {
+                        let n = (1..)
+                            .find(|n| !mem_names.values().any(|s| *s == format!("{name}_{n}")))
+                            .unwrap();
+                        mem_names.insert(id, format!("{name}_{n}"));
+                    } else {
+                        mem_names.insert(id, name);
+                    }
+                }
+
+                // Translating component requires WasmFeatures::Threads
+                // but we cannot enable it because it in other crates.
+                // So, we set shared to false here temporarily.
+                if mem.shared {
+                    if ctx.no_transpile && !is_first {
+                        is_first = true;
+                        log::warn!(
+                            r"Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is. {mem:?}"
+                        );
+                    }
+
+                    shared_memories.push(id);
+                    mem.shared = false;
+                }
+
+                Ok(())
+            })
+            .collect::<eyre::Result<Vec<_>>>()?;
+
+        for (n, mem_id) in module
+            .memories
+            .iter()
+            .map(|mem| mem.id())
+            .enumerate()
+            .collect::<Box<_>>()
+        {
+            module.create_memory_anchor_with_info(
+                format!("__wasip1_vfs_memory_anchor_{n}"),
+                mem_id,
+                Some(HadSharedAndImported {
+                    had_shared: shared_memories.contains(&mem_id),
+                    had_imported: imported_memories.contains(&mem_id),
+                    name: mem_names.get(&mem_id).cloned(),
+                }),
+            )?;
+        }
+
+        self.memory_count = module.memories.iter().count();
+
+        module
+            .save_info("memory_count", self.memory_count)
+            .wrap_err("Failed to save memory_count")?;
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone)]
+struct HadSharedAndImported {
+    pub had_shared: bool,
+    pub had_imported: bool,
+    pub name: Option<String>,
+}
+
+impl ToString for HadSharedAndImported {
+    fn to_string(&self) -> String {
+        let n = self.had_shared as u8
+            | (self.had_imported as u8) << 1
+            | (self.name.is_some() as u8) << 2;
+        format!("{n}{}", self.name.as_ref().unwrap_or(&"".into()))
+    }
+}
+
+impl FromStr for HadSharedAndImported {
+    type Err = eyre::Report;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let n = s[0..1]
+            .parse::<u8>()
+            .wrap_err_with(|| eyre::eyre!("Failed to parse HadSharedAndImported from {s}"))?;
+        let name = if n & 4 != 0 {
+            Some(s[1..].to_string())
+        } else {
+            None
+        };
+        Ok(Self {
+            had_shared: (n & 1) != 0,
+            had_imported: (n & 2) != 0,
+            name,
+        })
+    }
 }
 
 impl Generator for TemporaryRefugeMemory {
@@ -70,47 +189,34 @@ impl Generator for TemporaryRefugeMemory {
             return Ok(());
         }
 
-        let mut is_first = false;
+        if ctx.target_memory_type == TargetMemoryType::Multi {
+            self.ready_component_and_transpile(module, ctx)?;
+        } else {
+            module
+                .memories
+                .iter_mut()
+                .filter(|mem| mem.id() != *ctx.vfs_used_memory_id.as_ref().unwrap())
+                .map(|mem| {
+                    let id = mem.id();
+                    let mem_id = module.imports.iter().find_map(|import| match import.kind {
+                        walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
+                        _ => None,
+                    });
 
-        module
-            .memories
-            .iter_mut()
-            .map(|mem| {
-                let id = mem.id();
-                let mem_id = module.imports.iter().find_map(|import| match import.kind {
-                    walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
-                    _ => None,
-                });
-
-                if let Some(mem_id) = mem_id {
-                    self.imported_memories.push(id);
-                    module.imports.delete(mem_id);
-                    mem.import = None;
-                }
-
-                // Translating component requires WasmFeatures::Threads
-                // but we cannot enable it because it in other crates.
-                // So, we set shared to false here temporarily.
-                if mem.shared {
-                    if ctx.no_transpile && !is_first {
-                        is_first = true;
-                        log::warn!(
-                            r"Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is. {mem:?}"
-                        );
+                    if let Some(mem_id) = mem_id {
+                        module.imports.delete(mem_id);
+                        mem.import = None;
                     }
 
-                    self.shared_memories.push(id);
-                    mem.shared = false;
-                }
-
-                Ok(())
-            })
-            .collect::<eyre::Result<Vec<_>>>()?;
+                    Ok(())
+                })
+                .collect::<eyre::Result<Vec<_>>>()?;
+        }
 
         Ok(())
     }
 
-    fn post_components(
+    fn post_lower_memory(
         &mut self,
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
@@ -119,27 +225,49 @@ impl Generator for TemporaryRefugeMemory {
             return Ok(());
         }
 
-        module
-            .memories
-            .iter_mut()
-            .enumerate()
-            .for_each(|(count, mem)| {
-                if self.imported_memories.contains(&mem.id()) {
-                    let import_id = module.imports.add(
-                        "env",
-                        &mem.name.clone().unwrap_or_else(|| match count {
-                            0 => "memory".to_string(),
-                            n => format!("memory{n}"),
-                        }),
-                        walrus::ImportKind::Memory(mem.id()),
-                    );
+        self.ready_component_and_transpile(module, ctx)?;
 
-                    mem.import = Some(import_id);
-                }
-                if self.shared_memories.contains(&mem.id()) {
-                    mem.shared = true;
-                }
-            });
+        Ok(())
+    }
+
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &ComponentCtx,
+    ) -> eyre::Result<()> {
+        if !ctx.threads() {
+            return Ok(());
+        }
+
+        self.memory_count = module
+            .load_info::<usize>("memory_count")
+            .wrap_err("Failed to load memory_count")?;
+
+        for count in 0..self.memory_count {
+            let (id, info) = module
+                .get_memory_anchor_with_info::<HadSharedAndImported>(
+                    &format!("__wasip1_vfs_memory_anchor_{count}"),
+                    true,
+                )
+                .wrap_err("cannot find info, you may change anchor name")?;
+            let info = info.unwrap();
+            let mem = module.memories.get_mut(id);
+
+            mem.name = info.name.clone();
+
+            if info.had_imported {
+                let import_id = module.imports.add(
+                    "env",
+                    &info.name.unwrap(),
+                    walrus::ImportKind::Memory(mem.id()),
+                );
+
+                mem.import = Some(import_id);
+            }
+            if info.had_shared {
+                mem.shared = true;
+            }
+        }
 
         Ok(())
     }

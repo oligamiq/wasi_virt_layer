@@ -19,6 +19,14 @@ pub struct Args {
     pub wasm: Vec<WasmPath>,
 
     #[arg(short, long)]
+    /// Path to the wasip1 wasm file
+    /// This allow 4 patterns:
+    /// 1. only manifest path, like `./Cargo.toml` or `./some/dir/Cargo.toml`
+    /// 2. only package name, like `my_package`
+    /// 3. manifest path and package name, like `./Cargo.toml::my_package` or `./some/dir/Cargo.toml::my_package`
+    /// 4. direct path to wasm file, like `./target/wasm32-wasi/release/my_crate.wasm`
+    /// 5. direct path to component file, like `./target/wasm32-wasi/release/my_crate.component.wasm`
+    ///      You can translate component to js directly.
     package: Option<WasmPath>,
 
     /// Memory hints for the wasm files.
@@ -64,7 +72,12 @@ impl Args {
             .map(Into::<std::ffi::OsString>::into)
             .collect::<Vec<_>>();
         let parsed = Args::parse_from(args);
-        if parsed.wasm.is_empty() {
+        if parsed.wasm.is_empty()
+            && !parsed
+                .package
+                .as_ref()
+                .is_some_and(|p| matches!(p, WasmPath::Component(_)))
+        {
             unimplemented!("target to only self file is not supported yet");
         }
 
@@ -125,7 +138,7 @@ impl Args {
                 base64_cutoff: self.transpile_opts.base64_cutoff,
                 tla_compat: self.transpile_opts.tla_compat,
                 valid_lifting_optimization: self.transpile_opts.valid_lifting_optimization,
-                tracing: !self.transpile_opts.no_tracing,
+                tracing: self.transpile_opts.tracing,
                 no_namespaced_exports: self.transpile_opts.no_namespaced_exports,
                 multi_memory: true,
                 guest: self.transpile_opts.guest,
@@ -174,7 +187,7 @@ pub struct TranspileOpts {
 
     /// Whether or not to emit tracing calls on function entry/exit.
     #[arg(long, default_value = "false")]
-    no_tracing: bool,
+    tracing: bool,
 
     /// Whether to generate namespaced exports like foo as "local:package/foo ". These exports can break typescript builds.
     #[arg(long, default_value = "false")]

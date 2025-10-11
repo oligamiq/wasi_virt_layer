@@ -1,8 +1,10 @@
-use std::io::Write as _;
+use std::{collections::HashMap, io::Write as _};
+
+use compact_str::CompactString;
 
 pub fn gen_threads_run(
     wasm_name: impl AsRef<str>,
-    mem_size: Box<[(u64, u64)]>,
+    mem_size: HashMap<CompactString, (u64, u64)>,
     out_dir: impl AsRef<str>,
 ) {
     let wasm_name = wasm_name.as_ref();
@@ -360,19 +362,13 @@ run();
     .trim()
 }
 
-fn worker_ts(wasm_name: &str, mem_size: &[(u64, u64)]) -> String {
+fn worker_ts(wasm_name: &str, mem_size: &HashMap<CompactString, (u64, u64)>) -> String {
     let mut memories = String::new();
-    for (i, (init, max)) in mem_size.iter().enumerate() {
-        let i = if i > 0 {
-            memories.push_str("\n");
-            i.to_string()
-        } else {
-            "".to_string()
-        };
+    for (name, (init, max)) in mem_size {
         memories.push_str(&{
             let str = format!(
                 r#"
-                memory{i}: new WebAssembly.Memory({{
+                {name}: new WebAssembly.Memory({{
                     initial:{init},
                     maximum:{max},
                     shared:true,

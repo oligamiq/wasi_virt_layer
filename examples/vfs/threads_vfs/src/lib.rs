@@ -65,7 +65,7 @@ const FILES: NormalFILES = ConstFiles!([(
 )]);
 
 plug_thread!(DirectThreadPool, self, test_threads);
-plug_process!(self, test_threads);
+plug_process!(test_threads);
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
     environ: &[
@@ -74,7 +74,7 @@ const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
         // "RUST_BACKTRACE=full",
     ],
 };
-plug_env!(@const, VirtualEnvTy, self, test_threads);
+plug_env!(@const, VirtualEnvTy, test_threads);
 
 #[cfg(test)]
 mod tests {
