@@ -202,11 +202,7 @@ impl Generator for ResetFunc {
             let reset_on_thread_once =
                 (NAMESPACE, "__wasip1_vfs_reset_on_thread_once").get_fid(&module.imports)?;
 
-            module.connect_func_alt(
-                reset_on_thread_once,
-                initializers,
-                ctx.unstable_print_debug,
-            )?;
+            module.renew_call_fn(reset_on_thread_once, initializers)?;
 
             reset_on_thread
         } else {

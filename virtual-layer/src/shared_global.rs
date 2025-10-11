@@ -15,6 +15,8 @@
 // Ordinary global variables are sometimes used as stacks,
 // so they must not be shared between threads.
 
+use crate::utils::InitOnce;
+
 static LOCK: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
 static mut ALT_GLOBAL_VAR: i32 = 0;
@@ -34,7 +36,7 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_set(v: i32) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_init_once(v: i32) {
-    static INIT: std::sync::Once = std::sync::Once::new();
+    static INIT: InitOnce = InitOnce::new();
 
     INIT.call_once(|| {
         // use crate::debug::*;

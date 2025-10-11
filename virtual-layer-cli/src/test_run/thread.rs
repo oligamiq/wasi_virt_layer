@@ -2,7 +2,7 @@ use std::io::Write as _;
 
 pub fn gen_threads_run(
     wasm_name: impl AsRef<str>,
-    mem_size: Vec<(u64, u64)>,
+    mem_size: Box<[(u64, u64)]>,
     out_dir: impl AsRef<str>,
 ) {
     let wasm_name = wasm_name.as_ref();
@@ -15,7 +15,7 @@ pub fn gen_threads_run(
         ("tsconfig.json", tsconfig_json()),
         ("package.json", package_json()),
         ("worker_background_worker.ts", worker_background_worker_ts()),
-        ("worker.ts", &worker_ts(wasm_name, mem_size)),
+        ("worker.ts", &worker_ts(wasm_name, &mem_size)),
         ("vite.config.ts", vite_config_ts()),
         ("index.html", index_html()),
     ]
@@ -360,7 +360,7 @@ run();
     .trim()
 }
 
-fn worker_ts(wasm_name: &str, mem_size: Vec<(u64, u64)>) -> String {
+fn worker_ts(wasm_name: &str, mem_size: &[(u64, u64)]) -> String {
     let mut memories = String::new();
     for (i, (init, max)) in mem_size.iter().enumerate() {
         let i = if i > 0 {

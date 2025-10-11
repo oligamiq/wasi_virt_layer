@@ -1514,7 +1514,10 @@ impl WalrusUtilModule for walrus::Module {
 
         let mut fid_map: HashMap<FunctionId, FunctionId> = HashMap::new();
 
-        let fids = self.funcs.find_children_with(from, allow_call_indirect)?;
+        let fids = self
+            .funcs
+            .find_children_with(from, allow_call_indirect)
+            .wrap_err("Failed to find children functions")?;
 
         for fid in fids {
             if exclude.contains(&fid) {
@@ -1563,10 +1566,10 @@ impl WalrusUtilModule for walrus::Module {
                             }
                         }
                         Instr::CallIndirect(call) if !allow_call_indirect => {
-                            eyre::bail!("Call indirect found: {:?}", call);
+                            eyre::bail!("Call indirect found: {call:?} in nested copy");
                         }
                         Instr::ReturnCallIndirect(call) if !allow_call_indirect => {
-                            eyre::bail!("Return call indirect found: {:?}", call);
+                            eyre::bail!("Return call indirect found: {call:?} in nested copy");
                         }
                         _ => {}
                     }
@@ -1617,7 +1620,7 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
             match &self.get(fid).kind {
                 FunctionKind::Local(imported_function) => {
                     imported_function
-                        .read(|instr, _place| {
+                        .read(|instr, _| {
                             use walrus::ir::*;
                             match instr {
                                 Instr::Call(Call { func })
@@ -1628,10 +1631,12 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
                                     }
                                 }
                                 Instr::CallIndirect(call) if !allow_call_indirect => {
-                                    eyre::bail!("Call indirect found: {:?}", call);
+                                    eyre::bail!("Call indirect found: {call:?} in find children");
                                 }
                                 Instr::ReturnCallIndirect(call) if !allow_call_indirect => {
-                                    eyre::bail!("Return call indirect found: {:?}", call);
+                                    eyre::bail!(
+                                        "Return call indirect found: {call:?} in find children"
+                                    );
                                 }
                                 _ => {}
                             }

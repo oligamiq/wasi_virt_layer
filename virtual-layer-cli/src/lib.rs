@@ -150,7 +150,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .run_layers_to_component(&parsed_args.out_dir)
         .wrap_err("Failed to run layers to component")?;
 
-    generator
+    let (name, memory) = generator
         .component_to_files(&parsed_args)
         .wrap_err("Failed to run component to files")?;
 
@@ -395,11 +395,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     //     .get_file_main_name()
     //     .wrap_err("Failed to get core wasm main name")?;
 
-    // if let Some(mem_size) = mem_size {
-    //     test_run::thread::gen_threads_run(name, mem_size, &out_dir);
-    // } else {
-    //     test_run::gen_test_run(name, out_dir);
-    // }
+    if threads {
+        test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
+    } else {
+        test_run::gen_test_run(name, &parsed_args.out_dir);
+    }
 
     Ok(())
 }

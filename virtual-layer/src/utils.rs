@@ -306,3 +306,21 @@ pub unsafe fn alloc_buff<T, R>(size: usize, init: impl FnOnce(&mut [T]) -> R) ->
     let result = init(&mut buff);
     (unsafe { buf.assume_init() }, result)
 }
+
+pub struct InitOnce {
+    is_init: std::sync::atomic::AtomicBool,
+}
+
+impl InitOnce {
+    pub const fn new() -> Self {
+        Self {
+            is_init: std::sync::atomic::AtomicBool::new(false),
+        }
+    }
+
+    pub fn call_once<F: FnOnce()>(&self, f: F) {
+        if !self.is_init.swap(true, std::sync::atomic::Ordering::SeqCst) {
+            f();
+        }
+    }
+}

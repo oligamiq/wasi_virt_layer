@@ -243,7 +243,9 @@ macro_rules! plug_thread {
 #[cfg(feature = "threads")]
 #[cfg(target_os = "wasi")]
 mod reset_on_thread {
-    static INIT: std::sync::Once = std::sync::Once::new();
+    use crate::utils::InitOnce;
+
+    static INIT: InitOnce = InitOnce::new();
 
     #[link(wasm_import_module = "wasip1-vfs")]
     unsafe extern "C" {

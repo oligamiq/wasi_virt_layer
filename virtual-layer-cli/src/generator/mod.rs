@@ -130,7 +130,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
             generator
                 .pre_target(module, ctx, external)
                 .wrap_err_with(|| {
-                    eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+                    eyre::eyre!(format!("Failed to run pre_target for {generator:?}"))
                 })?;
         }
         Ok(())
@@ -143,7 +143,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     ) -> eyre::Result<()> {
         for generator in self {
             generator.post_combine(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+                eyre::eyre!(format!("Failed to run post_combine for {generator:?}"))
             })?;
         }
         Ok(())
@@ -156,7 +156,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     ) -> eyre::Result<()> {
         for generator in self {
             generator.post_lower_memory(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+                eyre::eyre!(format!("Failed to run post_lower_memory for {generator:?}"))
             })?;
         }
         Ok(())
@@ -169,7 +169,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     ) -> eyre::Result<()> {
         for generator in self {
             generator.post_components(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+                eyre::eyre!(format!("Failed to run post_components for {generator:?}"))
             })?;
         }
         Ok(())
@@ -182,7 +182,7 @@ impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
     ) -> eyre::Result<()> {
         for generator in self {
             generator.post_all_optimize(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
+                eyre::eyre!(format!("Failed to run post_all_optimize for {generator:?}"))
             })?;
         }
         Ok(())
@@ -471,8 +471,12 @@ impl GeneratorRunner {
 
         self.generators
             .iter()
+            .map(|g| g.as_ref())
             .find_map(|g| downcast_ref::<T>(g))
-            .wrap_err("Failed to get generator")
+            .wrap_err_with(|| {
+                eyre::eyre!("Failed to get generator: {}", core::any::type_name::<T>())
+            })
+            .wrap_err_with(|| eyre::eyre!("Available generators: {:?}", self.generators))
     }
 
     #[deprecated(
@@ -525,6 +529,12 @@ impl GeneratorRunner {
 
         let dwarf = self.ctx.dwarf;
 
+        println!("Remove existing output directory...");
+        if std::fs::metadata(&out_dir).is_ok() {
+            std::fs::remove_dir_all(&out_dir).expect("Failed to remove existing directory");
+        }
+        std::fs::create_dir_all(&out_dir).expect("Failed to create output directory");
+
         println!("Adjusting VFS Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
@@ -546,7 +556,7 @@ impl GeneratorRunner {
         .with_opt(&mut self.path, dwarf)?;
 
         println!("Adjusting target Wasm...");
-
+        self.ctx.vfs_used_memory_id = None;
         for (target, target_name) in self.targets.iter_mut().zip(self.ctx.target_names.clone()) {
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
@@ -570,6 +580,8 @@ impl GeneratorRunner {
         }
 
         println!("Combining Wasm modules...");
+        self.ctx.vfs_used_memory_id = None;
+        self.ctx.target_used_memory_id = None;
         let output = format!("{out_dir}/merged.wasm");
         (|path: &mut WasmPath| {
             merge(
@@ -619,6 +631,14 @@ impl GeneratorRunner {
         })
         .with_opt(&mut self.path, dwarf)?;
 
+        self.ctx.vfs_used_memory_id = None;
+        self.ctx.target_used_memory_id = None;
+
+        self.ctx.vfs_used_global_id = None;
+        self.ctx.target_used_global_id = None;
+
+        self.ctx.start_func_id = None;
+
         if self.ctx.target_memory_type == TargetMemoryType::Single {
             println!("Generating single memory Merged Wasm...");
             let optimized_path = compile::optimize_wasm(
@@ -652,23 +672,8 @@ impl GeneratorRunner {
             .wrap_err("Failed to translate Wasm to Component")?;
         self.path.set_path(component)?;
 
-        // todo!();
-        let mem_size_visitor = MemorySizeVisitor::default();
-        self.add_generator(mem_size_visitor);
-
-        println!("Adjusting component Merged Wasm...");
-        (|path: &mut WasmPath| {
-            (|module: &mut walrus::Module| {
-                self.generators
-                    .post_components(module, &self.ctx)
-                    .wrap_err("Failed in run_post_components")
-            })
-            .wrap_run(path, dwarf)
-        })
-        .with_opt(&mut self.path, dwarf)?;
-
         if self.ctx.no_transpile {
-            println!("Skipping transpiling Component to JS as per --no-transpile flag...");
+            println!("Skipping transpile Component to JS as per --no-transpile flag...");
             return Ok(());
         }
 
@@ -737,16 +742,19 @@ impl GeneratorRunner {
         })
         .with_opt(&mut self.path, dwarf)?;
 
-        // If it cannot be done in the component state, do it here.
-        // println!("Adjusting component Merged Wasm...");
-        // (|path: &mut WasmPath| {
-        //     (|module: &mut walrus::Module| {
-        //         Self::run_post_components(&mut self.generators, &self.ctx, module)
-        //             .wrap_err("Failed in run_post_components")
-        //     })
-        //     .wrap_run(path, dwarf)
-        // })
-        // .with_opt(&mut self.path, dwarf)?;
+        let mem_size_visitor = MemorySizeVisitor::default();
+        self.add_generator(mem_size_visitor);
+
+        println!("Adjusting component Merged Wasm...");
+        (|path: &mut WasmPath| {
+            (|module: &mut walrus::Module| {
+                self.generators
+                    .post_components(module, &self.ctx)
+                    .wrap_err("Failed in run_post_components")
+            })
+            .wrap_run(path, dwarf)
+        })
+        .with_opt(&mut self.path, dwarf)?;
 
         println!("Final optimizing Merged Wasm...");
         for generator in &mut self.generators {

@@ -66,28 +66,40 @@ impl Generator for TemporaryRefugeMemory {
         if !ctx.threads {
             return Ok(());
         }
+        if ctx.target_memory_type == TargetMemoryType::Multi {
+            return Ok(());
+        }
+
+        let mut is_first = false;
 
         module
             .memories
             .iter_mut()
             .map(|mem| {
                 let id = mem.id();
-                let mem_id = module
-                    .imports
-                    .iter()
-                    .find_map(|import| match import.kind {
-                        walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
-                        _ => None,
-                    })
-                    .wrap_err("Failed to find memory import id")?;
+                let mem_id = module.imports.iter().find_map(|import| match import.kind {
+                    walrus::ImportKind::Memory(mid) if mid == id => Some(import.id()),
+                    _ => None,
+                });
 
-                module.imports.delete(mem_id);
-                mem.import = None;
+                if let Some(mem_id) = mem_id {
+                    module.imports.delete(mem_id);
+                    mem.import = None;
+                }
 
                 // Translating component requires WasmFeatures::Threads
                 // but we cannot enable it because it in other crates.
                 // So, we set shared to false here temporarily.
-                mem.shared = false;
+                if mem.shared {
+                    if ctx.no_transpile && !is_first {
+                        is_first = true;
+                        log::warn!(
+                            r"Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is. {mem:?}"
+                        );
+                    }
+
+                    mem.shared = false;
+                }
 
                 Ok(())
             })

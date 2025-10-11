@@ -158,7 +158,9 @@ impl Generator for SharedGlobal {
 
         // check global set in start section function
         let start_id = if let Some(id) = module.start {
-            module.nested_copy_func(id, &[] as &[FunctionId], false, false)?
+            module
+                .nested_copy_func(id, &[] as &[FunctionId], false, false)
+                .wrap_err("Failed to create start function copy")?
         } else {
             // create a new start function
             module.add_func(&[], &[], |_, _| Ok(()))?
