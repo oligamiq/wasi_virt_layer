@@ -43,7 +43,11 @@ impl<
         }
         #[cfg(feature = "multi_memory")]
         {
-            StdIo::write(unsafe { core::slice::from_raw_parts(data, data_len) })
+            let (buf, _) = unsafe {
+                use crate::utils::alloc_buff;
+                alloc_buff(data_len, |buf| Wasm::memcpy_to(buf, data))
+            };
+            StdIo::write(&buf)
         }
     }
 
@@ -58,7 +62,11 @@ impl<
         }
         #[cfg(feature = "multi_memory")]
         {
-            StdIo::ewrite(unsafe { core::slice::from_raw_parts(data, data_len) })
+            let (buf, _) = unsafe {
+                use crate::utils::alloc_buff;
+                alloc_buff(data_len, |buf| Wasm::memcpy_to(buf, data))
+            };
+            StdIo::ewrite(&buf)
         }
     }
 
@@ -285,9 +293,14 @@ impl<
         {
             StdIo::read_direct::<Wasm>(buf, buf_len)
         }
+
         #[cfg(feature = "multi_memory")]
         {
-            StdIo::read(unsafe { core::slice::from_raw_parts_mut(buf, buf_len) })
+            use crate::__private::utils;
+
+            let (buf_vec, read) = unsafe { utils::alloc_buff(buf_len, |buf| StdIo::read(buf)) };
+            Wasm::memcpy(buf, &buf_vec);
+            Ok(read?)
         }
     }
 

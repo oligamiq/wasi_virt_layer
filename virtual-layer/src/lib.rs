@@ -93,5 +93,7 @@ pub mod __private {
 
     pub mod utils {
         pub use crate::utils::StaticArrayBuilder;
+        #[cfg(feature = "alloc")]
+        pub use crate::utils::alloc_buff;
     }
 }

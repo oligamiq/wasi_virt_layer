@@ -434,7 +434,7 @@ globalThis.onmessage = async (message) => {{
 	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 	wasi.start(root as any);
 
-    process?.exit(0);
+    globalThis.process?.exit(0);
 }};
 "#
     )
