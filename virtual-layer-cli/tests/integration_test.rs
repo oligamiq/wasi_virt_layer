@@ -1,10 +1,10 @@
-use assert_cmd::{Command, assert::OutputAssertExt};
-
-const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
-const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
+use assert_cmd::{Command, assert::OutputAssertExt as _};
 
 // cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
 // cargo r -r -- -p threads_vfs test_threads -t single --threads true
+
+pub mod utils;
+use utils::*;
 
 #[test]
 fn build_normal() -> color_eyre::Result<()> {
@@ -15,26 +15,13 @@ fn build_normal() -> color_eyre::Result<()> {
             "test_wasm",
             "-t",
             "single",
-            "--out-dir",
-            &format!("{THIS_FOLDER}/dist"),
+            // "--out-dir",
+            // &format!("{THIS_FOLDER}/dist"),
         ])
         .assert()
         .success();
 
-    Command::new("deno")
-        .args(["add", "npm:@bjorn3/browser_wasi_shim"])
-        .assert()
-        .success();
-
-    std::process::Command::new("deno")
-        .args([
-            "run",
-            "--allow-read",
-            "--allow-env",
-            &format!("{THIS_FOLDER}/dist/test_run.ts"),
-        ])
-        .assert()
-        .success();
+    utils::run_non_thread(&format!("{THIS_FOLDER}/dist"))?;
 
     Ok(())
 }
