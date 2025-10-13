@@ -11,16 +11,24 @@ use crate::{
 /// a memory area shall be provided
 /// to retain memory information at startup.
 pub struct VFSExternalMemoryManager {
-    pub external_size: usize,
-    pub current_size: usize, // * 64KiB
+    external_size: usize,
+    current_size: usize, // * 64KiB
+    mem_id: MemoryId,
 }
 
 impl VFSExternalMemoryManager {
-    pub const fn new() -> Self {
+    pub fn new(module: &mut walrus::Module) -> Self {
+        let mem_id = module.memories.add_local(true, false, 0, None, None);
+
         Self {
             external_size: 0,
             current_size: 0,
+            mem_id,
         }
+    }
+
+    pub fn memory_id(&self) -> MemoryId {
+        self.mem_id
     }
 
     pub fn alloc(&mut self, size: usize) -> usize {
@@ -30,18 +38,20 @@ impl VFSExternalMemoryManager {
         ptr
     }
 
-    pub fn flush(mut self, module: &mut walrus::Module) -> eyre::Result<MemoryId> {
+    pub fn flush(mut self, module: &mut walrus::Module, threads: bool) -> eyre::Result<MemoryId> {
         let external_size = (0..=0x10000)
             .find(|i| *i * 64 * 1024 >= self.external_size)
             .ok_or_else(|| eyre::eyre!("Failed to find external size in 0..=0x10000"))?;
 
         self.current_size += external_size;
 
-        let mem_id = module
-            .memories
-            .add_local(true, false, self.current_size as u64, None, None);
+        let mem = module.memories.get_mut(self.mem_id);
 
-        Ok(mem_id)
+        mem.initial = self.current_size as u64;
+        mem.maximum = Some(self.current_size as u64);
+        mem.shared = threads;
+
+        Ok(self.mem_id)
     }
 }
 
@@ -54,9 +64,8 @@ impl Generator for ResetFunc {
         module: &mut walrus::Module,
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
-        let mut mem_manager = VFSExternalMemoryManager::new();
+        let mut mem_manager = VFSExternalMemoryManager::new(module);
 
-        let vfs_mem = ctx.vfs_used_memory_id.unwrap();
         let wasm_mem = ctx.vfs_used_memory_id.unwrap();
 
         let initializers = module
@@ -132,6 +141,8 @@ impl Generator for ResetFunc {
                     .map(|(offset, len)| (offset, len, mem_manager.alloc(len)))
                     .collect::<Box<_>>();
 
+                let reset_area_mem_id = mem_manager.memory_id();
+
                 let start_section_id = module.start.clone();
 
                 module
@@ -166,7 +177,7 @@ impl Generator for ResetFunc {
                             body.i32_const(*mem_offset) // dst
                                 .i32_const(*mem_ptr as i32) // src
                                 .i32_const(*mem_len as i32) // len
-                                .memory_copy(vfs_mem, wasm_mem);
+                                .memory_copy(reset_area_mem_id, wasm_mem);
                         }
 
                         if let Some(start_section_id) = start_section_id {
@@ -189,10 +200,12 @@ impl Generator for ResetFunc {
                         .i32_const(ptr as i32) // dst
                         .i32_const(offset) // src
                         .i32_const(len as i32) // len
-                        .memory_copy(wasm_mem, vfs_mem);
+                        .memory_copy(wasm_mem, reset_area_mem_id);
                 }
             }
         }
+
+        let _ = mem_manager.flush(module, ctx.threads)?;
 
         // Saves the memory state upon initial startup.
         // As the start section is also invoked when spawning threads,
