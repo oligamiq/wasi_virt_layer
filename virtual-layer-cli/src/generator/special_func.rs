@@ -48,7 +48,6 @@ impl VFSExternalMemoryManager {
         let mem = module.memories.get_mut(self.mem_id);
 
         mem.initial = self.current_size as u64;
-        mem.maximum = Some(self.current_size as u64);
         mem.shared = threads;
 
         Ok(self.mem_id)

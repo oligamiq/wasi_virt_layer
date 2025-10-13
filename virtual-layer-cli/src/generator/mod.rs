@@ -867,13 +867,15 @@ impl GeneratorRunner {
         self.ctx.start_func_id = None;
 
         if self.ctx.target_memory_type == TargetMemoryType::Single {
+            let old_path = self.path.path()?;
+
             println!("Generating single memory Merged Wasm...");
-            let optimized_path = compile::optimize_wasm(
-                self.path.path()?,
-                &["--multi-memory-lowering"],
-                true,
-                dwarf,
-            )?;
+            let optimized_path =
+                compile::optimize_wasm(old_path, &["--multi-memory-lowering"], true, dwarf)?;
+
+            std::fs::remove_file(old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+
             self.path.set_path(optimized_path)?;
 
             (|path: &mut WasmPath| {
