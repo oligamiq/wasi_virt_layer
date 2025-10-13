@@ -281,11 +281,10 @@ impl Generator for StartFunc {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
-            module.connect_func_alt(
+            module.renew_call_fn(
                 (NAMESPACE, &format!("__wasip1_vfs_{wasm}__start")).get_fid(&module.imports)?,
                 ctx.start_func_id.as_ref().unwrap()[wasm],
                 // Export already removed by StartFuncIdVisitor
-                false,
             )?;
         }
 

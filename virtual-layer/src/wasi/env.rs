@@ -27,7 +27,7 @@ use crate::memory::WasmAccess;
 /// const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
 ///     environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
 /// };
-/// plug_env!(@block, @const, VirtualEnvTy, test_wasm);
+/// plug_env!(@const, VirtualEnvTy, test_wasm);
 /// ```
 ///
 /// ```rust
@@ -53,15 +53,15 @@ use crate::memory::WasmAccess;
 ///   environ.push("HOME=~/".into());
 ///   Mutex::new(VirtualEnvState { environ })
 /// });
-/// plug_env!(@through, @static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+/// plug_env!(@static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
 /// ```
 #[macro_export]
 macro_rules! plug_env {
-    (@const, $ty:ty, $($wasm:tt),*) => {
+    (@const, $ty:ty, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @const, $ty);
     };
 
-    (@static, $state:expr, $($wasm:tt),*) => {
+    (@static, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @static, $state);
     };
 

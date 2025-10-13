@@ -8,5 +8,4 @@ world hello {
   export %world: func();
 
   export main: func();
-  export start: func();
 }

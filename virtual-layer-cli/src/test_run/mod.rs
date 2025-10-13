@@ -31,7 +31,6 @@ wasi.start({{
         memory: inst.exports.memory as WebAssembly.Memory,
         _start: () => {{
             // init only
-            root.start();
             console.log("[WASI main]");
             root.main();
             console.log("[WASI main] done.");

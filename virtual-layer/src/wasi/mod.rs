@@ -34,20 +34,20 @@ macro_rules! __as_t {
         $wasm
     };
 
-    (@through, $($wasm:tt),* => $callback:path, $($ex:tt)*) => {
-        $crate::__as_t!(@through_inner; $($wasm),*; => $callback, $($ex)*);
+    (@through, $($wasm:ident),* $(,)? => $callback:path, $($ex:tt)*) => {
+        $crate::__as_t!(@through_inner; $($wasm),*, ; => $callback, $($ex)*);
     };
 
-    (@through_inner; $(,)? ; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
+    (@through_inner; , ; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
         $callback!($($ex)*, $($tail),*);
     };
 
-    (@through_inner; self, $($left:ident),*; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
-        $crate::__as_t!(@through_inner; $($left),*; $($tail),*, __self => $callback, $($ex)*);
+    (@through_inner; self, $($left:ident),* $(,)?; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
+        $crate::__as_t!(@through_inner; $($left),*, ; $($tail),*, __self => $callback, $($ex)*);
     };
 
-    (@through_inner; $pop:ident $(,)? $($left:ident),*; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
-        $crate::__as_t!(@through_inner; $($left),*; $($tail),*, $pop => $callback, $($ex)*);
+    (@through_inner; $pop:ident, $($left:ident),* $(,)?; $(,)? $($tail:ident),* => $callback:path, $($ex:tt)*) => {
+        $crate::__as_t!(@through_inner; $($left),*, ; $($tail),*, $pop => $callback, $($ex)*);
     };
 
     // (@through, self => $callback:path, $($ex:tt)*) => {

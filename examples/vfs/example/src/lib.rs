@@ -10,7 +10,7 @@ wit_bindgen::generate!({
 
 struct Hello;
 
-import_wasm!(test_wasm_opt);
+import_wasm!(test_wasm);
 
 impl Guest for Hello {
     fn world() {
@@ -41,19 +41,16 @@ impl Guest for Hello {
     fn get_envs() -> Vec<String> {
         VIRTUAL_ENV.lock().get_environ().to_vec()
     }
-    fn start() {
-        test_wasm_opt::_start();
-    }
     fn main() {
-        test_wasm_opt::_reset();
-        test_wasm_opt::_start();
-        test_wasm_opt::_main();
+        test_wasm::_reset();
+        test_wasm::_start();
+        test_wasm::_main();
     }
 }
 
 export!(Hello);
 
-plug_process!(test_wasm_opt);
+plug_process!(test_wasm);
 
 struct VirtualEnvState {
     environ: Vec<String>,
@@ -69,13 +66,24 @@ impl<'a> VirtualEnv<'a> for VirtualEnvState {
 
 static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     let mut environ = Vec::<String>::new();
-    environ.push("RUST_MIN_STACK=16777216".into());
+    // environ.push("RUST_MIN_STACK=16777216".into());
     environ.push("HOME=~/".into());
     environ.push("RUST_BACKTRACE=1".into());
     Mutex::new(VirtualEnvState { environ })
 });
 
-plug_env!(@static, &mut VIRTUAL_ENV.lock(), test_wasm_opt, self);
+plug_env!(@static, &mut VIRTUAL_ENV.lock(), test_wasm);
+
+#[const_struct]
+const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
+    environ: &[
+        // "RUST_MIN_STACK=16777216",
+        "HOME=~/",
+        "RUST_BACKTRACE=1",
+    ],
+};
+
+plug_env!(@const, HostEnvTy, self);
 
 const FILE_COUNT: usize = 10;
 
@@ -115,5 +123,5 @@ mod fs {
     plug_fs!(@const, {
         #[allow(static_mut_refs)]
         unsafe { &mut VIRTUAL_FILE_SYSTEM }
-    }, test_wasm_opt);
+    }, test_wasm);
 }

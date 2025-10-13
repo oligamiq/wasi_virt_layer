@@ -35,8 +35,34 @@ impl Generator for CheckUseLibrary {
                 .iter()
                 .any(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
             {
+                let suggests = module
+                    .exports
+                    .iter()
+                    .filter_map(|e| {
+                        e.name
+                            .strip_prefix("__wasip1_vfs_")?
+                            .strip_suffix("__start_anchor")
+                            .map(|s| s.to_string())
+                    })
+                    .collect::<Vec<_>>();
+
+                let best_suggest = suggests
+                    .iter()
+                    .map(|s| (strsim::jaro_winkler(&s, wasm_name.as_ref()), s))
+                    .min_by(|(a, _), (b, _)| b.partial_cmp(a).unwrap());
+
+                let msg = if let Some((score, suggest)) = best_suggest
+                    && score > 0.8
+                {
+                    format!(
+                        "\nDid you mean `{wasm_name}`? You used `{suggest}` in `import_wasm!` macro."
+                    )
+                } else {
+                    String::new()
+                };
+
                 eyre::bail!(
-                    "Failed to get __start_anchor export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name."
+                    "Failed to get __start_anchor export on {wasm_name}. You may forget definition `import_wasm!` macro with wasm name.{msg}",
                 );
             }
         }
@@ -148,12 +174,14 @@ impl Generator for IsRustWasm {
         _: &GeneratorCtx,
         external: &ModuleExternal,
     ) -> eyre::Result<()> {
+        let producers = format!("{:?}", module.producers);
+
         if !["_start", "__main_void"]
             .iter()
-            .all(|name| !module.exports.iter().any(|e| e.name == *name))
-            || ["Rust", "rustc"]
+            .all(|name| module.exports.iter().any(|e| e.name == *name))
+            || !["Rust", "rustc"]
                 .iter()
-                .all(|name| !module.customs.iter().any(|(_, c)| c.name() == *name))
+                .all(|name| producers.contains(format!(r#""{name}""#).as_str()))
         {
             log::error!(
                 "This file: {} is not built by rust toolchain, or you forget to export _start or main_void function. If you use `cdylib` or `rlib`, please change to `bin` or `lib`.\nIf you use other language, create an issue.",
