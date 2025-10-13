@@ -501,7 +501,7 @@ mod tests {
     use const_for::const_for;
 
     /// If not using `--release`, compilation will fail with: link error
-    /// cargo test -r --package wasip1-virtual-layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
+    /// cargo test -r --package wasi_virt_layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output
     #[test]
     fn test_file_flat_iterate() {
         #[allow(dead_code)]

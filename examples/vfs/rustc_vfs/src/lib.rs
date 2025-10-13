@@ -1,5 +1,5 @@
 use const_struct::const_struct;
-use wasip1_virtual_layer::{file::*, prelude::*};
+use wasi_virt_layer::{file::*, prelude::*};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file

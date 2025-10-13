@@ -7,7 +7,7 @@ use std::{
     sync::atomic::AtomicUsize,
 };
 
-use compact_str::{CompactString, ToCompactString as _};
+use compact_str::CompactString;
 use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 use walrus::{ir::InstrSeqId, *};
@@ -1921,14 +1921,27 @@ impl CaminoUtilModule for camino::Utf8Path {
         let file_name_poss = binding.iter().rev();
         let mut file_name = None;
         for name in file_name_poss {
-            if *name == "opt" || *name == "adjusted" || *name == "wasm" || *name == "core" {
+            if *name == "opt"
+                || *name == "adjusted"
+                || *name == "wasm"
+                || *name == "core"
+                || *name == "component"
+            {
                 continue;
             }
             file_name = Some(name);
             break;
         }
+        let file_name = file_name.map(ToOwned::to_owned).or_else(|| {
+            self.file_name()
+                .unwrap()
+                .split(".")
+                .next()
+                .as_ref()
+                .cloned()
+        });
 
-        file_name.map(|s| s.to_compact_string())
+        file_name.map(CompactString::from)
     }
 }
 

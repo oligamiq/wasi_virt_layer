@@ -1,9 +1,13 @@
 [package]
-name = "wasip1_vfs-cli"
+name = "wasi_virt_layer-cli"
 version.workspace = true
 edition = "2024"
-description = "CLI for the wasip1_vfs crate"
+description = "CLI for the wasi_virt_layer crate"
 license = "MIT OR Apache-2.0"
+
+[[bin]]
+name = "wasi_virt_layer"
+path = "src/main.rs"
 
 [dependencies]
 anyhow = "1.0.99"

@@ -16,7 +16,7 @@ readme.workspace = true
 wit-bindgen = "0.43.0"
 const_struct = "0.6.2"
 
-[dependencies.wasip1-virtual-layer]
+[dependencies.wasi_virt_layer]
 workspace = true
 features = ["std", "threads"]
 

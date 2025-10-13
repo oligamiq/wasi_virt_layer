@@ -24,7 +24,7 @@ impl Generator for CheckUseLibrary {
             })
         {
             eyre::bail!(
-                r#"This wasm file is not use "wasip1-virtual-layer" crate, you need to add it to your dependencies and use wasip1_virtual_layer;"#
+                r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer;"#
             );
         }
 

@@ -1,7 +1,7 @@
 use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasip1_virtual_layer::{file::*, plug_process, prelude::*};
+use wasi_virt_layer::{file::*, plug_process, prelude::*};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file

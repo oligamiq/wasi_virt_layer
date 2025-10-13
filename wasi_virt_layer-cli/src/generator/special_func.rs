@@ -50,6 +50,10 @@ impl VFSExternalMemoryManager {
         mem.initial = self.current_size as u64;
         mem.shared = threads;
 
+        if threads {
+            mem.maximum = Some(mem.initial);
+        }
+
         Ok(self.mem_id)
     }
 }

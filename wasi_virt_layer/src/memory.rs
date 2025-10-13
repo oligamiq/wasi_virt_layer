@@ -424,7 +424,7 @@ pub trait WasmAccess: Copy {
     /// If you wish to call it again,
     /// you must use the __main_void function.
     /// When you write code that explicitly calls this function,
-    /// the command-line tool (virtual-layer-cli) detects it,
+    /// the command-line tool (wasi_virt_layer-cli) detects it,
     /// and as a result,
     /// __main_void will no longer be invoked from within _start.
     /// Instead, it can only be called through the function

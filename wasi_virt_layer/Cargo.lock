@@ -1433,7 +1433,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasip1-virtual-layer"
+name = "wasi_virt_layer"
 version = "0.1.0"
 dependencies = [
  "const_for",

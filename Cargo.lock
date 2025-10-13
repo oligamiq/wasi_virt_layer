@@ -516,7 +516,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasip1-virtual-layer",
+ "wasi_virt_layer",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1208,7 +1208,7 @@ name = "rustc_vfs"
 version = "0.1.0"
 dependencies = [
  "const_struct",
- "wasip1-virtual-layer",
+ "wasi_virt_layer",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1457,7 +1457,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasip1-virtual-layer",
+ "wasi_virt_layer",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1674,7 +1674,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
-name = "wasip1-virtual-layer"
+name = "wasi_virt_layer"
 version = "0.1.0"
 dependencies = [
  "backtrace",
@@ -1688,7 +1688,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "wasip1_vfs-cli"
+name = "wasi_virt_layer-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",

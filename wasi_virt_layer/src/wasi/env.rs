@@ -22,7 +22,7 @@ use crate::memory::WasmAccess;
 /// import_wasm!(test_wasm);
 ///
 /// use const_struct::*;
-/// use wasip1_virtual_layer::prelude::*;
+/// use wasi_virt_layer::prelude::*;
 /// #[const_struct]
 /// const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
 ///     environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
@@ -35,7 +35,7 @@ use crate::memory::WasmAccess;
 /// import_wasm!(test_wasm);
 ///
 /// use std::sync::{LazyLock, Mutex};
-/// use wasip1_virtual_layer::prelude::*;
+/// use wasi_virt_layer::prelude::*;
 ///
 /// struct VirtualEnvState {
 ///    environ: Vec<String>,
