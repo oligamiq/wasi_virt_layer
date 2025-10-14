@@ -7,7 +7,7 @@ members = [
     "examples/test_wasm/example",
     "examples/vfs/rustc_vfs",
     "examples/test_wasm/test_threads",
-    "examples/vfs/threads_vfs", "examples/test_wasm/test_pool_thread", "examples/vfs/thread_pool_vfs", "examples/vfs/no_std_vfs",
+    "examples/vfs/threads_vfs", "examples/test_wasm/test_pool_thread", "examples/vfs/thread_pool_vfs", "examples/vfs/no_std_vfs", "examples/vfs/no_thread_with_thread_feature_vfs",
 ]
 default-members = ["wasi_virt_layer-cli"]
 

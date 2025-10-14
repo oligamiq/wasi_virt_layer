@@ -2,7 +2,7 @@ use const_struct::const_struct;
 use wasi_virt_layer::{
     self, ConstFiles,
     file::{VFSConstNormalFiles, WasiConstFile},
-    import_wasm, plug_env, plug_fs, plug_process,
+    import_wasm, plug_env, plug_fs, plug_process, plug_thread,
     prelude::VirtualEnvConstState,
 };
 
@@ -43,6 +43,19 @@ const ENV: VirtualEnvConstState = VirtualEnvConstState {
 };
 
 plug_env!(@const, EnvTy, test_pool_thread);
+
+struct ThreadAlt;
+impl wasi_virt_layer::thread::VirtualThread for ThreadAlt {
+    fn new_thread(
+        &mut self,
+        accessor: impl wasi_virt_layer::thread::ThreadAccess,
+        runner: wasi_virt_layer::thread::ThreadRunner,
+    ) -> Option<std::num::NonZero<u32>> {
+        unreachable!();
+    }
+}
+
+plug_thread!(@sched_yield, ThreadAlt, test_pool_thread);
 
 mod fs {
     use wasi_virt_layer::file::{DefaultStdIO, VFSConstNormalLFS, Wasip1ConstVFS};

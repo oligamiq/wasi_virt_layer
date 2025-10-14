@@ -210,8 +210,6 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
 
         let crate_setting = &doc["dependencies"][crate_name];
 
-        println!("crate_setting: {crate_setting}");
-
         // check normal crate setting
         Ok(if Self::has_feature(crate_setting, feature) {
             HasFeature::EnabledOnNormal

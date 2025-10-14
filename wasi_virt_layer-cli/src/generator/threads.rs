@@ -44,74 +44,92 @@ impl Generator for ThreadsSpawn {
 
         let branch_fid = "__wasip1_vfs_is_root_spawn".get_fid(&module.exports)?;
 
-        let normal_thread_spawn_fn_id = ("wasi", "thread-spawn").get_fid(&module.imports)?;
+        if let Some(normal_thread_spawn_fn_id) =
+            ("wasi", "thread-spawn").get_fid(&module.imports).ok()
+        {
+            let self_thread_spawn_fn_id =
+                "__wasip1_vfs_wasi_thread_spawn___self".get_fid(&module.exports)?;
 
-        let self_thread_spawn_fn_id =
-            "__wasip1_vfs_wasi_thread_spawn___self".get_fid(&module.exports)?;
-
-        module
-            .exports
-            .erase_with(self_thread_spawn_fn_id, ctx.unstable_print_debug)?;
-
-        use walrus::ValType::I32;
-        let real_thread_spawn_fn_id = module
-            .add_func(&[I32], &[I32], |builder, args| {
-                let mut body = builder.func_body();
-                body.call(branch_fid)
-                    .if_else(
-                        I32,
-                        |then| {
-                            then.local_get(args[0]) // pass the argument to thread-spawn
-                                .call(real_thread_spawn_fn_id);
-                        },
-                        |else_| {
-                            else_
-                                .local_get(args[0]) // pass the argument to thread-spawn
-                                .call(self_thread_spawn_fn_id); // call thread-spawn
-                        },
-                    )
-                    .return_();
-
-                Ok(())
-            })
-            .wrap_err("Failed to add real thread spawn function")?;
-
-        module
-            .renew_call_fn(normal_thread_spawn_fn_id, real_thread_spawn_fn_id)
-            .wrap_err("Failed to rewrite thread-spawn call")?;
-
-        let exporting_thread_starter_id = "wasi_thread_start".get_fid(&module.exports)?;
-
-        module
-            .connect_func_alt(
-                (NAMESPACE, "__wasip1_vfs___self_wasi_thread_start"),
-                exporting_thread_starter_id,
-                ctx.unstable_print_debug,
-            )
-            .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
-
-        module.exports.erase_with(
-            "__wasip1_vfs___self_wasi_thread_start_anchor",
-            ctx.unstable_print_debug,
-        )?;
-
-        if ctx.unstable_print_debug {
             module
                 .exports
-                .add("real_thread_spawn_fn", real_thread_spawn_fn_id);
+                .erase_with(self_thread_spawn_fn_id, ctx.unstable_print_debug)?;
+
+            use walrus::ValType::I32;
+            let real_thread_spawn_fn_id = module
+                .add_func(&[I32], &[I32], |builder, args| {
+                    let mut body = builder.func_body();
+                    body.call(branch_fid)
+                        .if_else(
+                            I32,
+                            |then| {
+                                then.local_get(args[0]) // pass the argument to thread-spawn
+                                    .call(real_thread_spawn_fn_id);
+                            },
+                            |else_| {
+                                else_
+                                    .local_get(args[0]) // pass the argument to thread-spawn
+                                    .call(self_thread_spawn_fn_id); // call thread-spawn
+                            },
+                        )
+                        .return_();
+
+                    Ok(())
+                })
+                .wrap_err("Failed to add real thread spawn function")?;
+
+            module
+                .renew_call_fn(normal_thread_spawn_fn_id, real_thread_spawn_fn_id)
+                .wrap_err("Failed to rewrite thread-spawn call")?;
+
+            let exporting_thread_starter_id = "wasi_thread_start".get_fid(&module.exports)?;
+
+            module
+                .connect_func_alt(
+                    (NAMESPACE, "__wasip1_vfs___self_wasi_thread_start"),
+                    exporting_thread_starter_id,
+                    ctx.unstable_print_debug,
+                )
+                .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
+
+            module.exports.erase_with(
+                "__wasip1_vfs___self_wasi_thread_start_anchor",
+                ctx.unstable_print_debug,
+            )?;
+
+            if ctx.unstable_print_debug {
+                module
+                    .exports
+                    .add("real_thread_spawn_fn", real_thread_spawn_fn_id);
+            }
+
+            // __wasip1_vfs_self_wasi_thread_start
+            module
+                .renew_call_fn(
+                    (NAMESPACE, "__wasip1_vfs_wasi_thread_start_entry"),
+                    exporting_thread_starter_id,
+                )
+                .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
+
+            module
+                .exports
+                .erase_with(branch_fid, ctx.unstable_print_debug)?;
+        } else {
+            log::warn!("No normal thread-spawn found, why are you not using threads?");
+
+            let component_name = gen_component_name(namespace, name);
+
+            let real_thread_spawn_fn_id = (root, &component_name).get_fid(&module.imports)?;
+
+            let branch_fid = "__wasip1_vfs_is_root_spawn".get_fid(&module.exports)?;
+
+            if let Some(normal_thread_spawn_fn_id) =
+                ("wasi", "thread-spawn").get_fid(&module.imports).ok()
+            {
+                println!("Found existing thread-spawn, replacing it");
+            } else {
+                println!("No existing thread-spawn, adding it");
+            }
         }
-
-        // __wasip1_vfs_self_wasi_thread_start
-        module
-            .renew_call_fn(
-                (NAMESPACE, "__wasip1_vfs_wasi_thread_start_entry"),
-                exporting_thread_starter_id,
-            )
-            .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
-
-        module
-            .exports
-            .erase_with(branch_fid, ctx.unstable_print_debug)?;
 
         Ok(())
     }
