@@ -94,6 +94,8 @@ pub(crate) trait WalrusUtilImport: Debug {
 
         Ok(())
     }
+
+    fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()>;
 }
 
 pub(crate) trait WalrusUtilExport: Debug {
@@ -432,6 +434,25 @@ impl WalrusUtilImport for ModuleImports {
         let import_id = self.get_imported_func(fid).unwrap().id();
 
         Ok(self.get_mut(import_id))
+    }
+
+    fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()> {
+        let fid = as_fn.get_fid(self)?;
+        let import_id = self
+            .iter()
+            .find(|f| {
+                if let walrus::ImportKind::Function(f) = f.kind {
+                    f == fid
+                } else {
+                    false
+                }
+            })
+            .map(|f| f.id())
+            .ok_or_else(|| eyre::eyre!("Import not found: {}", as_fn.as_str()))?;
+
+        self.delete(import_id);
+
+        Ok(())
     }
 }
 

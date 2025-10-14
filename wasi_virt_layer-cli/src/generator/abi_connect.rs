@@ -7,6 +7,7 @@ use crate::{
 /// Connect Wasip1 ABI
 /// If an import exists, add the corresponding export.
 /// If it does not exist, remove that export if it exists.
+/// Require before PatchComponent
 #[derive(Debug, Default)]
 pub struct ConnectWasip1ABI;
 
@@ -127,6 +128,51 @@ impl Generator for ConnectWasip1ThreadsABI {
                 )?;
             }
         }
+        Ok(())
+    }
+}
+
+/// Require before PatchComponent
+/// Require after ConnectWasip1ABI
+#[derive(Debug, Default)]
+pub struct NonRecursiveWasiABI;
+
+impl Generator for NonRecursiveWasiABI {
+    fn pre_vfs(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &super::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
+            if let Some(fid) = ("non_recursive_wasi_snapshot_preview1", import)
+                .get_fid(&module.imports)
+                .ok()
+            {
+                // If it already exists, make it possible to call it.
+                if let Some(import_id) = ("wasi_snapshot_preview1", import)
+                    .get_fid(&module.imports)
+                    .ok()
+                {
+                    module.renew_call_fn(fid, import_id)?;
+                } else {
+                    let import_id = module.imports.get_imported_func(fid).unwrap().id();
+                    let import = module.imports.get_mut(import_id);
+                    import.module = "wasi_snapshot_preview1".to_string();
+                }
+            }
+        }
+
+        module
+            .imports
+            .iter()
+            .filter(|import| import.module == "non_recursive_wasi_snapshot_preview1")
+            .map(|import| &import.name)
+            .for_each(|name| {
+                log::warn!(
+                    "Non-recursive Wasip1 ABI import exists: {name}, but this is not verified."
+                );
+            });
+
         Ok(())
     }
 }

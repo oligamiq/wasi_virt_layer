@@ -40,6 +40,7 @@ macro_rules! add_generator {
             memory::MemoryTrap,
             abi_connect::ConnectWasip1ABI,
             abi_connect::ConnectWasip1ThreadsABI,
+            abi_connect::NonRecursiveWasiABI,
             debug::DebugBase,
             debug::DebugCallMemoryGrow,
             debug::DebugExportVFSFunctions,

@@ -17,7 +17,7 @@ pub mod is_valid {
         })
         .map(|import| {
             let name = import.name.strip_prefix("__wasip1_vfs_")
-                .wrap_err("This import is not a valid this library custom import.")?;
+                .wrap_err_with(|| eyre::eyre!("This import is not a valid this library custom import. {name}", name = import.name))?;
             wasm_names.iter().find_map(|n| {
                 name.strip_prefix(n.as_ref())?.strip_prefix("_")?.parse().ok()
             })

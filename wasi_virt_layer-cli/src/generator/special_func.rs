@@ -4,7 +4,10 @@ use walrus::*;
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
-    util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
+    util::{
+        NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport as _, WalrusUtilFuncs as _,
+        WalrusUtilImport as _, WalrusUtilModule as _,
+    },
 };
 
 /// To enable the reset function,
@@ -218,9 +221,16 @@ impl Generator for ResetFunc {
             let reset_on_thread_once =
                 (NAMESPACE, "__wasip1_vfs_reset_on_thread_once").get_fid(&module.imports)?;
 
-            module.renew_call_fn(reset_on_thread_once, initializers)?;
+            module.imports.erase(reset_on_thread_once)?;
 
-            reset_on_thread
+            module.exports.erase(reset_on_thread)?;
+            module.funcs.delete(reset_on_thread);
+
+            // module.renew_call_fn(reset_on_thread_once, initializers)?;
+
+            // reset_on_thread
+
+            initializers
         } else {
             initializers
         };

@@ -324,3 +324,56 @@ impl InitOnce {
         }
     }
 }
+
+/// Typically, WASI ABI calls are made using plug!.
+/// However, there may be cases where you want to call the ABI directly from within plug!.
+/// Doing so would result in recursion.
+/// To address this, call the function through this macro.
+/// When calling a function through this macro,
+/// it becomes a proper WASI ABI call after plug is connected.
+/// This allows you to call the ABI without causing recursion.
+///
+/// Note: This ABI call is low-level. Please verify the ABI thoroughly.
+///
+/// ```rust
+/// unsafe fn fd_read(
+///     fd: wasip1::Fd,
+///     iovs: wasip1::IovecArray<'_>,
+/// ) -> Result<wasip1::Size, wasip1::Errno> {
+///     let mut rp0 = core::mem::MaybeUninit::<wasip1::Size>::uninit();
+
+///     let fd = fd as i32;
+///     let iovs_ptr = iovs.as_ptr() as i32;
+///     let iovs_len = iovs.len() as i32;
+///     let rp0_ptr = rp0.as_mut_ptr() as i32;
+
+///     let ret = crate::non_recursive_wasi_snapshot_preview1!(
+///         fd_read(
+///             fd: i32,
+///             iovs_ptr: i32,
+///             iovs_len: i32,
+///             rp0_ptr: i32
+///         ) -> i32
+///     );
+
+///     match ret {
+///         0 => Ok(unsafe { core::ptr::read(rp0.as_mut_ptr() as i32 as *const wasip1::Size) }),
+///         _ => Err(unsafe { core::mem::transmute::<u16, wasip1::Errno>(ret as u16) }),
+///     }
+/// }
+/// ```
+#[macro_export]
+macro_rules! non_recursive_wasi_snapshot_preview1 {
+    (
+        $name:ident ($($arg:ident : $arg_ty:ty),* $(,)?) -> $ret:ty
+    ) => {
+        {
+            #[link(wasm_import_module = "non_recursive_wasi_snapshot_preview1")]
+            unsafe extern "C" {
+                pub fn $name($($arg: $arg_ty),*) -> $ret;
+            }
+
+            unsafe { $name($($arg),*) }
+        }
+    };
+}

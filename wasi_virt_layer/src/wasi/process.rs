@@ -14,8 +14,9 @@ impl ProcessExit for DefaultProcess {
         }
         #[cfg(not(feature = "std"))]
         {
-            unsafe { wasip1::proc_exit(code) };
-            unreachable!();
+            use crate::transporter::Wasip1Transporter;
+
+            Wasip1Transporter::proc_exit(code as u32)
         }
     }
 }

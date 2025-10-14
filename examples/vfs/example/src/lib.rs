@@ -50,7 +50,7 @@ impl Guest for Hello {
 
 export!(Hello);
 
-plug_process!(test_wasm);
+plug_process!(test_wasm, self);
 
 struct VirtualEnvState {
     environ: Vec<String>,
