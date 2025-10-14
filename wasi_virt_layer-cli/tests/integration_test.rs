@@ -11,6 +11,10 @@ use utils::*;
 fn build_all() -> color_eyre::Result<()> {
     color_eyre::install()?;
 
+    // todo!();
+    // check no alloc
+    // check no std
+
     build_out_dir().wrap_err("Failed to build with out-dir")?;
     println!("Out dir build done.");
     build_normal(false).wrap_err("Failed to build normal multi")?;

@@ -16,7 +16,7 @@ impl ProcessExit for DefaultProcess {
         {
             use crate::transporter::Wasip1Transporter;
 
-            Wasip1Transporter::proc_exit(code as u32)
+            Wasip1Transporter::process_abort(code as u32);
         }
     }
 }

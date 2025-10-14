@@ -8,7 +8,7 @@ default = ["alloc", "std"]
 alloc = []
 multi_memory = ["alloc"]
 std = ["alloc", "wasip1/std"]
-threads = ["alloc", "dep:parking_lot", "dep:dashmap"]
+threads = ["std", "dep:parking_lot", "dep:dashmap"]
 # this is unstable
 unstable_print_debug = ["std", "dep:backtrace"]
 

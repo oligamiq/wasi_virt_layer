@@ -4,7 +4,7 @@ use strum::VariantNames;
 use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, GeneratorCtx, ModuleExternal},
-    util::{ResultUtil as _, WalrusUtilModule},
+    util::{ResultUtil as _, WalrusFID as _, WalrusUtilModule},
 };
 
 #[derive(Debug, Default)]
@@ -24,7 +24,7 @@ impl Generator for CheckUseLibrary {
             })
         {
             eyre::bail!(
-                r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer;"#
+                r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer; or, it does not import a crate."#
             );
         }
 
@@ -186,6 +186,25 @@ impl Generator for IsRustWasm {
             log::error!(
                 "This file: {} is not built by rust toolchain, or you forget to export _start or main_void function. If you use `cdylib` or `rlib`, please change to `bin` or `lib`.\nIf you use other language, create an issue.",
                 external.name
+            );
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct CheckUseWasiVirtLayer;
+
+impl Generator for CheckUseWasiVirtLayer {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, _: &GeneratorCtx) -> eyre::Result<()> {
+        if "__wasip1_vfs_flag_vfs_memory"
+            .get_fid(&module.exports)
+            .ok()
+            .is_none()
+        {
+            eyre::bail!(
+                r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer;"#
             );
         }
 

@@ -48,6 +48,8 @@ macro_rules! add_generator {
             debug::DebugCallFunctionMain,
             patch_component::PatchComponent,
         );
+
+        $runner.checker(check::CheckUseWasiVirtLayer);
     }};
 }
 

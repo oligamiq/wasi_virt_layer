@@ -485,6 +485,7 @@ impl ModuleExternal {
 
 #[derive(Debug)]
 pub struct GeneratorRunner {
+    pub checkers: Vec<Box<dyn Generator + 'static>>,
     pub generators: Vec<Box<dyn Generator + 'static>>,
     pub ctx: GeneratorCtx,
     pub path: WasmPath,
@@ -635,6 +636,7 @@ impl GeneratorRunner {
             .collect::<HashMap<_, _>>();
 
         Ok(Self {
+            checkers: Vec::new(),
             generators: Vec::new(),
             ctx: GeneratorCtx {
                 vfs_name,
@@ -663,8 +665,8 @@ impl GeneratorRunner {
         self.generators.push(Box::new(generator));
     }
 
-    pub fn insert_generator<G: Generator + 'static>(&mut self, index: usize, generator: G) {
-        self.generators.insert(index, Box::new(generator));
+    pub fn checker(&mut self, checker: impl Generator + 'static) {
+        self.checkers.push(Box::new(checker));
     }
 
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
@@ -757,6 +759,10 @@ impl GeneratorRunner {
         println!("Adjusting VFS Wasm...");
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
+                self.checkers
+                    .pre_vfs(module, &self.ctx)
+                    .wrap_err("Failed to run checkers in pre_vfs")?;
+
                 mem_id_visitor
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
@@ -921,6 +927,10 @@ impl ComponentRunner {
             path,
             lstring_holder: None,
         }
+    }
+
+    pub fn checker(&mut self, checker: impl Generator + 'static) {
+        self.generators.push(Box::new(checker));
     }
 
     pub fn with_generators(path: WasmPath, generators: Vec<Box<dyn Generator + 'static>>) -> Self {

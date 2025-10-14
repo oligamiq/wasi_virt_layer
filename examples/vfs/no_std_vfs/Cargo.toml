@@ -1,0 +1,15 @@
+[package]
+name = "no_std_vfs"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]

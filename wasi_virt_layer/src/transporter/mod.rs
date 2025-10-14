@@ -66,7 +66,7 @@ unsafe fn non_recursive_proc_exit(rval: wasip1::Exitcode) -> ! {
         proc_exit(rval: i32) -> ()
     );
 
-    unreachable!("proc_exit should not return");
+    unreachable!();
 }
 
 impl Wasip1Transporter {
@@ -191,7 +191,7 @@ impl Wasip1Transporter {
     }
 
     #[allow(unused_variables)]
-    pub fn process_abort(rval: wasip1::Exitcode) {
+    pub fn process_abort(rval: wasip1::Exitcode) -> ! {
         #[cfg(not(target_os = "wasi"))]
         unimplemented!("this is not supported on this architecture");
 

@@ -143,11 +143,15 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
     }
 
     fn has_feature(item: &Item, feature: &str) -> bool {
+        if item.is_none() {
+            return false;
+        }
         match item {
-            Item::Table(table) => table["features"]
-                .as_array()
-                .map(|arr| arr.iter().any(|s| s.as_str() == Some(feature)))
-                .unwrap_or(false),
+            Item::Table(table) => table.get("features").map_or(false, |v| {
+                v.as_array()
+                    .map(|arr| arr.iter().any(|s| s.as_str() == Some(feature)))
+                    .unwrap_or(false)
+            }),
             _ => false,
         }
     }
@@ -182,11 +186,22 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
         let feature = feature.ok_or_else(|| eyre::eyre!("Feature is not set"))?;
 
         let doc = self.read_manifest::<Document<String>>()?;
-        let crate_setting = &doc["dependencies"][crate_name];
 
-        if matches!(crate_setting, Item::None) {
+        if doc
+            .get("dependencies")
+            .map_or(true, |inner| inner.is_none())
+        {
+            eyre::bail!("No dependencies found in manifest");
+        }
+
+        if doc["dependencies"]
+            .get(crate_name)
+            .map_or(true, |inner| inner.is_none())
+        {
             eyre::bail!("Crate `{crate_name}` not found in dependencies");
         }
+
+        let crate_setting = &doc["dependencies"][crate_name];
 
         // check normal crate setting
         Ok(if Self::has_feature(crate_setting, feature) {
