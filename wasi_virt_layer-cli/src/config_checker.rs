@@ -152,6 +152,13 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
                     .map(|arr| arr.iter().any(|s| s.as_str() == Some(feature)))
                     .unwrap_or(false)
             }),
+            Item::Value(toml_edit::Value::InlineTable(inline)) => {
+                inline.get("features").map_or(false, |v| {
+                    v.as_array()
+                        .map(|arr| arr.iter().any(|s| s.as_str() == Some(feature)))
+                        .unwrap_or(false)
+                })
+            }
             _ => false,
         }
     }
@@ -202,6 +209,8 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
         }
 
         let crate_setting = &doc["dependencies"][crate_name];
+
+        println!("crate_setting: {crate_setting}");
 
         // check normal crate setting
         Ok(if Self::has_feature(crate_setting, feature) {
