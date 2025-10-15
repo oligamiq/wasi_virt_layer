@@ -7,9 +7,12 @@ pub mod utils;
 use eyre::Context;
 use utils::*;
 
+static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 #[test]
-fn build_all() -> color_eyre::Result<()> {
-    color_eyre::install()?;
+fn test_build_out_dir() -> color_eyre::Result<()> {
+    let _lock = MUTEX.lock().unwrap();
+    color_eyre::install().ok();
 
     // todo!();
     // check no alloc
@@ -17,14 +20,38 @@ fn build_all() -> color_eyre::Result<()> {
 
     build_out_dir().wrap_err("Failed to build with out-dir")?;
     println!("Out dir build done.");
+
+    core::mem::drop(_lock);
+
+    Ok(())
+}
+
+#[test]
+fn test_build_multi() -> color_eyre::Result<()> {
+    let _lock = MUTEX.lock().unwrap();
+    color_eyre::install().ok();
+
     build_normal(false).wrap_err("Failed to build normal multi")?;
     println!("Normal multi build done.");
     build_threads(false).wrap_err("Failed to build threads multi")?;
     println!("Threads multi build done.");
+
+    core::mem::drop(_lock);
+
+    Ok(())
+}
+
+#[test]
+fn test_build_single() -> color_eyre::Result<()> {
+    let _lock = MUTEX.lock().unwrap();
+    color_eyre::install().ok();
+
     build_normal(true).wrap_err("Failed to build normal single")?;
     println!("Normal single build done.");
     build_threads(true).wrap_err("Failed to build threads single")?;
     println!("Threads single build done.");
+
+    core::mem::drop(_lock);
 
     Ok(())
 }

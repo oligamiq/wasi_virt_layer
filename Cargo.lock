@@ -969,6 +969,14 @@ name = "no_std_vfs"
 version = "0.1.0"
 
 [[package]]
+name = "no_thread_with_thread_feature_vfs"
+version = "0.1.0"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"

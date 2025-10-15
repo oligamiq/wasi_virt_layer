@@ -13,3 +13,8 @@ homepage.workspace = true
 readme.workspace = true
 
 [dependencies]
+wasi_virt_layer = { workspace = true, features = ["threads"] }
+const_struct = "0.6.2"
+
+[lib]
+crate-type = ["cdylib"]
