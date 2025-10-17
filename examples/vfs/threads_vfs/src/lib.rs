@@ -32,8 +32,8 @@ impl Guest for Starter {
     }
 
     fn main() {
-        // test_threads::reset();
-        // test_threads::_start();
+        test_threads::_reset();
+        test_threads::_start();
         // println!("Starting _main...");
         test_threads::_main();
         // println!("_main done.");
