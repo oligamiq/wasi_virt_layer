@@ -99,7 +99,9 @@ pub(crate) trait WalrusUtilImport: Debug {
 }
 
 pub(crate) trait WalrusUtilExport: Debug {
+    /// As it deletes based on the fid, it may involve functions that export the same function.
     fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()>;
+    /// As it deletes based on the fid, it may involve functions that export the same function.
     fn erase_with<A>(&mut self, as_fn: impl WalrusFID<A>, debug: bool) -> eyre::Result<()> {
         if !debug { self.erase(as_fn) } else { Ok(()) }
     }
@@ -196,6 +198,12 @@ pub(crate) trait WalrusUtilModule {
         &mut self,
         import: impl WalrusFID<A>,
         export: impl WalrusFID<B>,
+    ) -> eyre::Result<()>;
+
+    fn connect_func_alt_with_remove_export<A>(
+        &mut self,
+        import: impl WalrusFID<A>,
+        export: impl AsRef<str>,
         is_debug: bool,
     ) -> eyre::Result<()>;
 
@@ -460,21 +468,15 @@ impl WalrusUtilExport for ModuleExports {
     fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()> {
         let fid = as_fn.get_fid(self)?;
 
-        let mut export_id = self
+        let export_id = self
             .iter()
             .filter(|f| matches!(f.item, walrus::ExportItem::Function(f) if f == fid))
             .map(|f| f.id())
-            .collect::<Vec<_>>()
-            .into_iter();
+            .exactly_one()
+            .to_eyre()
+            .wrap_err("Expected exactly one export for function")?;
 
-        let minimum = export_id
-            .next()
-            .ok_or_else(|| eyre::eyre!("Export not found: {}", as_fn.as_str()))?;
-        self.delete(minimum);
-
-        for eid in export_id {
-            self.delete(eid);
-        }
+        self.delete(export_id);
 
         Ok(())
     }
@@ -1381,7 +1383,6 @@ impl WalrusUtilModule for walrus::Module {
         &mut self,
         import: impl WalrusFID<A>,
         export: impl WalrusFID<B>,
-        is_debug: bool,
     ) -> eyre::Result<()> {
         let err_msg = || {
             format!(
@@ -1398,8 +1399,6 @@ impl WalrusUtilModule for walrus::Module {
         self.renew_call_fn(import, export)
             .wrap_err("Failed to renew call function")
             .wrap_err_with(err_msg)?;
-
-        self.exports.erase_with(export, is_debug)?;
 
         Ok(())
     }
@@ -1767,6 +1766,20 @@ impl WalrusUtilModule for walrus::Module {
         self.exports.delete(export.id());
 
         Ok(info)
+    }
+
+    fn connect_func_alt_with_remove_export<A>(
+        &mut self,
+        import: impl WalrusFID<A>,
+        export: impl AsRef<str>,
+        is_debug: bool,
+    ) -> eyre::Result<()> {
+        self.connect_func_alt(import, export.as_ref())?;
+        if !is_debug {
+            self.exports.remove(export.as_ref()).unwrap();
+        }
+
+        Ok(())
     }
 }
 

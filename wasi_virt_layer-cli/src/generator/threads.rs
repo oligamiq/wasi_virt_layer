@@ -81,12 +81,13 @@ impl Generator for ThreadsSpawn {
                 .renew_call_fn(normal_thread_spawn_fn_id, real_thread_spawn_fn_id)
                 .wrap_err("Failed to rewrite thread-spawn call")?;
 
-            let exporting_thread_starter_id = "wasi_thread_start".get_fid(&module.exports)?;
+            let exporting_thread_starter_name = "wasi_thread_start".to_string();
+            let exporting_thread_starter_id = exporting_thread_starter_name.get_fid(&module.exports)?;
 
             module
-                .connect_func_alt(
+                .connect_func_alt_with_remove_export(
                     (NAMESPACE, "__wasip1_vfs___self_wasi_thread_start"),
-                    exporting_thread_starter_id,
+                    exporting_thread_starter_name,
                     ctx.unstable_print_debug,
                 )
                 .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;

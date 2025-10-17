@@ -20,9 +20,8 @@ impl Generator for ConnectWasip1ABI {
         ctx: &super::GeneratorCtx,
     ) -> eyre::Result<()> {
         for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-            let export = format!("__wasip1_vfs___self_{import}")
-                .get_fid(&module.exports)
-                .ok();
+            let export_name = format!("__wasip1_vfs___self_{import}");
+            let export = export_name.get_fid(&module.exports).ok();
 
             if let Some(import_id) = (
                 // CORE_MODULE_ROOT,
@@ -33,17 +32,18 @@ impl Generator for ConnectWasip1ABI {
                 .get_fid(&module.imports)
                 .ok()
             {
-                if let Some(export) = export {
-                    module.connect_func_alt(import_id, export, ctx.unstable_print_debug)?;
+                if let Some(_) = export {
+                    module.connect_func_alt_with_remove_export(
+                        import_id,
+                        export_name,
+                        ctx.unstable_print_debug,
+                    )?;
                 } else {
                     log::warn!("No export found for Wasip1 ABI import self: {import}");
                 }
             } else {
-                if let Some(export) = export {
-                    module
-                        .exports
-                        .erase_with(export, ctx.unstable_print_debug)
-                        .ok();
+                if let Some(_) = export {
+                    module.exports.remove(export_name).unwrap();
                 }
             }
         }
@@ -83,7 +83,8 @@ impl Generator for ConnectWasip1ABI {
                     .get_fid(&module.imports)
                     .ok()
                 {
-                    module.connect_func_alt(import_id, &export_name, ctx.unstable_print_debug)?;
+                    unreachable!();
+                    // module.connect_func_alt(import_id, &export_name, ctx.unstable_print_debug)?;
                 } else {
                     module
                         .exports
@@ -112,7 +113,7 @@ impl Generator for ConnectWasip1ThreadsABI {
                     .ok()
                     .is_some()
                 {
-                    module.connect_func_alt(
+                    module.connect_func_alt_with_remove_export(
                         (
                             "wasip1-vfs",
                             &format!("__wasip1_vfs_{wasm}_wasi_thread_start"),
@@ -126,7 +127,7 @@ impl Generator for ConnectWasip1ThreadsABI {
                         ctx.unstable_print_debug,
                     )?;
 
-                    module.connect_func_alt(
+                    module.connect_func_alt_with_remove_export(
                         ("wasi", &format!("__wasip1_vfs_wasi_thread_spawn_{wasm}")),
                         &format!("__wasip1_vfs_wasi_thread_spawn_{wasm}"),
                         ctx.unstable_print_debug,

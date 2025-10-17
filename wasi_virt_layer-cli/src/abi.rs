@@ -45,13 +45,13 @@ pub mod is_valid {
         })
         .count()
         > 0
-    {
-        Err(eyre::eyre!(
-            "Extra imports remain. This is not allowed in a component"
-        ))
-    } else {
-        Ok(())
-    }
+        {
+            Err(eyre::eyre!(
+                "Extra imports remain. This is not allowed in a component"
+            ))
+        } else {
+            Ok(())
+        }
     }
 
     #[derive(

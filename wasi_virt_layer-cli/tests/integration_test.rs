@@ -11,6 +11,22 @@ use wasi_virt_layer_cli::util;
 
 static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+fn lock() -> std::sync::MutexGuard<'static, ()> {
+    let mut count = 0;
+    loop {
+        if let Ok(guard) = MUTEX.lock() {
+            return guard;
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(100));
+        count += 1;
+
+        if count % 300 == 0 {
+            println!("Waiting for lock...");
+        }
+    }
+}
+
 // alloc
 // multi_memory
 // std
@@ -24,7 +40,7 @@ static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
 fn test_build_out_dir() -> color_eyre::Result<()> {
-    let _lock = MUTEX.lock().unwrap();
+    let _lock = lock();
     color_eyre::install().ok();
 
     build_out_dir().wrap_err("Failed to build with out-dir")?;
@@ -37,7 +53,7 @@ fn test_build_out_dir() -> color_eyre::Result<()> {
 
 #[test]
 fn test_build_multi() -> color_eyre::Result<()> {
-    let _lock = MUTEX.lock().unwrap();
+    let _lock = lock();
     color_eyre::install().ok();
 
     build_normal(false).wrap_err("Failed to build normal multi")?;
@@ -52,7 +68,7 @@ fn test_build_multi() -> color_eyre::Result<()> {
 
 #[test]
 fn test_build_single() -> color_eyre::Result<()> {
-    let _lock = MUTEX.lock().unwrap();
+    let _lock = lock();
     color_eyre::install().ok();
 
     build_normal(true).wrap_err("Failed to build normal single")?;
@@ -125,8 +141,12 @@ fn build_threads(single: bool) -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn set_features<T>(features: &[&str], fn_: impl FnOnce() -> T) -> color_eyre::Result<T> {
-    let manifest_path = Utf8PathBuf::from(EXAMPLE_DIR.to_owned() + "./vfs/no_std_vfs/Cargo.toml");
+fn set_features_inner<T>(
+    features: &[&str],
+    p: &str,
+    fn_: impl FnOnce() -> T,
+) -> color_eyre::Result<T> {
+    let manifest_path = Utf8PathBuf::from(EXAMPLE_DIR.to_owned() + "./vfs/" + p + "/Cargo.toml");
     let root_manifest_path = Utf8PathBuf::from(EXAMPLE_DIR.to_owned() + "./../Cargo.toml");
     let original = std::fs::read_to_string(&manifest_path)
         .wrap_err("Failed to read Cargo.toml for feature checking")?;
@@ -166,7 +186,7 @@ impl core::ops::Drop for Resetter<'_> {
 
 #[test]
 fn all_features_without_threads() -> color_eyre::Result<()> {
-    let _lock = MUTEX.lock().unwrap();
+    let _lock = lock();
     color_eyre::install().ok();
 
     let run = || -> color_eyre::Result<()> {
@@ -181,34 +201,32 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
         Ok(())
     };
 
-    set_features(&[], run)
-        .flatten()
-        .wrap_err("Failed to run without features")?;
-    set_features(&["alloc"], run)
-        .flatten()
-        .wrap_err("Failed to run with alloc")?;
-    set_features(&["std"], run)
-        .flatten()
-        .wrap_err("Failed to run with std")?;
-    set_features(&["multi_memory"], run)
-        .flatten()
-        .wrap_err("Failed to run with multi_memory")?;
+    fn set_features(
+        features: &[&str],
+        run: impl FnOnce() -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        set_features_inner(features, "no_std_vfs", run).flatten()
+    }
+
+    set_features(&[], run).wrap_err("Failed to run without features")?;
+    set_features(&["alloc"], run).wrap_err("Failed to run with alloc")?;
+    set_features(&["std"], run).wrap_err("Failed to run with std")?;
+    set_features(&["multi_memory"], run).wrap_err("Failed to run with multi_memory")?;
     set_features(&["unstable_print_debug"], run)
-        .flatten()
         .wrap_err("Failed to run with unstable_print_debug")?;
     set_features(&["multi_memory", "std"], run)
-        .flatten()
         .wrap_err("Failed to run with multi_memory + std")?;
     set_features(&["multi_memory", "unstable_print_debug"], run)
-        .flatten()
         .wrap_err("Failed to run with multi_memory + unstable_print_debug")?;
+
+    core::mem::drop(_lock);
 
     Ok(())
 }
 
 #[test]
 fn all_features_with_threads() -> color_eyre::Result<()> {
-    let _lock = MUTEX.lock().unwrap();
+    let _lock = lock();
     color_eyre::install().ok();
 
     let run = || -> color_eyre::Result<()> {
@@ -222,24 +240,30 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
 
         Ok(())
     };
-    set_features(&["threads"], run)
-        .flatten()
-        .wrap_err("Failed to run without features")?;
+
+    fn set_features(
+        features: &[&str],
+        run: impl FnOnce() -> color_eyre::Result<()>,
+    ) -> color_eyre::Result<()> {
+        set_features_inner(features, "threads_vfs", run).flatten()
+    }
+
+    set_features(&["threads"], run).wrap_err("Failed to run without features")?;
     set_features(&["multi_memory", "threads"], run)
-        .flatten()
         .wrap_err("Failed to run with multi_memory + threads")?;
     set_features(&["threads", "unstable_print_debug"], run)
-        .flatten()
         .wrap_err("Failed to run with threads + unstable_print_debug")?;
     set_features(&["multi_memory", "threads", "unstable_print_debug"], run)
-        .flatten()
         .wrap_err("Failed to run with multi_memory + threads + unstable_print_debug")?;
+
+    core::mem::drop(_lock);
+
     Ok(())
 }
 
 #[test]
 fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
-    let _lock = MUTEX.lock().unwrap();
+    let _lock = lock();
     color_eyre::install().ok();
 
     let fn_ = |m: bool| -> color_eyre::Result<()> {

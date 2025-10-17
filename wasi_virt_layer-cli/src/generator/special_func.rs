@@ -348,8 +348,8 @@ impl Generator for MainVoidFunc {
                 .get_fid(&module.imports)
                 .ok()
             {
-                let main_void_func_id =
-                    format!("__wasip1_vfs_{wasm}___main_void").get_fid(&module.exports)?;
+                let main_void_func_name = format!("__wasip1_vfs_{wasm}___main_void");
+                let main_void_func_id = main_void_func_name.get_fid(&module.exports)?;
                 let start_fn_id = ctx.start_func_id.as_ref().unwrap()[wasm];
 
                 let fake_fn_id = module.add_func(&[], &[walrus::ValType::I32], |func, _| {
@@ -413,11 +413,7 @@ impl Generator for MainVoidFunc {
                             // but since the main_void function is only called inside start_fn and through export,
                             // it is acceptable to modify it in this function.
                             module
-                                .connect_func_alt(
-                                    main_void_func_id,
-                                    fake_fn_id,
-                                    ctx.unstable_print_debug,
-                                )
+                                .renew_call_fn(main_void_func_id, fake_fn_id)
                                 .wrap_err("Failed to rewrite main_void call in start")?;
                         }
                     }
@@ -443,7 +439,11 @@ impl Generator for MainVoidFunc {
                     );
                 }
 
-                module.connect_func_alt(fid, main_void_func_id, ctx.unstable_print_debug)?;
+                module.connect_func_alt_with_remove_export(
+                    fid,
+                    main_void_func_name,
+                    ctx.unstable_print_debug,
+                )?;
             } else {
                 log::warn!(
                     "No main_void found for {wasm}. You can use __wasip1_vfs_{wasm}___main_void directly"
