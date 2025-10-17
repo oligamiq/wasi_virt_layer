@@ -460,19 +460,21 @@ impl WalrusUtilExport for ModuleExports {
     fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()> {
         let fid = as_fn.get_fid(self)?;
 
-        let export_id = self
+        let mut export_id = self
             .iter()
-            .find(|f| {
-                if let walrus::ExportItem::Function(f) = f.item {
-                    f == fid
-                } else {
-                    false
-                }
-            })
+            .filter(|f| matches!(f.item, walrus::ExportItem::Function(f) if f == fid))
             .map(|f| f.id())
-            .ok_or_else(|| eyre::eyre!("Export not found: {}", as_fn.as_str()))?;
+            .collect::<Vec<_>>()
+            .into_iter();
 
-        self.delete(export_id);
+        let minimum = export_id
+            .next()
+            .ok_or_else(|| eyre::eyre!("Export not found: {}", as_fn.as_str()))?;
+        self.delete(minimum);
+
+        for eid in export_id {
+            self.delete(eid);
+        }
 
         Ok(())
     }

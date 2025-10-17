@@ -120,15 +120,26 @@ impl Generator for ThreadsSpawn {
 
             let real_thread_spawn_fn_id = (root, &component_name).get_fid(&module.imports)?;
 
-            let branch_fid = "__wasip1_vfs_is_root_spawn".get_fid(&module.exports)?;
+            module
+                .exports
+                .erase_with("__wasip1_vfs_is_root_spawn", ctx.unstable_print_debug)?;
 
-            if let Some(normal_thread_spawn_fn_id) =
-                ("wasi", "thread-spawn").get_fid(&module.imports).ok()
-            {
-                println!("Found existing thread-spawn, replacing it");
-            } else {
-                println!("No existing thread-spawn, adding it");
-            }
+            let fake_start = module
+                .add_func(
+                    &[walrus::ValType::I32, walrus::ValType::I32],
+                    &[],
+                    |_, _| Ok(()),
+                )
+                .wrap_err("Failed to add fake thread spawn function")?;
+
+            module
+                .renew_call_fn(
+                    (NAMESPACE, "__wasip1_vfs_wasi_thread_start_entry"),
+                    fake_start,
+                )
+                .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
+
+            println!("unstable_print_debug: {}", ctx.unstable_print_debug);
         }
 
         Ok(())

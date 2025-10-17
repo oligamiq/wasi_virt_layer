@@ -236,3 +236,36 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
         .wrap_err("Failed to run with multi_memory + threads + unstable_print_debug")?;
     Ok(())
 }
+
+#[test]
+fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
+    let _lock = MUTEX.lock().unwrap();
+    color_eyre::install().ok();
+
+    let fn_ = |m: bool| -> color_eyre::Result<()> {
+        Command::cargo_bin("wasi_virt_layer")?
+            .args([
+                "-p",
+                "no_thread_with_thread_feature_vfs",
+                "test_wasm",
+                "-t",
+                if m { "multi" } else { "single" },
+                "--threads",
+                "true",
+            ])
+            .current_dir(THIS_FOLDER)
+            .assert()
+            .try_success()?;
+
+        utils::run_thread(&format!("{THIS_FOLDER}/dist"))?;
+
+        Ok(())
+    };
+
+    fn_(false).wrap_err("Failed to run no_thread_with_thread_feature_vfs single")?;
+    fn_(true).wrap_err("Failed to run no_thread_with_thread_feature_vfs multi")?;
+
+    core::mem::drop(_lock);
+
+    Ok(())
+}

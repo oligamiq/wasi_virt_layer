@@ -1,10 +1,25 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{
-    self, ConstFiles,
     file::{VFSConstNormalFiles, WasiConstFile},
-    import_wasm, plug_env, plug_fs, plug_process, plug_thread,
-    prelude::VirtualEnvConstState,
+    prelude::*,
 };
+
+wit_bindgen::generate!({
+    // the name of the world in the `*.wit` input file
+    world: "init",
+});
+
+struct Starter;
+
+impl Guest for Starter {
+    fn main() {
+        test_wasm::_reset();
+        test_wasm::_start();
+        test_wasm::_main();
+    }
+}
+
+export!(Starter);
 
 import_wasm!(test_wasm);
 

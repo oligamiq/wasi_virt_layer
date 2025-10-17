@@ -444,6 +444,10 @@ impl Generator for MainVoidFunc {
                 }
 
                 module.connect_func_alt(fid, main_void_func_id, ctx.unstable_print_debug)?;
+            } else {
+                log::warn!(
+                    "No main_void found for {wasm}. You can use __wasip1_vfs_{wasm}___main_void directly"
+                );
             }
         }
 

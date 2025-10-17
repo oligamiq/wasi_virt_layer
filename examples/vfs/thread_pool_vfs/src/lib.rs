@@ -6,6 +6,23 @@ use wasi_virt_layer::{
     prelude::VirtualEnvConstState,
 };
 
+wit_bindgen::generate!({
+    // the name of the world in the `*.wit` input file
+    world: "init",
+});
+
+struct Starter;
+
+impl Guest for Starter {
+    fn main() {
+        test_pool_thread::_reset();
+        test_pool_thread::_start();
+        test_pool_thread::_main();
+    }
+}
+
+export!(Starter);
+
 import_wasm!(test_pool_thread);
 
 const FILE_COUNT: usize = 10;

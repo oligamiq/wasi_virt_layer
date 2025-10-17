@@ -5,7 +5,10 @@ use crate::{
     args::TargetMemoryType,
     generator::Generator,
     instrs::InstrRewrite as _,
-    util::{WalrusFID as _, WalrusUtilFuncs as _, WalrusUtilModule as _},
+    util::{
+        WalrusFID as _, WalrusUtilExport, WalrusUtilFuncs as _, WalrusUtilImport as _,
+        WalrusUtilModule as _,
+    },
 };
 
 /// https://github.com/WebAssembly/binaryen/issues/7916
@@ -78,7 +81,7 @@ impl Generator for SharedGlobal {
         let lockers = used_mem_id
             .into_iter()
             .map(|mem_id| {
-                Self::gen_custom_locker(module, mem_id)
+                Self::gen_custom_locker(module, mem_id, ctx.unstable_print_debug)
                     .wrap_err("Failed to generate custom locker function")
                     .map(|locker_id| (mem_id, locker_id))
             })
@@ -140,7 +143,7 @@ impl Generator for SharedGlobal {
         let global_id = global.id();
 
         // Obtain the location within memory.
-        // let global_alt_pos = "__wasip1_vfs_memory_grow_global_alt_pos".get_fid(&module.exports)?;
+        let global_alt_pos = "__wasip1_vfs_memory_grow_global_alt_pos".get_fid(&module.exports)?;
         // let global_alt_pos = module.funcs.get(global_alt_pos).kind.unwrap_local();
         // let global_alt_pos = if let walrus::ir::Instr::Const(walrus::ir::Const {
         //     value: walrus::ir::Value::I32(value),
@@ -155,6 +158,9 @@ impl Generator for SharedGlobal {
         // } else {
         //     unreachable!()
         // };
+        module
+            .exports
+            .erase_with(global_alt_pos, ctx.unstable_print_debug)?;
 
         // check global set in start section function
         let start_id = if let Some(id) = module.start {
@@ -273,6 +279,19 @@ impl Generator for SharedGlobal {
 
         module.globals.delete(global_id);
 
+        module
+            .exports
+            .erase_with(global_set_alt_without_lock, ctx.unstable_print_debug)?;
+        module
+            .exports
+            .erase_with(global_init_alt_without_lock_once, ctx.unstable_print_debug)?;
+        module
+            .exports
+            .erase_with(global_get_alt_with_lock, ctx.unstable_print_debug)?;
+        module
+            .exports
+            .erase_with(global_get_alt_without_lock, ctx.unstable_print_debug)?;
+
         Ok(())
     }
 }
@@ -281,16 +300,20 @@ impl SharedGlobal {
     fn gen_custom_locker(
         module: &mut walrus::Module,
         mem_id: walrus::MemoryId,
+        is_debug: bool,
     ) -> eyre::Result<walrus::FunctionId> {
         let alt_id = ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
             .get_fid(&module.imports)?;
         let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
 
         let locker_id = module.copy_func(base_locker)?;
-        module.exports.add(
-            &format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index()),
-            locker_id,
-        );
+        if is_debug {
+            module.exports.add(
+                &format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index()),
+                locker_id,
+            );
+        }
+
         let locker = module.funcs.get_mut(locker_id);
 
         use walrus::ir::*;
@@ -321,10 +344,7 @@ impl SharedGlobal {
             module.funcs.delete(base_locker);
             module.funcs.delete(alt_id);
 
-            module
-                .exports
-                .remove("__wasip1_vfs_memory_grow_locker")
-                .unwrap();
+            module.exports.erase_with(base_locker, debug)?;
         } else {
             let mem_id = module.memories.iter().next().unwrap().id();
 
@@ -344,10 +364,7 @@ impl SharedGlobal {
                 })?;
         }
 
-        module
-            .imports
-            .remove("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
-            .unwrap();
+        module.imports.erase(alt_id)?;
 
         Ok(())
     }

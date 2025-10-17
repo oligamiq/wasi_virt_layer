@@ -76,7 +76,7 @@ pub struct CheckVFSMemoryType;
 
 impl Generator for CheckVFSMemoryType {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        let target_memory_type = module.get_memory_type(false)?;
+        let target_memory_type = module.get_memory_type(true)?;
 
         if ctx.target_memory_type != target_memory_type {
             eyre::bail!(

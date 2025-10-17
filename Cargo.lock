@@ -979,6 +979,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
+ "wit-bindgen 0.43.0",
 ]
 
 [[package]]
@@ -1478,6 +1479,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
+ "wit-bindgen 0.43.0",
 ]
 
 [[package]]
