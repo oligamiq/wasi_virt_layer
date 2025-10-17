@@ -1622,6 +1622,7 @@ impl WalrusUtilModule for walrus::Module {
 
         for fid in fids {
             if exclude.contains(&fid) {
+                fid_map.insert(fid, fid);
                 continue;
             }
             if fid_map.contains_key(&fid) {

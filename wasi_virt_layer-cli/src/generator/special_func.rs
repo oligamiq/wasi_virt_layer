@@ -243,10 +243,10 @@ impl Generator for ResetFunc {
         let new_start = module
             .add_func(&[], &[], |builder, _| {
                 let mut body = builder.func_body();
+                body.call(init_id); // save environment
                 if let Some(old_start) = old_start {
                     body.call(old_start);
                 }
-                body.call(init_id);
                 Ok(())
             })
             .wrap_err_with(|| eyre::eyre!("Failed to add new start function"))?;

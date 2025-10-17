@@ -42,7 +42,6 @@ use crate::{
 ///             }
 ///         }
 ///     });
-/// It is preferable that it precedes ResetFunc and similar functions.
 #[derive(Debug, Default)]
 pub struct SharedGlobal;
 
@@ -166,7 +165,7 @@ impl Generator for SharedGlobal {
         // check global set in start section function
         let start_id = if let Some(id) = module.start {
             module
-                .nested_copy_func(id, &[] as &[FunctionId], false, false)
+                .nested_copy_func(id, &[id], false, false)
                 .wrap_err("Failed to create start function copy")?
         } else {
             // create a new start function
