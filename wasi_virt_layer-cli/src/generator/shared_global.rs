@@ -42,6 +42,7 @@ use crate::{
 ///             }
 ///         }
 ///     });
+/// It is preferable that it precedes ResetFunc and similar functions.
 #[derive(Debug, Default)]
 pub struct SharedGlobal;
 

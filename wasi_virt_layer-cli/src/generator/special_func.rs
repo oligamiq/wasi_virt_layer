@@ -78,6 +78,8 @@ impl Generator for ResetFunc {
             .add_func(&[], &[], |_, _| Ok(()))
             .wrap_err_with(|| eyre::eyre!("Failed to add initializer function"))?;
 
+        let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
+
         for wasm in &ctx.target_names {
             let reset_name = format!("__wasip1_vfs_{wasm}_reset");
 
@@ -149,9 +151,7 @@ impl Generator for ResetFunc {
 
                 let reset_area_mem_id = mem_manager.memory_id();
 
-                let start_section_id = module.start.clone();
-
-                module
+                let resetter = module
                     .replace_imported_func(reset, |(builder, _)| {
                         let mut body = builder.func_body();
 
@@ -186,12 +186,16 @@ impl Generator for ResetFunc {
                                 .memory_copy(reset_area_mem_id, wasm_mem);
                         }
 
-                        if let Some(start_section_id) = start_section_id {
-                            body.call(start_section_id);
-                        }
+                        body.call(tmp_start_section_id);
                     })
                     .to_eyre()
                     .wrap_err_with(|| eyre::eyre!("Failed to replace reset function for {wasm}"))?;
+
+                if ctx.unstable_print_debug {
+                    module
+                        .exports
+                        .add(&format!("__wasip1_vfs_{wasm}_resetter"), resetter);
+                }
 
                 let mut func_body = module
                     .funcs
@@ -239,18 +243,20 @@ impl Generator for ResetFunc {
         let new_start = module
             .add_func(&[], &[], |builder, _| {
                 let mut body = builder.func_body();
-                body.call(init_id);
                 if let Some(old_start) = old_start {
                     body.call(old_start);
                 }
+                body.call(init_id);
                 Ok(())
             })
             .wrap_err_with(|| eyre::eyre!("Failed to add new start function"))?;
 
         module.start = Some(new_start);
 
-        if ctx.unstable_print_debug {
-            if let Some(start) = module.start {
+        module.renew_call_fn(tmp_start_section_id, new_start)?;
+
+        if let Some(start) = old_start {
+            if ctx.unstable_print_debug {
                 module.exports.add("__wasip1_vfs_start_init_old", start);
             }
         }
