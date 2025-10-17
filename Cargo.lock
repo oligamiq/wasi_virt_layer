@@ -967,6 +967,11 @@ dependencies = [
 [[package]]
 name = "no_std_vfs"
 version = "0.1.0"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.43.0",
+]
 
 [[package]]
 name = "no_thread_with_thread_feature_vfs"

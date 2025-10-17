@@ -231,6 +231,13 @@ pub trait Wasip1FileSystem {
 macro_rules! plug_fs {
     (@const, $state:expr, $($wasm:ident),*) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @const, $state);
+
+        // To prevent unused errors from occurring
+        $crate::__private::paste::paste! {
+            const _: () = {
+                let _ = $state;
+            };
+        }
     };
 
     (@inner, @const, $state:expr, $($wasm:ident),*) => {

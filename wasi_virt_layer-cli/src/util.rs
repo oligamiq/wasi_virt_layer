@@ -2365,6 +2365,8 @@ impl Borrow<str> for LString {
     }
 }
 
+pub const CRATE_NAME: &str = "wasi_virt_layer";
+
 #[cfg(test)]
 mod tests {
     use super::*;

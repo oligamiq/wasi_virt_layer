@@ -299,7 +299,10 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
 }
 
 #[cfg(feature = "alloc")]
-pub unsafe fn alloc_buff<T, R>(size: usize, init: impl FnOnce(&mut [T]) -> R) -> (Box<[T]>, R) {
+pub unsafe fn alloc_buff<T, R>(
+    size: usize,
+    init: impl FnOnce(&mut [T]) -> R,
+) -> (alloc::boxed::Box<[T]>, R) {
     let mut buf = alloc::boxed::Box::<[T]>::new_uninit_slice(size);
     let mut buff =
         &mut *(unsafe { core::slice::from_raw_parts_mut(buf.as_mut_ptr() as *mut T, size) });

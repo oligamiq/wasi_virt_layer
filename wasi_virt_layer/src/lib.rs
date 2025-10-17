@@ -33,7 +33,7 @@ pub mod prelude {
     pub use crate::plug_thread;
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
     pub use crate::wasi::file::constant::vfs::Wasip1ConstVFS;
-    pub use crate::{ConstFiles, import_wasm, plug_env, plug_fs};
+    pub use crate::{ConstFiles, import_wasm, plug_env, plug_fs, plug_process};
 }
 
 #[cfg(feature = "threads")]

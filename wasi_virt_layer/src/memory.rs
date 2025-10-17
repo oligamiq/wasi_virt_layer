@@ -1,3 +1,5 @@
+use crate::__private::wasip1;
+
 /// By entering the names of the files to be combined, a bridge for the combination is created.
 /// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
 #[macro_export]
@@ -398,7 +400,7 @@ pub trait WasmAccess: Copy {
 
     /// utility internal
     #[cfg(feature = "alloc")]
-    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> Box<[T]>
+    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
     where
         Self: Sized,
     {

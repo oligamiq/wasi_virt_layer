@@ -92,7 +92,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             "multi_memory",
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            "wasi_virt_layer",
+            util::CRATE_NAME,
         );
 
         if let Some(target_memory_type) = parsed_args.target_memory_type {
@@ -116,7 +116,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             "threads",
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            "wasi_virt_layer",
+            util::CRATE_NAME,
         );
         if let Some(threads) = parsed_args.threads {
             if let Some(restorer) = threads_feature_checker.set(threads)? {
@@ -135,7 +135,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         let checker = FeatureChecker::new_no_feature(
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            "wasi_virt_layer",
+            util::CRATE_NAME,
         );
 
         toml_restores.push(checker.set_dwarf(dwarf)?);
@@ -150,7 +150,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             "unstable_print_debug",
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            "wasi_virt_layer",
+            util::CRATE_NAME,
         );
 
         matches!(
