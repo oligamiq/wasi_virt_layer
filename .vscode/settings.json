@@ -2,7 +2,7 @@
     "rust-analyzer.linkedProjects": [
         "${workspaceFolder}/Cargo.toml",
     ],
-    "rust-analyzer.cargo.target": "wasm32-wasip1-threads",
+    // "rust-analyzer.cargo.target": "wasm32-wasip1-threads",
     // "rust-analyzer.cargo.features": [
     //     "threads"
     // ],

@@ -13,8 +13,8 @@ struct Starter;
 
 impl Guest for Starter {
     fn main() {
-        test_wasm::_reset();
-        test_wasm::_start();
+        // test_wasm::_reset();
+        // test_wasm::_start();
         test_wasm::_main();
     }
 }
