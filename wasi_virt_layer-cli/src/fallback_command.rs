@@ -51,7 +51,7 @@ where
                 let args = self.args.clone();
                 let func = self.func.take().expect("Function already taken");
                 let handle = std::thread::spawn(move || {
-                    let captured_output = CapturedOutput::new();
+                    let captured_output = CapturedOutput::new().unwrap();
                     let result = (func)(&args);
                     let mut output = captured_output.into_captured();
                     output.success = result == 0;
@@ -122,7 +122,7 @@ mod unix {
     }
 
     impl CapturedOutput {
-        pub fn new() -> Self {
+        pub fn new() -> std::io::Result<Self> {
             let time_stamp = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
             let out_path = temp_dir().join(format!("wasi_virt_layer_cli_out_{time_stamp}.txt"));
             let err_path = temp_dir().join(format!("wasi_virt_layer_cli_err_{time_stamp}.txt"));
@@ -133,13 +133,13 @@ mod unix {
             Self::swap_fds(out.as_raw_fd(), libc::STDOUT_FILENO).unwrap();
             Self::swap_fds(err.as_raw_fd(), libc::STDERR_FILENO).unwrap();
 
-            Self {
+            Ok(Self {
                 out_file: out,
                 out_path: Utf8PathBuf::from_path_buf(out_path).unwrap(),
                 err_file: err,
                 err_path: Utf8PathBuf::from_path_buf(err_path).unwrap(),
                 is_released: false,
-            }
+            })
         }
 
         fn swap_fds(fd1: i32, fd2: i32) -> std::io::Result<()> {
@@ -236,67 +236,110 @@ use unix::CapturedOutput;
 
 #[cfg(windows)]
 mod windows {
-    use std::io::Write;
+    use std::io::{self, Write};
+    use std::os::windows::io::AsRawHandle as _;
 
     use super::*;
-    use camino::Utf8PathBuf;
-    use libc::{O_WRONLY, close, dup, dup2, open_osfhandle};
-    use std::env::temp_dir;
-    use std::os::windows::io::AsRawHandle as _;
+    use libc::{close, open_osfhandle};
     use windows_sys::Win32::Foundation::HANDLE;
-    use windows_sys::Win32::System::Console::{
-        GetStdHandle, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE, SetStdHandle,
-    };
+    use windows_sys::Win32::System::Console::{GetStdHandle, STD_OUTPUT_HANDLE, SetStdHandle};
+    use windows_sys::Win32::System::Pipes::CreatePipe;
     const STDOUT_FILENO: i32 = 1;
     const STDERR_FILENO: i32 = 2;
 
     pub struct CapturedOutput {
-        out_file: std::fs::File,
-        out_path: Utf8PathBuf,
-        err_file: std::fs::File,
-        err_path: Utf8PathBuf,
-        original_stdout: HANDLE,
-        original_stderr: HANDLE,
-        original_stdout_fd: i32,
-        original_stderr_fd: i32,
+        keep_stdout: HANDLE,
+        readable_stdout: HANDLE,
+        writable_stdout: HANDLE,
+        stdout: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+        stop_signal: std::sync::Arc<std::sync::atomic::AtomicBool>,
         is_released: bool,
     }
 
+    struct HandleGuard(pub HANDLE);
+    unsafe impl Send for HandleGuard {}
+    unsafe impl Sync for HandleGuard {}
+    impl HandleGuard {
+        fn as_raw_handle(&self) -> HANDLE {
+            self.0
+        }
+    }
+
     impl CapturedOutput {
-        pub fn new() -> Self {
-            let time_stamp = chrono::Utc::now().format("%Y-%m-%d_%H-%M-%S").to_string();
-            let out_path = temp_dir().join(format!("wasi_virt_layer_cli_out_{time_stamp}.txt"));
-            let err_path = temp_dir().join(format!("wasi_virt_layer_cli_err_{time_stamp}.txt"));
-            let out = std::fs::File::create(&out_path).unwrap();
-            let err = std::fs::File::create(&err_path).unwrap();
+        pub fn new() -> io::Result<Self> {
+            let mut readable_stdout: HANDLE = HANDLE::default();
+            let mut writable_stdout: HANDLE = HANDLE::default();
 
-            unsafe {
-                std::io::stdout().flush().unwrap();
-                std::io::stderr().flush().unwrap();
-
-                let original_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
-                let original_stderr = GetStdHandle(STD_ERROR_HANDLE);
-
-                let original_stdout_fd = dup(STDOUT_FILENO);
-                let original_stderr_fd = dup(STDERR_FILENO);
-
-                if SetStdHandle(STD_OUTPUT_HANDLE, out.as_raw_handle() as HANDLE) == 0 {
-                    panic!("Failed to set stdout handle");
-                }
-                if SetStdHandle(STD_ERROR_HANDLE, err.as_raw_handle() as HANDLE) == 0 {
-                    panic!("Failed to set stderr handle");
-                }
-
-                Self {
-                    out_file: out,
-                    out_path: Utf8PathBuf::from_path_buf(out_path).unwrap(),
-                    err_file: err,
-                    err_path: Utf8PathBuf::from_path_buf(err_path).unwrap(),
-                    original_stdout,
-                    original_stderr,
-                    is_released: false,
-                }
+            if unsafe {
+                CreatePipe(
+                    &mut readable_stdout,
+                    &mut writable_stdout,
+                    std::ptr::null(),
+                    0,
+                )
+            } == 0
+            {
+                return Err(io::Error::last_os_error());
             }
+
+            let keep_stdout = unsafe { GetStdHandle(STD_OUTPUT_HANDLE) };
+
+            unsafe { SetStdHandle(STD_OUTPUT_HANDLE, writable_stdout) };
+
+            // let writable_stdout_file_stream = unsafe { open_osfhandle(writable_stdout as _, 0) };
+
+            // let writable_stdout_file =
+            //     unsafe { libc::fdopen(writable_stdout_file_stream, "wt".as_ptr() as *const _) };
+
+            // Duplicate the handle for C stdout compatibility
+            // unsafe { libc::dup2(libc::fileno(writable_stdout_file), STDOUT_FILENO) };
+
+            let readable_stdout_guard = HandleGuard(readable_stdout);
+            let stdout = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+            let stop_signal = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+            std::thread::spawn({
+                let stdout = stdout.clone();
+                let stop_signal = stop_signal.clone();
+                move || {
+                    let mut buf = [0u8; 1024];
+                    loop {
+                        let mut read: u32 = 0;
+                        let ok = unsafe {
+                            windows_sys::Win32::Storage::FileSystem::ReadFile(
+                                readable_stdout_guard.as_raw_handle(),
+                                buf.as_mut_ptr() as *mut _,
+                                buf.len() as u32,
+                                &mut read,
+                                std::ptr::null_mut(),
+                            )
+                        };
+                        if ok == 0 {
+                            // panic!("Failed to read from pipe: {}", io::Error::last_os_error());
+                            break;
+                        }
+                        if read == 0 {
+                            if stop_signal.load(std::sync::atomic::Ordering::Relaxed) {
+                                break;
+                            }
+
+                            std::thread::yield_now();
+                            continue;
+                        }
+                        let mut guard = stdout.lock().unwrap();
+                        guard.extend_from_slice(&buf[..read as usize]);
+                    }
+                }
+            });
+
+            Ok(Self {
+                keep_stdout,
+                readable_stdout,
+                writable_stdout,
+                stdout,
+                stop_signal,
+                is_released: false,
+            })
         }
 
         fn dropper(&mut self) -> Option<(Vec<u8>, Vec<u8>)> {
@@ -307,29 +350,22 @@ mod windows {
             std::io::stdout().flush().ok();
             std::io::stderr().flush().ok();
 
-            unsafe {
-                // Restore original stdout and stderr
-                SetStdHandle(STD_OUTPUT_HANDLE, self.original_stdout);
-                SetStdHandle(STD_ERROR_HANDLE, self.original_stderr);
+            let mut out_bytes = Vec::new();
+            let mut err_bytes = Vec::new();
+
+            self.stop_signal
+                .store(true, std::sync::atomic::Ordering::Relaxed);
+            {
+                let mut guard = self.stdout.lock().unwrap();
+                out_bytes.extend_from_slice(&guard);
+                guard.clear();
             }
 
-            // Close the file handles to ensure everything is flushed
-            drop(std::mem::replace(
-                &mut self.out_file,
-                std::fs::File::create("NUL").unwrap(),
-            ));
-            drop(std::mem::replace(
-                &mut self.err_file,
-                std::fs::File::create("NUL").unwrap(),
-            ));
-
-            // Read the captured output
-            let out_bytes = std::fs::read(&self.out_path).expect("Failed to read captured stdout");
-            let err_bytes = std::fs::read(&self.err_path).expect("Failed to read captured stderr");
-
-            // Clean up temp files
-            std::fs::remove_file(&self.out_path).ok();
-            std::fs::remove_file(&self.err_path).ok();
+            unsafe {
+                SetStdHandle(STD_OUTPUT_HANDLE, self.keep_stdout);
+                close(self.readable_stdout as _);
+                close(self.writable_stdout as _);
+            }
 
             self.is_released = true;
 
@@ -352,113 +388,115 @@ mod windows {
         }
     }
 
-    mod redirect {
-        use super::*;
+    // mod redirect {
+    //     use super::*;
 
-        use std::ffi::CString;
-        use std::fs::File;
-        use std::io;
-        use std::io::Write;
-        use std::os::windows::io::{AsRawHandle, FromRawHandle};
-        use std::sync::Arc;
-        use std::thread;
-        use windows_sys::Win32::Foundation::*;
-        use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
-        use windows_sys::Win32::Storage::FileSystem::*;
-        use windows_sys::Win32::System::Console::*;
-        use windows_sys::Win32::System::Diagnostics::Debug::*;
-        use windows_sys::Win32::System::IO::*;
-        use windows_sys::Win32::System::Pipes::CreatePipe;
-        use windows_sys::Win32::System::Threading::*;
+    //     use std::ffi::CString;
+    //     use std::fs::File;
+    //     use std::io;
+    //     use std::io::Write;
+    //     use std::os::windows::io::{AsRawHandle, FromRawHandle};
+    //     use std::sync::Arc;
+    //     use std::thread;
+    //     use windows_sys::Win32::Foundation::*;
+    //     use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
+    //     use windows_sys::Win32::Storage::FileSystem::*;
+    //     use windows_sys::Win32::System::Console::*;
+    //     use windows_sys::Win32::System::Diagnostics::Debug::*;
+    //     use windows_sys::Win32::System::IO::*;
+    //     use windows_sys::Win32::System::Pipes::CreatePipe;
+    //     use windows_sys::Win32::System::Threading::*;
 
-        #[derive(Clone, Copy)]
-        enum StdHandleToRedirect {
-            Stdout,
-            Stderr,
-        }
+    //     #[derive(Clone, Copy)]
+    //     enum StdHandleToRedirect {
+    //         Stdout,
+    //         Stderr,
+    //     }
 
-        struct StdRedirect {
-            readable: HANDLE,
-            writable: HANDLE,
-            _thread: Option<std::thread::JoinHandle<()>>,
-        }
+    //     struct StdRedirect {
+    //         readable: HANDLE,
+    //         writable: HANDLE,
+    //         _thread: Option<std::thread::JoinHandle<()>>,
+    //     }
 
-        impl StdRedirect {
-            fn new(
-                h: StdHandleToRedirect,
-                callback: Arc<dyn Fn(u8) + Send + Sync + 'static>,
-            ) -> io::Result<Self> {
-                unsafe {
-                    let mut readable: HANDLE = HANDLE::default();
-                    let mut writable: HANDLE = HANDLE::default();
+    //     impl StdRedirect {
+    //         fn new(
+    //             h: StdHandleToRedirect,
+    //             callback: Arc<dyn Fn(u8) + Send + Sync + 'static>,
+    //         ) -> io::Result<Self> {
+    //             unsafe {
+    //                 let mut readable: HANDLE = HANDLE::default();
+    //                 let mut writable: HANDLE = HANDLE::default();
 
-                    if CreatePipe(&mut readable, &mut writable, std::ptr::null(), 0) == 0 {
-                        return Err(io::Error::last_os_error());
-                    }
+    //                 if CreatePipe(&mut readable, &mut writable, std::ptr::null(), 0) == 0 {
+    //                     return Err(io::Error::last_os_error());
+    //                 }
 
-                    // Set std handle
-                    let handle_id = match h {
-                        StdHandleToRedirect::Stdout => STD_OUTPUT_HANDLE,
-                        StdHandleToRedirect::Stderr => STD_ERROR_HANDLE,
-                    };
-                    SetStdHandle(handle_id, writable);
+    //                 // Set std handle
+    //                 let handle_id = match h {
+    //                     StdHandleToRedirect::Stdout => STD_OUTPUT_HANDLE,
+    //                     StdHandleToRedirect::Stderr => STD_ERROR_HANDLE,
+    //                 };
+    //                 SetStdHandle(handle_id, writable);
 
-                    // Redirect libc stdout/stderr
-                    let writable_file_stream = open_osfhandle(writable as _, 0);
+    //                 // Redirect libc stdout/stderr
+    //                 let writable_file_stream = open_osfhandle(writable as _, 0);
 
-                    let writable_file =
-                        libc::fdopen(writable_file_stream, "wt".as_ptr() as *const _);
+    //                 let writable_file =
+    //                     libc::fdopen(writable_file_stream, "wt".as_ptr() as *const _);
 
-                    // Duplicate the handle for C stdout compatibility
-                    let _ = unsafe {
-                        libc::dup2(
-                            libc::fileno(writable_file),
-                            match h {
-                                StdHandleToRedirect::Stdout => STDOUT_FILENO,
-                                StdHandleToRedirect::Stderr => STDERR_FILENO,
-                            },
-                        )
-                    };
+    //                 // Duplicate the handle for C stdout compatibility
+    //                 libc::dup2(
+    //                     libc::fileno(writable_file),
+    //                     match h {
+    //                         StdHandleToRedirect::Stdout => STDOUT_FILENO,
+    //                         StdHandleToRedirect::Stderr => STDERR_FILENO,
+    //                     },
+    //                 );
 
-                    // Launch a reading thread
-                    let readable_clone = readable;
-                    let cb = callback.clone();
+    //                 struct Readable(pub HANDLE);
+    //                 unsafe impl Send for Readable {}
+    //                 unsafe impl Sync for Readable {}
+    //                 impl Readable {
+    //                     fn as_raw_handle(&self) -> HANDLE {
+    //                         self.0
+    //                     }
+    //                 }
 
-                    let handle = thread::Builder::new()
-                        .spawn_unchecked::<_, ()>(move || {
-                            let mut buf = [0u8; 1];
-                            loop {
-                                let mut read: u32 = 0;
-                                let ok = ReadFile(
-                                    readable_clone,
-                                    buf.as_mut_ptr() as *mut _,
-                                    1,
-                                    &mut read,
-                                    std::ptr::null_mut(),
-                                );
-                                if ok == 0 {
-                                    panic!(
-                                        "Failed to read from pipe: {}",
-                                        io::Error::last_os_error()
-                                    );
-                                }
-                                if read == 1 {
-                                    cb(buf[0]);
-                                }
-                                std::thread::yield_now();
-                            }
-                        })
-                        .unwrap();
+    //                 // Launch a reading thread
+    //                 let readable_clone = Readable(readable);
+    //                 let cb = callback.clone();
 
-                    Ok(Self {
-                        readable,
-                        writable,
-                        _thread: Some(handle),
-                    })
-                }
-            }
-        }
-    }
+    //                 let handle = thread::spawn(move || {
+    //                     let mut buf = [0u8; 1];
+    //                     loop {
+    //                         let mut read: u32 = 0;
+    //                         let ok = ReadFile(
+    //                             readable_clone.as_raw_handle(),
+    //                             buf.as_mut_ptr() as *mut _,
+    //                             1,
+    //                             &mut read,
+    //                             std::ptr::null_mut(),
+    //                         );
+    //                         if ok == 0 {
+    //                             panic!("Failed to read from pipe: {}", io::Error::last_os_error());
+    //                         }
+    //                         if read == 1 {
+    //                             cb(buf[0]);
+    //                         }
+    //                         std::thread::yield_now();
+    //                     }
+    //                 });
+
+    //                 Ok(Self {
+    //                     readable,
+    //                     writable,
+    //                     _thread: Some(handle),
+    //                 })
+    //             }
+    //         }
+    //     }
+    // }
 }
 #[cfg(windows)]
 use windows::CapturedOutput;
@@ -469,12 +507,18 @@ mod tests {
 
     #[test]
     fn test_captured_output() {
-        let captured = CapturedOutput::new();
+        let captured = CapturedOutput::new().unwrap();
         print!("This is a ");
         println!("test output");
         eprint!("This is a ");
         eprintln!("test error");
+
         let output = captured.into_captured();
+
+        panic!(
+            "Captured stdout: {:?}",
+            String::from_utf8(output.stdout.clone())
+        );
 
         let stdout_str = String::from_utf8(output.stdout).unwrap();
         let stderr_str = String::from_utf8(output.stderr).unwrap();
