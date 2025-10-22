@@ -1,12 +1,12 @@
 [package]
 name = "wasi_virt_layer"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
 description = "A virtual layer for WASI modules"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/oligamiq/wasi_virt_layer"
 documentation = "https://docs.rs/wasi_virt_layer"
-publish=true
+publish = true
 
 [features]
 default = ["std"]

@@ -1,10 +1,9 @@
 [workspace]
-members = ["cargo:."]
+members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 packages = [
-    # "wasi_virt_layer",
+    "wasi_virt_layer",
     "wasi_virt_layer-cli",
 ]
-
 
 # Config for 'dist'
 [dist]
