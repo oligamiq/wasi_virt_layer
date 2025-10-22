@@ -3,8 +3,8 @@ use core::{
     sync::atomic::{AtomicU32, Ordering},
 };
 
-#[cfg(target_os = "wasi")]
-use crate::memory::WasmAccess;
+#[allow(unused_imports)]
+use crate::{memory::WasmAccess, wasip1};
 
 pub trait VirtualThread {
     fn new_thread(
@@ -23,6 +23,7 @@ pub trait VirtualThread {
         #[cfg(not(target_os = "wasi"))]
         {
             std::thread::yield_now();
+            wasip1::ERRNO_SUCCESS
         }
     }
 }
