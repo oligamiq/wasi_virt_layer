@@ -82,7 +82,8 @@ impl Generator for ThreadsSpawn {
                 .wrap_err("Failed to rewrite thread-spawn call")?;
 
             let exporting_thread_starter_name = "wasi_thread_start".to_string();
-            let exporting_thread_starter_id = exporting_thread_starter_name.get_fid(&module.exports)?;
+            let exporting_thread_starter_id =
+                exporting_thread_starter_name.get_fid(&module.exports)?;
 
             module
                 .connect_func_alt_with_remove_export(
