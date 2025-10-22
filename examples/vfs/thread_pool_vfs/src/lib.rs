@@ -1,9 +1,7 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{
-    self, ConstFiles,
     file::{VFSConstNormalFiles, WasiConstFile},
-    import_wasm, plug_env, plug_fs, plug_process, plug_thread,
-    prelude::VirtualEnvConstState,
+    prelude::*,
 };
 
 wit_bindgen::generate!({
