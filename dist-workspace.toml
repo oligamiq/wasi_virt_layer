@@ -1,9 +1,10 @@
 [workspace]
 members = ["cargo:."]
 packages = [
-    "wasi_virt_layer",
+    # "wasi_virt_layer",
     "wasi_virt_layer-cli",
 ]
+
 
 # Config for 'dist'
 [dist]
@@ -19,3 +20,5 @@ targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "aarch64-pc-wind
 install-path = "CARGO_HOME"
 # Whether to install an updater program
 install-updater = true
+
+all-features = true
