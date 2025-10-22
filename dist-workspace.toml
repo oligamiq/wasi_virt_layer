@@ -1,5 +1,5 @@
 [workspace]
-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
+members = ["cargo:wasi_virt_layer", "cargo:wasi_virt_layer-cli"]
 packages = [
     "wasi_virt_layer",
     "wasi_virt_layer-cli",
