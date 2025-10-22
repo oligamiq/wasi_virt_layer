@@ -21,3 +21,8 @@ install-path = "CARGO_HOME"
 install-updater = true
 
 all-features = true
+
+packages = [
+    "wasi_virt_layer",
+    "wasi_virt_layer-cli"
+]
