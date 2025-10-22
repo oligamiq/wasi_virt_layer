@@ -11,6 +11,7 @@ repository.workspace = true
 documentation.workspace = true
 homepage.workspace = true
 readme.workspace = true
+publish=false
 
 [dependencies]
 wit-bindgen = "0.43.0"

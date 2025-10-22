@@ -6,6 +6,7 @@ description = "CLI for the wasi_virt_layer crate"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/wasi_virt_layer-cli"
 repository = "https://github.com/oligamiq/wasi_virt_layer"
+publish=true
 
 [[bin]]
 name = "wasi_virt_layer"
