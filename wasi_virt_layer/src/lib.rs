@@ -40,6 +40,7 @@ pub mod prelude {
 pub mod thread {
     pub use crate::wasi::thread::{
         DirectThreadPool, ThreadAccess, ThreadRunner, VirtualThread, VirtualThreadPool, root_spawn,
+        root_spawn_unchecked,
     };
 }
 

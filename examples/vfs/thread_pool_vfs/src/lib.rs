@@ -17,6 +17,14 @@ impl Guest for Starter {
         test_pool_thread::_start();
         test_pool_thread::_main();
     }
+
+    fn init(pool_size: u32) {
+        let pool = &raw mut THREAD_POOL;
+        let pool = unsafe { &mut *pool };
+        pool.init();
+        pool.set_capacity(pool_size as usize);
+        pool.flush_capacity().wait();
+    }
 }
 
 export!(Starter);
@@ -61,9 +69,13 @@ plug_env!(@const, EnvTy, test_pool_thread);
 
 use wasi_virt_layer::thread::VirtualThreadPool;
 
-static mut THREAD_POOL: VirtualThreadPool = VirtualThreadPool::new(4);
+static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
+    unsafe { VirtualThreadPool::const_new(4) };
 
-plug_thread!(unsafe { &mut THREAD_POOL }, test_pool_thread);
+plug_thread!(
+    { unsafe { &mut *(&raw mut THREAD_POOL) } },
+    test_pool_thread
+);
 
 mod fs {
     use wasi_virt_layer::file::{DefaultStdIO, VFSConstNormalLFS, Wasip1ConstVFS};

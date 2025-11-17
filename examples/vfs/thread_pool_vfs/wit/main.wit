@@ -3,4 +3,5 @@ package hello:host;
 
 world init {
   export main: func();
+  export init: func(pool-size: u32);
 }

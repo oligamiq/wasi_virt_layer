@@ -1,20 +1,17 @@
 use core::{
-    cell::UnsafeCell,
-    mem::MaybeUninit,
     num::NonZero,
     ptr::NonNull,
-    slice::SliceIndex,
-    sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering},
+    sync::atomic::{AtomicU32, AtomicUsize, Ordering},
 };
 use std::{sync::Arc, thread::JoinHandle};
 
 #[allow(unused_imports)]
-use crate::{memory::WasmAccess, wasip1};
+use crate::{__private::wasip1, memory::WasmAccess};
 
-pub trait VirtualThread {
+pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
     fn new_thread(
         &mut self,
-        accessor: impl ThreadAccess,
+        accessor: ThreadAccessor,
         runner: ThreadRunner,
     ) -> Option<NonZero<u32>>;
 
@@ -56,360 +53,324 @@ impl ThreadRunner {
 }
 
 /// Thread Util on each wasm
-pub trait ThreadAccess: Send + 'static {
+pub trait ThreadAccess: Send + 'static + Copy {
     /// If creation is failed, thread_id return None
     /// Run given function(ThreadRunner) and wait
     fn call_wasi_thread_start(&self, ptr: ThreadRunner, thread_id: Option<NonZero<u32>>);
     /// Get wasm name on which create thread
     fn as_name(&self) -> &'static str;
+
+    fn as_usize(&self) -> usize;
+
+    fn from_usize(v: usize) -> Self
+    where
+        Self: Sized;
 }
 
-use parking_lot::{Mutex, RwLock};
-
-pub struct ThreadWorkerCondition(core::sync::atomic::AtomicU8);
-
-impl ThreadWorkerCondition {
-    /// This worker is not doing anything.
-    /// It is waiting for a task.
-    const BLANK: u8 = 1;
-    /// A task is being executed on this worker.
-    const RUNNING: u8 = 2;
-    /// A task is being sent to this worker.
-    const SENDING_TASK: u8 = 3;
-    /// A task has been sent to this worker.
-    const SENDED_TASK: u8 = 4;
-    /// This worker is receiving a task.
-    const RECEIVING_TASK: u8 = 5;
-
-    pub const fn blank() -> Self {
-        ThreadWorkerCondition(core::sync::atomic::AtomicU8::new(Self::BLANK))
-    }
+pub struct ThreadAccessorWrapper<T: ThreadAccess> {
+    inner: usize,
+    _marker: core::marker::PhantomData<T>,
 }
 
-struct UnsafeSharedPlace<T> {
-    data: UnsafeCell<Option<T>>,
-}
-
-unsafe impl<T> Send for UnsafeSharedPlace<T> where T: Send {}
-unsafe impl<T> Sync for UnsafeSharedPlace<T> where T: Send {}
-
-impl<T> UnsafeSharedPlace<T> {
-    pub const fn new() -> Self {
-        UnsafeSharedPlace {
-            data: UnsafeCell::new(None),
+impl<T: ThreadAccess> ThreadAccessorWrapper<T> {
+    pub fn new(accessor: T) -> Self {
+        ThreadAccessorWrapper {
+            inner: accessor.as_usize(),
+            _marker: core::marker::PhantomData,
         }
     }
 
-    pub unsafe fn replace(&self, value: T) {
-        unsafe { &mut *self.data.get() }.replace(value);
+    pub fn as_accessor(&self) -> T {
+        T::from_usize(self.inner)
+    }
+}
+
+#[derive(Clone)]
+struct JoinPoolHandle {
+    pool: Option<Arc<parking_lot::Mutex<Vec<JoinHandle<()>>>>>,
+}
+
+impl JoinPoolHandle {
+    pub fn lock(&self) -> parking_lot::MutexGuard<'_, Vec<JoinHandle<()>>> {
+        self.pool.as_ref().unwrap().lock()
+    }
+
+    pub fn extend<I: IntoIterator<Item = JoinHandle<()>>>(&self, iter: I) {
+        let mut guard = self.pool.as_ref().unwrap().lock();
+        guard.extend(iter);
+    }
+
+    pub const fn const_new() -> Self {
+        JoinPoolHandle { pool: None }
+    }
+
+    pub fn init(&mut self) -> bool {
+        if self.pool.is_none() {
+            self.pool = Some(Arc::new(parking_lot::Mutex::new(Vec::new())));
+            true
+        } else {
+            false
+        }
     }
 }
 
 pub enum WaitThreadJoin {
     None,
-    WaitWithFn(Box<dyn FnOnce() -> () + Send>),
+    Recv(std::sync::mpsc::Receiver<()>),
+    RecvN(flume::Receiver<()>, usize),
 }
 
 impl WaitThreadJoin {
-    pub fn join(self) {
+    pub fn wait(self) {
         match self {
             WaitThreadJoin::None => {}
-            WaitThreadJoin::WaitWithFn(f) => {
-                f();
+            WaitThreadJoin::Recv(recv) => {
+                let _ = recv.recv();
+            }
+            WaitThreadJoin::RecvN(recv, n) => {
+                for _ in 0..n {
+                    let _ = recv.recv();
+                }
             }
         }
     }
 }
 
-pub struct ThreadWorker {
-    condition: ThreadWorkerCondition,
-    runner: UnsafeSharedPlace<ThreadRunner>,
-    queue: flume::Receiver<ThreadRunner>,
-    thread_handle: JoinHandle<()>,
+enum VirtualThreadPoolMessage<ThreadAccessor: ThreadAccess> {
+    Run(
+        ThreadRunner,
+        ThreadAccessorWrapper<ThreadAccessor>,
+        NonZero<u32>,
+    ),
+    AddThread(usize, std::sync::mpsc::SyncSender<()>, JoinPoolHandle),
+    Terminate(flume::Sender<()>, JoinPoolHandle),
 }
 
-impl ThreadWorker {
-    /// When b is no longer present, access from within the thread must be stopped.
-    pub(crate) unsafe fn spawn_on_new_thread<
-        'b,
-        I: Iterator<Item = core::pin::Pin<&'b mut MaybeUninit<Self>>> + Send + 'b,
-    >(
-        mut sl: I,
+impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
+    pub fn use_(self, queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>) -> bool {
+        match self {
+            VirtualThreadPoolMessage::Run(runner, accessor_wrapper, thread_id) => {
+                let accessor = accessor_wrapper.as_accessor();
+                accessor.call_wasi_thread_start(runner, Some(thread_id));
+            }
+            VirtualThreadPoolMessage::AddThread(count, ref sender, ref kept_workers_pool) => {
+                let threads = self.create_thread(count, &queue);
+                kept_workers_pool.extend(threads);
+                let _ = sender.try_send(());
+            }
+            VirtualThreadPoolMessage::Terminate(sender, pool) => {
+                let thread_id = std::thread::current().id();
+                let mut _guard = pool.lock();
+                if let Some(pos) = _guard.iter().position(|h| h.thread().id() == thread_id) {
+                    _guard.remove(pos);
+                    core::mem::drop(_guard);
+                } else {
+                    panic!("Thread not found in pool during termination");
+                }
+
+                let _ = sender.send(());
+
+                return false;
+            }
+        }
+        true
+    }
+
+    fn listen(queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>) {
+        while queue.recv().unwrap().use_(queue) {}
+    }
+
+    fn listen_with(
+        queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>,
+        message: VirtualThreadPoolMessage<ThreadAccessor>,
+    ) {
+        if message.use_(queue) {
+            Self::listen(queue);
+        }
+    }
+
+    fn create_thread(
+        &self,
         count: usize,
-    ) -> WaitThreadJoin {
-        debug_assert!(count >= 1);
-
-        let is_waiting = Arc::new(AtomicU8::new(0));
-        let is_waiting_clone = is_waiting.clone();
-        let thread_id = std::thread::current();
-
-        let first_area = UnsafeCell::new(sl.next().unwrap());
-        let first_area_ptr = first_area.get();
-
-        let handle = root_spawn_unchecked(std::thread::Builder::new(), move || {
-            for mut sl in sl.take(count - 1) {
-                unsafe {
-                    Self::each_nested_spawn(&mut sl, |condition, runner| {
-                        let thread_handle = root_spawn(std::thread::Builder::new(), || {
-                            Self::listener_loop(condition, runner);
-                        })
-                        .unwrap();
-                        return Some(thread_handle);
-                    })
-                };
-            }
-
-            if is_waiting_clone.load(Ordering::SeqCst) == 1 {
-                thread_id.unpark();
-                is_waiting_clone.store(2, Ordering::SeqCst);
-            }
-
-            unsafe {
-                Self::each_nested_spawn(&mut *first_area.get(), |condition, runner| {
-                    Self::listener_loop(condition, runner);
-                    return None;
-                })
-            };
+        queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>,
+    ) -> impl Iterator<Item = JoinHandle<()>> {
+        core::iter::repeat_n(queue.clone(), count).map(move |queue| {
+            let thread = root_spawn(std::thread::Builder::new(), move || {
+                Self::listen(&queue);
+            })
+            .unwrap();
+            thread
         })
-        .unwrap();
-
-        unsafe { Self::set_thread_handle(&mut *first_area_ptr, handle) };
-
-        let wait = move || {
-            if is_waiting.load(Ordering::SeqCst) == 2 {
-                return;
-            }
-            is_waiting.store(1, Ordering::SeqCst);
-            std::thread::park();
-        };
-
-        WaitThreadJoin::WaitWithFn(Box::new(wait))
-    }
-
-    /// When b is no longer present, access from within the thread must be stopped in f.
-    unsafe fn each_nested_spawn<'a, 'b>(
-        sl: &'a mut core::pin::Pin<&'b mut MaybeUninit<Self>>,
-        f: impl FnOnce(
-            &'static ThreadWorkerCondition,
-            &'static UnsafeSharedPlace<ThreadRunner>,
-        ) -> Option<JoinHandle<()>>,
-    ) {
-        let sl_ptr = sl.as_mut_ptr();
-        let sl: &'a mut ThreadWorker = unsafe { &mut *sl_ptr };
-
-        unsafe { core::ptr::write(&mut sl.condition, ThreadWorkerCondition::blank()) };
-        unsafe { core::ptr::write(&mut sl.runner, UnsafeSharedPlace::new()) };
-        let condition: &'static _ =
-            unsafe { core::mem::transmute::<&'a _, &'static _>(&sl.condition) };
-        let runner: &'static _ = unsafe { core::mem::transmute::<&'a _, &'static _>(&sl.runner) };
-
-        if let Some(thread_handle) = f(condition, runner) {
-            unsafe { core::ptr::write(&mut sl.thread_handle, thread_handle) };
-        }
-    }
-
-    /// If you don't give a handle on each_nested_spawn, you can set it later.
-    unsafe fn set_thread_handle<'a, 'b>(
-        sl: &'a mut core::pin::Pin<&'b mut MaybeUninit<Self>>,
-        handle: JoinHandle<()>,
-    ) {
-        let sl_ptr = sl.as_mut_ptr();
-        let sl: &'a mut ThreadWorker = unsafe { &mut *sl_ptr };
-
-        unsafe { core::ptr::write(&mut sl.thread_handle, handle) };
-    }
-
-    fn send(&self, data: ThreadRunner) -> bool {
-        let condition = &self.condition;
-        let shared_place = &self.runner;
-
-        let current = condition.0.compare_exchange(
-            ThreadWorkerCondition::BLANK,
-            ThreadWorkerCondition::SENDING_TASK,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        );
-        if current.is_ok() {
-            unsafe { shared_place.replace(data) };
-
-            condition
-                .0
-                .store(ThreadWorkerCondition::SENDED_TASK, Ordering::SeqCst);
-
-            self.thread_handle.thread().unpark();
-
-            return true;
-        } else {
-            let current = condition.0.compare_exchange(
-                ThreadWorkerCondition::RUNNING,
-                ThreadWorkerCondition::SENDING_TASK,
-                Ordering::SeqCst,
-                Ordering::SeqCst,
-            );
-            match current {
-                Ok(_) | Err(ThreadWorkerCondition::BLANK) => {
-                    unsafe { shared_place.replace(data) };
-
-                    condition
-                        .0
-                        .store(ThreadWorkerCondition::SENDED_TASK, Ordering::SeqCst);
-
-                    if current.is_err() {
-                        self.thread_handle.thread().unpark();
-                    }
-
-                    return true;
-                }
-                Err(_) => {
-                    return false;
-                }
-            }
-        }
-    }
-
-    fn recv(
-        condition: &ThreadWorkerCondition,
-        runner: &mut UnsafeCell<Option<ThreadRunner>>,
-    ) -> ThreadRunner {
-        let old = condition.0.compare_exchange(
-            ThreadWorkerCondition::SENDED_TASK,
-            ThreadWorkerCondition::RECEIVING_TASK,
-            Ordering::SeqCst,
-            Ordering::SeqCst,
-        );
-
-        match old {
-            Ok(_) => {
-                std::thread::park();
-
-                let old = condition.0.compare_exchange(
-                    ThreadWorkerCondition::SENDED_TASK,
-                    ThreadWorkerCondition::RUNNING,
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
-                );
-                if old.is_err() {
-                    panic!("ThreadWorker condition corrupted");
-                }
-
-                let data = unsafe { &mut *runner.get() }.take().unwrap();
-                data
-            }
-            Err(v) if v == ThreadWorkerCondition::SENDED_TASK => {
-                let old = condition.0.compare_exchange(
-                    ThreadWorkerCondition::SENDED_TASK,
-                    ThreadWorkerCondition::RUNNING,
-                    Ordering::SeqCst,
-                    Ordering::SeqCst,
-                );
-                if old.is_err() {
-                    panic!("ThreadWorker condition corrupted");
-                }
-
-                let data = unsafe { &mut *runner.get() }.take().unwrap();
-                data
-            }
-        }
-    }
-
-    fn listener_loop(condition: &ThreadWorkerCondition, runner: &UnsafeSharedPlace<ThreadRunner>) {
-        loop {
-            // wait for condition
-            // if received, run the runner
-            // after finish, set condition to blank
-        }
     }
 }
 
-pub struct VirtualThreadPool {
-    max_threads: AtomicU32,
-    kept_workers_pool: RwLock<Vec<ThreadWorker>>,
+pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess> {
+    max_threads: AtomicUsize,
+    read_kept_workers_pool_size: AtomicUsize,
+    queue: parking_lot::Mutex<Option<flume::Sender<VirtualThreadPoolMessage<ThreadAccessor>>>>,
+    queue_receiver: Option<flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>>,
+    kept_workers_pool: JoinPoolHandle,
 }
 
-impl VirtualThreadPool {
-    pub const fn new(max_threads: u32) -> Self {
+impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
+    /// You must call `init` after creating this struct.
+    pub const unsafe fn const_new(max_threads: usize) -> Self {
         VirtualThreadPool {
-            max_threads: AtomicU32::new(max_threads),
-            kept_workers_pool: RwLock::new(Vec::new()),
+            max_threads: AtomicUsize::new(max_threads),
+            kept_workers_pool: JoinPoolHandle::const_new(),
+            queue: parking_lot::Mutex::new(None),
+            queue_receiver: None,
+            read_kept_workers_pool_size: AtomicUsize::new(0),
         }
     }
 
-    pub fn search_blank_thread_worker(&self) -> Option<usize> {
-        let pool = self.kept_workers_pool.read();
-
-        for (index, worker) in pool.iter().enumerate() {
-            let condition_value = worker.condition.0.load(Ordering::SeqCst);
-            if condition_value == ThreadWorkerCondition::BLANK {
-                return Some(index);
-            }
+    /// You can call this multiple times, but only the first call takes effect.
+    pub fn init(&mut self) {
+        if self.kept_workers_pool.init() {
+            let (sender, receiver) = flume::unbounded();
+            *self.queue.lock() = Some(sender);
+            self.queue_receiver = Some(receiver);
         }
-
-        None
     }
 
-    pub fn set_capacity<'a>(&'a self) -> WaitThreadJoin {
+    pub fn set_capacity(&self, max_threads: usize) {
+        self.max_threads.store(max_threads, Ordering::SeqCst);
+    }
+
+    fn add_queue_with<T>(
+        &self,
+        f: impl FnOnce(
+            &mut flume::Sender<VirtualThreadPoolMessage<ThreadAccessor>>,
+        ) -> Option<(VirtualThreadPoolMessage<ThreadAccessor>, T)>,
+    ) -> Option<T> {
+        let mut lock = self.queue.lock();
+        let r = if let Some((msg, t)) = f(&mut lock.as_mut().unwrap()) {
+            let _ = lock.as_mut().unwrap().send(msg).unwrap();
+            Some(t)
+        } else {
+            None
+        };
+        core::mem::drop(lock);
+        r
+    }
+
+    pub fn flush_capacity(&self) -> WaitThreadJoin {
         let max_threads = self.max_threads.load(Ordering::SeqCst);
 
-        let current_len = self.kept_workers_pool.read().len() as u32;
+        let current_len = self.read_kept_workers_pool_size.load(Ordering::SeqCst);
 
         if current_len == max_threads {
             // no change
             return WaitThreadJoin::None;
         }
 
-        let mut pool = self.kept_workers_pool.write();
-
-        if current_len < max_threads {
-            let mut new_workers = Vec::with_capacity(max_threads as usize);
-
-            // This pool contents must no longer be used.
-            for worker_count in 0..pool.len() {
-                let worker = unsafe { core::ptr::read(&pool[worker_count]) };
-                new_workers.push(worker);
-            }
-
-            let _ = core::mem::replace::<Vec<ThreadWorker>>(&mut pool, new_workers);
-
-            unsafe { pool.set_len(current_len as usize) };
-
-            unsafe fn pin_vec<'holder, 'a, T: Unpin + 'holder, S: 'holder>(
-                vec: &'a mut Vec<T>,
-                range: core::ops::Range<S>,
-            ) -> impl Iterator<Item = core::pin::Pin<&'holder mut MaybeUninit<T>>> + 'holder
-            where
-                std::ops::Range<S>: core::slice::SliceIndex<[MaybeUninit<T>]>,
-                &'holder mut <std::ops::Range<S> as core::slice::SliceIndex<[MaybeUninit<T>]>>::Output:
-                    IntoIterator<Item = &'holder mut MaybeUninit<T>>,
-                <std::ops::Range<S> as core::slice::SliceIndex<[MaybeUninit<T>]>>::Output: 'holder,
-                'holder: 'a,
-            {
-                let vec = unsafe {
-                    core::mem::transmute::<&'a mut Vec<T>, &'holder mut Vec<MaybeUninit<T>>>(vec)
-                };
-                (&mut vec[range])
-                    .into_iter()
-                    .map(move |item| core::pin::Pin::new(item))
-            }
-
-            let pin =
-                unsafe { pin_vec::<'a, '_>(&mut pool, current_len as usize..max_threads as usize) };
-
-            if let Some(index) = self.search_blank_thread_worker() {
-                panic!("ThreadWorker at index {} is still running", index);
-            }
-
-            // use new_workers
-            unsafe { ThreadWorker::spawn_on_new_thread(pin, (max_threads - current_len) as usize) }
-        } else {
-            pool.truncate(max_threads as usize);
-
+        if self
+            .read_kept_workers_pool_size
+            .compare_exchange(current_len, max_threads, Ordering::SeqCst, Ordering::SeqCst)
+            .is_err()
+        {
+            // another thread is updating
             return WaitThreadJoin::None;
         }
+
+        let mut pool = self.kept_workers_pool.lock();
+
+        if current_len < max_threads {
+            match self.add_queue_with(|sender| {
+                let (send, recv) = std::sync::mpsc::sync_channel(0);
+                if !sender.is_empty() || sender.receiver_count() == 0 {
+                    return None;
+                }
+                Some((
+                    VirtualThreadPoolMessage::AddThread(
+                        max_threads - current_len,
+                        send,
+                        self.kept_workers_pool.clone(),
+                    ),
+                    recv,
+                ))
+            }) {
+                Some(recv) => {
+                    return WaitThreadJoin::Recv(recv);
+                }
+                None => {
+                    let (send, recv) = std::sync::mpsc::sync_channel(0);
+                    let msg = VirtualThreadPoolMessage::<ThreadAccessor>::AddThread(
+                        max_threads - current_len,
+                        send,
+                        self.kept_workers_pool.clone(),
+                    );
+
+                    let queue_receiver = self.queue_receiver.clone();
+                    let handle = root_spawn(std::thread::Builder::new(), move || {
+                        VirtualThreadPoolMessage::listen_with(
+                            queue_receiver.as_ref().unwrap(),
+                            msg,
+                        );
+                    })
+                    .unwrap();
+
+                    pool.push(handle);
+                    return WaitThreadJoin::Recv(recv);
+                }
+            }
+        } else {
+            let mut sender = self.queue.lock();
+
+            let count = current_len - max_threads;
+
+            let (send, recv) = flume::bounded(count);
+
+            for _ in 0..count {
+                let _ = sender
+                    .as_mut()
+                    .unwrap()
+                    .send(VirtualThreadPoolMessage::Terminate(
+                        send.clone(),
+                        self.kept_workers_pool.clone(),
+                    ));
+            }
+
+            return WaitThreadJoin::RecvN(recv, count);
+        }
+    }
+
+    pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
+        self.queue
+            .lock()
+            .as_mut()
+            .unwrap()
+            .send(VirtualThreadPoolMessage::Run(
+                runner,
+                ThreadAccessorWrapper::new(accessor),
+                thread_id,
+            ))
+            .unwrap();
     }
 }
 
-unsafe impl Send for VirtualThreadPool {}
-unsafe impl Sync for VirtualThreadPool {}
+impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
+    for VirtualThreadPool<ThreadAccessor>
+{
+    fn new_thread(
+        &mut self,
+        accessor: ThreadAccessor,
+        runner: ThreadRunner,
+    ) -> Option<NonZero<u32>> {
+        static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
+
+        let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
+
+        let thread_id_nz = NonZero::new(thread_id as u32)?;
+
+        self.run(accessor, runner, thread_id_nz);
+
+        Some(thread_id_nz)
+    }
+}
+
+unsafe impl<ThreadAccessor: ThreadAccess> Send for VirtualThreadPool<ThreadAccessor> {}
+unsafe impl<ThreadAccessor: ThreadAccess> Sync for VirtualThreadPool<ThreadAccessor> {}
 pub struct DirectThreadPool;
 
 mod spawn {
@@ -463,13 +424,14 @@ mod spawn {
         IS_ROOT_THREAD.with(|flag| unsafe { flag.get().replace(false) })
     }
 }
+
 pub use spawn::{root_spawn, root_spawn_unchecked};
 
-impl VirtualThread for DirectThreadPool {
+impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor> for DirectThreadPool {
     // new thread start function call by other wasm
     fn new_thread(
         &mut self,
-        accessor: impl ThreadAccess,
+        accessor: ThreadAccessor,
         runner: ThreadRunner,
     ) -> Option<NonZero<u32>> {
         static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
@@ -497,6 +459,7 @@ macro_rules! plug_thread {
         $crate::__private::paste::paste! {
             #[allow(non_camel_case_types)]
             #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+            #[repr(usize)]
             pub(crate) enum ThreadAccessor {
                 $(
                     $wasm,
@@ -539,6 +502,22 @@ macro_rules! plug_thread {
                                 <T as $crate::memory::WasmAccess>::NAME
                             }
                         )*
+                    }
+                }
+
+                fn as_usize(&self) -> usize {
+                    *self as usize
+                }
+
+                fn from_usize(v: usize) -> Self
+                where
+                    Self: Sized,
+                {
+                    match v {
+                        $(
+                            x if x == Self::$wasm as usize => Self::$wasm,
+                        )*
+                        _ => panic!("Invalid ThreadAccessor value: {v}"),
                     }
                 }
             }

@@ -2,6 +2,7 @@ use const_struct::const_struct;
 use wasi_virt_layer::{
     file::{VFSConstNormalFiles, WasiConstFile},
     prelude::*,
+    thread::ThreadAccess,
 };
 
 wit_bindgen::generate!({
@@ -60,10 +61,12 @@ const ENV: VirtualEnvConstState = VirtualEnvConstState {
 plug_env!(@const, EnvTy, test_wasm);
 
 struct ThreadAlt;
-impl wasi_virt_layer::thread::VirtualThread for ThreadAlt {
+impl<ThreadAccessor: ThreadAccess> wasi_virt_layer::thread::VirtualThread<ThreadAccessor>
+    for ThreadAlt
+{
     fn new_thread(
         &mut self,
-        _: impl wasi_virt_layer::thread::ThreadAccess,
+        _: ThreadAccessor,
         _: wasi_virt_layer::thread::ThreadRunner,
     ) -> Option<std::num::NonZero<u32>> {
         unreachable!();
