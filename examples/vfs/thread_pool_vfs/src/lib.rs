@@ -59,18 +59,11 @@ const ENV: VirtualEnvConstState = VirtualEnvConstState {
 
 plug_env!(@const, EnvTy, test_pool_thread);
 
-struct ThreadAlt;
-impl wasi_virt_layer::thread::VirtualThread for ThreadAlt {
-    fn new_thread(
-        &mut self,
-        accessor: impl wasi_virt_layer::thread::ThreadAccess,
-        runner: wasi_virt_layer::thread::ThreadRunner,
-    ) -> Option<std::num::NonZero<u32>> {
-        unreachable!();
-    }
-}
+use wasi_virt_layer::thread::VirtualThreadPool;
 
-plug_thread!(@sched_yield, ThreadAlt, test_pool_thread);
+static mut THREAD_POOL: VirtualThreadPool = VirtualThreadPool::new(4);
+
+plug_thread!(unsafe { &mut THREAD_POOL }, test_pool_thread);
 
 mod fs {
     use wasi_virt_layer::file::{DefaultStdIO, VFSConstNormalLFS, Wasip1ConstVFS};
