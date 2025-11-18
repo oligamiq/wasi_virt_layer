@@ -3,6 +3,7 @@ use wasi_virt_layer::{
     file::{VFSConstNormalFiles, WasiConstFile},
     poll::PollOneoff,
     prelude::*,
+    thread::VirtualThreadPool,
 };
 
 wit_bindgen::generate!({
@@ -17,7 +18,7 @@ impl Guest for Starter {
         test_pool_thread::_reset();
         test_pool_thread::_start();
 
-        // Self::init(4);
+        Self::init(4);
 
         test_pool_thread::_main();
     }
@@ -25,23 +26,23 @@ impl Guest for Starter {
     fn init(pool_size: u32) {
         println!("Initializing thread pool with size {}", pool_size);
 
-        // let pool = &raw mut THREAD_POOL;
-        // let pool = unsafe { &mut *pool };
-        // pool.init();
+        let pool = &raw mut THREAD_POOL;
+        let pool = unsafe { &mut *pool };
+        pool.init();
 
-        // println!("Setting thread pool capacity to {}", pool_size);
+        println!("Setting thread pool capacity to {}", pool_size);
 
-        // pool.set_capacity(pool_size as usize);
+        pool.set_capacity(pool_size as usize);
 
-        // println!("Flushing thread pool capacity...");
+        println!("Flushing thread pool capacity...");
 
-        // let waiter = pool.flush_capacity();
+        let waiter = pool.flush_capacity();
 
-        // println!("Waiting for thread pool to initialize...");
+        println!("Waiting for thread pool to initialize...");
 
-        // waiter.wait();
+        waiter.wait();
 
-        // println!("Thread pool initialized.");
+        println!("Thread pool initialized.");
     }
 }
 
@@ -79,12 +80,12 @@ const FILES: NormalFILES = ConstFiles!([
     )
 ]);
 
-// static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
-//     unsafe { VirtualThreadPool::const_new(4) };
+static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
+    unsafe { VirtualThreadPool::const_new(4) };
 
 plug_thread!(
-    // { unsafe { &mut *(&raw mut THREAD_POOL) } },
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new() },
+    { unsafe { &mut *(&raw mut THREAD_POOL) } },
+    // { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new() },
     self,
     test_pool_thread
 );

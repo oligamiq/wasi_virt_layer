@@ -508,7 +508,7 @@ macro_rules! plug_thread {
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
                     #[cfg(target_os = "wasi")]
                     {
-                        // println!("$$$ Calling wasi_thread_start in {}", self.as_name());
+                        println!("$$$ Calling wasi_thread_start in {}", self.as_name());
                         match *self {
                             $(
                                 Self::$wasm => {
@@ -590,7 +590,7 @@ macro_rules! plug_thread {
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::$wasm;
-                    // println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
+                    println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
                     // println!("  data_ptr: {:?}", data_ptr);
 
                     #[allow(unused_mut)]
