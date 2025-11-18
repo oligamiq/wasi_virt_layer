@@ -60,9 +60,19 @@ const ENV: VirtualEnvConstState = VirtualEnvConstState {
 
 plug_env!(@const, EnvTy, test_wasm);
 
-struct ThreadAlt;
+struct ThreadAlt<ThreadAccessor: ThreadAccess> {
+    _marker: core::marker::PhantomData<ThreadAccessor>,
+}
+impl<ThreadAccessor: ThreadAccess> ThreadAlt<ThreadAccessor> {
+    pub const fn new() -> Self {
+        ThreadAlt {
+            _marker: core::marker::PhantomData,
+        }
+    }
+}
+
 impl<ThreadAccessor: ThreadAccess> wasi_virt_layer::thread::VirtualThread<ThreadAccessor>
-    for ThreadAlt
+    for ThreadAlt<ThreadAccessor>
 {
     fn new_thread(
         &mut self,
@@ -73,7 +83,35 @@ impl<ThreadAccessor: ThreadAccess> wasi_virt_layer::thread::VirtualThread<Thread
     }
 }
 
-plug_thread!(@sched_yield, ThreadAlt, test_wasm);
+#[derive(Clone, Copy)]
+struct ThreadAccessorAlt;
+
+impl ThreadAccess for ThreadAccessorAlt {
+    fn call_wasi_thread_start(
+        &self,
+        _: wasi_virt_layer::thread::ThreadRunner,
+        _: Option<std::num::NonZero<u32>>,
+    ) {
+        todo!()
+    }
+
+    fn as_name(&self) -> &'static str {
+        todo!()
+    }
+
+    fn as_usize(&self) -> usize {
+        todo!()
+    }
+
+    fn from_usize(_: usize) -> Self
+    where
+        Self: Sized,
+    {
+        todo!()
+    }
+}
+
+plug_thread!(@sched_yield, { ThreadAlt::<ThreadAccessorAlt>::new() }, test_wasm);
 
 mod fs {
     use wasi_virt_layer::file::{DefaultStdIO, VFSConstNormalLFS, Wasip1ConstVFS};

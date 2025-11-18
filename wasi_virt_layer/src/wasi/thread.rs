@@ -371,7 +371,15 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 
 unsafe impl<ThreadAccessor: ThreadAccess> Send for VirtualThreadPool<ThreadAccessor> {}
 unsafe impl<ThreadAccessor: ThreadAccess> Sync for VirtualThreadPool<ThreadAccessor> {}
-pub struct DirectThreadPool;
+pub struct DirectThreadPool<ThreadAccessor: ThreadAccess>(
+    core::marker::PhantomData<ThreadAccessor>,
+);
+
+impl<ThreadAccessor: ThreadAccess> DirectThreadPool<ThreadAccessor> {
+    pub const fn new() -> Self {
+        DirectThreadPool(core::marker::PhantomData)
+    }
+}
 
 mod spawn {
     use core::cell::UnsafeCell;
@@ -427,7 +435,9 @@ mod spawn {
 
 pub use spawn::{root_spawn, root_spawn_unchecked};
 
-impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor> for DirectThreadPool {
+impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
+    for DirectThreadPool<ThreadAccessor>
+{
     // new thread start function call by other wasm
     fn new_thread(
         &mut self,
