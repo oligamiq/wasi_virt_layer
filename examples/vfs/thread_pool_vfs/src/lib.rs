@@ -74,7 +74,8 @@ static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
 
 plug_thread!(
     { unsafe { &mut *(&raw mut THREAD_POOL) } },
-    test_pool_thread
+    test_pool_thread,
+    self
 );
 
 mod fs {

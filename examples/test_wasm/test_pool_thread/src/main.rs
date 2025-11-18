@@ -11,10 +11,10 @@ fn main() {
     for i in 0..10 {
         let counter = Arc::clone(&counter);
         let handle = std::thread::spawn(move || {
-            println!("Thread {} started", i);
+            println!("Thread {i} started");
             counter.fetch_add(1, Ordering::SeqCst);
             std::thread::sleep(std::time::Duration::from_millis(10));
-            println!("Thread {} completed", i);
+            println!("Thread {i} completed");
         });
         handles.push(handle);
     }

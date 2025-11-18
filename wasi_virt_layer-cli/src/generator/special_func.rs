@@ -4,10 +4,7 @@ use walrus::*;
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
-    util::{
-        NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport as _, WalrusUtilFuncs as _,
-        WalrusUtilImport as _, WalrusUtilModule as _,
-    },
+    util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
 };
 
 /// To enable the reset function,

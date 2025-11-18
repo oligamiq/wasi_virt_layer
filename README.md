@@ -38,6 +38,7 @@ For further details, please refer to the example.
 # TODO!
 - Support non-binary Wasm modules
 - Enable specifying multiple Wasm modules
+- Support self is not passed in plug_thread!
 - Support self binary
 - support flush sync to file system
 - Fake global allocator and center allocator and merge with vfs
