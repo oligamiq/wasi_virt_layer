@@ -11,12 +11,16 @@ repository.workspace = true
 documentation.workspace = true
 homepage.workspace = true
 readme.workspace = true
-publish=false
+publish = false
 
 [dependencies]
-wasi_virt_layer = { workspace = true, features = ["threads"] }
-const_struct = "0.6.2"
 wit-bindgen = "0.43.0"
+const_struct = "0.6.2"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+default-features = false
+features = ["threads"]
 
 [lib]
 crate-type = ["cdylib"]

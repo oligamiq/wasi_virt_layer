@@ -48,7 +48,7 @@ For further details, please refer to the example.
 - Feature Access time etc traits
 - Separate mode (connect function by javascript)
 - threading vfs with non threading wasm
-- valider with error on threads
+- validator with error on threads
 - Unicode support
 
 # run example

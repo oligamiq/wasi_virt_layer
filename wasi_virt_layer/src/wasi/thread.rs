@@ -125,11 +125,19 @@ impl WaitThreadJoin {
         match self {
             WaitThreadJoin::None => {}
             WaitThreadJoin::Recv(recv) => {
-                let _ = recv.recv();
+                println!("Waiting for thread pool flush to complete...");
+                println!("Thread ID: {:?}", std::thread::current().id());
+                let s = recv.recv();
+                println!("Thread pool flush completed: {:?}", s);
             }
             WaitThreadJoin::RecvN(recv, n) => {
+                println!(
+                    "Waiting for thread pool flush to complete for {} threads...",
+                    n
+                );
                 for _ in 0..n {
-                    let _ = recv.recv();
+                    let s = recv.recv();
+                    println!("Thread pool flush completed for one thread: {:?}", s);
                 }
             }
         }
@@ -194,6 +202,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
         count: usize,
         queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>,
     ) -> impl Iterator<Item = JoinHandle<()>> {
+        println!("Creating {count} threads in the thread pool...");
         core::iter::repeat_n(queue.clone(), count).map(move |queue| {
             let thread = root_spawn(std::thread::Builder::new(), move || {
                 Self::listen(&queue);
@@ -276,33 +285,52 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         let mut pool = self.kept_workers_pool.lock();
 
         if current_len < max_threads {
-            match self.add_queue_with(|sender| {
-                let (send, recv) = std::sync::mpsc::sync_channel(0);
-                if !sender.is_empty() || sender.receiver_count() == 0 {
-                    return None;
-                }
-                Some((
-                    VirtualThreadPoolMessage::AddThread(
-                        max_threads - current_len,
-                        send,
-                        self.kept_workers_pool.clone(),
-                    ),
-                    recv,
-                ))
-            }) {
+            println!("[] Increasing thread pool size from {current_len} to {max_threads}");
+
+            match {
+                self.add_queue_with(|sender| {
+                    println!(
+                        "[] Requesting addition of {} threads to the thread pool...",
+                        max_threads - current_len
+                    );
+
+                    let (send, recv) = std::sync::mpsc::sync_channel(0);
+                    println!("sender.receiver_count(): {}", sender.receiver_count());
+                    println!("sender.len(): {}", sender.len());
+                    if !sender.is_empty() || sender.receiver_count() <= 1 {
+                        println!("[] Another thread is handling the addition. Skipping...");
+                        return None;
+                    }
+                    println!("[] Sending add thread request...");
+                    Some((
+                        VirtualThreadPoolMessage::AddThread(
+                            max_threads - current_len,
+                            send,
+                            self.kept_workers_pool.clone(),
+                        ),
+                        recv,
+                    ))
+                })
+            } {
                 Some(recv) => {
                     return WaitThreadJoin::Recv(recv);
                 }
                 None => {
-                    let (send, recv) = std::sync::mpsc::sync_channel(0);
+                    let count = max_threads - current_len;
+                    let (send, recv) = std::sync::mpsc::sync_channel(count);
                     let msg = VirtualThreadPoolMessage::<ThreadAccessor>::AddThread(
-                        max_threads - current_len,
+                        count,
                         send,
                         self.kept_workers_pool.clone(),
                     );
 
                     let queue_receiver = self.queue_receiver.clone();
+
+                    println!("[] queue_receiver is_some(): {}", queue_receiver.is_some());
+
                     let handle = root_spawn(std::thread::Builder::new(), move || {
+                        println!("[] Thread pool addition thread started.");
+
                         VirtualThreadPoolMessage::listen_with(
                             queue_receiver.as_ref().unwrap(),
                             msg,
@@ -461,11 +489,11 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 
 #[macro_export]
 macro_rules! plug_thread {
-    ($pool:tt, $($wasm:ident),*) => {
+    ($pool:tt, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_thread, @inner, $pool);
     };
 
-    (@inner, $pool:tt, $($wasm:ident),*) => {
+    (@inner, $pool:tt, $($wasm:ident),* $(,)?) => {
         $crate::__private::paste::paste! {
             #[allow(non_camel_case_types)]
             #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -480,6 +508,7 @@ macro_rules! plug_thread {
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
                     #[cfg(target_os = "wasi")]
                     {
+                        // println!("$$$ Calling wasi_thread_start in {}", self.as_name());
                         match *self {
                             $(
                                 Self::$wasm => {
@@ -561,8 +590,7 @@ macro_rules! plug_thread {
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::$wasm;
-
-                    // println!("Spawning a new thread in {}", ACCESSOR.as_name());
+                    // println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
                     // println!("  data_ptr: {:?}", data_ptr);
 
                     #[allow(unused_mut)]

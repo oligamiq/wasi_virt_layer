@@ -33,7 +33,7 @@ pub mod prelude {
     pub use crate::plug_thread;
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
     pub use crate::wasi::file::constant::vfs::Wasip1ConstVFS;
-    pub use crate::{ConstFiles, import_wasm, plug_env, plug_fs, plug_process};
+    pub use crate::{ConstFiles, import_wasm, plug_env, plug_fs, plug_poll, plug_process};
 }
 
 #[cfg(feature = "threads")]
@@ -60,6 +60,10 @@ pub mod process {
     pub use crate::wasi::process::{DefaultProcess, ProcessExit};
 }
 
+pub mod poll {
+    pub use crate::wasi::poll::{DefaultPoll, PollOneoff};
+}
+
 pub mod __private {
     #[cfg(not(target_os = "wasi"))]
     pub use super::wasip1;
@@ -83,6 +87,8 @@ pub mod __private {
                 VFSConstNormalFiles, VFSConstNormalInode, WasiConstPrimitiveFile,
             };
         }
+
+
 
         #[cfg(feature = "threads")]
         pub mod thread {

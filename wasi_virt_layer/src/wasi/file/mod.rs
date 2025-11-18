@@ -229,7 +229,7 @@ pub trait Wasip1FileSystem {
 
 #[macro_export]
 macro_rules! plug_fs {
-    (@const, $state:expr, $($wasm:ident),*) => {
+    (@const, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @const, $state);
 
         // To prevent unused errors from occurring
@@ -240,7 +240,7 @@ macro_rules! plug_fs {
         }
     };
 
-    (@inner, @const, $state:expr, $($wasm:ident),*) => {
+    (@inner, @const, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__private::paste::paste! {
             $(
                 #[cfg(target_os = "wasi")]

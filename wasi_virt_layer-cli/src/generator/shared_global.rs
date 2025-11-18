@@ -43,7 +43,10 @@ use crate::{
 ///         }
 ///     });
 #[derive(Debug, Default)]
-pub struct SharedGlobal;
+pub struct SharedGlobal {
+    /// If unstable_print_debug is not enabled, store the names of the extra exported functions here
+    extra_export_func_names: Option<Vec<String>>,
+}
 
 impl Generator for SharedGlobal {
     fn post_combine(
@@ -83,7 +86,7 @@ impl Generator for SharedGlobal {
             .map(|mem_id| {
                 Self::gen_custom_locker(module, mem_id, ctx.unstable_print_debug)
                     .wrap_err("Failed to generate custom locker function")
-                    .map(|locker_id| (mem_id, locker_id))
+                    .map(|(locker_id, export_name)| (mem_id, (locker_id, export_name)))
             })
             .collect::<eyre::Result<HashMap<_, _>>>()?;
 
@@ -94,12 +97,22 @@ impl Generator for SharedGlobal {
             |instr, _| {
                 if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
                     *instr = Instr::Call(Call {
-                        func: lockers.get(memory).unwrap().to_owned(),
+                        func: lockers.get(memory).unwrap().to_owned().0,
                     });
                 }
             },
-            &lockers.values().cloned().collect::<Vec<_>>(),
+            &lockers.values().map(|(v, _)| *v).collect::<Vec<_>>(),
         )?;
+
+        let extra_export_func_names = lockers
+            .into_values()
+            .map(|(_, name)| name)
+            .collect::<Vec<_>>();
+
+        self.extra_export_func_names = match ctx.unstable_print_debug {
+            true => None,
+            false => Some(extra_export_func_names),
+        };
 
         Ok(())
     }
@@ -294,24 +307,38 @@ impl Generator for SharedGlobal {
 
         Ok(())
     }
+
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &super::ComponentCtx,
+    ) -> eyre::Result<()> {
+        if let Some(extra_export_func_names) = &self.extra_export_func_names {
+            for export_name in extra_export_func_names {
+                module.exports.erase(export_name)?;
+            }
+        }
+        Ok(())
+    }
 }
 
 impl SharedGlobal {
+    #[allow(unused_variables)]
     fn gen_custom_locker(
         module: &mut walrus::Module,
         mem_id: walrus::MemoryId,
         is_debug: bool,
-    ) -> eyre::Result<walrus::FunctionId> {
+    ) -> eyre::Result<(walrus::FunctionId, String)> {
         let alt_id = ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
             .get_fid(&module.imports)?;
         let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
 
         let locker_id = module.copy_func(base_locker)?;
-        if is_debug {
-            module.exports.add(
-                &format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index()),
-                locker_id,
-            );
+
+        let export_name = format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index());
+        // todo!(); This is essential for it to function.
+        {
+            module.exports.add(&export_name, locker_id);
         }
 
         let locker = module.funcs.get_mut(locker_id);
@@ -331,7 +358,7 @@ impl SharedGlobal {
                 }
             })?;
 
-        Ok(locker_id)
+        Ok((locker_id, export_name))
     }
 
     fn remove_gen_custom_locker_base(module: &mut walrus::Module, debug: bool) -> eyre::Result<()> {

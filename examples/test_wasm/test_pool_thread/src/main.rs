@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 fn main() {
-    println!("Testing virtual thread pool...");
+    println!("### Testing virtual thread pool...");
 
     let counter = Arc::new(AtomicU32::new(0));
     let mut handles = vec![];
@@ -10,14 +10,17 @@ fn main() {
     // Spawn 10 threads to test the pool
     for i in 0..10 {
         let counter = Arc::clone(&counter);
+        println!("### Spawning thread {i}");
         let handle = std::thread::spawn(move || {
-            println!("Thread {i} started");
+            println!("### Thread {i} started");
             counter.fetch_add(1, Ordering::SeqCst);
-            std::thread::sleep(std::time::Duration::from_millis(10));
-            println!("Thread {i} completed");
+            std::thread::sleep(std::time::Duration::from_millis(5000));
+            println!("### Thread {i} completed");
         });
         handles.push(handle);
     }
+
+    println!("### Waiting for threads to complete...");
 
     // Wait for all threads to complete
     for handle in handles {
@@ -25,8 +28,8 @@ fn main() {
     }
 
     let final_count = counter.load(Ordering::SeqCst);
-    println!("All threads completed. Counter: {}", final_count);
+    println!("### All threads completed. Counter: {}", final_count);
 
     assert_eq!(final_count, 10, "Expected counter to be 10");
-    println!("Test passed!");
+    println!("### Test passed!");
 }
