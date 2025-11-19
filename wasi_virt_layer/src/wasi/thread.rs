@@ -162,9 +162,11 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
                 accessor.call_wasi_thread_start(runner, Some(thread_id));
             }
             VirtualThreadPoolMessage::AddThread(count, ref sender, ref kept_workers_pool) => {
-                let threads = self.create_thread(count, &queue);
+                // Passing an iterator to kept_workers_pool causes the lock to hold for too long.
+                let threads = self.create_thread(count, &queue).collect::<Vec<_>>();
                 kept_workers_pool.extend(threads);
-                let _ = sender.try_send(());
+                let s = sender.try_send(());
+                println!("Sent add thread completion signal: {:?}", s);
             }
             VirtualThreadPoolMessage::Terminate(sender, pool) => {
                 let thread_id = std::thread::current().id();
@@ -294,7 +296,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                         max_threads - current_len
                     );
 
-                    let (send, recv) = std::sync::mpsc::sync_channel(0);
+                    let (send, recv) = std::sync::mpsc::sync_channel(1);
                     println!("sender.receiver_count(): {}", sender.receiver_count());
                     println!("sender.len(): {}", sender.len());
                     if !sender.is_empty() || sender.receiver_count() <= 1 {
@@ -318,8 +320,9 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                 None => {
                     let count = max_threads - current_len;
                     let (send, recv) = std::sync::mpsc::sync_channel(count);
+                    println!("[] count {count}");
                     let msg = VirtualThreadPoolMessage::<ThreadAccessor>::AddThread(
-                        count,
+                        count - 1,
                         send,
                         self.kept_workers_pool.clone(),
                     );
