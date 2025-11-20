@@ -62,6 +62,11 @@ pub struct Args {
     /// See https://github.com/wasm-bindgen/walrus/issues/258
     #[arg(long)]
     pub dwarf: Option<bool>,
+
+    /// Finally, align the ABI with wasip1-threads.
+    /// Only WASM will be generated.
+    #[arg(long, default_value = "false")]
+    pub adjust_abi: bool,
 }
 
 impl Args {

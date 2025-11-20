@@ -7,13 +7,9 @@ use crate::{
     generator::{Generator, GeneratorCtx},
     util::{
         NAMESPACE, THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _,
-        WalrusUtilImport as _, WalrusUtilModule as _,
+        WalrusUtilImport as _, WalrusUtilModule as _, gen_component_name,
     },
 };
-
-fn gen_component_name(namespace: &str, name: &str) -> String {
-    format!("[static]{namespace}.{}-import", name.replace("_", "-"))
-}
 
 /// The thread spawn process itself within the VFS is also caught,
 /// but processing is performed to exclude only the root spawn from this.

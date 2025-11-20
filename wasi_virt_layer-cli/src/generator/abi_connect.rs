@@ -1,7 +1,12 @@
+use itertools::Itertools;
+
 use crate::{
-    abi::Wasip1ABIFunc,
+    abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
     generator::Generator,
-    util::{WalrusFID, WalrusUtilExport, WalrusUtilModule},
+    util::{
+        CORE_MODULE_ROOT, THREADS_MODULE_ROOT, WalrusFID, WalrusUtilExport, WalrusUtilImport,
+        WalrusUtilModule, gen_component_name,
+    },
 };
 
 /// Connect Wasip1 ABI
@@ -179,6 +184,74 @@ impl Generator for NonRecursiveWasiABI {
                     "Non-recursive Wasip1 ABI import exists: {name}, but this is not verified."
                 );
             });
+
+        Ok(())
+    }
+}
+
+/// Adjust ABI to match wasip1-threads
+#[derive(Debug, Clone, Default)]
+pub struct AdjustABI;
+
+impl Generator for AdjustABI {
+    fn post_components(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &super::ComponentCtx,
+    ) -> eyre::Result<()> {
+        if !ctx.adjust_abi {
+            return Ok(());
+        }
+
+        for import_name in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
+            if let Ok(import_id) = (CORE_MODULE_ROOT, &gen_component_name("wasip1", import_name))
+                .get_fid(&module.imports)
+            {
+                if let Ok(import_id) =
+                    ("wasi_snapshot_preview1", import_name).get_fid(&module.imports)
+                {
+                    module.imports.erase(import_id).unwrap();
+                }
+
+                let import_id = module.imports.get_imported_func(import_id).unwrap().id();
+                let import = module.imports.get_mut(import_id);
+                import.module = "wasi_snapshot_preview1".to_string();
+                import.name = import_name.to_string();
+            }
+        }
+
+        let import_name = <Wasip1ThreadsABIFunc as strum::VariantNames>::VARIANTS
+            .iter()
+            .exactly_one()
+            .unwrap();
+
+        if let Ok(import_id) = (
+            THREADS_MODULE_ROOT,
+            &gen_component_name("wasip1-threads", import_name),
+        )
+            .get_fid(&module.imports)
+        {
+            if let Ok(import_id) = ("wasi", "thread-spawn").get_fid(&module.imports) {
+                module.imports.erase(import_id).unwrap();
+            }
+
+            let import_id = module.imports.get_imported_func(import_id).unwrap().id();
+            let import = module.imports.get_mut(import_id);
+            import.module = "wasi".to_string();
+            import.name = "thread-spawn".to_string();
+
+            if let Ok(export_id) = "wasi_thread_start".get_fid(&module.exports) {
+                module.exports.erase(export_id)?;
+            }
+
+            // adjust export
+            let export_name =
+                "wasip1-vfs:host/virtual-file-system-wasip1-threads-export#wasi-thread-start";
+            let id = export_name.get_fid(&module.exports)?;
+            let eid = module.exports.get_exported_func(id).unwrap().id();
+            let export = module.exports.get_mut(eid);
+            export.name = "wasi_thread_start".into();
+        }
 
         Ok(())
     }

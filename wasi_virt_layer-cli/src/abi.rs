@@ -222,7 +222,7 @@ pub enum Wasip1ABIFunc {
 #[derive(
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
 )]
-#[strum(serialize_all = "snake_case")]
+#[strum(serialize_all = "kebab_case")]
 pub enum Wasip1ThreadsABIFunc {
     ThreadSpawn,
 }

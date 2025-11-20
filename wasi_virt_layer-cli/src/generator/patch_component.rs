@@ -3,12 +3,8 @@ use strum::VariantNames;
 use crate::{
     abi::Wasip1ABIFunc,
     generator::Generator,
-    util::{CORE_MODULE_ROOT, WalrusUtilExport as _, WalrusUtilImport as _},
+    util::{CORE_MODULE_ROOT, WalrusUtilExport as _, WalrusUtilImport as _, gen_component_name},
 };
-
-fn gen_component_name(namespace: &str, name: &str) -> String {
-    format!("[static]{namespace}.{}-import", name.replace("_", "-"))
-}
 
 /// Apply the patch to use wit-bindgen.
 /// As it will be rejected otherwise,

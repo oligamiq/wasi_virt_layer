@@ -2383,6 +2383,10 @@ impl Borrow<str> for LString {
 
 pub const CRATE_NAME: &str = "wasi_virt_layer";
 
+pub fn gen_component_name(namespace: &str, name: &str) -> String {
+    format!("[static]{namespace}.{}-import", name.replace("_", "-"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

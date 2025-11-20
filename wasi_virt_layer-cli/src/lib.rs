@@ -42,6 +42,7 @@ macro_rules! add_generator {
             abi_connect::ConnectWasip1ABI,
             abi_connect::ConnectWasip1ThreadsABI,
             abi_connect::NonRecursiveWasiABI,
+            abi_connect::AdjustABI,
             debug::DebugBase,
             debug::DebugCallMemoryGrow,
             debug::DebugExportVFSFunctions,
@@ -69,15 +70,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         let mut component_runner = generator::ComponentRunner::new(package.clone());
         add_generator!(component_runner);
 
-        let (threads, name, memory) = component_runner
-            .component_to_files(&parsed_args, parsed_args.dwarf.unwrap_or(false))
-            .wrap_err("Failed to run component to files")?;
-
-        if threads {
-            test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
-        } else {
-            test_run::gen_test_run(name, &parsed_args.out_dir);
-        }
+        last(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 
         return Ok(());
     }
@@ -167,6 +160,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         dwarf,
         unstable_print_debug,
         parsed_args.no_transpile,
+        parsed_args.adjust_abi,
         memory_type,
         toml_restores.clone(),
         parsed_args.get_wasm_memory_hints(),
@@ -189,17 +183,29 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         return Ok(());
     }
 
-    let (_, name, memory) = component_runner
-        .component_to_files(&parsed_args, dwarf)
-        .wrap_err("Failed to run component to files")?;
-
-    if threads {
-        test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
-    } else {
-        test_run::gen_test_run(name, &parsed_args.out_dir);
-    }
+    last(&mut component_runner, &parsed_args, Some(dwarf))?;
 
     Ok(())
 }
 
 // deno run dist/example_vfs.js
+
+fn last(
+    component_runner: &mut generator::ComponentRunner,
+    parsed_args: &args::Args,
+    dwarf: Option<bool>,
+) -> eyre::Result<()> {
+    let (threads, name, memory) = component_runner
+        .component_to_files(&parsed_args, dwarf.unwrap_or(false), parsed_args.adjust_abi)
+        .wrap_err("Failed to run component to files")?;
+
+    if !parsed_args.adjust_abi {
+        if threads {
+            test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
+        } else {
+            test_run::gen_test_run(name, &parsed_args.out_dir);
+        }
+    }
+
+    Ok(())
+}

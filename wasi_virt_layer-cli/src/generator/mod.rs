@@ -47,6 +47,7 @@ pub struct GeneratorCtx {
     pub dwarf: bool,
     pub threads: bool,
     pub no_transpile: bool,
+    pub adjust_abi: bool,
 }
 
 #[derive(Debug, Default)]
@@ -57,6 +58,7 @@ pub struct ComponentCtx {
     unstable_print_debug: Option<bool>,
     dwarf: bool,
     threads: Option<bool>,
+    adjust_abi: bool,
 }
 
 struct CompressNames {
@@ -117,6 +119,7 @@ pub struct ComponentCtxVisitor {
     unstable_print_debug: Option<bool>,
     dwarf: Option<bool>,
     threads: Option<bool>,
+    adjust_abi: bool,
 }
 
 impl ComponentCtxVisitor {
@@ -127,6 +130,7 @@ impl ComponentCtxVisitor {
         unstable_print_debug: bool,
         dwarf: bool,
         threads: bool,
+        adjust_abi: bool,
     ) -> Self {
         Self {
             vfs_name: Some(vfs_name.to_compact_string()),
@@ -140,6 +144,7 @@ impl ComponentCtxVisitor {
             unstable_print_debug: Some(unstable_print_debug),
             dwarf: Some(dwarf),
             threads: Some(threads),
+            adjust_abi,
         }
     }
 }
@@ -154,16 +159,29 @@ impl Generator for ComponentCtxVisitor {
                 .map(|s| s.to_string())
                 .collect::<Box<_>>(),
         };
-        let target_memory_type = ctx.target_memory_type;
-        let unstable_print_debug = ctx.unstable_print_debug;
-        let dwarf = ctx.dwarf;
-        let threads = ctx.threads;
+        let GeneratorCtx {
+            vfs_name: _,
+            target_names: _,
+            target_memory_type,
+            unstable_print_debug,
+            dwarf,
+            threads,
+            adjust_abi,
+            target_names_with_self: _,
+            vfs_used_memory_id: _,
+            vfs_used_global_id: _,
+            target_used_memory_id: _,
+            target_used_global_id: _,
+            start_func_id: _,
+            no_transpile: _,
+        } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
         module.save_info("target_names", target_names)?;
-        module.save_info("target_memory_type", target_memory_type)?;
-        module.save_info("unstable_print_debug", unstable_print_debug)?;
-        module.save_info("dwarf", dwarf)?;
-        module.save_info("threads", threads)?;
+        module.save_info("target_memory_type", *target_memory_type)?;
+        module.save_info("unstable_print_debug", *unstable_print_debug)?;
+        module.save_info("dwarf", *dwarf)?;
+        module.save_info("threads", *threads)?;
+        module.save_info("adjust_abi", *adjust_abi)?;
         Ok(())
     }
 
@@ -178,6 +196,7 @@ impl Generator for ComponentCtxVisitor {
         let unstable_print_debug = module.load_info::<bool>("unstable_print_debug")?;
         let dwarf = module.load_info::<bool>("dwarf")?;
         let threads = module.load_info::<bool>("threads")?;
+        let adjust_abi = module.load_info::<bool>("adjust_abi")?;
         self.vfs_name = Some(vfs_name.to_compact_string());
         self.target_names = Some(
             target_names
@@ -190,6 +209,7 @@ impl Generator for ComponentCtxVisitor {
         self.unstable_print_debug = Some(unstable_print_debug);
         self.dwarf = Some(dwarf);
         self.threads = Some(threads);
+        self.adjust_abi = adjust_abi;
 
         Ok(())
     }
@@ -203,6 +223,7 @@ impl ComponentCtx {
         unstable_print_debug: bool,
         dwarf: bool,
         threads: bool,
+        adjust_abi: bool,
     ) -> Self {
         Self {
             vfs_name: Some(vfs_name),
@@ -211,6 +232,7 @@ impl ComponentCtx {
             unstable_print_debug: Some(unstable_print_debug),
             dwarf,
             threads: Some(threads),
+            adjust_abi,
         }
     }
 
@@ -607,6 +629,7 @@ impl GeneratorRunner {
         dwarf: bool,
         unstable_print_debug: bool,
         no_transpile: bool,
+        adjust_abi: bool,
         memory_type: TargetMemoryType,
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
@@ -647,6 +670,7 @@ impl GeneratorRunner {
                 dwarf,
                 threads,
                 no_transpile,
+                adjust_abi,
                 vfs_used_memory_id: None,
                 vfs_used_global_id: None,
                 target_used_memory_id: None,
@@ -754,6 +778,7 @@ impl GeneratorRunner {
             self.ctx.unstable_print_debug,
             self.ctx.dwarf,
             self.ctx.threads,
+            self.ctx.adjust_abi,
         );
 
         println!("Adjusting VFS Wasm...");
@@ -970,6 +995,7 @@ impl ComponentRunner {
         &mut self,
         parsed_args: &args::Args,
         dwarf: bool,
+        only_core: bool,
     ) -> eyre::Result<(bool, CompactString, HashMap<CompactString, (u64, u64)>)> {
         let out_dir = &parsed_args.out_dir;
 
@@ -1009,11 +1035,17 @@ impl ComponentRunner {
                                 if dir.as_str() != "interfaces" {
                                     log::warn!("Creating directory: {joined_dir}");
                                 }
+                                if only_core {
+                                    continue;
+                                }
                                 std::fs::create_dir_all(&joined_dir).wrap_err_with(|| {
                                     eyre::eyre!("Failed to create directory: {joined_dir}")
                                 })?;
                             }
                         }
+                    }
+                    if only_core {
+                        continue;
                     }
                     std::fs::write(&file_name, &data).wrap_err_with(|| {
                         eyre::eyre!("Failed to write transpiled file: {file_name}")
@@ -1066,6 +1098,7 @@ impl ComponentRunner {
                     unstable_print_debug: Some(visitor.unstable_print_debug.unwrap()),
                     dwarf: visitor.dwarf.unwrap(),
                     threads: Some(visitor.threads.unwrap()),
+                    adjust_abi: visitor.adjust_abi,
                 });
 
                 self.generators

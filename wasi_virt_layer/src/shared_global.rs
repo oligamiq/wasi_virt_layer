@@ -67,9 +67,9 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get_no_wait() -> i32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get() -> i32 {
-    use crate::debug::*;
+    // use crate::debug::*;
 
-    out(b"waiting for read lock...\n");
+    // out(b"waiting for read lock...\n");
     let _guard = LOCK.read().unwrap();
     let i = unsafe { ALT_GLOBAL_VAR };
     // if !is_pre_init() {
@@ -78,7 +78,7 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get() -> i32 {
     //     out(b"\n");
     // }
     core::mem::drop(_guard);
-    out(b"unlocked global read\n");
+    // out(b"unlocked global read\n");
     i
 }
 
@@ -90,9 +90,9 @@ unsafe extern "C" {
 
 #[unsafe(no_mangle)]
 extern "C" fn __wasip1_vfs_memory_grow_locker(page_size: i32) -> i32 {
-    use crate::debug::*;
+    // use crate::debug::*;
 
-    out(b"locking memory.grow...\n");
+    // out(b"locking memory.grow...\n");
     let _guard = LOCK.write().unwrap();
 
     // out(b"memory.grow requested: ");
@@ -107,7 +107,7 @@ extern "C" fn __wasip1_vfs_memory_grow_locker(page_size: i32) -> i32 {
 
     core::mem::drop(_guard);
 
-    out(b"unlocked memory.grow\n");
+    // out(b"unlocked memory.grow\n");
 
     pre_page_size
 }
