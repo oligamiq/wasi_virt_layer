@@ -1858,6 +1858,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "thread_direct_vfs"
+version = "0.1.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.43.0",
+]
+
+[[package]]
 name = "thread_pool_vfs"
 version = "0.1.1"
 dependencies = [

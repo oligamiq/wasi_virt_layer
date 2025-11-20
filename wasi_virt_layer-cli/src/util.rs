@@ -1775,9 +1775,16 @@ impl WalrusUtilModule for walrus::Module {
         export: impl AsRef<str>,
         is_debug: bool,
     ) -> eyre::Result<()> {
-        self.connect_func_alt(import, export.as_ref())?;
-        if !is_debug {
-            self.exports.remove(export.as_ref()).unwrap();
+        let export = export.as_ref();
+        self.connect_func_alt(import, export)?;
+        if is_debug {
+            self.exports
+                .iter_mut()
+                .find(|e| e.name == export)
+                .unwrap()
+                .name = format!("_____debug_left_{export}");
+        } else {
+            self.exports.remove(export).unwrap();
         }
 
         Ok(())
