@@ -44,7 +44,7 @@ impl Generator for ConnectWasip1ABI {
                         ctx.unstable_print_debug,
                     )?;
                 } else {
-                    log::warn!("No export found for Wasip1 ABI import self: {import}");
+                    log::warn!("No plug found for Wasip1 ABI import self: {import}");
                 }
             } else {
                 if let Some(_) = export {
