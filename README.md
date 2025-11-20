@@ -79,3 +79,14 @@ build target dirのキャッシュ(--no-cache)
 同時実行対策
 超絶長い引数で失敗するかも
 自分自身を呼び出す（フォールバック）
+
+## 色んなスレッド作成の順番での失敗か
+single_memory failed
+multi_memory OK
+VFS -> Body
+
+success
+Body -> Body
+
+success
+VFS -> VFS
