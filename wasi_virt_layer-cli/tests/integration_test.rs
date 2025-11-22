@@ -80,63 +80,36 @@ fn test_build_single() -> color_eyre::Result<()> {
 }
 
 fn build_normal(single: bool) -> color_eyre::Result<()> {
-    assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer")
-        .args([
-            "-p",
-            "example_vfs",
-            "test_wasm",
-            "-t",
-            if single { "single" } else { "multi" },
-        ])
-        .current_dir(THIS_FOLDER)
-        .assert()
-        .try_success()?;
-
-    utils::run_non_thread(&format!("{THIS_FOLDER}/dist"))?;
-
-    Ok(())
+    run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(single),
+        false,
+        OutDir::Default,
+        &[],
+    )
 }
 
 fn build_out_dir() -> color_eyre::Result<()> {
-    assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer")
-        .args([
-            "-p",
-            "example_vfs",
-            "test_wasm",
-            "-t",
-            "single",
-            "--out-dir",
-            &format!("{THIS_FOLDER}/tmp/dist"),
-        ])
-        .current_dir(THIS_FOLDER)
-        .assert()
-        .try_success()?;
-
-    utils::run_non_thread(&format!("{THIS_FOLDER}/tmp/dist"))?;
-
-    Ok(())
+    run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(true),
+        false,
+        OutDir::Path(&format!("{THIS_FOLDER}/tmp/dist")),
+        &[],
+    )
 }
 
 fn build_threads(single: bool) -> color_eyre::Result<()> {
-    assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer")
-        .args([
-            "-p",
-            "threads_vfs",
-            "test_threads",
-            "-t",
-            if single { "single" } else { "multi" },
-            "--threads",
-            "true",
-            "--out-dir",
-            &format!("{THIS_FOLDER}/threads/dist"),
-        ])
-        .current_dir(THIS_FOLDER)
-        .assert()
-        .try_success()?;
-
-    utils::run_thread(&format!("{THIS_FOLDER}/threads/dist"))?;
-
-    Ok(())
+    run_wasi_virt_layer(
+        Some("threads_vfs"),
+        Some("test_threads"),
+        Some(single),
+        true,
+        OutDir::Random,
+        &[],
+    )
 }
 
 fn set_features_inner<T>(
@@ -188,15 +161,14 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
     let run = || -> color_eyre::Result<()> {
-        assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer")
-            .args(["-p", "no_std_vfs", "test_wasm"])
-            .current_dir(THIS_FOLDER)
-            .assert()
-            .try_success()?;
-
-        utils::run_non_thread(&format!("{THIS_FOLDER}/dist"))?;
-
-        Ok(())
+        run_wasi_virt_layer(
+            Some("no_std_vfs"),
+            Some("test_wasm"),
+            None,
+            false,
+            OutDir::Random,
+            &[],
+        )
     };
 
     fn set_features(
@@ -228,26 +200,14 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
     let run = || -> color_eyre::Result<()> {
-        // uuid
-        let out_dir = uuid::Uuid::new_v4();
-
-        assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer")
-            .args([
-                "-p",
-                "threads_vfs",
-                "test_threads",
-                "--threads",
-                "true",
-                "--out-dir",
-                &format!("{THIS_FOLDER}/{out_dir}/dist"),
-            ])
-            .current_dir(THIS_FOLDER)
-            .assert()
-            .try_success()?;
-
-        utils::run_thread(&format!("{THIS_FOLDER}/{out_dir}/dist"))?;
-
-        Ok(())
+        run_wasi_virt_layer(
+            Some("threads_vfs"),
+            Some("test_threads"),
+            None,
+            true,
+            OutDir::Random,
+            &[],
+        )
     };
 
     fn set_features(
@@ -276,23 +236,14 @@ fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
     let fn_ = |m: bool| -> color_eyre::Result<()> {
-        assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer")
-            .args([
-                "-p",
-                "no_thread_with_thread_feature_vfs",
-                "test_wasm",
-                "-t",
-                if m { "multi" } else { "single" },
-                "--threads",
-                "true",
-            ])
-            .current_dir(THIS_FOLDER)
-            .assert()
-            .try_success()?;
-
-        utils::run_thread(&format!("{THIS_FOLDER}/dist"))?;
-
-        Ok(())
+        run_wasi_virt_layer(
+            Some("no_thread_with_thread_feature_vfs"),
+            Some("test_wasm"),
+            Some(m),
+            true,
+            OutDir::Random,
+            &[],
+        )
     };
 
     fn_(false).wrap_err("Failed to run no_thread_with_thread_feature_vfs single")?;
