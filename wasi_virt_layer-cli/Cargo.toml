@@ -68,3 +68,8 @@ fallback = ["dep:wasm-merge-sys", "dep:wasm-opt"]
 
 [dev-dependencies]
 assert_cmd = "2.0.17"
+
+[dev-dependencies.uuid]
+version = "1.18.1"
+# Lets you generate random UUIDs
+features = ["v4"]
