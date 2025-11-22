@@ -1669,6 +1669,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spawn_vfs_and_body_example"
+version = "0.1.1"
+
+[[package]]
+name = "spawn_vfs_and_body_vfs"
+version = "0.1.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.43.0",
+]
+
+[[package]]
 name = "spin"
 version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"

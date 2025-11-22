@@ -1,0 +1,25 @@
+[package]
+name = "spawn_vfs_and_body_vfs"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+license.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+wit-bindgen = "0.43.0"
+const_struct = "0.6.2"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+default-features = false
+features = ["threads", "unstable_print_debug"]
+
+[lib]
+crate-type = ["cdylib"]
