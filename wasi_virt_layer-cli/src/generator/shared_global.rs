@@ -123,7 +123,7 @@ impl Generator for SharedGlobal {
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
         if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
-            return Ok(());
+            unreachable!();
         }
 
         if !ctx.threads {
