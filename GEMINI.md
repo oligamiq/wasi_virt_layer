@@ -1,6 +1,11 @@
 # Gemini CLI Agent Workflow for wasi_virt_layer
 
 This document outlines the general workflow and tools used by the Gemini CLI agent when working on the `wasi_virt_layer` project.
+- Upon receiving instructions, first check whether there is anything that should be included in GEMINI.md; if so, update it.
+
+## Constraints
+- All updates to configuration files such as Cargo.toml must be confirmed.
+- Changes such as `git add commit restore` will be rejected. Changes such as `git diff status` will be permitted.
 
 ## Core Mandates
 
@@ -37,9 +42,13 @@ pub fn run_wasi_virt_layer(
     t_single: Option<bool>,
     threads: bool,
     out_dir: OutDir,
+    keep_build_artifacts: bool,
     other_args: &[&str],
-) -> color_eyre::Result<()>
+) -> color_eyre::Result<TestDir>
 ```
+
+**Parameters:**
+- `keep_build_artifacts`: A `bool` indicating whether intermediate build artifacts should be kept. If `true`, files like `*.adjusted.wasm` and `*.opt.wasm` will remain in the output directory. If `false`, these intermediate files are deleted.
 
 ### `OutDir` Enum
 
@@ -66,5 +75,11 @@ run_wasi_virt_layer(Some("threads_vfs"), Some("test_threads"), None, true, OutDi
 -   `git status`, `git diff HEAD`, `git log -n 3` are used to understand the current state before committing.
 -   Draft commit messages are always proposed.
 -   Changes are never pushed without explicit user request.
+
+## Operational Guidelines
+
+-   When performing a build, use `cargo r -r -- ...`
+-   When performing a check, use `cargo check -r`
+-   When running tests, use `cargo test -r`
 
 This document serves as a guide for the agent's operation within this repository.
