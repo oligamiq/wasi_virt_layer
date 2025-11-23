@@ -25,7 +25,7 @@ The project consists of two main crates:
 
 ### Constraints
 -   All updates to configuration files such as `Cargo.toml` must be confirmed with the user. This includes adding or removing dependencies.
--   Direct git commands for staging (`git add`), committing (`git commit`), or restoring (`git restore`) files are disallowed. Agent should rely on its internal tools and user confirmation for version control. Read-only commands like `git status` and `git diff` are permitted.
+-   Direct git commands for staging (`git add`), committing (`git commit`), or restoring (`git restore`) files are disallowed. Agent must rely on its internal tools and user confirmation for each version control. Read-only commands like `git status` and `git diff` are permitted.
 
 ## 3. Development Workflow
 
