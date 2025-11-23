@@ -67,6 +67,10 @@ pub struct Args {
     /// Only WASM will be generated.
     #[arg(long, default_value = "false")]
     pub adjust_abi: bool,
+
+    /// Keep all intermediate build artifacts instead of deleting them.
+    #[arg(long, default_value = "false")]
+    pub keep_build_artifacts: bool,
 }
 
 impl Args {

@@ -57,7 +57,7 @@ pub enum OutDir<'a> {
 
 /// A wrapper around a directory path that is automatically deleted when it goes out of scope.
 #[derive(Debug)]
-pub struct TestDir(Utf8PathBuf);
+pub struct TestDir(pub Utf8PathBuf);
 
 impl TestDir {
     pub fn new(path: impl Into<Utf8PathBuf>) -> Self {
@@ -84,6 +84,7 @@ pub fn run_wasi_virt_layer(
     t_single: Option<bool>,
     threads: bool,
     out_dir: OutDir,
+    keep_build_artifacts: bool,
     other_args: &[&str],
 ) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
@@ -101,6 +102,10 @@ pub fn run_wasi_virt_layer(
 
     if threads {
         cmd.args(["--threads", "true"]);
+    }
+
+    if keep_build_artifacts {
+        cmd.arg("--keep-build-artifacts");
     }
 
     let out_dir_path = match out_dir {

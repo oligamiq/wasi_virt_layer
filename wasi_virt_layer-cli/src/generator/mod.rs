@@ -48,6 +48,7 @@ pub struct GeneratorCtx {
     pub threads: bool,
     pub no_transpile: bool,
     pub adjust_abi: bool,
+    pub keep_build_artifacts: bool,
 }
 
 #[derive(Debug, Default)]
@@ -174,6 +175,7 @@ impl Generator for ComponentCtxVisitor {
             target_used_global_id: _,
             start_func_id: _,
             no_transpile: _,
+            keep_build_artifacts: _,
         } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
         module.save_info("target_names", target_names)?;
@@ -527,13 +529,13 @@ pub struct ComponentRunner {
 
 pub(crate) trait WrapRunner<T> {
     #[allow(unused_variables)]
-    fn wrap_run(self, path: &mut WasmPath, dwarf: bool) -> eyre::Result<T>
+    fn wrap_run(self, path: &mut WasmPath, dwarf: bool, keep_build_artifacts: bool) -> eyre::Result<T>
     where
         Self: Sized;
 }
 
 impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
-    fn wrap_run(self, path: &mut WasmPath, dwarf: bool) -> eyre::Result<T> {
+    fn wrap_run(self, path: &mut WasmPath, dwarf: bool, keep_build_artifacts: bool) -> eyre::Result<T> {
         let old_path = path.path()?;
         let module =
             &mut walrus::Module::load(old_path, dwarf).wrap_err("Failed to load Wasm module")?;
@@ -552,8 +554,10 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
             .to_eyre()
             .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
 
-        std::fs::remove_file(old_path)
-            .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        if !keep_build_artifacts {
+            std::fs::remove_file(old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        }
 
         path.set_path(new_path)?;
 
@@ -563,7 +567,7 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
 
 pub(crate) trait EndWithOpt<T> {
     #[allow(unused_variables)]
-    fn with_opt(self, path: &mut WasmPath, dwarf: bool) -> eyre::Result<T>
+    fn with_opt(self, path: &mut WasmPath, dwarf: bool, keep_build_artifacts: bool) -> eyre::Result<T>
     where
         Self: Sized;
 
@@ -574,25 +578,28 @@ pub(crate) trait EndWithOpt<T> {
         args: &[&str],
         require_update: bool,
         dwarf: bool,
+        keep_build_artifacts: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
 }
 
 impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
-    fn with_opt(self, path: &mut WasmPath, dwarf: bool) -> eyre::Result<T>
+    fn with_opt(self, path: &mut WasmPath, dwarf: bool, keep_build_artifacts: bool) -> eyre::Result<T>
     where
         Self: Sized,
     {
         let result = (self)(path).wrap_err("Failed to run with with_opt")?;
 
         println!("Optimizing Wasm...");
-        let old_path = path.path()?;
-        let new_path = compile::optimize_wasm(old_path, &[], false, dwarf)
+        let old_path = path.path()?.clone();
+        let new_path = compile::optimize_wasm(&old_path, &[], false, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
 
-        std::fs::remove_file(old_path)
-            .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        if !keep_build_artifacts && old_path != new_path {
+            std::fs::remove_file(&old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        }
 
         path.set_path(new_path)?;
 
@@ -605,6 +612,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         args: &[&str],
         require_update: bool,
         dwarf: bool,
+        keep_build_artifacts: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
@@ -612,8 +620,14 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let result = (self)(path).wrap_err("Failed to run with with_opt_args")?;
 
         println!("Optimizing Wasm... with args: {}", args.iter().join(" "));
-        let new_path = compile::optimize_wasm(path.path()?, args, require_update, dwarf)
+        let old_path = path.path()?.clone();
+        let new_path = compile::optimize_wasm(&old_path, args, require_update, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
+
+        if !keep_build_artifacts && old_path != new_path {
+            std::fs::remove_file(&old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        }
 
         path.set_path(new_path)?;
 
@@ -630,6 +644,7 @@ impl GeneratorRunner {
         unstable_print_debug: bool,
         no_transpile: bool,
         adjust_abi: bool,
+        keep_build_artifacts: bool,
         memory_type: TargetMemoryType,
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
@@ -671,6 +686,7 @@ impl GeneratorRunner {
                 threads,
                 no_transpile,
                 adjust_abi,
+                keep_build_artifacts,
                 vfs_used_memory_id: None,
                 vfs_used_global_id: None,
                 target_used_memory_id: None,
@@ -741,6 +757,7 @@ impl GeneratorRunner {
     pub fn run_layers_to_component(
         mut self,
         out_dir: &Utf8PathBuf,
+        keep_build_artifacts: bool,
     ) -> eyre::Result<ComponentRunner> {
         self.definitely()?;
 
@@ -805,9 +822,9 @@ impl GeneratorRunner {
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in run_pre_vfs")
             })
-            .wrap_run(path, dwarf)
+            .wrap_run(path, dwarf, keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
 
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
@@ -828,9 +845,9 @@ impl GeneratorRunner {
                         .pre_target(module, &self.ctx, &external)
                         .wrap_err("Failed in run_pre_target")
                 })
-                .wrap_run(path, dwarf)
+                .wrap_run(path, dwarf, keep_build_artifacts)
             })
-            .with_opt(target, dwarf)?;
+            .with_opt(target, dwarf, keep_build_artifacts)?;
         }
 
         println!("Combining Wasm modules...");
@@ -838,9 +855,9 @@ impl GeneratorRunner {
         self.ctx.target_used_memory_id = None;
         let output = format!("{out_dir}/merged.wasm");
         (|path: &mut WasmPath| {
-            let old_path = path.path()?;
+            let old_path = path.path()?.clone();
             merge(
-                old_path,
+                &old_path,
                 &self
                     .targets
                     .iter()
@@ -852,12 +869,14 @@ impl GeneratorRunner {
             )
             .wrap_err("Failed to combine Wasm modules")?;
 
-            std::fs::remove_file(old_path)
-                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+            if !keep_build_artifacts {
+                std::fs::remove_file(&old_path)
+                    .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+            }
 
             path.set_path(output.into())
         })
-        .with_opt(&mut self.path, dwarf)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
 
         println!("Adjusting Merged Wasm...");
         (|path: &mut WasmPath| {
@@ -883,11 +902,10 @@ impl GeneratorRunner {
 
                 self.generators
                     .post_combine(module, &self.ctx)
-                    .wrap_err("Failed in run_post_combine")
             })
-            .wrap_run(path, dwarf)
+            .wrap_run(path, dwarf, keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
 
         self.ctx.vfs_used_memory_id = None;
         self.ctx.target_used_memory_id = None;
@@ -898,14 +916,16 @@ impl GeneratorRunner {
         self.ctx.start_func_id = None;
 
         if self.ctx.target_memory_type == TargetMemoryType::Single {
-            let old_path = self.path.path()?;
+            let old_path = self.path.path()?.clone();
 
             println!("Generating single memory Merged Wasm...");
             let optimized_path =
-                compile::optimize_wasm(old_path, &["--multi-memory-lowering"], true, dwarf)?;
+                compile::optimize_wasm(&old_path, &["--multi-memory-lowering"], true, dwarf)?;
 
-            std::fs::remove_file(old_path)
-                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+            if !keep_build_artifacts {
+                std::fs::remove_file(&old_path)
+                    .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+            }
 
             self.path.set_path(optimized_path)?;
 
@@ -922,17 +942,19 @@ impl GeneratorRunner {
                         .post_lower_memory(module, &self.ctx)
                         .wrap_err("Failed in run_post_lower_memory")
                 })
-                .wrap_run(path, dwarf)
+                .wrap_run(path, dwarf, keep_build_artifacts)
             })
-            .with_opt(&mut self.path, dwarf)?;
+            .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
         }
 
         println!("Translating Wasm to Component...");
-        let old_path = self.path.path()?;
-        let component = compile::wasm_to_component(old_path, &self.ctx.target_names)
+        let old_path = self.path.path()?.clone();
+        let component = compile::wasm_to_component(&old_path, &self.ctx.target_names)
             .wrap_err("Failed to translate Wasm to Component")?;
-        std::fs::remove_file(old_path)
-            .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        if !keep_build_artifacts {
+            std::fs::remove_file(&old_path)
+                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+        }
 
         let new_component = format!("{out_dir}/{}.component.wasm", self.ctx.vfs_name);
         std::fs::rename(&component, &new_component)
@@ -1003,8 +1025,8 @@ impl ComponentRunner {
 
         println!("Translating Component to JS...");
         let core_wasm_path = (|path: &mut WasmPath| {
-            let old_path = path.path()?;
-            let binary = std::fs::read(old_path).wrap_err("Failed to read component")?;
+            let old_path = path.path()?.clone();
+            let binary = std::fs::read(&old_path).wrap_err("Failed to read component")?;
             let transpiled = parsed_args
                 .transpile_to_js(&binary, &name)
                 .wrap_err("Failed to transpile to JS")?;
@@ -1057,13 +1079,15 @@ impl ComponentRunner {
                 .as_ref()
                 .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
-            std::fs::remove_file(old_path)
-                .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+            if !parsed_args.keep_build_artifacts {
+                std::fs::remove_file(&old_path)
+                    .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+            }
             path.set_path(core_wasm.clone())?;
 
             Ok(core_wasm.clone())
         })
-        .with_opt(&mut self.path, dwarf)?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts)?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
         self.generators.push(Box::new(mem_size_visitor));
@@ -1105,9 +1129,9 @@ impl ComponentRunner {
                     .post_components(module, self.ctx.as_ref().unwrap())
                     .wrap_err("Failed in run_post_components")
             })
-            .wrap_run(path, dwarf)
+            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf)?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts)?;
 
         let dwarf = {
             let new_dwarf = self.ctx.as_ref().unwrap().dwarf;
@@ -1137,7 +1161,7 @@ impl ComponentRunner {
                     }
                 }
             })
-            .wrap_run(&mut self.path, dwarf)?;
+            .wrap_run(&mut self.path, dwarf, parsed_args.keep_build_artifacts)?;
         }
 
         std::fs::rename(self.path.path()?, &core_wasm_path).wrap_err_with(|| {

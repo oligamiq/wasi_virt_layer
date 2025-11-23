@@ -5,6 +5,7 @@ pub mod utils;
 use camino::Utf8PathBuf;
 use eyre::Context;
 use utils::*;
+use glob;
 use wasi_virt_layer_cli::util;
 
 static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -91,6 +92,7 @@ fn build_normal(single: bool) -> color_eyre::Result<TestDir> {
         Some(single),
         false,
         OutDir::Default,
+        false, // keep_build_artifacts
         &[],
     )
 }
@@ -104,6 +106,7 @@ fn build_out_dir() -> color_eyre::Result<TestDir> {
         Some(true),
         false,
         OutDir::Path(&format!("{THIS_FOLDER}/tmp/dist")),
+        false, // keep_build_artifacts
         &[],
     )
 }
@@ -117,6 +120,7 @@ fn build_threads(single: bool) -> color_eyre::Result<TestDir> {
         Some(single),
         true,
         OutDir::Random,
+        false, // keep_build_artifacts
         &[],
     )
 }
@@ -178,6 +182,7 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
             None,
             false,
             OutDir::Random,
+            false, // keep_build_artifacts
             &[],
         )
     };
@@ -219,6 +224,7 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
             None,
             true,
             OutDir::Random,
+            false, // keep_build_artifacts
             &[],
         )
     };
@@ -258,12 +264,88 @@ fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
             Some(m),
             true,
             OutDir::Random,
+            false, // keep_build_artifacts
             &[],
         )
     };
 
     let _t1 = fn_(false).wrap_err("Failed to run no_thread_with_thread_feature_vfs single")?;
     let _t2 = fn_(true).wrap_err("Failed to run no_thread_with_thread_feature_vfs multi")?;
+
+    core::mem::drop(_lock);
+
+    Ok(())
+}
+
+/// Tests the `--keep-build-artifacts` argument.
+#[test]
+fn test_keep_build_artifacts() -> color_eyre::Result<()> {
+    let _lock = lock();
+    color_eyre::install().ok();
+
+    // Test with keep_build_artifacts = true
+    let test_dir_keep = run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(true),
+        false,
+        OutDir::Random,
+        true, // keep_build_artifacts
+        &[],
+    )
+    .wrap_err("Failed to run with keep_build_artifacts = true")?;
+
+    let parent_dir_keep = test_dir_keep.0.parent().unwrap();
+
+    // Check for intermediate files
+    let adjusted_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.adjusted.wasm"))?
+        .filter_map(Result::ok)
+        .collect();
+    let opt_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.opt.wasm"))?
+        .filter_map(Result::ok)
+        .collect();
+
+    assert!(
+        !adjusted_wasm_files.is_empty(),
+        "Expected .adjusted.wasm files to exist when keep_build_artifacts is true"
+    );
+    assert!(
+        !opt_wasm_files.is_empty(),
+        "Expected .opt.wasm files to exist when keep_build_artifacts is true"
+    );
+
+    // Test with keep_build_artifacts = false
+    let test_dir_no_keep = run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false, // keep_build_artifacts
+        &[],
+    )
+    .wrap_err("Failed to run with keep_build_artifacts = false")?;
+
+    let parent_dir_no_keep = test_dir_no_keep.0.parent().unwrap();
+
+    // Check for intermediate files - should not exist
+    let adjusted_wasm_files_no_keep: Vec<_> =
+        glob::glob(&format!("{parent_dir_no_keep}/**/*.adjusted.wasm"))?
+            .filter_map(Result::ok)
+            .collect();
+    let opt_wasm_files_no_keep: Vec<_> =
+        glob::glob(&format!("{parent_dir_no_keep}/**/*.opt.wasm"))?
+            .filter_map(Result::ok)
+            .collect();
+
+    assert!(
+        adjusted_wasm_files_no_keep.is_empty(),
+        "Expected no .adjusted.wasm files to exist when keep_build_artifacts is false"
+    );
+    assert!(
+        opt_wasm_files_no_keep.is_empty(),
+        "Expected no .opt.wasm files to exist when keep_build_artifacts is false"
+    );
 
     core::mem::drop(_lock);
 

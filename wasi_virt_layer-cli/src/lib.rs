@@ -161,6 +161,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         unstable_print_debug,
         parsed_args.no_transpile,
         parsed_args.adjust_abi,
+        parsed_args.keep_build_artifacts,
         memory_type,
         toml_restores.clone(),
         parsed_args.get_wasm_memory_hints(),
@@ -169,7 +170,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     add_generator!(generator);
 
     let mut component_runner = generator
-        .run_layers_to_component(&parsed_args.out_dir)
+        .run_layers_to_component(&parsed_args.out_dir, parsed_args.keep_build_artifacts)
         .wrap_err("Failed to run layers to component")?;
 
     if parsed_args.no_transpile {
