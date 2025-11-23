@@ -7,6 +7,7 @@ use eyre::Context;
 use utils::*;
 use glob;
 use wasi_virt_layer_cli::util;
+use itertools::Itertools;
 
 static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -349,5 +350,118 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 
     core::mem::drop(_lock);
 
+    Ok(())
+}
+
+/// Generates documentation for import/export name changes across generator stages.
+/// This test is ignored by default and should be run manually when the documentation needs to be updated.
+#[test]
+#[ignore]
+fn doc_gen_imports_exports() -> color_eyre::Result<()> {
+    let _lock = lock();
+    color_eyre::install().ok();
+
+    let feature_combos: Vec<(&str, &[&str])> = vec![
+        ("no_features", &[]),
+        ("alloc", &["alloc"]),
+        ("std", &["std"]),
+        ("multi_memory", &["multi_memory"]),
+        ("unstable_print_debug", &["unstable_print_debug"]),
+        ("multi_memory_std", &["multi_memory", "std"]),
+        ("multi_memory_unstable_print_debug", &["multi_memory", "unstable_print_debug"]),
+    ];
+
+    let mut md_output = String::new();
+    md_output.push_str("# Wasm Import/Export Evolution\n\n");
+    md_output.push_str("This document tracks the changes in Wasm import and export names through each generator stage for different feature combinations.\n\n");
+
+    for (name, features) in feature_combos {
+        println!("Processing feature combination: {name}");
+        md_output.push_str(&format!("## Feature Combination: `{}`\n\n", name));
+
+        let run = || -> color_eyre::Result<TestDir> {
+            run_wasi_virt_layer(
+                Some("no_std_vfs"),
+                Some("test_wasm"),
+                None,
+                false,
+                OutDir::Random,
+                true, // keep_build_artifacts is crucial
+                &[],
+            )
+        };
+
+        let test_dir = set_features_inner(features, "no_std_vfs", run)?;
+        let parent_dir = test_dir.0.parent().unwrap();
+
+        let wasm_files: Vec<_> = glob::glob(&format!("{}/**/*.wasm", parent_dir.as_str()))?
+            .filter_map(Result::ok)
+            // Sort files to have a somewhat logical order. This is simplistic.
+            .sorted_by_key(|p| p.metadata().unwrap().created().unwrap())
+            .collect();
+
+        if wasm_files.is_empty() {
+            md_output.push_str("*No wasm files found for this combination.*\n\n");
+            continue;
+        }
+
+        for wasm_path in wasm_files {
+            let file_name = wasm_path.file_name().unwrap().to_str().unwrap();
+            md_output.push_str(&format!("### Stage: `{}`\n\n", file_name));
+
+            let wat_output = std::process::Command::new("wasm-tools")
+                .args(["print", wasm_path.to_str().unwrap()])
+                .output()?;
+
+            if !wat_output.status.success() {
+                let stderr = String::from_utf8_lossy(&wat_output.stderr);
+                md_output.push_str(&format!("Failed to process `{}`. Error:\n```\n{}\n```\n\n", file_name, stderr));
+                continue;
+            }
+
+            let wat = String::from_utf8_lossy(&wat_output.stdout);
+
+            let imports = wat.lines()
+                .filter(|line| line.trim().starts_with("(import"))
+                .map(|line| {
+                    // Very basic parsing, might not be robust.
+                    let parts: Vec<_> = line.split_whitespace().collect();
+                    format!("| `{}` | `{}` |", parts.get(1).unwrap_or(&""), parts.get(2).unwrap_or(&""))
+                })
+                .collect::<Vec<_>>();
+
+            if !imports.is_empty() {
+                md_output.push_str("#### Imports\n\n");
+                md_output.push_str("| Module | Name |\n");
+                md_output.push_str("|---|---|\n");
+                md_output.push_str(&imports.join("\n"));
+                md_output.push_str("\n\n");
+            }
+
+            let exports = wat.lines()
+                .filter(|line| line.trim().starts_with("(export"))
+                .map(|line| {
+                    let parts: Vec<_> = line.split_whitespace().collect();
+                    format!("| `{}` |", parts.get(1).unwrap_or(&""))
+                })
+                .collect::<Vec<_>>();
+
+            if !exports.is_empty() {
+                md_output.push_str("#### Exports\n\n");
+                md_output.push_str("| Name |\n");
+                md_output.push_str("|---|\n");
+                md_output.push_str(&exports.join("\n"));
+                md_output.push_str("\n\n");
+            }
+
+            if imports.is_empty() && exports.is_empty() {
+                md_output.push_str("*No imports or exports found.*\n\n");
+            }
+        }
+    }
+
+    std::fs::write("IMPORTS_EXPORTS_EVOLUTION_DETAILED.md", md_output)?;
+
+    core::mem::drop(_lock);
     Ok(())
 }
