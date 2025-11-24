@@ -1,8 +1,34 @@
-# Wasm Import/Export Evolution
+# Wasm Import/Export Evolution (Detailed)
 
-This document tracks the changes in Wasm import and export names through each generator stage for different feature combinations.
+This document exhaustively tracks the changes in Wasm import and export names through each generator stage for different feature combinations. **When refactoring the `wasi_virt_layer` library, this document must be consulted to ensure that no changes in import/export names inadvertently alter the expected behavior.** Many past errors in this library have been traced back to subtle naming discrepancies. This document serves as a definitive reference for maintaining correctness.
 
 ## Feature Combination: `no_features`
+
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
 
 ### Stage: `merged.wasm`
 
@@ -406,6 +432,32 @@ This document tracks the changes in Wasm import and export names through each ge
 
 ## Feature Combination: `alloc`
 
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
+
 ### Stage: `merged.wasm`
 
 #### Imports
@@ -807,6 +859,32 @@ This document tracks the changes in Wasm import and export names through each ge
 | `"cabi_realloc_wit_bindgen_0_44_0"` |
 
 ## Feature Combination: `std`
+
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
 
 ### Stage: `merged.wasm`
 
@@ -1210,6 +1288,32 @@ This document tracks the changes in Wasm import and export names through each ge
 
 ## Feature Combination: `multi_memory`
 
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
+
 ### Stage: `merged.wasm`
 
 #### Imports
@@ -1512,6 +1616,32 @@ This document tracks the changes in Wasm import and export names through each ge
 | `"cabi_realloc_wit_bindgen_0_44_0"` |
 
 ## Feature Combination: `unstable_print_debug`
+
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
 
 ### Stage: `merged.wasm`
 
@@ -2353,6 +2483,32 @@ This document tracks the changes in Wasm import and export names through each ge
 
 ## Feature Combination: `multi_memory_std`
 
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
+
 ### Stage: `merged.wasm`
 
 #### Imports
@@ -2655,6 +2811,32 @@ This document tracks the changes in Wasm import and export names through each ge
 | `"cabi_realloc_wit_bindgen_0_44_0"` |
 
 ## Feature Combination: `multi_memory_unstable_print_debug`
+
+### Stage 0: Initial Modules
+
+### Stage: `no_std_vfs.wasm (initial)`
+
+Failed to process `no_std_vfs.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/no_std_vfs.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Stage: `test_wasm.wasm (initial)`
+
+Failed to process `test_wasm.wasm (initial)`. Error:
+```
+error: failed to read from `target/wasm32-wasip1/release/test_wasm.wasm`
+
+Caused by:
+    0: 指定されたパスが見つかりません。 (os error 3)
+
+```
+
+### Post-Merge Stages
 
 ### Stage: `merged.wasm`
 

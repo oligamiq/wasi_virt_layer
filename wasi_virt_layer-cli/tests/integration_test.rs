@@ -361,6 +361,60 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
     let _lock = lock();
     color_eyre::install().ok();
 
+    fn process_wasm_file(md_output: &mut String, wasm_path: &std::path::Path, stage_name: &str) -> color_eyre::Result<()> {
+        md_output.push_str(&format!("### Stage: `{}`\n\n", stage_name));
+
+        let wasm_path_str = wasm_path.to_str().ok_or_else(|| eyre::eyre!("Invalid UTF-8 path"))?;
+        let wat_output = std::process::Command::new("wasm-tools")
+            .args(["print", wasm_path_str])
+            .output()?;
+
+        if !wat_output.status.success() {
+            let stderr = String::from_utf8_lossy(&wat_output.stderr);
+            md_output.push_str(&format!("Failed to process `{}`. Error:\n```\n{}\n```\n\n", stage_name, stderr));
+            return Ok(());
+        }
+
+        let wat = String::from_utf8_lossy(&wat_output.stdout);
+
+        let imports: Vec<_> = wat.lines()
+            .filter(|line| line.trim().starts_with("(import"))
+            .map(|line| {
+                let parts: Vec<_> = line.split_whitespace().collect();
+                format!("| `{}` | `{}` |", parts.get(1).unwrap_or(&""), parts.get(2).unwrap_or(&""))
+            })
+            .collect();
+
+        if !imports.is_empty() {
+            md_output.push_str("#### Imports\n\n");
+            md_output.push_str("| Module | Name |\n");
+            md_output.push_str("|---|---|\n");
+            md_output.push_str(&imports.join("\n"));
+            md_output.push_str("\n\n");
+        }
+
+        let exports: Vec<_> = wat.lines()
+            .filter(|line| line.trim().starts_with("(export"))
+            .map(|line| {
+                let parts: Vec<_> = line.split_whitespace().collect();
+                format!("| `{}` |", parts.get(1).unwrap_or(&""))
+            })
+            .collect();
+
+        if !exports.is_empty() {
+            md_output.push_str("#### Exports\n\n");
+            md_output.push_str("| Name |\n");
+            md_output.push_str("|---|\n");
+            md_output.push_str(&exports.join("\n"));
+            md_output.push_str("\n\n");
+        }
+
+        if imports.is_empty() && exports.is_empty() {
+            md_output.push_str("*No imports or exports found.*\n\n");
+        }
+        Ok(())
+    }
+
     let feature_combos: Vec<(&str, &[&str])> = vec![
         ("no_features", &[]),
         ("alloc", &["alloc"]),
@@ -372,14 +426,25 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
     ];
 
     let mut md_output = String::new();
-    md_output.push_str("# Wasm Import/Export Evolution\n\n");
-    md_output.push_str("This document tracks the changes in Wasm import and export names through each generator stage for different feature combinations.\n\n");
+    md_output.push_str("# Wasm Import/Export Evolution (Detailed)\n\n");
+    md_output.push_str("This document exhaustively tracks the changes in Wasm import and export names through each generator stage for different feature combinations.\n\n");
 
     for (name, features) in feature_combos {
         println!("Processing feature combination: {name}");
         md_output.push_str(&format!("## Feature Combination: `{}`\n\n", name));
 
         let run = || -> color_eyre::Result<TestDir> {
+            // Manually build and inspect initial modules
+            md_output.push_str("### Stage 0: Initial Modules\n\n");
+
+            std::process::Command::new("cargo").args(["build", "--release", "--target", "wasm32-wasip1", "-p", "no_std_vfs"]).status()?;
+            let vfs_path = std::path::PathBuf::from("target/wasm32-wasip1/release/no_std_vfs.wasm");
+            process_wasm_file(&mut md_output, &vfs_path, "no_std_vfs.wasm (initial)")?;
+
+            std::process::Command::new("cargo").args(["build", "--release", "--target", "wasm32-wasip1", "-p", "test_wasm"]).status()?;
+            let test_wasm_path = std::path::PathBuf::from("target/wasm32-wasip1/release/test_wasm.wasm");
+            process_wasm_file(&mut md_output, &test_wasm_path, "test_wasm.wasm (initial)")?;
+
             run_wasi_virt_layer(
                 Some("no_std_vfs"),
                 Some("test_wasm"),
@@ -394,69 +459,20 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
         let test_dir = set_features_inner(features, "no_std_vfs", run)?;
         let parent_dir = test_dir.0.parent().unwrap();
 
+        md_output.push_str("### Post-Merge Stages\n\n");
         let wasm_files: Vec<_> = glob::glob(&format!("{}/**/*.wasm", parent_dir.as_str()))?
             .filter_map(Result::ok)
-            // Sort files to have a somewhat logical order. This is simplistic.
             .sorted_by_key(|p| p.metadata().unwrap().created().unwrap())
             .collect();
 
         if wasm_files.is_empty() {
-            md_output.push_str("*No wasm files found for this combination.*\n\n");
+            md_output.push_str("*No post-merge wasm files found for this combination.*\n\n");
             continue;
         }
 
         for wasm_path in wasm_files {
             let file_name = wasm_path.file_name().unwrap().to_str().unwrap();
-            md_output.push_str(&format!("### Stage: `{}`\n\n", file_name));
-
-            let wat_output = std::process::Command::new("wasm-tools")
-                .args(["print", wasm_path.to_str().unwrap()])
-                .output()?;
-
-            if !wat_output.status.success() {
-                let stderr = String::from_utf8_lossy(&wat_output.stderr);
-                md_output.push_str(&format!("Failed to process `{}`. Error:\n```\n{}\n```\n\n", file_name, stderr));
-                continue;
-            }
-
-            let wat = String::from_utf8_lossy(&wat_output.stdout);
-
-            let imports = wat.lines()
-                .filter(|line| line.trim().starts_with("(import"))
-                .map(|line| {
-                    // Very basic parsing, might not be robust.
-                    let parts: Vec<_> = line.split_whitespace().collect();
-                    format!("| `{}` | `{}` |", parts.get(1).unwrap_or(&""), parts.get(2).unwrap_or(&""))
-                })
-                .collect::<Vec<_>>();
-
-            if !imports.is_empty() {
-                md_output.push_str("#### Imports\n\n");
-                md_output.push_str("| Module | Name |\n");
-                md_output.push_str("|---|---|\n");
-                md_output.push_str(&imports.join("\n"));
-                md_output.push_str("\n\n");
-            }
-
-            let exports = wat.lines()
-                .filter(|line| line.trim().starts_with("(export"))
-                .map(|line| {
-                    let parts: Vec<_> = line.split_whitespace().collect();
-                    format!("| `{}` |", parts.get(1).unwrap_or(&""))
-                })
-                .collect::<Vec<_>>();
-
-            if !exports.is_empty() {
-                md_output.push_str("#### Exports\n\n");
-                md_output.push_str("| Name |\n");
-                md_output.push_str("|---|\n");
-                md_output.push_str(&exports.join("\n"));
-                md_output.push_str("\n\n");
-            }
-
-            if imports.is_empty() && exports.is_empty() {
-                md_output.push_str("*No imports or exports found.*\n\n");
-            }
+            process_wasm_file(&mut md_output, &wasm_path, file_name)?;
         }
     }
 
