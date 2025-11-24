@@ -44,7 +44,11 @@ The project consists of two main crates:
 5.  **Verify (Standards):** Run project-specific build, linting, and type-checking commands (`cargo check`, `cargo fmt`).
 6.  **Finalize:** Update this document (`GEMINI.md`) if the changes affect the workflow or project structure, then await the next instruction.
 
-### 3.3. Git Operations
+### 3.3. Refactoring Guidelines
+
+-   **Consult the Evolution Document:** When refactoring, especially code within the `generator` modules, you **must** consult the `wasi_virt_layer-cli/IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` file. This document exhaustively lists the expected import and export names at each stage of the build process. Cross-reference your changes against this document to ensure that function and module names are not accidentally altered, as this has been a common source of bugs.
+
+### 3.4. Git Operations
 
 -   Before proposing a commit, use `git status`, `git diff HEAD`, and `git log -n 3` to understand the current state and match commit style.
 -   Always propose a draft commit message.
