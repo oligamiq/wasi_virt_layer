@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use walrus::FunctionId;
 
-use crate::generator::GeneratorCtx;
+use crate::generator::{Generator, GeneratorCtx};
 use crate::util::{
     NAMESPACE, WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName,
 };
@@ -27,34 +27,30 @@ pub struct StartSectionCommon {
     start_alternatives: HashMap<WasmName, FunctionId>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct StartSectionGenerator {
-    common: Arc<parking_lot::Mutex<StartSectionCommon>>,
+    common: Option<Arc<parking_lot::Mutex<StartSectionCommon>>>,
 }
 
 impl StartSectionGenerator {
-    pub fn new(
-        module: &mut walrus::Module,
-        wasm_names: impl IntoIterator<Item = WasmName>,
-    ) -> Self {
+    fn init(&mut self, module: &mut walrus::Module, wasm_names: &[WasmName]) {
         let func_ty = module.types.add(&[], &[]);
         let common = StartSectionCommon {
             map: HashMap::new(),
             start_alternatives: wasm_names
-                .into_iter()
+                .iter()
                 .map(|name| {
-                    let (new_fid, _) = module.add_import_func(
-                        NAMESPACE,
-                        &Self::unique_import_name(&name),
-                        func_ty,
-                    );
-                    (name, new_fid)
+                    let unique_name = Self::unique_import_name(name);
+                    let new_fid = (NAMESPACE, &unique_name)
+                        .get_fid(&module.imports)
+                        .unwrap_or_else(|_| {
+                            module.add_import_func(NAMESPACE, &unique_name, func_ty).0
+                        });
+                    (name.clone(), new_fid)
                 })
                 .collect(),
         };
-        Self {
-            common: Arc::new(parking_lot::Mutex::new(common)),
-        }
+        self.common = Some(Arc::new(parking_lot::Mutex::new(common)));
     }
 
     fn unique_import_name(wasm_name: &WasmName) -> String {
@@ -63,11 +59,31 @@ impl StartSectionGenerator {
 
     pub fn builder(&self) -> StartSectionBuilder {
         StartSectionBuilder {
-            common: self.common.clone(),
+            common: self.common.as_ref().unwrap().clone(),
         }
     }
 
     pub fn build(&self) {}
+}
+
+impl Generator for StartSectionGenerator {
+    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        Self::init(self, module, &ctx.target_names_with_self);
+
+        println!("Start Section Generator:");
+
+        for (name, fid) in self
+            .common
+            .as_ref()
+            .unwrap()
+            .lock()
+            .start_alternatives
+            .iter()
+        {
+            println!("Added start alternative: {name}");
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone)]

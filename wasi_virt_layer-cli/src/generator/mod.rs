@@ -20,6 +20,7 @@ use crate::{
     args::{self, TargetMemoryType},
     compile,
     config_checker::TomlRestorers,
+    generator::start_section::StartSectionGenerator,
     util::{
         CaminoUtilModule as _, ResultUtil, WalrusFID as _, WalrusUtilExport as _, WalrusUtilModule,
         WasmName, WasmNameHolder,
@@ -50,6 +51,7 @@ pub struct GeneratorCtx {
     pub no_transpile: bool,
     pub adjust_abi: bool,
     pub keep_build_artifacts: bool,
+    pub start_section_builder: Option<start_section::StartSectionBuilder>,
 }
 
 #[derive(Debug, Default)]
@@ -177,6 +179,7 @@ impl Generator for ComponentCtxVisitor {
             start_func_id: _,
             no_transpile: _,
             keep_build_artifacts: _,
+            start_section_builder: _,
         } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
         module.save_info("target_names", target_names)?;
@@ -712,6 +715,7 @@ impl GeneratorRunner {
                 target_used_memory_id: None,
                 target_used_global_id: None,
                 start_func_id: None,
+                start_section_builder: None,
             },
             path,
             targets,
@@ -799,6 +803,7 @@ impl GeneratorRunner {
             vfs_global_id: None,
             global_id: None,
         };
+        let mut start_section_generator = StartSectionGenerator::default();
 
         let dwarf = self.ctx.dwarf;
 
@@ -837,6 +842,12 @@ impl GeneratorRunner {
                 component_ctx_visitor
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
+
+                start_section_generator
+                    .pre_vfs(module, &self.ctx)
+                    .wrap_err("Failed in pre_vfs")?;
+
+                self.ctx.start_section_builder = Some(start_section_generator.builder());
 
                 self.generators
                     .pre_vfs(module, &self.ctx)
