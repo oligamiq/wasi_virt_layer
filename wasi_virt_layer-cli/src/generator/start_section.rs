@@ -16,18 +16,6 @@ pub enum StartOrigin {
     // Debug,
 }
 
-impl StartOrigin {
-    pub fn export_name(&self) -> String {
-        match self {
-            StartOrigin::ResetFunc => "__wasip1_vfs_origin_reset".to_string(),
-            // StartOrigin::StartFunc => "__wasip1_vfs_origin_startfunc".to_string(),
-            // StartOrigin::Threads => "__wasip1_vfs_origin_threads".to_string(),
-            // StartOrigin::SharedGlobal => "__wasip1_vfs_origin_shared_global".to_string(),
-            // StartOrigin::Debug => "__wasip1_vfs_origin_debug".to_string(),
-        }
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct StartSource(String);
 
