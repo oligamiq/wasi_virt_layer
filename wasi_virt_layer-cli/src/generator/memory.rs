@@ -6,7 +6,7 @@ use walrus::ir;
 use crate::{
     args::TargetMemoryType,
     generator::{ComponentCtx, Generator, GeneratorCtx},
-    util::{LString, NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule},
+    util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
 };
 
 #[derive(Debug, Default)]
@@ -273,7 +273,7 @@ impl Generator for TemporaryRefugeMemory {
     }
 }
 
-fn with_name(wasm: &LString, name: &str) -> String {
+fn with_name(wasm: &WasmName, name: &str) -> String {
     format!("__wasip1_vfs_{wasm}_{name}")
 }
 

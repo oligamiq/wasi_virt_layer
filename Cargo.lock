@@ -2164,6 +2164,7 @@ dependencies = [
  "js-component-bindgen",
  "libc",
  "log",
+ "parking_lot",
  "regex",
  "serde_json",
  "strsim",

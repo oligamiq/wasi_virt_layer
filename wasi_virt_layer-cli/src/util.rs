@@ -2307,22 +2307,22 @@ impl WalrusFIDAssister for ModuleExports {
 // }
 
 #[derive(Debug)]
-pub struct LStringHolder(&'static [compact_str::CompactString], &'static AtomicUsize);
+pub struct WasmNameHolder(&'static [compact_str::CompactString], &'static AtomicUsize);
 
-impl LStringHolder {
+impl WasmNameHolder {
     pub fn new(strings: Box<[compact_str::CompactString]>) -> Self {
         let count = Box::leak(Box::new(AtomicUsize::new(0)));
 
         let strings = Box::leak(strings);
-        LStringHolder(strings, count)
+        WasmNameHolder(strings, count)
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = LString> {
-        self.0.iter().map(|s| LString::new(s.as_str(), self.1))
+    pub fn iter(&self) -> impl Iterator<Item = WasmName> {
+        self.0.iter().map(|s| WasmName::new(s.as_str(), self.1))
     }
 }
 
-impl Drop for LStringHolder {
+impl Drop for WasmNameHolder {
     fn drop(&mut self) {
         unsafe {
             let _ = Box::from_raw(self.0 as *const _ as *mut [compact_str::CompactString]);
@@ -2330,7 +2330,7 @@ impl Drop for LStringHolder {
             let _ = Box::from_raw(self.1 as *const _ as *mut AtomicUsize);
             if count != 0 {
                 panic!(
-                    "LStringHolder dropped while there are still {count} LString instances alive"
+                    "WasmNameHolder dropped while there are still {count} WasmName instances alive"
                 );
             }
         }
@@ -2338,51 +2338,51 @@ impl Drop for LStringHolder {
 }
 
 /// Literal String
-pub struct LString(&'static str, &'static AtomicUsize);
-impl LString {
+pub struct WasmName(&'static str, &'static AtomicUsize);
+impl WasmName {
     pub fn new(s: &'static str, counter: &'static AtomicUsize) -> Self {
         counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        LString(s, counter)
+        WasmName(s, counter)
     }
 }
-impl Drop for LString {
+impl Drop for WasmName {
     fn drop(&mut self) {
         self.1.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
     }
 }
-impl Clone for LString {
+impl Clone for WasmName {
     fn clone(&self) -> Self {
         self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        LString(self.0, self.1)
+        WasmName(self.0, self.1)
     }
 }
-impl std::hash::Hash for LString {
+impl std::hash::Hash for WasmName {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         (self.0 as *const str).hash(state);
     }
 }
-impl PartialEq for LString {
+impl PartialEq for WasmName {
     fn eq(&self, other: &Self) -> bool {
         std::ptr::addr_eq(self.0 as *const _, other.0 as *const _)
     }
 }
-impl Eq for LString {}
-impl std::fmt::Debug for LString {
+impl Eq for WasmName {}
+impl std::fmt::Debug for WasmName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.0)
     }
 }
-impl std::fmt::Display for LString {
+impl std::fmt::Display for WasmName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
-impl AsRef<str> for LString {
+impl AsRef<str> for WasmName {
     fn as_ref(&self) -> &str {
         &self.0
     }
 }
-impl Borrow<str> for LString {
+impl Borrow<str> for WasmName {
     fn borrow(&self) -> &str {
         &self.0
     }
