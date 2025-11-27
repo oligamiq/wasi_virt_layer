@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::panic;
 use std::sync::Arc;
 use walrus::FunctionId;
 
@@ -33,24 +34,42 @@ pub struct StartSectionGenerator {
 }
 
 impl StartSectionGenerator {
-    fn init(&mut self, module: &mut walrus::Module, wasm_names: &[WasmName]) {
-        let func_ty = module.types.add(&[], &[]);
-        let common = StartSectionCommon {
-            map: HashMap::new(),
-            start_alternatives: wasm_names
-                .iter()
-                .map(|name| {
-                    let unique_name = Self::unique_import_name(name);
-                    let new_fid = (NAMESPACE, &unique_name)
-                        .get_fid(&module.imports)
-                        .unwrap_or_else(|_| {
-                            module.add_import_func(NAMESPACE, &unique_name, func_ty).0
-                        });
-                    (name.clone(), new_fid)
-                })
-                .collect(),
-        };
-        self.common = Some(Arc::new(parking_lot::Mutex::new(common)));
+    pub fn init(&mut self, module: &mut walrus::Module, wasm_names: &[WasmName]) {
+        if let Some(common) = &self.common {
+            let mut common = common.lock();
+            common.start_alternatives.clear();
+            for name in wasm_names {
+                let unique_name = Self::unique_import_name(name);
+                // if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
+                //     panic!("Import function for start alternative '{name}' already exists");
+                // }
+                let fid = (NAMESPACE, &unique_name)
+                    .get_fid(&module.imports)
+                    .unwrap_or_else(|_| {
+                        let func_ty = module.types.add(&[], &[]);
+                        let (new_fid, _) = module.add_import_func(NAMESPACE, &unique_name, func_ty);
+                        new_fid
+                    });
+                common.start_alternatives.insert(name.clone(), fid);
+            }
+        } else {
+            let func_ty = module.types.add(&[], &[]);
+            let common = StartSectionCommon {
+                map: HashMap::new(),
+                start_alternatives: wasm_names
+                    .iter()
+                    .map(|name| {
+                        let unique_name = Self::unique_import_name(name);
+                        if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
+                            panic!("Import function for start alternative '{name}' already exists");
+                        }
+                        let (new_fid, _) = module.add_import_func(NAMESPACE, &unique_name, func_ty);
+                        (name.clone(), new_fid)
+                    })
+                    .collect(),
+            };
+            self.common = Some(Arc::new(parking_lot::Mutex::new(common)));
+        }
     }
 
     fn unique_import_name(wasm_name: &WasmName) -> String {
@@ -63,28 +82,12 @@ impl StartSectionGenerator {
         }
     }
 
-    pub fn build(&self) {}
-}
-
-impl Generator for StartSectionGenerator {
-    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        Self::init(self, module, &ctx.target_names_with_self);
-
-        println!("Start Section Generator:");
-
-        for (name, fid) in self
-            .common
-            .as_ref()
-            .unwrap()
-            .lock()
-            .start_alternatives
-            .iter()
-        {
-            println!("Added start alternative: {name}");
-        }
+    pub fn build(self, module: &mut walrus::Module) -> eyre::Result<()> {
         Ok(())
     }
 }
+
+impl Generator for StartSectionGenerator {}
 
 #[derive(Debug, Clone)]
 pub struct StartSectionBuilder {

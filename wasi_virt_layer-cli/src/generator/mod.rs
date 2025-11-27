@@ -682,12 +682,13 @@ impl GeneratorRunner {
         let vfs_name = wasm_name_holder_iter
             .next()
             .ok_or_else(|| eyre::eyre!("Failed to get VFS name"))?;
-        let target_names_with_self = wasm_name_holder_iter.collect::<Box<_>>();
 
-        let target_names = target_names_with_self
+        let target_names = wasm_name_holder_iter.collect::<Box<_>>();
+
+        let target_names_with_self = target_names
             .iter()
-            .take(targets.len())
             .cloned()
+            .chain(core::iter::once(vfs_name.clone()))
             .collect::<Box<_>>();
 
         let memory_hint = memory_hint
@@ -843,9 +844,7 @@ impl GeneratorRunner {
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
 
-                start_section_generator
-                    .pre_vfs(module, &self.ctx)
-                    .wrap_err("Failed in pre_vfs")?;
+                start_section_generator.init(module, &self.ctx.target_names_with_self);
 
                 self.ctx.start_section_builder = Some(start_section_generator.builder());
 
@@ -856,6 +855,8 @@ impl GeneratorRunner {
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
         .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+
+        let mut start_section_generator = Some(start_section_generator);
 
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
@@ -931,7 +932,13 @@ impl GeneratorRunner {
 
                 self.ctx.start_func_id = start_func_id_visitor.start_func_id.take();
 
-                self.generators.post_combine(module, &self.ctx)
+                self.generators.post_combine(module, &self.ctx)?;
+
+                if self.ctx.target_memory_type == TargetMemoryType::Multi {
+                    start_section_generator.take().unwrap().build(module)?;
+                }
+
+                Ok(())
             })
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
@@ -970,7 +977,11 @@ impl GeneratorRunner {
 
                     self.generators
                         .post_lower_memory(module, &self.ctx)
-                        .wrap_err("Failed in run_post_lower_memory")
+                        .wrap_err("Failed in run_post_lower_memory")?;
+
+                    start_section_generator.take().unwrap().build(module)?;
+
+                    Ok(())
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts)
             })
