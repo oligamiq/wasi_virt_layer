@@ -321,7 +321,7 @@ impl InitOnce {
         }
     }
 
-    pub fn call_once<F: FnOnce()>(&self, f: F) {
+    pub fn call_once(&self, f: impl FnOnce()) {
         if !self
             .is_init
             .swap(true, core::sync::atomic::Ordering::SeqCst)
