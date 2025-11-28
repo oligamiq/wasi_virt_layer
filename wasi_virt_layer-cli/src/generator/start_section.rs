@@ -1,3 +1,4 @@
+use itertools::Itertools;
 use std::collections::HashMap;
 use std::panic;
 use std::sync::Arc;
@@ -11,14 +12,33 @@ use crate::util::{
 };
 
 #[derive(Debug, Clone)]
+pub enum StartFnPriority {
+    AfterMemoryReset,
+    AfterAll,
+}
+
+#[derive(Debug)]
 pub struct StartFnInfo {
-    pub after_memory_reset: bool,
+    pub priority: StartFnPriority,
     pub source: StartSource,
 }
 
-#[derive(Debug, Clone)]
 pub enum StartSource {
     ExportFunc(String),
+    Rewrite(Option<Box<dyn FnOnce(&mut walrus::Module, &GeneratorCtx) -> eyre::Result<()>>>),
+}
+
+impl core::fmt::Debug for StartSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StartSource::ExportFunc(name) => {
+                write!(f, "ExportFunc({})", name)
+            }
+            StartSource::Rewrite(_) => {
+                write!(f, "Rewrite(<function>)")
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, AsRefStr, PartialEq, Eq, Hash)]
@@ -39,6 +59,7 @@ pub struct StartSectionCommon {
     map: Vec<StartFnInfo>,
     /// The function body is an import fn and is replaced during the Build phase.
     start_alternatives: HashMap<StartAlternative, FunctionId>,
+    is_builded: bool,
 }
 
 impl StartSectionCommon {
@@ -63,6 +84,12 @@ impl StartSectionCommon {
                 StartAlternative::WasmName(wasm_name) => Some((wasm_name, *fid)),
                 _ => None,
             })
+    }
+
+    pub fn check_is_builded(&self) {
+        if self.is_builded {
+            panic!("StartSectionCommon has already been built");
+        }
     }
 }
 
@@ -100,6 +127,7 @@ impl StartSectionGenerator {
             let func_ty = module.types.add(&[], &[]);
             let common = StartSectionCommon {
                 map: Vec::new(),
+                is_builded: false,
                 start_alternatives: core::iter::once(StartAlternative::VFS(vfs_name.clone()))
                     .chain(core::iter::once(StartAlternative::AfterMemoryReset))
                     .chain(wasm_names.iter().cloned().map(StartAlternative::WasmName))
@@ -121,12 +149,46 @@ impl StartSectionGenerator {
     }
 
     pub fn builder(&self) -> StartSectionBuilder {
+        match &self.common {
+            None => panic!("StartSectionGenerator is not initialized"),
+            Some(common) => {
+                if common.lock().is_builded {
+                    panic!("StartSectionGenerator has already been built");
+                }
+            }
+        }
+
         StartSectionBuilder {
             common: self.common.as_ref().unwrap().clone(),
         }
     }
 
-    pub fn build(self, module: &mut walrus::Module) -> eyre::Result<()> {
+    pub fn build(self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
+        let common = self.common.unwrap();
+        let mut common = common.lock();
+        common.is_builded = true;
+
+        // todo!();
+
+        for info in common
+            .map
+            .iter_mut()
+            .filter(|info| matches!(info.priority, StartFnPriority::AfterAll))
+        {
+            match &mut info.source {
+                StartSource::ExportFunc(name) => {
+                    unimplemented!();
+                }
+                StartSource::Rewrite(f) => {
+                    if let Some(f) = f.take() {
+                        f(module, ctx)?;
+                    } else {
+                        panic!("StartSource::Rewrite function has already been taken");
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -170,6 +232,8 @@ impl StartSectionBuilder {
     }
 
     pub fn add_start_fn(&self, info: StartFnInfo) {
+        self.common.lock().check_is_builded();
+
         self.common.lock().map.push(info);
     }
 }

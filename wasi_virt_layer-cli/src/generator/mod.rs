@@ -939,7 +939,10 @@ impl GeneratorRunner {
                 self.generators.post_combine(module, &self.ctx)?;
 
                 if self.ctx.target_memory_type == TargetMemoryType::Multi {
-                    start_section_generator.take().unwrap().build(module)?;
+                    start_section_generator
+                        .take()
+                        .unwrap()
+                        .build(module, &self.ctx)?;
                 }
 
                 Ok(())
@@ -983,7 +986,10 @@ impl GeneratorRunner {
                         .post_lower_memory(module, &self.ctx)
                         .wrap_err("Failed in run_post_lower_memory")?;
 
-                    start_section_generator.take().unwrap().build(module)?;
+                    start_section_generator
+                        .take()
+                        .unwrap()
+                        .build(module, &self.ctx)?;
 
                     Ok(())
                 })

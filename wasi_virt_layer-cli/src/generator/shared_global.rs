@@ -4,7 +4,10 @@ use walrus::FunctionId;
 
 use crate::{
     args::TargetMemoryType,
-    generator::Generator,
+    generator::{
+        Generator,
+        start_section::{StartFnInfo, StartFnPriority, StartSource},
+    },
     instrs::InstrRewrite as _,
     unique_name::UniqueName,
     util::{
@@ -73,9 +76,8 @@ impl SharedGlobalFns {
     }
 }
 
-impl Generator for SharedGlobal {
-    fn post_lower_memory(
-        &mut self,
+impl SharedGlobal {
+    fn post_lower_memory_inner(
         module: &mut walrus::Module,
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
@@ -292,6 +294,37 @@ impl Generator for SharedGlobal {
         module
             .exports
             .erase_with(global_get_alt_without_lock, ctx.unstable_print_debug)?;
+
+        Ok(())
+    }
+}
+
+impl Generator for SharedGlobal {
+    fn post_lower_memory(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &crate::generator::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        use std::collections::{HashMap, HashSet};
+        use walrus::ir::*;
+
+        if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
+            unreachable!();
+        }
+
+        if !ctx.threads {
+            return Ok(());
+        }
+
+        ctx.start_section_builder
+            .as_ref()
+            .unwrap()
+            .add_start_fn(StartFnInfo {
+                priority: StartFnPriority::AfterAll,
+                source: StartSource::Rewrite(Some(Box::new(|module, ctx| {
+                    SharedGlobal::post_lower_memory_inner(module, ctx)
+                }))),
+            });
 
         Ok(())
     }
