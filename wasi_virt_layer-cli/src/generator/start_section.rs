@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 use std::panic;
 use std::sync::Arc;
+use strum::AsRefStr;
 use walrus::FunctionId;
 
 use crate::generator::{Generator, GeneratorCtx};
+use crate::unique_name::UniqueName;
 use crate::util::{
     NAMESPACE, WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName,
 };
@@ -18,14 +20,52 @@ pub enum StartOrigin {
 }
 
 #[derive(Debug, Clone)]
-pub struct StartSource(String);
+pub enum StartSource {
+    ExportFunc(String),
+}
+
+#[derive(Debug, Clone, AsRefStr, PartialEq, Eq, Hash)]
+pub enum StartAlternative {
+    /// Initialize each target wasm module
+    WasmName(WasmName),
+    /// This is the VFS initialization function
+    VFS(WasmName),
+    /// This should call after resetting the memory state
+    /// Conclusion: All initialization function must be done here
+    AfterMemoryReset,
+}
 
 #[derive(Debug, Default)]
 pub struct StartSectionCommon {
     /// Additional start functions.
     map: HashMap<StartOrigin, StartSource>,
     /// The function body is an import fn and is replaced during the Build phase.
-    start_alternatives: HashMap<WasmName, FunctionId>,
+    start_alternatives: HashMap<StartAlternative, FunctionId>,
+}
+
+impl StartSectionCommon {
+    pub fn vfs_start_fid(&self) -> (WasmName, FunctionId) {
+        self.start_alternatives
+            .iter()
+            .find_map(|(name, fid)| match name {
+                StartAlternative::VFS(wasm_name) => Some((wasm_name.clone(), *fid)),
+                _ => None,
+            })
+            .expect("VFS start alternative must exist")
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (&StartAlternative, FunctionId)> {
+        self.start_alternatives.iter().map(|(a, b)| (a, *b))
+    }
+
+    pub fn target_wasm_fids(&self) -> impl Iterator<Item = (&WasmName, FunctionId)> {
+        self.start_alternatives
+            .iter()
+            .filter_map(move |(name, fid)| match name {
+                StartAlternative::WasmName(wasm_name) => Some((wasm_name, *fid)),
+                _ => None,
+            })
+    }
 }
 
 #[derive(Debug, Default)]
@@ -34,46 +74,52 @@ pub struct StartSectionGenerator {
 }
 
 impl StartSectionGenerator {
-    pub fn init(&mut self, module: &mut walrus::Module, wasm_names: &[WasmName]) {
+    pub fn init(
+        &mut self,
+        module: &mut walrus::Module,
+        vfs_name: WasmName,
+        wasm_names: &[WasmName],
+    ) {
         if let Some(common) = &self.common {
-            let mut common = common.lock();
-            common.start_alternatives.clear();
-            for name in wasm_names {
-                let unique_name = Self::unique_import_name(name);
-                // if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
-                //     panic!("Import function for start alternative '{name}' already exists");
-                // }
-                let fid = (NAMESPACE, &unique_name)
-                    .get_fid(&module.imports)
-                    .unwrap_or_else(|_| {
-                        let func_ty = module.types.add(&[], &[]);
-                        let (new_fid, _) = module.add_import_func(NAMESPACE, &unique_name, func_ty);
-                        new_fid
-                    });
-                common.start_alternatives.insert(name.clone(), fid);
-            }
+            // let mut common = common.lock();
+            // common.start_alternatives.clear();
+            // for name in wasm_names {
+            //     let unique_name = Self::unique_import_name(name);
+            //     // if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
+            //     //     panic!("Import function for start alternative '{name}' already exists");
+            //     // }
+            //     let fid = (NAMESPACE, &unique_name)
+            //         .get_fid(&module.imports)
+            //         .unwrap_or_else(|_| {
+            //             let func_ty = module.types.add(&[], &[]);
+            //             let (new_fid, _) = module.add_import_func(NAMESPACE, &unique_name, func_ty);
+            //             new_fid
+            //         });
+            //     common.start_alternatives.insert(name.clone(), fid);
+            // }
+            panic!("Re-initialization of StartSectionGenerator is not supported");
         } else {
             let func_ty = module.types.add(&[], &[]);
             let common = StartSectionCommon {
                 map: HashMap::new(),
-                start_alternatives: wasm_names
-                    .iter()
+                start_alternatives: core::iter::once(StartAlternative::VFS(vfs_name.clone()))
+                    .chain(core::iter::once(StartAlternative::AfterMemoryReset))
+                    .chain(wasm_names.iter().cloned().map(StartAlternative::WasmName))
                     .map(|name| {
-                        let unique_name = Self::unique_import_name(name);
+                        let unique_name = UniqueName::StartAlternative(&name);
                         if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
-                            panic!("Import function for start alternative '{name}' already exists");
+                            panic!(
+                                "Import function for start alternative '{name:?}' already exists"
+                            );
                         }
-                        let (new_fid, _) = module.add_import_func(NAMESPACE, &unique_name, func_ty);
-                        (name.clone(), new_fid)
+                        let (new_fid, _) =
+                            module.add_import_func(NAMESPACE, &unique_name.to_string(), func_ty);
+                        (name, new_fid)
                     })
                     .collect(),
             };
             self.common = Some(Arc::new(parking_lot::Mutex::new(common)));
         }
-    }
-
-    fn unique_import_name(wasm_name: &WasmName) -> String {
-        format!("__wasip1_vfs_{wasm_name}__start_anchor")
     }
 
     pub fn builder(&self) -> StartSectionBuilder {
@@ -95,12 +141,33 @@ pub struct StartSectionBuilder {
 }
 
 impl StartSectionBuilder {
-    pub fn iter(&self) -> Vec<(WasmName, FunctionId)> {
+    pub fn iter(&self) -> Vec<(StartAlternative, FunctionId)> {
         self.common
             .lock()
             .start_alternatives
             .iter()
             .map(|(name, fid)| (name.clone(), *fid))
+            .collect::<Vec<_>>()
+    }
+
+    pub fn vfs_start_fid(&self) -> (WasmName, FunctionId) {
+        self.common.lock().vfs_start_fid()
+    }
+
+    pub fn after_memory_reset_fid(&self) -> FunctionId {
+        self.common
+            .lock()
+            .start_alternatives
+            .get(&StartAlternative::AfterMemoryReset)
+            .copied()
+            .expect("AfterMemoryReset start alternative must exist")
+    }
+
+    pub fn target_wasm_fids(&self) -> Vec<(WasmName, FunctionId)> {
+        self.common
+            .lock()
+            .target_wasm_fids()
+            .map(|(name, fid)| (name.clone(), fid))
             .collect::<Vec<_>>()
     }
 }

@@ -15,6 +15,7 @@ pub mod fallback_command;
 pub mod generator;
 pub mod instrs;
 pub mod test_run;
+pub mod unique_name;
 pub mod util;
 
 macro_rules! add_generator {

@@ -844,7 +844,11 @@ impl GeneratorRunner {
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
 
-                start_section_generator.init(module, &self.ctx.target_names_with_self);
+                start_section_generator.init(
+                    module,
+                    self.ctx.vfs_name.clone(),
+                    &self.ctx.target_names,
+                );
 
                 self.ctx.start_section_builder = Some(start_section_generator.builder());
 

@@ -4,6 +4,7 @@ use walrus::*;
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
+    unique_name::UniqueName,
     util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
 };
 
@@ -78,9 +79,10 @@ impl Generator for ResetFunc {
         let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
 
         for wasm in &ctx.target_names {
-            let reset_name = format!("__wasip1_vfs_{wasm}_reset");
-
-            if let Some(reset) = (NAMESPACE, &reset_name).get_fid(&module.imports).ok() {
+            if let Some(reset) = (NAMESPACE, &UniqueName::EachReset(wasm))
+                .get_fid(&module.imports)
+                .ok()
+            {
                 let global = ctx.target_used_global_id.as_ref().unwrap()[wasm]
                 .iter()
                 .copied()
@@ -230,8 +232,6 @@ impl Generator for ResetFunc {
             module.renew_call_fn(reset_on_thread_once, initializers)?;
 
             reset_on_thread
-
-            // initializers
         } else {
             initializers
         };

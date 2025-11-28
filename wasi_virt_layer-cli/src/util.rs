@@ -15,6 +15,7 @@ use walrus::{ir::InstrSeqId, *};
 use crate::{
     args::TargetMemoryType,
     instrs::{InstrRead, InstrRewrite as _},
+    unique_name::UniqueNameMarker,
 };
 
 #[allow(dead_code)]
@@ -2060,7 +2061,9 @@ pub trait WalrusFIDAssister {
 
 pub struct FunctionIdMarker;
 pub struct StrMarker;
+pub struct UniqueMarker;
 pub struct DoubleStrMarker;
+pub struct StrAndUniqueNameMarker;
 
 impl<B: Borrow<FunctionId> + Copy> WalrusFID<FunctionIdMarker> for B {
     fn as_str(self) -> String {
@@ -2098,6 +2101,24 @@ impl<S: AsRef<str> + Copy> WalrusFID<StrMarker> for S {
     }
 }
 
+impl<U: UniqueNameMarker> WalrusFID<UniqueMarker> for U {
+    fn as_str(self) -> String {
+        self.to_string()
+    }
+
+    fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId> {
+        let name = self.to_string();
+        assist
+            .get_fid_by_name(&name)
+            .wrap_err_with(|| eyre::eyre!("Function name {name} not found in get_fid"))
+    }
+
+    fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId> {
+        let name = self.to_string();
+        assist.find_fid_by_name(&name)
+    }
+}
+
 impl<S1: AsRef<str> + Copy, S2: AsRef<str> + Copy> WalrusFID<DoubleStrMarker> for (S1, S2) {
     fn as_str(self) -> String {
         format!("{}.{}", self.0.as_ref(), self.1.as_ref())
@@ -2115,6 +2136,26 @@ impl<S1: AsRef<str> + Copy, S2: AsRef<str> + Copy> WalrusFID<DoubleStrMarker> fo
         let module = self.0.as_ref();
         let name = self.1.as_ref();
         assist.find_fid_by_double_name(module, name)
+    }
+}
+
+impl<S: AsRef<str> + Copy, U: UniqueNameMarker> WalrusFID<StrAndUniqueNameMarker> for (S, U) {
+    fn as_str(self) -> String {
+        format!("{}.{}", self.0.as_ref(), self.1.to_string())
+    }
+
+    fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId> {
+        let module = self.0.as_ref();
+        let name = self.1.to_string();
+        assist
+            .get_fid_by_double_name(module, &name)
+            .wrap_err_with(|| eyre::eyre!("Function name {module}.{name} not found in get_fid"))
+    }
+
+    fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId> {
+        let module = self.0.as_ref();
+        let name = self.1.to_string();
+        assist.find_fid_by_double_name(module, &name)
     }
 }
 
