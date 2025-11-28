@@ -59,7 +59,7 @@ impl UniqueName<'_> {
     pub const EACH_RESET: &'static str = "";
 
     fn to_str(&self) -> String {
-        let s = match self {
+        match self {
             UniqueName::EachReset(name) => fmt!(EachReset; "{name}_reset"),
             UniqueName::StartAlternative(alt) => {
                 let alt_name = alt.as_ref();
@@ -79,9 +79,7 @@ impl UniqueName<'_> {
                     _ => fmt!(SharedGlobalFns; "{func_name}"),
                 }
             }
-        };
-        println!("UniqueName to_str: {:?}", s);
-        s
+        }
     }
 }
 
