@@ -10,13 +10,10 @@ use crate::util::{
     NAMESPACE, WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StartOrigin {
-    ResetFunc,
-    // StartFunc,
-    // Threads,
-    // SharedGlobal,
-    // Debug,
+#[derive(Debug, Clone)]
+pub struct StartFnInfo {
+    pub after_memory_reset: bool,
+    pub source: StartSource,
 }
 
 #[derive(Debug, Clone)]
@@ -38,7 +35,7 @@ pub enum StartAlternative {
 #[derive(Debug, Default)]
 pub struct StartSectionCommon {
     /// Additional start functions.
-    map: HashMap<StartOrigin, StartSource>,
+    map: Vec<StartFnInfo>,
     /// The function body is an import fn and is replaced during the Build phase.
     start_alternatives: HashMap<StartAlternative, FunctionId>,
 }
@@ -101,7 +98,7 @@ impl StartSectionGenerator {
         } else {
             let func_ty = module.types.add(&[], &[]);
             let common = StartSectionCommon {
-                map: HashMap::new(),
+                map: Vec::new(),
                 start_alternatives: core::iter::once(StartAlternative::VFS(vfs_name.clone()))
                     .chain(core::iter::once(StartAlternative::AfterMemoryReset))
                     .chain(wasm_names.iter().cloned().map(StartAlternative::WasmName))
@@ -169,5 +166,9 @@ impl StartSectionBuilder {
             .target_wasm_fids()
             .map(|(name, fid)| (name.clone(), fid))
             .collect::<Vec<_>>()
+    }
+
+    pub fn add_start_fn(&self, info: StartFnInfo) {
+        self.common.lock().map.push(info);
     }
 }
