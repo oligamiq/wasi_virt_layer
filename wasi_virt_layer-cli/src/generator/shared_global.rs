@@ -77,21 +77,21 @@ impl SharedGlobalFns {
 }
 
 impl Generator for SharedGlobal {
-    fn post_combine(
+    fn post_lower_memory(
         &mut self,
         module: &mut walrus::Module,
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
+        use std::collections::{HashMap, HashSet};
+        use walrus::ir::*;
+
         if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
-            return Ok(());
+            unreachable!();
         }
 
         if !ctx.threads {
             return Ok(());
         }
-
-        use std::collections::{HashMap, HashSet};
-        use walrus::ir::*;
 
         let used_mem_id = module
             .funcs
@@ -141,22 +141,6 @@ impl Generator for SharedGlobal {
             true => None,
             false => Some(extra_export_func_names),
         };
-
-        Ok(())
-    }
-
-    fn post_lower_memory(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &crate::generator::GeneratorCtx,
-    ) -> eyre::Result<()> {
-        if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
-            unreachable!();
-        }
-
-        if !ctx.threads {
-            return Ok(());
-        }
 
         let global_set_alt_without_lock =
             UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltSet).get_fid(&module.exports)?;

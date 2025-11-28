@@ -78,7 +78,7 @@ impl StartSectionGenerator {
         vfs_name: WasmName,
         wasm_names: &[WasmName],
     ) {
-        if let Some(common) = &self.common {
+        if let Some(_) = &self.common {
             // let mut common = common.lock();
             // common.start_alternatives.clear();
             // for name in wasm_names {
