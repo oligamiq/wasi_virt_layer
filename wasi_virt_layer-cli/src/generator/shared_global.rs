@@ -1,10 +1,12 @@
 use eyre::{Context as _, ContextCompat as _};
+use strum::AsRefStr;
 use walrus::FunctionId;
 
 use crate::{
     args::TargetMemoryType,
     generator::Generator,
     instrs::InstrRewrite as _,
+    unique_name::UniqueName,
     util::{
         WalrusFID as _, WalrusUtilExport, WalrusUtilFuncs as _, WalrusUtilImport as _,
         WalrusUtilModule as _,
@@ -46,6 +48,32 @@ use crate::{
 pub struct SharedGlobal {
     /// If unstable_print_debug is not enabled, store the names of the extra exported functions here
     extra_export_func_names: Option<Vec<String>>,
+}
+
+#[derive(Debug, AsRefStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum SharedGlobalFns {
+    GlobalAltSet,
+    GlobalAltGet,
+    GlobalAltGetNoWait,
+    GlobalAltInitOnce,
+    GlobalAltPos,
+    Locker(usize),
+}
+
+impl SharedGlobalFns {
+    pub fn check_locker(str: impl AsRef<str>) -> Option<SharedGlobalFns> {
+        let s = str.as_ref();
+        let prefix =
+            crate::unique_name::fmt!(SharedGlobalFns; "{}", SharedGlobalFns::Locker(0).as_ref());
+        if s.starts_with(&prefix) && s.len() > prefix.len() {
+            let index_str = &s[prefix.len() + 1..];
+            if let Ok(index) = index_str.parse::<usize>() {
+                return Some(SharedGlobalFns::Locker(index));
+            }
+        }
+        None
+    }
 }
 
 impl Generator for SharedGlobal {
@@ -131,13 +159,15 @@ impl Generator for SharedGlobal {
         }
 
         let global_set_alt_without_lock =
-            "__wasip1_vfs_memory_grow_global_alt_set".get_fid(&module.exports)?;
+            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltSet).get_fid(&module.exports)?;
         let global_init_alt_without_lock_once =
-            "__wasip1_vfs_memory_grow_global_alt_init_once".get_fid(&module.exports)?;
+            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltInitOnce)
+                .get_fid(&module.exports)?;
         let global_get_alt_with_lock =
-            "__wasip1_vfs_memory_grow_global_alt_get".get_fid(&module.exports)?;
+            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltGet).get_fid(&module.exports)?;
         let global_get_alt_without_lock =
-            "__wasip1_vfs_memory_grow_global_alt_get_no_wait".get_fid(&module.exports)?;
+            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltGetNoWait)
+                .get_fid(&module.exports)?;
 
         let global = module
             .globals
@@ -156,7 +186,8 @@ impl Generator for SharedGlobal {
         let global_id = global.id();
 
         // Obtain the location within memory.
-        let global_alt_pos = "__wasip1_vfs_memory_grow_global_alt_pos".get_fid(&module.exports)?;
+        let global_alt_pos =
+            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltPos).get_fid(&module.exports)?;
         // let global_alt_pos = module.funcs.get(global_alt_pos).kind.unwrap_local();
         // let global_alt_pos = if let walrus::ir::Instr::Const(walrus::ir::Const {
         //     value: walrus::ir::Value::I32(value),
@@ -230,7 +261,7 @@ impl Generator for SharedGlobal {
             .exports
             .iter()
             .filter_map(|e| {
-                if e.name.starts_with("__wasip1_vfs_memory_grow_locker_") {
+                if SharedGlobalFns::check_locker(&e.name).is_some() {
                     if let walrus::ExportItem::Function(fid) = e.item {
                         Some(fid)
                     } else {

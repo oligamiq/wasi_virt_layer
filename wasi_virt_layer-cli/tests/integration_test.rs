@@ -4,10 +4,10 @@
 pub mod utils;
 use camino::Utf8PathBuf;
 use eyre::Context;
-use utils::*;
 use glob;
-use wasi_virt_layer_cli::util;
 use itertools::Itertools;
+use utils::*;
+use wasi_virt_layer_cli::util;
 
 static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -361,27 +361,41 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
     let _lock = lock();
     color_eyre::install().ok();
 
-    fn process_wasm_file(md_output: &mut String, wasm_path: &std::path::Path, stage_name: &str) -> color_eyre::Result<()> {
+    fn process_wasm_file(
+        md_output: &mut String,
+        wasm_path: &std::path::Path,
+        stage_name: &str,
+    ) -> color_eyre::Result<()> {
         md_output.push_str(&format!("### Stage: `{}`\n\n", stage_name));
 
-        let wasm_path_str = wasm_path.to_str().ok_or_else(|| eyre::eyre!("Invalid UTF-8 path"))?;
+        let wasm_path_str = wasm_path
+            .to_str()
+            .ok_or_else(|| eyre::eyre!("Invalid UTF-8 path"))?;
         let wat_output = std::process::Command::new("wasm-tools")
             .args(["print", wasm_path_str])
             .output()?;
 
         if !wat_output.status.success() {
             let stderr = String::from_utf8_lossy(&wat_output.stderr);
-            md_output.push_str(&format!("Failed to process `{}`. Error:\n```\n{}\n```\n\n", stage_name, stderr));
+            md_output.push_str(&format!(
+                "Failed to process `{}`. Error:\n```\n{}\n```\n\n",
+                stage_name, stderr
+            ));
             return Ok(());
         }
 
         let wat = String::from_utf8_lossy(&wat_output.stdout);
 
-        let imports: Vec<_> = wat.lines()
+        let imports: Vec<_> = wat
+            .lines()
             .filter(|line| line.trim().starts_with("(import"))
             .map(|line| {
                 let parts: Vec<_> = line.split_whitespace().collect();
-                format!("| `{}` | `{}` |", parts.get(1).unwrap_or(&""), parts.get(2).unwrap_or(&""))
+                format!(
+                    "| `{}` | `{}` |",
+                    parts.get(1).unwrap_or(&""),
+                    parts.get(2).unwrap_or(&"")
+                )
             })
             .collect();
 
@@ -393,7 +407,8 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
             md_output.push_str("\n\n");
         }
 
-        let exports: Vec<_> = wat.lines()
+        let exports: Vec<_> = wat
+            .lines()
             .filter(|line| line.trim().starts_with("(export"))
             .map(|line| {
                 let parts: Vec<_> = line.split_whitespace().collect();
@@ -422,7 +437,10 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
         ("multi_memory", &["multi_memory"]),
         ("unstable_print_debug", &["unstable_print_debug"]),
         ("multi_memory_std", &["multi_memory", "std"]),
-        ("multi_memory_unstable_print_debug", &["multi_memory", "unstable_print_debug"]),
+        (
+            "multi_memory_unstable_print_debug",
+            &["multi_memory", "unstable_print_debug"],
+        ),
     ];
 
     let mut md_output = String::new();
@@ -437,12 +455,31 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
             // Manually build and inspect initial modules
             md_output.push_str("### Stage 0: Initial Modules\n\n");
 
-            std::process::Command::new("cargo").args(["build", "--release", "--target", "wasm32-wasip1", "-p", "no_std_vfs"]).status()?;
+            std::process::Command::new("cargo")
+                .args([
+                    "build",
+                    "--release",
+                    "--target",
+                    "wasm32-wasip1",
+                    "-p",
+                    "no_std_vfs",
+                ])
+                .status()?;
             let vfs_path = std::path::PathBuf::from("target/wasm32-wasip1/release/no_std_vfs.wasm");
             process_wasm_file(&mut md_output, &vfs_path, "no_std_vfs.wasm (initial)")?;
 
-            std::process::Command::new("cargo").args(["build", "--release", "--target", "wasm32-wasip1", "-p", "test_wasm"]).status()?;
-            let test_wasm_path = std::path::PathBuf::from("target/wasm32-wasip1/release/test_wasm.wasm");
+            std::process::Command::new("cargo")
+                .args([
+                    "build",
+                    "--release",
+                    "--target",
+                    "wasm32-wasip1",
+                    "-p",
+                    "test_wasm",
+                ])
+                .status()?;
+            let test_wasm_path =
+                std::path::PathBuf::from("target/wasm32-wasip1/release/test_wasm.wasm");
             process_wasm_file(&mut md_output, &test_wasm_path, "test_wasm.wasm (initial)")?;
 
             run_wasi_virt_layer(

@@ -22,6 +22,7 @@ pub enum StartSource {
 }
 
 #[derive(Debug, Clone, AsRefStr, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
 pub enum StartAlternative {
     /// Initialize each target wasm module
     WasmName(WasmName),

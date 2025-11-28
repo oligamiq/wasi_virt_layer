@@ -41,7 +41,7 @@ where
     }
 
     pub fn spawn(&mut self) -> std::io::Result<FallbackChild> {
-        let mut cmd = Command::new(&self.bin);
+        let mut cmd = std::process::Command::new(&self.bin);
         cmd.args(&self.args);
         let piped_out = std::process::Stdio::piped();
         let piped_err = std::process::Stdio::piped();
