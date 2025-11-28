@@ -39,6 +39,9 @@ pub struct StartSectionCommon {
     map: Vec<StartFnInfo>,
     /// The function body is an import fn and is replaced during the Build phase.
     start_alternatives: HashMap<StartAlternative, FunctionId>,
+    /// The one that gets called just once immediately after a memory reset
+    /// Use `reset` for things that must not be reset
+    once_after_memory_reset: Vec<StartSource>,
 }
 
 impl StartSectionCommon {
@@ -115,6 +118,7 @@ impl StartSectionGenerator {
                         (name, new_fid)
                     })
                     .collect(),
+                once_after_memory_reset: Vec::new(),
             };
             self.common = Some(Arc::new(parking_lot::Mutex::new(common)));
         }

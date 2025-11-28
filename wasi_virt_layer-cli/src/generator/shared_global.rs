@@ -45,10 +45,7 @@ use crate::{
 ///         }
 ///     });
 #[derive(Debug, Default)]
-pub struct SharedGlobal {
-    /// If unstable_print_debug is not enabled, store the names of the extra exported functions here
-    extra_export_func_names: Option<Vec<String>>,
-}
+pub struct SharedGlobal;
 
 #[derive(Debug, AsRefStr)]
 #[strum(serialize_all = "snake_case")]
@@ -131,16 +128,6 @@ impl Generator for SharedGlobal {
             },
             &lockers.values().map(|(v, _)| *v).collect::<Vec<_>>(),
         )?;
-
-        let extra_export_func_names = lockers
-            .into_values()
-            .map(|(_, name)| name)
-            .collect::<Vec<_>>();
-
-        self.extra_export_func_names = match ctx.unstable_print_debug {
-            true => None,
-            false => Some(extra_export_func_names),
-        };
 
         let global_set_alt_without_lock =
             UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltSet).get_fid(&module.exports)?;
@@ -241,24 +228,8 @@ impl Generator for SharedGlobal {
             .i32_const(init)
             .call(global_init_alt_without_lock_once);
 
-        let lockers = module
-            .exports
-            .iter()
-            .filter_map(|e| {
-                if SharedGlobalFns::check_locker(&e.name).is_some() {
-                    if let walrus::ExportItem::Function(fid) = e.item {
-                        Some(fid)
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>();
-
         // The locker is locked at the point it is called. So we can replace
-        for locker_id in lockers {
+        for (_, (locker_id, name)) in lockers {
             // println!("Rewriting locker: {:?}", locker_id);
             use walrus::ir::*;
             let new_locker =
@@ -279,6 +250,8 @@ impl Generator for SharedGlobal {
             )?;
 
             module.renew_call_fn(locker_id, new_locker)?;
+
+            module.exports.erase_with(&name, ctx.unstable_print_debug)?;
         }
 
         module
@@ -320,19 +293,6 @@ impl Generator for SharedGlobal {
             .exports
             .erase_with(global_get_alt_without_lock, ctx.unstable_print_debug)?;
 
-        Ok(())
-    }
-
-    fn post_components(
-        &mut self,
-        module: &mut walrus::Module,
-        _: &super::ComponentCtx,
-    ) -> eyre::Result<()> {
-        if let Some(extra_export_func_names) = &self.extra_export_func_names {
-            for export_name in extra_export_func_names {
-                module.exports.erase(export_name)?;
-            }
-        }
         Ok(())
     }
 }
