@@ -2,13 +2,12 @@ use itertools::Itertools;
 use std::collections::HashMap;
 use std::panic;
 use std::sync::Arc;
-use strum::AsRefStr;
 use walrus::FunctionId;
 
-use crate::generator::{Generator, GeneratorCtx};
-use crate::unique_name::UniqueName;
-use crate::util::{
-    NAMESPACE, WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName,
+use crate::{
+    generator::{Generator, GeneratorCtx},
+    unique_name::UniqueName,
+    util::{WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName},
 };
 
 #[derive(Debug, Clone)]
@@ -41,7 +40,7 @@ impl core::fmt::Debug for StartSource {
     }
 }
 
-#[derive(Debug, Clone, AsRefStr, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, strum::AsRefStr, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum StartAlternative {
     /// Initialize each target wasm module
@@ -110,14 +109,14 @@ impl StartSectionGenerator {
             // common.start_alternatives.clear();
             // for name in wasm_names {
             //     let unique_name = Self::unique_import_name(name);
-            //     // if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
+            //     // if (UniqueName::NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
             //     //     panic!("Import function for start alternative '{name}' already exists");
             //     // }
-            //     let fid = (NAMESPACE, &unique_name)
+            //     let fid = (UniqueName::NAMESPACE, &unique_name)
             //         .get_fid(&module.imports)
             //         .unwrap_or_else(|_| {
             //             let func_ty = module.types.add(&[], &[]);
-            //             let (new_fid, _) = module.add_import_func(NAMESPACE, &unique_name, func_ty);
+            //             let (new_fid, _) = module.add_import_func(UniqueName::NAMESPACE, &unique_name, func_ty);
             //             new_fid
             //         });
             //     common.start_alternatives.insert(name.clone(), fid);
@@ -133,13 +132,19 @@ impl StartSectionGenerator {
                     .chain(wasm_names.iter().cloned().map(StartAlternative::WasmName))
                     .map(|name| {
                         let unique_name = UniqueName::StartAlternative(&name);
-                        if (NAMESPACE, &unique_name).get_fid(&module.imports).is_ok() {
+                        if (UniqueName::NAMESPACE, &unique_name)
+                            .get_fid(&module.imports)
+                            .is_ok()
+                        {
                             panic!(
                                 "Import function for start alternative '{name:?}' already exists"
                             );
                         }
-                        let (new_fid, _) =
-                            module.add_import_func(NAMESPACE, &unique_name.to_string(), func_ty);
+                        let (new_fid, _) = module.add_import_func(
+                            UniqueName::NAMESPACE,
+                            &unique_name.to_string(),
+                            func_ty,
+                        );
                         (name, new_fid)
                     })
                     .collect(),

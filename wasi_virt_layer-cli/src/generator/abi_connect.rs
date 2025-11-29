@@ -1,16 +1,20 @@
 use itertools::Itertools;
+use strum::VariantNames;
 
 use crate::{
-    abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
+    abi::{Wasip1ABIFunc, Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
     generator::Generator,
-    util::{
-        CORE_MODULE_ROOT, THREADS_MODULE_ROOT, WalrusFID, WalrusUtilExport, WalrusUtilImport,
-        WalrusUtilModule, gen_component_name,
-    },
+    unique_name::UniqueName,
+    util::{WalrusFID, WalrusUtilExport, WalrusUtilImport, WalrusUtilModule, gen_component_name},
 };
 
+#[derive(Debug, strum::AsRefStr)]
+#[strum(serialize_all = "snake_case")]
 pub enum Wasip1ABI<'a> {
-    Temporal { external: &'a str, name: &'a str },
+    #[strum(serialize = "__self")]
+    SelfDefault { import: &'a str },
+    #[strum(serialize = "")]
+    TargetTemporal { external: &'a str, import: &'a str },
 }
 
 /// Connect Wasip1 ABI
@@ -29,13 +33,14 @@ impl Generator for ConnectWasip1ABI {
         ctx: &super::GeneratorCtx,
     ) -> eyre::Result<()> {
         for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-            let export_name = format!("__wasip1_vfs___self_{import}");
-            let export = export_name.get_fid(&module.exports).ok();
+            let export = UniqueName::Wasip1ABI(&Wasip1ABI::SelfDefault { import })
+                .get_fid(&module.exports)
+                .ok();
 
             if let Some(import_id) = (
                 // CORE_MODULE_ROOT,
                 // &format!("[static]wasip1.{}-import", import.replace("_", "-")),
-                "wasi_snapshot_preview1",
+                UniqueName::WASIP1_ABI_MODULE,
                 import,
             )
                 .get_fid(&module.imports)
@@ -44,7 +49,7 @@ impl Generator for ConnectWasip1ABI {
                 if let Some(_) = export {
                     module.connect_func_alt_with_remove_export(
                         import_id,
-                        export_name,
+                        &UniqueName::Wasip1ABI(&Wasip1ABI::SelfDefault { import }).to_string(),
                         ctx.unstable_print_debug,
                     )?;
                 } else {
@@ -52,7 +57,12 @@ impl Generator for ConnectWasip1ABI {
                 }
             } else {
                 if let Some(_) = export {
-                    module.exports.remove(export_name).unwrap();
+                    module
+                        .exports
+                        .remove(
+                            &UniqueName::Wasip1ABI(&Wasip1ABI::SelfDefault { import }).to_string(),
+                        )
+                        .unwrap();
                 }
             }
         }
@@ -71,14 +81,15 @@ impl Generator for ConnectWasip1ABI {
             .iter_mut()
             .filter(|import| {
                 <Wasip1ABIFunc as strum::VariantNames>::VARIANTS.contains(&import.name.as_str())
-                    && import.module == "wasi_snapshot_preview1"
+                    && import.module == UniqueName::WASIP1_ABI_MODULE
             })
             .for_each(|import| {
-                import.name = crate::unique_name::UniqueName::Wasip1ABI(&Wasip1ABI::Temporal {
-                    external: &external.name.as_str(),
-                    name: import.name.as_str(),
-                })
-                .to_string();
+                import.name =
+                    crate::unique_name::UniqueName::Wasip1ABI(&Wasip1ABI::TargetTemporal {
+                        external: &external.name.as_str(),
+                        import: import.name.as_str(),
+                    })
+                    .to_string();
             });
 
         Ok(())
@@ -92,7 +103,7 @@ impl Generator for ConnectWasip1ABI {
         for wasm in &ctx.target_names {
             for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
                 let export_name = format!("__wasip1_vfs_{wasm}_{import}");
-                if let Some(import_id) = ("wasi_snapshot_preview1", import)
+                if let Some(import_id) = (UniqueName::WASIP1_ABI_MODULE, import)
                     .get_fid(&module.imports)
                     .ok()
                 {
@@ -164,12 +175,12 @@ impl Generator for NonRecursiveWasiABI {
         _: &super::GeneratorCtx,
     ) -> eyre::Result<()> {
         for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-            if let Some(fid) = ("non_recursive_wasi_snapshot_preview1", import)
+            if let Some(fid) = (UniqueName::CORE_NON_RECURSIVE_MODULE_ROOT, import)
                 .get_fid(&module.imports)
                 .ok()
             {
                 // If it already exists, make it possible to call it.
-                if let Some(import_id) = ("wasi_snapshot_preview1", import)
+                if let Some(import_id) = (UniqueName::WASIP1_ABI_MODULE, import)
                     .get_fid(&module.imports)
                     .ok()
                 {
@@ -177,7 +188,7 @@ impl Generator for NonRecursiveWasiABI {
                 } else {
                     let import_id = module.imports.get_imported_func(fid).unwrap().id();
                     let import = module.imports.get_mut(import_id);
-                    import.module = "wasi_snapshot_preview1".to_string();
+                    import.module = UniqueName::WASIP1_ABI_MODULE.to_string();
                 }
             }
         }
@@ -185,7 +196,7 @@ impl Generator for NonRecursiveWasiABI {
         module
             .imports
             .iter()
-            .filter(|import| import.module == "non_recursive_wasi_snapshot_preview1")
+            .filter(|import| import.module == UniqueName::CORE_NON_RECURSIVE_MODULE_ROOT)
             .map(|import| &import.name)
             .for_each(|name| {
                 log::warn!(
@@ -212,18 +223,21 @@ impl Generator for AdjustABI {
         }
 
         for import_name in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-            if let Ok(import_id) = (CORE_MODULE_ROOT, &gen_component_name("wasip1", import_name))
+            if let Ok(import_id) = (
+                UniqueName::CORE_MODULE_ROOT,
+                &gen_component_name(UniqueName::WASIP1_ABI_MODULE_ALT, import_name),
+            )
                 .get_fid(&module.imports)
             {
                 if let Ok(import_id) =
-                    ("wasi_snapshot_preview1", import_name).get_fid(&module.imports)
+                    (UniqueName::WASIP1_ABI_MODULE, import_name).get_fid(&module.imports)
                 {
                     module.imports.erase(import_id).unwrap();
                 }
 
                 let import_id = module.imports.get_imported_func(import_id).unwrap().id();
                 let import = module.imports.get_mut(import_id);
-                import.module = "wasi_snapshot_preview1".to_string();
+                import.module = UniqueName::WASIP1_ABI_MODULE.to_string();
                 import.name = import_name.to_string();
             }
         }
@@ -234,31 +248,36 @@ impl Generator for AdjustABI {
             .unwrap();
 
         if let Ok(import_id) = (
-            THREADS_MODULE_ROOT,
-            &gen_component_name("wasip1-threads", import_name),
+            UniqueName::THREADS_MODULE_ROOT,
+            &gen_component_name(UniqueName::WASIP1_THREADS_ABI_MODULE_ALT, import_name),
         )
             .get_fid(&module.imports)
         {
-            if let Ok(import_id) = ("wasi", "thread-spawn").get_fid(&module.imports) {
+            if let Ok(import_id) =
+                (UniqueName::WASIP1_THREADS_ABI_MODULE, import_name).get_fid(&module.imports)
+            {
                 module.imports.erase(import_id).unwrap();
             }
 
             let import_id = module.imports.get_imported_func(import_id).unwrap().id();
             let import = module.imports.get_mut(import_id);
-            import.module = "wasi".to_string();
-            import.name = "thread-spawn".to_string();
+            import.module = UniqueName::WASIP1_THREADS_ABI_MODULE.to_string();
+            import.name = import_name.to_string();
 
-            if let Ok(export_id) = "wasi_thread_start".get_fid(&module.exports) {
+            let export_name = Wasip1ThreadsABIExportFunc::VARIANTS
+                .iter()
+                .exactly_one()
+                .unwrap();
+
+            if let Ok(export_id) = export_name.get_fid(&module.exports) {
                 module.exports.erase(export_id)?;
             }
 
             // adjust export
-            let export_name =
-                "wasip1-vfs:host/virtual-file-system-wasip1-threads-export#wasi-thread-start";
-            let id = export_name.get_fid(&module.exports)?;
+            let id = UniqueName::THREADS_EXPORT_MODULE_ROOT.get_fid(&module.exports)?;
             let eid = module.exports.get_exported_func(id).unwrap().id();
             let export = module.exports.get_mut(eid);
-            export.name = "wasi_thread_start".into();
+            export.name = UniqueName::THREADS_EXPORT_MODULE_ROOT.to_string();
         }
 
         Ok(())

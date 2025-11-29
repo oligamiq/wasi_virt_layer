@@ -3,11 +3,12 @@ use itertools::Itertools;
 use strum::VariantNames;
 
 use crate::{
-    abi::Wasip1ThreadsABIFunc,
+    abi::{Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, GeneratorCtx},
+    unique_name::UniqueName,
     util::{
-        NAMESPACE, THREADS_MODULE_ROOT, WalrusFID as _, WalrusUtilExport as _,
-        WalrusUtilImport as _, WalrusUtilModule as _, gen_component_name,
+        WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,
+        gen_component_name,
     },
 };
 
@@ -23,14 +24,13 @@ impl Generator for ThreadsSpawn {
             return Ok(());
         }
 
-        let namespace = "wasip1-threads";
-        let root = THREADS_MODULE_ROOT;
+        let root = UniqueName::THREADS_MODULE_ROOT;
         let name = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
             .iter()
             .exactly_one()
             .wrap_err("Expected exactly one variant for Wasip1ThreadsABIFunc")?; // thread-spawn
 
-        let component_name = gen_component_name(namespace, name);
+        let component_name = gen_component_name(UniqueName::WASIP1_THREADS_ABI_MODULE_ALT, name);
 
         module
             .exports
@@ -40,8 +40,9 @@ impl Generator for ThreadsSpawn {
 
         let branch_fid = "__wasip1_vfs_is_root_spawn".get_fid(&module.exports)?;
 
-        if let Some(normal_thread_spawn_fn_id) =
-            ("wasi", "thread-spawn").get_fid(&module.imports).ok()
+        if let Some(normal_thread_spawn_fn_id) = (UniqueName::WASIP1_THREADS_ABI_MODULE, name)
+            .get_fid(&module.imports)
+            .ok()
         {
             let self_thread_spawn_fn_id =
                 "__wasip1_vfs_wasi_thread_spawn___self".get_fid(&module.exports)?;
@@ -77,14 +78,20 @@ impl Generator for ThreadsSpawn {
                 .renew_call_fn(normal_thread_spawn_fn_id, real_thread_spawn_fn_id)
                 .wrap_err("Failed to rewrite thread-spawn call")?;
 
-            let exporting_thread_starter_name = "wasi_thread_start".to_string();
-            let exporting_thread_starter_id =
-                exporting_thread_starter_name.get_fid(&module.exports)?;
+            let start_name = Wasip1ThreadsABIExportFunc::VARIANTS
+                .iter()
+                .exactly_one()
+                .wrap_err("Expected exactly one variant for Wasip1ThreadsABIExportFunc")?; // wasi-thread-start
+
+            let exporting_thread_starter_id = start_name.get_fid(&module.exports)?;
 
             module
                 .connect_func_alt_with_remove_export(
-                    (NAMESPACE, "__wasip1_vfs___self_wasi_thread_start"),
-                    exporting_thread_starter_name,
+                    (
+                        UniqueName::NAMESPACE,
+                        "__wasip1_vfs___self_wasi_thread_start",
+                    ),
+                    start_name,
                     ctx.unstable_print_debug,
                 )
                 .wrap_err("Failed to rewrite self_wasi_thread_start call in root spawn")?;
@@ -103,7 +110,10 @@ impl Generator for ThreadsSpawn {
             // __wasip1_vfs_self_wasi_thread_start
             module
                 .renew_call_fn(
-                    (NAMESPACE, "__wasip1_vfs_wasi_thread_start_entry"),
+                    (
+                        UniqueName::NAMESPACE,
+                        "__wasip1_vfs_wasi_thread_start_entry",
+                    ),
                     exporting_thread_starter_id,
                 )
                 .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
@@ -114,7 +124,8 @@ impl Generator for ThreadsSpawn {
         } else {
             log::warn!("No normal thread-spawn found, why are you not using threads?");
 
-            let component_name = gen_component_name(namespace, name);
+            let component_name =
+                gen_component_name(UniqueName::WASIP1_THREADS_ABI_MODULE_ALT, name);
 
             let real_thread_spawn_fn_id = (root, &component_name).get_fid(&module.imports)?;
 
@@ -132,7 +143,10 @@ impl Generator for ThreadsSpawn {
 
             module
                 .renew_call_fn(
-                    (NAMESPACE, "__wasip1_vfs_wasi_thread_start_entry"),
+                    (
+                        UniqueName::NAMESPACE,
+                        "__wasip1_vfs_wasi_thread_start_entry",
+                    ),
                     fake_start,
                 )
                 .wrap_err("Failed to connect wasip1-vfs.wasi_thread_start")?;
@@ -155,18 +169,28 @@ impl Generator for ThreadsSpawn {
 
         let name = &external.name;
 
+        let start_name = Wasip1ThreadsABIFunc::VARIANTS
+            .iter()
+            .exactly_one()
+            .wrap_err("Expected exactly one variant for Wasip1ThreadsABIExportFunc")?; // thread-spawn
+
         module
             .imports
-            .find_mut(("wasi", "thread-spawn"))
+            .find_mut((UniqueName::WASIP1_THREADS_ABI_MODULE, start_name))
             .ok()
             .map(|import| {
                 import.name = format!("__wasip1_vfs_wasi_thread_spawn_{name}");
             });
 
+        let export_name = Wasip1ThreadsABIExportFunc::VARIANTS
+            .iter()
+            .exactly_one()
+            .wrap_err("Expected exactly one variant for Wasip1ThreadsABIExportFunc")?; // wasi_thread_start
+
         module
             .exports
             .iter_mut()
-            .find(|export| export.name == "wasi_thread_start")
+            .find(|export| export.name == *export_name)
             .map(|export| {
                 export.name = format!("__wasip1_vfs_wasi_thread_start_{name}");
             });

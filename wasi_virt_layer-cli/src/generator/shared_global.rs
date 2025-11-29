@@ -1,5 +1,4 @@
 use eyre::{Context as _, ContextCompat as _};
-use strum::AsRefStr;
 use walrus::FunctionId;
 
 use crate::{
@@ -50,7 +49,7 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct SharedGlobal;
 
-#[derive(Debug, AsRefStr)]
+#[derive(Debug, strum::AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum SharedGlobalFns {
     GlobalAltSet,

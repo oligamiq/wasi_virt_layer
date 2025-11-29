@@ -1,4 +1,6 @@
 pub mod is_valid {
+    use crate::unique_name::UniqueName;
+
     pub fn is_valid_wasm_for_component(
         wasm_bytes: &[u8],
         wasm_names: &[impl AsRef<str>],
@@ -12,7 +14,7 @@ pub mod is_valid {
         if import
         .iter()
         .filter(|import| {
-            import.module == "wasi_snapshot_preview1"
+            import.module == UniqueName::WASIP1_ABI_MODULE
                 && matches!(import.kind, walrus::ImportKind::Function(_))
         })
         .map(|import| {
@@ -225,4 +227,12 @@ pub enum Wasip1ABIFunc {
 #[strum(serialize_all = "kebab_case")]
 pub enum Wasip1ThreadsABIFunc {
     ThreadSpawn,
+}
+
+#[derive(
+    strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
+)]
+#[strum(serialize_all = "snake_case")]
+pub enum Wasip1ThreadsABIExportFunc {
+    WasiThreadStart,
 }

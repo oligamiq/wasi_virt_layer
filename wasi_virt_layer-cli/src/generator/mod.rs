@@ -21,6 +21,7 @@ use crate::{
     compile,
     config_checker::TomlRestorers,
     generator::start_section::StartSectionGenerator,
+    unique_name::UniqueName,
     util::{
         CaminoUtilModule as _, ResultUtil, WalrusFID as _, WalrusUtilExport as _, WalrusUtilModule,
         WasmName, WasmNameHolder,
@@ -1676,7 +1677,7 @@ pub fn merge(
         merge_cmd.arg("--debuginfo");
     }
 
-    merge_cmd.arg(vfs).arg("wasi_snapshot_preview1");
+    merge_cmd.arg(vfs).arg(UniqueName::WASIP1_ABI_MODULE);
 
     for wasm in wasm {
         merge_cmd.arg(wasm.as_ref()).arg(format!(

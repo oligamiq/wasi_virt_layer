@@ -5,7 +5,7 @@ use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
     unique_name::UniqueName,
-    util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
+    util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _},
 };
 
 /// To enable the reset function,
@@ -79,7 +79,7 @@ impl Generator for ResetFunc {
         let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
 
         for wasm in &ctx.target_names {
-            if let Some(reset) = (NAMESPACE, &UniqueName::EachReset(wasm))
+            if let Some(reset) = (UniqueName::NAMESPACE, &UniqueName::EachReset(wasm))
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -221,8 +221,8 @@ impl Generator for ResetFunc {
         // ensure it is called only once if threads are enabled.
         let init_id = if ctx.threads {
             let reset_on_thread = "__wasip1_vfs_reset_on_thread".get_fid(&module.exports)?;
-            let reset_on_thread_once =
-                (NAMESPACE, "__wasip1_vfs_reset_on_thread_once").get_fid(&module.imports)?;
+            let reset_on_thread_once = (UniqueName::NAMESPACE, "__wasip1_vfs_reset_on_thread_once")
+                .get_fid(&module.imports)?;
 
             // module.imports.erase(reset_on_thread_once)?;
 
@@ -311,7 +311,11 @@ impl Generator for StartFunc {
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
             module.renew_call_fn(
-                (NAMESPACE, &format!("__wasip1_vfs_{wasm}__start")).get_fid(&module.imports)?,
+                (
+                    UniqueName::NAMESPACE,
+                    &format!("__wasip1_vfs_{wasm}__start"),
+                )
+                    .get_fid(&module.imports)?,
                 ctx.start_func_id.as_ref().unwrap()[wasm],
                 // Export already removed by StartFuncIdVisitor
             )?;
@@ -347,7 +351,10 @@ impl Generator for MainVoidFunc {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
-            if let Some(fid) = (NAMESPACE, &format!("__wasip1_vfs_{wasm}___main_void"))
+            if let Some(fid) = (
+                UniqueName::NAMESPACE,
+                &format!("__wasip1_vfs_{wasm}___main_void"),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {

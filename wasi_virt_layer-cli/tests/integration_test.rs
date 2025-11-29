@@ -7,7 +7,7 @@ use eyre::Context;
 use glob;
 use itertools::Itertools;
 use utils::*;
-use wasi_virt_layer_cli::util;
+use wasi_virt_layer_cli::{unique_name::UniqueName, util};
 
 static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -142,7 +142,7 @@ fn set_features_inner<T>(
                 feature,
                 &manifest_path,
                 &root_manifest_path,
-                util::CRATE_NAME,
+                UniqueName::CRATE_NAME,
             )
         })
         .map(|c| c.set(true))

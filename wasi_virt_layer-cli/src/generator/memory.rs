@@ -6,7 +6,8 @@ use walrus::ir;
 use crate::{
     args::TargetMemoryType,
     generator::{ComponentCtx, Generator, GeneratorCtx},
-    util::{NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
+    unique_name::UniqueName,
+    util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
 };
 
 #[derive(Debug, Default)]
@@ -325,7 +326,7 @@ impl Generator for MemoryBridge {
             let wasm_mem = ctx.target_used_memory_id.as_ref().unwrap()[wasm];
             let vfs_mem = ctx.vfs_used_memory_id.unwrap();
 
-            if let Some(id) = (NAMESPACE, &with_name(wasm, "memory_copy_from"))
+            if let Some(id) = (UniqueName::NAMESPACE, &with_name(wasm, "memory_copy_from"))
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -350,7 +351,7 @@ impl Generator for MemoryBridge {
                     .wrap_err_with(|| eyre::eyre!("Failed to replace memory_copy_from"))?;
             }
 
-            if let Some(id) = (NAMESPACE, &with_name(wasm, "memory_copy_to"))
+            if let Some(id) = (UniqueName::NAMESPACE, &with_name(wasm, "memory_copy_to"))
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -403,7 +404,7 @@ impl Generator for MemoryTrap {
         }
 
         for wasm in &ctx.target_names {
-            if let Some(id) = (NAMESPACE, &with_name(wasm, "memory_trap"))
+            if let Some(id) = (UniqueName::NAMESPACE, &with_name(wasm, "memory_trap"))
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -494,7 +495,10 @@ impl Generator for MemoryTrap {
             trap_body.remove(store_index);
             trap_body.remove(store_index - 1);
 
-            if let Some(id) = (NAMESPACE, &format!("__wasip1_vfs_{wasm}_memory_director"))
+            if let Some(id) = (
+                UniqueName::NAMESPACE,
+                &format!("__wasip1_vfs_{wasm}_memory_director"),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {

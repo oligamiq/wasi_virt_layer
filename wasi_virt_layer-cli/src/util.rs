@@ -2040,10 +2040,6 @@ impl Normal<walrus::ir::Value> for walrus::ValType {
     }
 }
 
-pub const CORE_MODULE_ROOT: &str = "wasip1-vfs:host/virtual-file-system-wasip1-core";
-pub const THREADS_MODULE_ROOT: &str = "wasip1-vfs:host/virtual-file-system-wasip1-threads-import";
-pub const NAMESPACE: &str = "wasip1-vfs";
-
 pub trait WalrusFID<Marker>: Copy {
     fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId>;
     fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId>;
@@ -2428,8 +2424,6 @@ impl Borrow<str> for WasmName {
         &self.0
     }
 }
-
-pub const CRATE_NAME: &str = "wasi_virt_layer";
 
 pub fn gen_component_name(namespace: &str, name: &str) -> String {
     format!("[static]{namespace}.{}-import", name.replace("_", "-"))
