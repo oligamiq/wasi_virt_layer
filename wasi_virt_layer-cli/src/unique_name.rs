@@ -1,5 +1,7 @@
 use crate::{
-    generator::{shared_global::SharedGlobalFns, start_section::StartAlternative},
+    generator::{
+        abi_connect::Wasip1ABI, shared_global::SharedGlobalFns, start_section::StartAlternative,
+    },
     util::WasmName,
 };
 
@@ -7,6 +9,7 @@ pub enum UniqueName<'a> {
     EachReset(&'a WasmName),
     StartAlternative(&'a StartAlternative),
     SharedGlobalFns(&'a SharedGlobalFns),
+    Wasip1ABI(&'a Wasip1ABI<'a>),
 }
 
 macro_rules! fmt {
@@ -57,6 +60,7 @@ impl UniqueName<'_> {
     pub const SHARED_GLOBAL_FNS: &'static str = "memory_grow_";
     /// todo!(); to unique names
     pub const EACH_RESET: &'static str = "";
+    pub const WASIP1_A_B_I: &'static str = "";
 
     fn to_str(&self) -> String {
         match self {
@@ -79,6 +83,9 @@ impl UniqueName<'_> {
                     _ => fmt!(SharedGlobalFns; "{func_name}"),
                 }
             }
+            UniqueName::Wasip1ABI(t) => match t {
+                Wasip1ABI::Temporal { external, name } => fmt!(Wasip1ABI; "{external}_{name}"),
+            },
         }
     }
 }

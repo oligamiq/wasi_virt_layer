@@ -9,6 +9,10 @@ use crate::{
     },
 };
 
+pub enum Wasip1ABI<'a> {
+    Temporal { external: &'a str, name: &'a str },
+}
+
 /// Connect Wasip1 ABI
 /// If an import exists, add the corresponding export.
 /// If it does not exist, remove that export if it exists.
@@ -70,7 +74,11 @@ impl Generator for ConnectWasip1ABI {
                     && import.module == "wasi_snapshot_preview1"
             })
             .for_each(|import| {
-                import.name = format!("__wasip1_vfs_{}_{}", external.name, import.name);
+                import.name = crate::unique_name::UniqueName::Wasip1ABI(&Wasip1ABI::Temporal {
+                    external: &external.name.as_str(),
+                    name: import.name.as_str(),
+                })
+                .to_string();
             });
 
         Ok(())
