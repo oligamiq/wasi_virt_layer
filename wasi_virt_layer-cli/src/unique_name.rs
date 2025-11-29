@@ -88,6 +88,7 @@ impl UniqueName<'_> {
     pub const SHARED_GLOBAL_FNS: &'static str = "memory_grow_";
     /// todo!(); to unique names
     pub const EACH_RESET: &'static str = "";
+    /// todo!(); to unique names
     pub const WASIP1_ABI: &'static str = "";
 
     fn to_str(&self) -> String {
@@ -115,8 +116,15 @@ impl UniqueName<'_> {
                 let name = t.as_ref();
                 match t {
                     Wasip1ABI::SelfDefault { import } => fmt!(Wasip1ABI; "{name}_{import}"),
-                    Wasip1ABI::TargetTemporal { external, import } => {
-                        fmt!(Wasip1ABI; "{external}_{import}")
+                    Wasip1ABI::TargetTemporal { wasm, import } => {
+                        fmt!(Wasip1ABI; "{wasm}_{import}")
+                    }
+                    Wasip1ABI::WasiThreadStart(wasm) | Wasip1ABI::WasiThreadStartAnchor(wasm) => {
+                        fmt!(Wasip1ABI; "{wasm}_{name}")
+                    }
+                    Wasip1ABI::WasiThreadStartDestination(wasm)
+                    | Wasip1ABI::WasiThreadSpawn(wasm) => {
+                        fmt!(Wasip1ABI; "{name}_{wasm}")
                     }
                 }
             }

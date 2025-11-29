@@ -5,16 +5,29 @@ use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
     generator::Generator,
     unique_name::UniqueName,
-    util::{WalrusFID, WalrusUtilExport, WalrusUtilImport, WalrusUtilModule, gen_component_name},
+    util::{
+        WalrusFID, WalrusUtilExport, WalrusUtilImport, WalrusUtilModule, WasmName,
+        gen_component_name,
+    },
 };
 
 #[derive(Debug, strum::AsRefStr)]
 #[strum(serialize_all = "snake_case")]
 pub enum Wasip1ABI<'a> {
     #[strum(serialize = "__self")]
-    SelfDefault { import: &'a str },
+    SelfDefault {
+        import: &'a str,
+    },
     #[strum(serialize = "")]
-    TargetTemporal { external: &'a str, import: &'a str },
+    TargetTemporal {
+        wasm: &'a WasmName,
+        import: &'a str,
+    },
+    WasiThreadStart(&'a WasmName),
+    #[strum(serialize = "wasi_thread_start")]
+    WasiThreadStartDestination(&'a WasmName),
+    WasiThreadSpawn(&'a WasmName),
+    WasiThreadStartAnchor(&'a WasmName),
 }
 
 /// Connect Wasip1 ABI
@@ -86,7 +99,7 @@ impl Generator for ConnectWasip1ABI {
             .for_each(|import| {
                 import.name =
                     crate::unique_name::UniqueName::Wasip1ABI(&Wasip1ABI::TargetTemporal {
-                        external: &external.name.as_str(),
+                        wasm: &external.name,
                         import: import.name.as_str(),
                     })
                     .to_string();
@@ -102,7 +115,6 @@ impl Generator for ConnectWasip1ABI {
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
             for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-                let export_name = format!("__wasip1_vfs_{wasm}_{import}");
                 if let Some(import_id) = (UniqueName::WASIP1_ABI_MODULE, import)
                     .get_fid(&module.imports)
                     .ok()
@@ -112,7 +124,10 @@ impl Generator for ConnectWasip1ABI {
                 } else {
                     module
                         .exports
-                        .erase_with(&export_name, ctx.unstable_print_debug)
+                        .erase_with(
+                            &UniqueName::Wasip1ABI(&Wasip1ABI::TargetTemporal { wasm, import }),
+                            ctx.unstable_print_debug,
+                        )
                         .ok();
                 }
             }
@@ -132,28 +147,32 @@ impl Generator for ConnectWasip1ThreadsABI {
     ) -> eyre::Result<()> {
         if ctx.threads {
             for wasm in &ctx.target_names {
-                if format!("__wasip1_vfs_wasi_thread_start_{wasm}")
+                if UniqueName::Wasip1ABI(&Wasip1ABI::WasiThreadStartDestination(wasm))
                     .get_fid(&module.exports)
                     .ok()
                     .is_some()
                 {
                     module.connect_func_alt_with_remove_export(
                         (
-                            "wasip1-vfs",
-                            &format!("__wasip1_vfs_{wasm}_wasi_thread_start"),
+                            UniqueName::NAMESPACE,
+                            &UniqueName::Wasip1ABI(&Wasip1ABI::WasiThreadStart(wasm)),
                         ),
-                        &format!("__wasip1_vfs_wasi_thread_start_{wasm}"),
+                        &UniqueName::Wasip1ABI(&Wasip1ABI::WasiThreadStartDestination(wasm))
+                            .to_string(),
                         ctx.unstable_print_debug,
                     )?;
 
                     module.exports.erase_with(
-                        &format!("__wasip1_vfs_{wasm}_wasi_thread_start_anchor"),
+                        &UniqueName::Wasip1ABI(&Wasip1ABI::WasiThreadStartAnchor(wasm)),
                         ctx.unstable_print_debug,
                     )?;
 
                     module.connect_func_alt_with_remove_export(
-                        ("wasi", &format!("__wasip1_vfs_wasi_thread_spawn_{wasm}")),
-                        &format!("__wasip1_vfs_wasi_thread_spawn_{wasm}"),
+                        (
+                            UniqueName::WASIP1_THREADS_ABI_MODULE,
+                            &UniqueName::Wasip1ABI(&&Wasip1ABI::WasiThreadSpawn(wasm)),
+                        ),
+                        &UniqueName::Wasip1ABI(&Wasip1ABI::WasiThreadSpawn(wasm)).to_string(),
                         ctx.unstable_print_debug,
                     )?;
                 }
