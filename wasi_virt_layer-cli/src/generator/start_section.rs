@@ -40,9 +40,9 @@ impl core::fmt::Debug for StartSource {
     }
 }
 
-#[derive(Debug, Clone, strum::AsRefStr, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, strum::AsRefStr, strum::EnumCount, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
-pub enum StartAlternative {
+pub enum StartAlternativeName {
     /// Initialize each target wasm module
     WasmName(WasmName),
     /// This is the VFS initialization function
@@ -57,7 +57,7 @@ pub struct StartSectionCommon {
     /// Additional start functions.
     map: Vec<StartFnInfo>,
     /// The function body is an import fn and is replaced during the Build phase.
-    start_alternatives: HashMap<StartAlternative, FunctionId>,
+    start_alternatives: HashMap<StartAlternativeName, FunctionId>,
     is_builded: bool,
 }
 
@@ -66,13 +66,13 @@ impl StartSectionCommon {
         self.start_alternatives
             .iter()
             .find_map(|(name, fid)| match name {
-                StartAlternative::VFS(wasm_name) => Some((wasm_name.clone(), *fid)),
+                StartAlternativeName::VFS(wasm_name) => Some((wasm_name.clone(), *fid)),
                 _ => None,
             })
             .expect("VFS start alternative must exist")
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = (&StartAlternative, FunctionId)> {
+    pub fn iter(&self) -> impl Iterator<Item = (&StartAlternativeName, FunctionId)> {
         self.start_alternatives.iter().map(|(a, b)| (a, *b))
     }
 
@@ -80,7 +80,7 @@ impl StartSectionCommon {
         self.start_alternatives
             .iter()
             .filter_map(move |(name, fid)| match name {
-                StartAlternative::WasmName(wasm_name) => Some((wasm_name, *fid)),
+                StartAlternativeName::WasmName(wasm_name) => Some((wasm_name, *fid)),
                 _ => None,
             })
     }
@@ -127,9 +127,14 @@ impl StartSectionGenerator {
             let common = StartSectionCommon {
                 map: Vec::new(),
                 is_builded: false,
-                start_alternatives: core::iter::once(StartAlternative::VFS(vfs_name.clone()))
-                    .chain(core::iter::once(StartAlternative::AfterMemoryReset))
-                    .chain(wasm_names.iter().cloned().map(StartAlternative::WasmName))
+                start_alternatives: core::iter::once(StartAlternativeName::VFS(vfs_name.clone()))
+                    .chain(core::iter::once(StartAlternativeName::AfterMemoryReset))
+                    .chain(
+                        wasm_names
+                            .iter()
+                            .cloned()
+                            .map(StartAlternativeName::WasmName),
+                    )
                     .map(|name| {
                         let unique_name = UniqueName::StartAlternative(&name);
                         if (UniqueName::NAMESPACE, &unique_name)
@@ -206,7 +211,7 @@ pub struct StartSectionBuilder {
 }
 
 impl StartSectionBuilder {
-    pub fn iter(&self) -> Vec<(StartAlternative, FunctionId)> {
+    pub fn iter(&self) -> Vec<(StartAlternativeName, FunctionId)> {
         self.common
             .lock()
             .start_alternatives
@@ -223,7 +228,7 @@ impl StartSectionBuilder {
         self.common
             .lock()
             .start_alternatives
-            .get(&StartAlternative::AfterMemoryReset)
+            .get(&StartAlternativeName::AfterMemoryReset)
             .copied()
             .expect("AfterMemoryReset start alternative must exist")
     }

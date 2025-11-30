@@ -49,9 +49,9 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct SharedGlobal;
 
-#[derive(Debug, strum::AsRefStr)]
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
-pub enum SharedGlobalFns {
+pub enum SharedGlobalFnsName {
     GlobalAltSet,
     GlobalAltGet,
     GlobalAltGetNoWait,
@@ -60,15 +60,14 @@ pub enum SharedGlobalFns {
     Locker(usize),
 }
 
-impl SharedGlobalFns {
-    pub fn check_locker(str: impl AsRef<str>) -> Option<SharedGlobalFns> {
+impl SharedGlobalFnsName {
+    pub fn check_locker(str: impl AsRef<str>) -> Option<SharedGlobalFnsName> {
         let s = str.as_ref();
-        let prefix =
-            crate::unique_name::fmt!(SharedGlobalFns; "{}", SharedGlobalFns::Locker(0).as_ref());
+        let prefix = crate::unique_name::fmt!(SharedGlobalFns; "{}", SharedGlobalFnsName::Locker(0).as_ref());
         if s.starts_with(&prefix) && s.len() > prefix.len() {
             let index_str = &s[prefix.len() + 1..];
             if let Ok(index) = index_str.parse::<usize>() {
-                return Some(SharedGlobalFns::Locker(index));
+                return Some(SharedGlobalFnsName::Locker(index));
             }
         }
         None
@@ -131,14 +130,16 @@ impl SharedGlobal {
         )?;
 
         let global_set_alt_without_lock =
-            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltSet).get_fid(&module.exports)?;
+            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltSet)
+                .get_fid(&module.exports)?;
         let global_init_alt_without_lock_once =
-            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltInitOnce)
+            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltInitOnce)
                 .get_fid(&module.exports)?;
         let global_get_alt_with_lock =
-            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltGet).get_fid(&module.exports)?;
+            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltGet)
+                .get_fid(&module.exports)?;
         let global_get_alt_without_lock =
-            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltGetNoWait)
+            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltGetNoWait)
                 .get_fid(&module.exports)?;
 
         let global = module
@@ -158,8 +159,8 @@ impl SharedGlobal {
         let global_id = global.id();
 
         // Obtain the location within memory.
-        let global_alt_pos =
-            UniqueName::SharedGlobalFns(&SharedGlobalFns::GlobalAltPos).get_fid(&module.exports)?;
+        let global_alt_pos = UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltPos)
+            .get_fid(&module.exports)?;
         // let global_alt_pos = module.funcs.get(global_alt_pos).kind.unwrap_local();
         // let global_alt_pos = if let walrus::ir::Instr::Const(walrus::ir::Const {
         //     value: walrus::ir::Value::I32(value),

@@ -1,15 +1,18 @@
 use crate::{
     generator::{
-        abi_connect::Wasip1ABI, shared_global::SharedGlobalFns, start_section::StartAlternative,
+        abi_connect::Wasip1ABIName, shared_global::SharedGlobalFnsName,
+        start_section::StartAlternativeName, threads::ThreadsSpawnName,
     },
     util::WasmName,
 };
 
-pub enum UniqueName<'a> {
+#[derive(Debug, Eq, PartialEq, Hash)]
+pub enum UniqueName<'a, 'b> {
     EachReset(&'a WasmName),
-    StartAlternative(&'a StartAlternative),
-    SharedGlobalFns(&'a SharedGlobalFns),
-    Wasip1ABI(&'a Wasip1ABI<'a>),
+    StartAlternative(&'a StartAlternativeName),
+    SharedGlobalFns(&'a SharedGlobalFnsName),
+    Wasip1ABI(&'a Wasip1ABIName<'b>),
+    ThreadsSpawn(&'a ThreadsSpawnName<'b>),
 }
 
 macro_rules! fmt {
@@ -48,6 +51,7 @@ macro_rules! fmt {
     };
 }
 pub(crate) use fmt;
+use strum::EnumCount;
 
 #[cfg(test)]
 mod tests {
@@ -68,7 +72,7 @@ mod tests {
     }
 }
 
-impl UniqueName<'_> {
+impl UniqueName<'_, '_> {
     pub const CORE_MODULE_ROOT: &'static str = "wasip1-vfs:host/virtual-file-system-wasip1-core";
     pub const THREADS_MODULE_ROOT: &'static str =
         "wasip1-vfs:host/virtual-file-system-wasip1-threads-import";
@@ -90,6 +94,8 @@ impl UniqueName<'_> {
     pub const EACH_RESET: &'static str = "";
     /// todo!(); to unique names
     pub const WASIP1_ABI: &'static str = "";
+    /// todo!(); to unique names
+    pub const THREADS_SPAWN: &'static str = "";
 
     fn to_str(&self) -> String {
         match self {
@@ -97,7 +103,7 @@ impl UniqueName<'_> {
             UniqueName::StartAlternative(alt) => {
                 let alt_name = alt.as_ref();
                 match alt {
-                    StartAlternative::WasmName(name) | StartAlternative::VFS(name) => {
+                    StartAlternativeName::WasmName(name) | StartAlternativeName::VFS(name) => {
                         fmt!(StartAlternative; "{alt_name}_{name}")
                     }
                     _ => fmt!(StartAlternative; "{alt_name}"),
@@ -106,7 +112,7 @@ impl UniqueName<'_> {
             UniqueName::SharedGlobalFns(func) => {
                 let func_name = func.as_ref();
                 match func {
-                    SharedGlobalFns::Locker(n) => {
+                    SharedGlobalFnsName::Locker(n) => {
                         fmt!(SharedGlobalFns; "{func_name}_{n}")
                     }
                     _ => fmt!(SharedGlobalFns; "{func_name}"),
@@ -115,16 +121,29 @@ impl UniqueName<'_> {
             UniqueName::Wasip1ABI(t) => {
                 let name = t.as_ref();
                 match t {
-                    Wasip1ABI::SelfDefault { import } => fmt!(Wasip1ABI; "{name}_{import}"),
-                    Wasip1ABI::TargetTemporal { wasm, import } => {
+                    Wasip1ABIName::SelfDefault { import } => fmt!(Wasip1ABI; "{name}_{import}"),
+                    Wasip1ABIName::TargetTemporal { wasm, import } => {
                         fmt!(Wasip1ABI; "{wasm}_{import}")
                     }
-                    Wasip1ABI::WasiThreadStart(wasm) | Wasip1ABI::WasiThreadStartAnchor(wasm) => {
+                    Wasip1ABIName::WasiThreadStart(wasm)
+                    | Wasip1ABIName::WasiThreadStartAnchor(wasm) => {
                         fmt!(Wasip1ABI; "{wasm}_{name}")
                     }
-                    Wasip1ABI::WasiThreadStartDestination(wasm)
-                    | Wasip1ABI::WasiThreadSpawn(wasm) => {
+                    Wasip1ABIName::WasiThreadStartDestination(wasm)
+                    | Wasip1ABIName::WasiThreadSpawn(wasm) => {
                         fmt!(Wasip1ABI; "{name}_{wasm}")
+                    }
+                }
+            }
+            UniqueName::ThreadsSpawn(t) => {
+                let name = t.as_ref();
+                match t {
+                    ThreadsSpawnName::ImportAnchor(wasm) => {
+                        // todo!(); use unique name
+                        format!("{wasm}_{name}")
+                    }
+                    _ => {
+                        fmt!(ThreadsSpawn; "{name}")
                     }
                 }
             }
@@ -134,16 +153,177 @@ impl UniqueName<'_> {
 
 pub trait UniqueNameMarker: ToString + Copy {}
 
-impl UniqueNameMarker for &'_ UniqueName<'_> {}
+impl UniqueNameMarker for &'_ UniqueName<'_, '_> {}
 
-impl ToString for &'_ UniqueName<'_> {
+impl ToString for &'_ UniqueName<'_, '_> {
     fn to_string(&self) -> String {
         self.to_str()
     }
 }
 
-impl ToString for UniqueName<'_> {
+impl ToString for UniqueName<'_, '_> {
     fn to_string(&self) -> String {
         self.to_str()
+    }
+}
+
+impl<'a> From<&'a StartAlternativeName> for UniqueName<'_, 'a> {
+    fn from(value: &'a StartAlternativeName) -> Self {
+        UniqueName::StartAlternative(value)
+    }
+}
+
+impl<'a> From<&'a SharedGlobalFnsName> for UniqueName<'_, 'a> {
+    fn from(value: &'a SharedGlobalFnsName) -> Self {
+        UniqueName::SharedGlobalFns(value)
+    }
+}
+
+impl<'a> From<&'a Wasip1ABIName<'_>> for UniqueName<'_, 'a> {
+    fn from(value: &'a Wasip1ABIName<'_>) -> Self {
+        UniqueName::Wasip1ABI(value)
+    }
+}
+
+impl<'a> From<&'a ThreadsSpawnName<'_>> for UniqueName<'_, 'a> {
+    fn from(value: &'a ThreadsSpawnName<'_>) -> Self {
+        UniqueName::ThreadsSpawn(value)
+    }
+}
+
+/// To verify whether an identical entry exists
+/// in the destination for generating UniqueName, prepare an iterator.
+trait UniqueNameIterator<'a>
+where
+    Self: Sized,
+{
+    type REQUIRED;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self>;
+}
+
+impl<'a> UniqueNameIterator<'a> for WasmName {
+    type REQUIRED = WasmName;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let v = vec![require.clone()];
+        assert_eq!(v.len(), 1);
+        v
+    }
+}
+
+impl<'a> UniqueNameIterator<'a> for StartAlternativeName {
+    type REQUIRED = WasmName;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let v = vec![
+            StartAlternativeName::WasmName(require.clone()),
+            StartAlternativeName::VFS(require.clone()),
+            StartAlternativeName::AfterMemoryReset,
+        ];
+        assert_eq!(v.len(), StartAlternativeName::COUNT);
+        v
+    }
+}
+
+impl<'a> UniqueNameIterator<'a> for SharedGlobalFnsName {
+    type REQUIRED = usize;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let v = vec![
+            SharedGlobalFnsName::GlobalAltSet,
+            SharedGlobalFnsName::GlobalAltGet,
+            SharedGlobalFnsName::GlobalAltGetNoWait,
+            SharedGlobalFnsName::GlobalAltInitOnce,
+            SharedGlobalFnsName::GlobalAltPos,
+            SharedGlobalFnsName::Locker(*require),
+        ];
+        assert_eq!(v.len(), SharedGlobalFnsName::COUNT);
+        v
+    }
+}
+
+impl<'a> UniqueNameIterator<'a> for Wasip1ABIName<'a> {
+    type REQUIRED = (WasmName, &'a str);
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let (wasm, import) = require;
+        let v = vec![
+            Wasip1ABIName::SelfDefault { import },
+            Wasip1ABIName::TargetTemporal { import, wasm },
+            Wasip1ABIName::WasiThreadSpawn(wasm),
+            Wasip1ABIName::WasiThreadStart(wasm),
+            Wasip1ABIName::WasiThreadStartAnchor(wasm),
+            Wasip1ABIName::WasiThreadStartDestination(wasm),
+        ];
+        assert_eq!(v.len(), Wasip1ABIName::COUNT);
+        v
+    }
+}
+
+impl<'a> UniqueNameIterator<'a> for ThreadsSpawnName<'a> {
+    type REQUIRED = &'a str;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let v = vec![
+            ThreadsSpawnName::ImportAnchor(require),
+            ThreadsSpawnName::IsRootSpawn,
+            ThreadsSpawnName::WasiThreadSpawnSelf,
+            ThreadsSpawnName::SelfWasiThreadStart,
+            ThreadsSpawnName::SelfWasiThreadStartAnchor,
+            ThreadsSpawnName::RealThreadSpawnFn,
+            ThreadsSpawnName::WasiThreadStartEntry,
+        ];
+        assert_eq!(v.len(), ThreadsSpawnName::COUNT);
+        v
+    }
+}
+
+#[cfg(test)]
+mod unique_name_iterator_tests {
+    use std::collections::HashSet;
+
+    use crate::util::WasmNameHolder;
+
+    use super::*;
+
+    #[test]
+    fn test_unique_name_iterator_start_alternative() {
+        let holder = WasmNameHolder::new(vec!["#original_import".into()].into_boxed_slice());
+        let require_import = holder.iter().next().unwrap();
+        let require_name = "#original_name";
+        let require_num = 5;
+        let requires = (require_import.clone(), require_name);
+        let t1 = WasmName::iter_unique_names(&require_import);
+        let t2 = StartAlternativeName::iter_unique_names(&require_import);
+        let t3 = SharedGlobalFnsName::iter_unique_names(&require_num);
+        let t4 = Wasip1ABIName::iter_unique_names(&requires);
+        let t5 = ThreadsSpawnName::iter_unique_names(&require_name);
+        let t1 = t1.iter().map(UniqueName::EachReset);
+        let t2 = t2.iter().map(Into::into);
+        let t3 = t3.iter().map(Into::into);
+        let t4 = t4.iter().map(Into::into);
+        let t5 = t5.iter().map(Into::into);
+        let t = t1
+            .chain(t2)
+            .chain(t3)
+            .chain(t4)
+            .chain(t5)
+            .collect::<Vec<UniqueName>>();
+
+        // Check whether there is the same output destination
+        let mut seen = std::collections::HashMap::new();
+        let mut duplicates = HashSet::new();
+        for t in &t {
+            let name = t.to_string();
+            if seen.insert(name.clone(), t).is_some() {
+                duplicates.insert(t);
+                duplicates.insert(seen.get(&name).unwrap());
+            }
+        }
+        assert!(
+            duplicates.is_empty(),
+            "Found duplicate unique names: {duplicates:?}",
+        );
     }
 }
