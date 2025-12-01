@@ -4,11 +4,11 @@ use strum::VariantNames;
 
 use crate::{
     abi::{Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
-    generator::{Generator, GeneratorCtx, abi_connect::Wasip1ABIName},
+    generator::{Generator, GeneratorCtx},
     unique_name::UniqueName,
     util::{
         WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,
-        gen_component_name,
+        gen_component_name, WasmName,
     },
 };
 
@@ -25,6 +25,11 @@ pub enum ThreadsSpawnName<'a> {
     SelfWasiThreadStartAnchor,
     RealThreadSpawnFn,
     WasiThreadStartEntry,
+    WasiThreadStart(&'a WasmName),
+    #[strum(serialize = "wasi_thread_start")]
+    WasiThreadStartDestination(&'a WasmName),
+    WasiThreadSpawn(&'a WasmName),
+    WasiThreadStartAnchor(&'a WasmName),
 }
 
 /// The thread spawn process itself within the VFS is also caught,
@@ -202,7 +207,7 @@ impl Generator for ThreadsSpawn {
             .map(|import| {
                 // import.name = format!("__wasip1_vfs_wasi_thread_spawn_{name}");
                 import.name =
-                    UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadSpawn(wasm)).to_string();
+                    UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadSpawn(wasm)).to_string();
             });
 
         let export_name = Wasip1ThreadsABIExportFunc::VARIANTS
@@ -216,7 +221,7 @@ impl Generator for ThreadsSpawn {
             .find(|export| export.name == *export_name)
             .map(|export| {
                 export.name =
-                    UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadStartDestination(wasm))
+                    UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartDestination(wasm))
                         .to_string();
             });
 

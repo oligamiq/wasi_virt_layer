@@ -125,14 +125,6 @@ impl UniqueName<'_, '_> {
                     Wasip1ABIName::TargetTemporal { wasm, import } => {
                         fmt!(Wasip1ABI; "{wasm}_{import}")
                     }
-                    Wasip1ABIName::WasiThreadStart(wasm)
-                    | Wasip1ABIName::WasiThreadStartAnchor(wasm) => {
-                        fmt!(Wasip1ABI; "{wasm}_{name}")
-                    }
-                    Wasip1ABIName::WasiThreadStartDestination(wasm)
-                    | Wasip1ABIName::WasiThreadSpawn(wasm) => {
-                        fmt!(Wasip1ABI; "{name}_{wasm}")
-                    }
                 }
             }
             UniqueName::ThreadsSpawn(t) => {
@@ -141,6 +133,14 @@ impl UniqueName<'_, '_> {
                     ThreadsSpawnName::ImportAnchor(wasm) => {
                         // todo!(); use unique name
                         format!("{wasm}_{name}")
+                    }
+                    ThreadsSpawnName::WasiThreadStart(wasm)
+                    | ThreadsSpawnName::WasiThreadStartAnchor(wasm) => {
+                        fmt!(ThreadsSpawn; "{wasm}_{name}")
+                    }
+                    ThreadsSpawnName::WasiThreadStartDestination(wasm)
+                    | ThreadsSpawnName::WasiThreadSpawn(wasm) => {
+                        fmt!(ThreadsSpawn; "{name}_{wasm}")
                     }
                     _ => {
                         fmt!(ThreadsSpawn; "{name}")
@@ -251,10 +251,6 @@ impl<'a> UniqueNameIterator<'a> for Wasip1ABIName<'a> {
         let v = vec![
             Wasip1ABIName::SelfDefault { import },
             Wasip1ABIName::TargetTemporal { import, wasm },
-            Wasip1ABIName::WasiThreadSpawn(wasm),
-            Wasip1ABIName::WasiThreadStart(wasm),
-            Wasip1ABIName::WasiThreadStartAnchor(wasm),
-            Wasip1ABIName::WasiThreadStartDestination(wasm),
         ];
         assert_eq!(v.len(), Wasip1ABIName::COUNT);
         v
@@ -262,17 +258,22 @@ impl<'a> UniqueNameIterator<'a> for Wasip1ABIName<'a> {
 }
 
 impl<'a> UniqueNameIterator<'a> for ThreadsSpawnName<'a> {
-    type REQUIRED = &'a str;
+    type REQUIRED = (WasmName, &'a str);
 
     fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let (wasm, import) = require;
         let v = vec![
-            ThreadsSpawnName::ImportAnchor(require),
+            ThreadsSpawnName::ImportAnchor(import),
             ThreadsSpawnName::IsRootSpawn,
             ThreadsSpawnName::WasiThreadSpawnSelf,
             ThreadsSpawnName::SelfWasiThreadStart,
             ThreadsSpawnName::SelfWasiThreadStartAnchor,
             ThreadsSpawnName::RealThreadSpawnFn,
             ThreadsSpawnName::WasiThreadStartEntry,
+            ThreadsSpawnName::WasiThreadSpawn(wasm),
+            ThreadsSpawnName::WasiThreadStart(wasm),
+            ThreadsSpawnName::WasiThreadStartAnchor(wasm),
+            ThreadsSpawnName::WasiThreadStartDestination(wasm),
         ];
         assert_eq!(v.len(), ThreadsSpawnName::COUNT);
         v
@@ -298,7 +299,7 @@ mod unique_name_iterator_tests {
         let t2 = StartAlternativeName::iter_unique_names(&require_import);
         let t3 = SharedGlobalFnsName::iter_unique_names(&require_num);
         let t4 = Wasip1ABIName::iter_unique_names(&requires);
-        let t5 = ThreadsSpawnName::iter_unique_names(&require_name);
+        let t5 = ThreadsSpawnName::iter_unique_names(&requires);
         let t1 = t1.iter().map(UniqueName::EachReset);
         let t2 = t2.iter().map(Into::into);
         let t3 = t3.iter().map(Into::into);

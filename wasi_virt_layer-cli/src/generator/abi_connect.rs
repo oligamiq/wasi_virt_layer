@@ -3,7 +3,7 @@ use strum::VariantNames;
 
 use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
-    generator::Generator,
+    generator::{threads::ThreadsSpawnName, Generator},
     unique_name::UniqueName,
     util::{
         WalrusFID, WalrusUtilExport, WalrusUtilImport, WalrusUtilModule, WasmName,
@@ -15,19 +15,9 @@ use crate::{
 #[strum(serialize_all = "snake_case")]
 pub enum Wasip1ABIName<'a> {
     #[strum(serialize = "__self")]
-    SelfDefault {
-        import: &'a str,
-    },
+    SelfDefault { import: &'a str },
     #[strum(serialize = "")]
-    TargetTemporal {
-        wasm: &'a WasmName,
-        import: &'a str,
-    },
-    WasiThreadStart(&'a WasmName),
-    #[strum(serialize = "wasi_thread_start")]
-    WasiThreadStartDestination(&'a WasmName),
-    WasiThreadSpawn(&'a WasmName),
-    WasiThreadStartAnchor(&'a WasmName),
+    TargetTemporal { wasm: &'a WasmName, import: &'a str },
 }
 
 /// Connect Wasip1 ABI
@@ -148,7 +138,7 @@ impl Generator for ConnectWasip1ThreadsABI {
     ) -> eyre::Result<()> {
         if ctx.threads {
             for wasm in &ctx.target_names {
-                if UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadStartDestination(wasm))
+                if UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartDestination(wasm))
                     .get_fid(&module.exports)
                     .ok()
                     .is_some()
@@ -156,24 +146,27 @@ impl Generator for ConnectWasip1ThreadsABI {
                     module.connect_func_alt_with_remove_export(
                         (
                             UniqueName::NAMESPACE,
-                            &UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadStart(wasm)),
+                            &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStart(wasm)),
                         ),
-                        &UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadStartDestination(wasm))
-                            .to_string(),
+                        &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartDestination(
+                            wasm,
+                        ))
+                        .to_string(),
                         ctx.unstable_print_debug,
                     )?;
 
                     module.exports.erase_with(
-                        &UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadStartAnchor(wasm)),
+                        &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartAnchor(wasm)),
                         ctx.unstable_print_debug,
                     )?;
 
                     module.connect_func_alt_with_remove_export(
                         (
                             UniqueName::WASIP1_THREADS_ABI_MODULE,
-                            &UniqueName::Wasip1ABI(&&Wasip1ABIName::WasiThreadSpawn(wasm)),
+                            &UniqueName::ThreadsSpawn(&&ThreadsSpawnName::WasiThreadSpawn(wasm)),
                         ),
-                        &UniqueName::Wasip1ABI(&Wasip1ABIName::WasiThreadSpawn(wasm)).to_string(),
+                        &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadSpawn(wasm))
+                            .to_string(),
                         ctx.unstable_print_debug,
                     )?;
                 }
