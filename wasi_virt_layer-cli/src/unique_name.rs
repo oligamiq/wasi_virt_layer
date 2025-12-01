@@ -1,7 +1,8 @@
 use crate::{
     generator::{
         abi_connect::Wasip1ABIName, shared_global::SharedGlobalFnsName,
-        start_section::StartAlternativeName, threads::ThreadsSpawnName,
+        special_func::SpecialFuncUniqueName, start_section::StartAlternativeName,
+        threads::ThreadsSpawnName,
     },
     util::WasmName,
 };
@@ -13,6 +14,7 @@ pub enum UniqueName<'a, 'b> {
     SharedGlobalFns(&'a SharedGlobalFnsName),
     Wasip1ABI(&'a Wasip1ABIName<'b>),
     ThreadsSpawn(&'a ThreadsSpawnName<'b>),
+    SpecialFunc(&'a SpecialFuncUniqueName<'b>),
 }
 
 macro_rules! fmt {
@@ -90,6 +92,7 @@ impl UniqueName<'_, '_> {
 
     pub const START_ALTERNATIVE: &'static str = "start_alt_";
     pub const SHARED_GLOBAL_FNS: &'static str = "memory_grow_";
+    pub const SPECIAL_FUNC: &'static str = "";
     /// todo!(); to unique names
     pub const EACH_RESET: &'static str = "";
     /// todo!(); to unique names
@@ -147,6 +150,23 @@ impl UniqueName<'_, '_> {
                     }
                 }
             }
+            UniqueName::SpecialFunc(t) => {
+                let name = t.as_ref();
+                match t {
+                    SpecialFuncUniqueName::Resetter(wasm) => {
+                        fmt!(SpecialFunc; "{wasm}_{name}")
+                    }
+                    SpecialFuncUniqueName::Start(wasm) => {
+                        fmt!(SpecialFunc; "{wasm}__{name}")
+                    }
+                    SpecialFuncUniqueName::MainVoid(wasm) => {
+                        fmt!(SpecialFunc; "{wasm}___{name}")
+                    }
+                    _ => {
+                        fmt!(SpecialFunc; "{name}")
+                    }
+                }
+            }
         }
     }
 }
@@ -188,6 +208,12 @@ impl<'a> From<&'a Wasip1ABIName<'_>> for UniqueName<'_, 'a> {
 impl<'a> From<&'a ThreadsSpawnName<'_>> for UniqueName<'_, 'a> {
     fn from(value: &'a ThreadsSpawnName<'_>) -> Self {
         UniqueName::ThreadsSpawn(value)
+    }
+}
+
+impl<'a> From<&'a SpecialFuncUniqueName<'_>> for UniqueName<'_, 'a> {
+    fn from(value: &'a SpecialFuncUniqueName<'_>) -> Self {
+        UniqueName::SpecialFunc(value)
     }
 }
 
@@ -280,6 +306,23 @@ impl<'a> UniqueNameIterator<'a> for ThreadsSpawnName<'a> {
     }
 }
 
+impl<'a> UniqueNameIterator<'a> for SpecialFuncUniqueName<'a> {
+    type REQUIRED = WasmName;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let v = vec![
+            SpecialFuncUniqueName::Resetter(require),
+            SpecialFuncUniqueName::ResetOnThread,
+            SpecialFuncUniqueName::ResetOnThreadOnce,
+            SpecialFuncUniqueName::StartInitOld,
+            SpecialFuncUniqueName::Start(require),
+            SpecialFuncUniqueName::MainVoid(require),
+        ];
+        assert_eq!(v.len(), SpecialFuncUniqueName::COUNT);
+        v
+    }
+}
+
 #[cfg(test)]
 mod unique_name_iterator_tests {
     use std::collections::HashSet;
@@ -300,16 +343,19 @@ mod unique_name_iterator_tests {
         let t3 = SharedGlobalFnsName::iter_unique_names(&require_num);
         let t4 = Wasip1ABIName::iter_unique_names(&requires);
         let t5 = ThreadsSpawnName::iter_unique_names(&requires);
+        let t6 = SpecialFuncUniqueName::iter_unique_names(&require_import);
         let t1 = t1.iter().map(UniqueName::EachReset);
         let t2 = t2.iter().map(Into::into);
         let t3 = t3.iter().map(Into::into);
         let t4 = t4.iter().map(Into::into);
         let t5 = t5.iter().map(Into::into);
+        let t6 = t6.iter().map(Into::into);
         let t = t1
             .chain(t2)
             .chain(t3)
             .chain(t4)
             .chain(t5)
+            .chain(t6)
             .collect::<Vec<UniqueName>>();
 
         // Check whether there is the same output destination
