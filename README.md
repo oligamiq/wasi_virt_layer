@@ -50,6 +50,7 @@ For further details, please refer to the example.
 - threading vfs with non threading wasm
 - validator with error on threads
 - Unicode support
+- Async wit support
 
 # run example
 ```bash
