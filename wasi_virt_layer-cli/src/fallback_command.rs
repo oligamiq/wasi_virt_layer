@@ -12,6 +12,8 @@ where
     func: Option<F>,
 }
 
+const DISABLE_FALLBACK: bool = true;
+
 impl<F> FallbackCommand<F>
 where
     F: FnOnce(&[String]) -> i32 + Send + 'static,
@@ -49,6 +51,10 @@ where
         cmd.stderr(piped_err);
         match cmd.spawn() {
             Ok(child) => Ok(FallbackChild::new_process(child)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && DISABLE_FALLBACK => {
+                let _ = self.func.take();
+                Err(e)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // Fallback to the provided function
                 let args = self.args.clone();
@@ -187,6 +193,10 @@ mod tests {
     /// if not use nocapture arg, skip test.
     /// because gag crate require it.
     fn test_fallback_command() {
+        if DISABLE_FALLBACK {
+            return;
+        }
+
         let _lock = MUTEX.lock().unwrap();
         if !check_gag() {
             return;

@@ -12,7 +12,7 @@ pub mod args;
 pub mod compile;
 pub mod config_checker;
 pub mod down_color;
-pub mod fallback_command;
+pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
 pub mod generator;
 pub mod instrs;
 pub mod test_run;
