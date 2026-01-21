@@ -3,6 +3,7 @@ use eyre::Context;
 use crate::{
     args::TargetMemoryType,
     config_checker::{FeatureChecker, HasFeature, TomlRestorers},
+    fallback_command::CommandLock,
     generator::WasmPath,
     unique_name::UniqueName,
 };
@@ -58,6 +59,8 @@ macro_rules! add_generator {
 }
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
+    let _command_lock = CommandLock::acquire()?;
+
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Info)
         .init();
