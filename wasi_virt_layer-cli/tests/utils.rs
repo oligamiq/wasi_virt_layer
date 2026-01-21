@@ -1,7 +1,9 @@
 use std::{io::Read as _, process::Stdio, time::Duration};
 
 use assert_cmd::assert::OutputAssertExt as _;
-use camino::{Utf8Path, Utf8PathBuf}; // Added Utf8Path
+use camino::{Utf8Path, Utf8PathBuf};
+use eyre::Context;
+// Added Utf8Path
 use uuid::Uuid;
 use wait_timeout::ChildExt;
 
@@ -148,17 +150,21 @@ pub fn run_wasi_virt_layer(
         cmd.args(other_args);
     }
 
-    cmd.current_dir(THIS_FOLDER).assert().try_success()?;
+    let result = || -> color_eyre::Result<TestDir> {
+        cmd.current_dir(THIS_FOLDER).assert().try_success()?;
 
-    println!("Output directory: {final_dist_path}");
+        println!("Output directory: {final_dist_path}");
 
-    if threads {
-        run_thread(&final_dist_path)?;
-    } else {
-        run_non_thread(&final_dist_path)?;
-    }
+        if threads {
+            run_thread(&final_dist_path)?;
+        } else {
+            run_non_thread(&final_dist_path)?;
+        }
 
-    println!("Test run successful");
+        println!("Test run successful");
 
-    Ok(TestDir::new(final_dist_path))
+        Ok(TestDir::new(final_dist_path))
+    };
+
+    result().context(format!("Error with cmd {cmd:?} in dir {}", THIS_FOLDER))
 }

@@ -350,58 +350,75 @@ impl Generator for StartFunc {
 pub struct MainVoidFunc;
 
 impl Generator for MainVoidFunc {
-        fn pre_target(
-            &mut self,
-            module: &mut walrus::Module,
-            _: &GeneratorCtx,
-            external: &ModuleExternal,
-        ) -> eyre::Result<()> {
-            let id = "__main_void".get_fid(&module.exports)?;
-    
-            module
-                .exports
-                .get_mut(module.exports.get_exported_func(id).unwrap().id())
-                .name = UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(&external.name))
-                .to_string();
-    
-            Ok(())
-        }
-    
-        fn post_combine(
-            &mut self,
-            module: &mut walrus::Module,
-            ctx: &GeneratorCtx,
-        ) -> eyre::Result<()> {
-            for wasm in &ctx.target_names {
-                if let Some(fid) = (
-                    UniqueName::NAMESPACE,
-                    &UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)),
-                )
-                    .get_fid(&module.imports)
-                    .ok()
-                {
-                    let main_void_func_name =
-                        UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string();
-                    let main_void_func_id = main_void_func_name.get_fid(&module.exports)?;
-                    let start_fn_id = ctx.start_func_id.as_ref().unwrap()[wasm];
-    
-                    let fake_fn_id = module.add_func(&[], &[walrus::ValType::I32], |func, _| {
-                        func.func_body().i32_const(0).return_();
-    
-                        Ok(())
-                    })?;
-    
-                    let call_main_void: i32 = module
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &GeneratorCtx,
+        external: &ModuleExternal,
+    ) -> eyre::Result<()> {
+        let id = "__main_void".get_fid(&module.exports)?;
+
+        module
+            .exports
+            .get_mut(module.exports.get_exported_func(id).unwrap().id())
+            .name =
+            UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(&external.name)).to_string();
+
+        Ok(())
+    }
+
+    fn post_combine(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        for wasm in &ctx.target_names {
+            if let Some(fid) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)),
+            )
+                .get_fid(&module.imports)
+                .ok()
+            {
+                let main_void_func_name =
+                    UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string();
+                let main_void_func_id = main_void_func_name.get_fid(&module.exports)?;
+                let start_fn_id = ctx.start_func_id.as_ref().unwrap()[wasm];
+
+                let fake_fn_id = module.add_func(&[], &[walrus::ValType::I32], |func, _| {
+                    func.func_body().i32_const(0).return_();
+
+                    Ok(())
+                })?;
+
+                let call_main_void: i32 = module
+                    .funcs
+                    .rewrite(
+                        |instr, _| {
+                            if let walrus::ir::Instr::Call(c) = instr {
+                                if c.func == main_void_func_id {
+                                    c.func = fake_fn_id;
+                                    1
+                                } else {
+                                    0
+                                }
+                            } else {
+                                0
+                            }
+                        },
+                        start_fn_id,
+                    )
+                    .wrap_err("Failed to read main_void calls")?
+                    .into_iter()
+                    .sum();
+
+                if call_main_void == 0 {
+                    let call_count = module
                         .funcs
-                        .rewrite(
+                        .flat_read(
                             |instr, _| {
                                 if let walrus::ir::Instr::Call(c) = instr {
-                                    if c.func == main_void_func_id {
-                                        c.func = fake_fn_id;
-                                        1
-                                    } else {
-                                        0
-                                    }
+                                    if c.func == main_void_func_id { 1 } else { 0 }
                                 } else {
                                     0
                                 }
@@ -410,85 +427,64 @@ impl Generator for MainVoidFunc {
                         )
                         .wrap_err("Failed to read main_void calls")?
                         .into_iter()
-                        .sum();
-    
-                    if call_main_void == 0 {
-                        let call_count = module
-                            .funcs
-                            .flat_read(
-                                |instr, _| {
-                                    if let walrus::ir::Instr::Call(c) = instr {
-                                        if c.func == main_void_func_id {
-                                            1
-                                        } else {
-                                            0
-                                        }
-                                    } else {
-                                        0
-                                    }
-                                },
-                                start_fn_id,
-                            )
-                            .wrap_err("Failed to read main_void calls")?
-                            .into_iter()
-                            .count();
-    
-                        if call_count == 1 {
+                        .count();
+
+                    if call_count == 1 {
+                        log::warn!(
+                            "main_void is not called directly in start function, but called in nested function. we replaced once call to a fake function that returns 0."
+                        );
+                    } else {
+                        if call_count > 1 {
                             log::warn!(
-                                "main_void is not called directly in start function, but called in nested function. we replaced once call to a fake function that returns 0."
+                                "main_void is not called directly in start function, and called in nested function. main_void called multiple times in start function, rust's default is once."
                             );
                         } else {
-                            if call_count > 1 {
-                                log::warn!(
-                                    "main_void is not called directly in start function, and called in nested function. main_void called multiple times in start function, rust's default is once."
-                                );
-                            } else {
-                                log::warn!(
-                                    "main_void is not called in nested start function, we think call_indirect is used. we replaced all calls to a fake function that returns 0."
-                                );
-                                // Strictly speaking, it should be limited to functions called within start_fn,
-                                // but since the main_void function is only called inside start_fn and through export,
-                                // it is acceptable to modify it in this function.
-                                module
-                                    .renew_call_fn(main_void_func_id, fake_fn_id)
-                                    .wrap_err("Failed to rewrite main_void call in start")?;
-                            }
+                            log::warn!(
+                                "main_void is not called in nested start function, we think call_indirect is used. we replaced all calls to a fake function that returns 0."
+                            );
+                            // Strictly speaking, it should be limited to functions called within start_fn,
+                            // but since the main_void function is only called inside start_fn and through export,
+                            // it is acceptable to modify it in this function.
+                            module
+                                .renew_call_fn(main_void_func_id, fake_fn_id)
+                                .wrap_err("Failed to rewrite main_void call in start")?;
                         }
-                        let start_fn_id =
-                            module.nested_copy_func(start_fn_id, &[start_fn_id], true, true)?;
-                        module
-                            .funcs
-                            .flat_rewrite(
-                                |instr, _| {
-                                    if let walrus::ir::Instr::Call(c) = instr {
-                                        if c.func == main_void_func_id {
-                                            c.func = fake_fn_id;
-                                        }
-                                    }
-                                },
-                                start_fn_id,
-                                false,
-                            )
-                            .wrap_err("Failed to read main_void calls")?;
-                    } else if call_main_void > 1 {
-                        log::warn!(
-                            "main_void called multiple times in start function, rust's default is once. we replaced all calls to a fake function that returns 0."
-                        );
                     }
-    
-                    module.connect_func_alt_with_remove_export(
-                        fid,
-                        main_void_func_name,
-                        ctx.unstable_print_debug,
-                    )?;
-                } else {
+                    let start_fn_id =
+                        module.nested_copy_func(start_fn_id, &[start_fn_id], true, true)?;
+                    module
+                        .funcs
+                        .flat_rewrite(
+                            |instr, _| {
+                                if let walrus::ir::Instr::Call(c) = instr {
+                                    if c.func == main_void_func_id {
+                                        c.func = fake_fn_id;
+                                    }
+                                }
+                            },
+                            start_fn_id,
+                            false,
+                        )
+                        .wrap_err("Failed to read main_void calls")?;
+                } else if call_main_void > 1 {
                     log::warn!(
-                        "No main_void found for {wasm}. You can use {} directly",
-                        UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string()
+                        "main_void called multiple times in start function, rust's default is once. we replaced all calls to a fake function that returns 0."
                     );
                 }
+
+                module.connect_func_alt_with_remove_export(
+                    fid,
+                    main_void_func_name,
+                    ctx.unstable_print_debug,
+                )?;
+            } else {
+                log::warn!(
+                    "No main_void found for {wasm}. You can use {} directly",
+                    UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string()
+                );
             }
-    
-            Ok(())
         }
+
+        Ok(())
     }
+}

@@ -66,6 +66,10 @@ cargo r -r -- -p threads_vfs test_threads -t single --threads true
 
 # goal
 
+# development
+install `cargo binstall cargo-nextest -y`
+- `cargo nextest run -r --fail-fast`
+
 # メモ
 cargo r -- -p threads_vfs test_threads -t multi --threads true
 _resetなしだとsingleもmultiも成功

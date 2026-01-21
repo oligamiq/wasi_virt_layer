@@ -64,8 +64,9 @@ pub fn build_vfs(
         args.push("--release");
         // todo!() https://github.com/rust-lang/rust/issues/146721
         if threads {
-            // args.insert(0, "+nightly");
-            args.insert(0, "+nightly-2025-12-20");
+            args.insert(0, "+nightly");
+
+            // args.insert(0, "+nightly-2025-12-20");
         }
         args.push("--package");
         args.push(&building_crate.name);

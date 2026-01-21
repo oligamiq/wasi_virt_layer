@@ -8,7 +8,7 @@ use crate::{
     unique_name::UniqueName,
     util::{
         WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,
-        gen_component_name, WasmName,
+        WasmName, gen_component_name,
     },
 };
 

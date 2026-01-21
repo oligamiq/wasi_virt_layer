@@ -3,7 +3,7 @@ use strum::VariantNames;
 
 use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
-    generator::{threads::ThreadsSpawnName, Generator},
+    generator::{Generator, threads::ThreadsSpawnName},
     unique_name::UniqueName,
     util::{
         WalrusFID, WalrusUtilExport, WalrusUtilImport, WalrusUtilModule, WasmName,
