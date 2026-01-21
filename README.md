@@ -68,6 +68,7 @@ cargo r -r -- -p threads_vfs test_threads -t single --threads true
 
 # development
 install `cargo binstall cargo-nextest -y`
+install deno
 - `cargo nextest run -r --fail-fast`
 
 # メモ

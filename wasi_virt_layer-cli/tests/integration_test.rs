@@ -7,25 +7,7 @@ use eyre::Context;
 use glob;
 use itertools::Itertools;
 use utils::*;
-use wasi_virt_layer_cli::{unique_name::UniqueName, util};
-
-static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-fn lock() -> std::sync::MutexGuard<'static, ()> {
-    let mut count = 0;
-    loop {
-        if let Ok(guard) = MUTEX.lock() {
-            return guard;
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(100));
-        count += 1;
-
-        if count % 300 == 0 {
-            println!("Waiting for lock...");
-        }
-    }
-}
+use wasi_virt_layer_cli::unique_name::UniqueName;
 
 // alloc
 // multi_memory
@@ -41,13 +23,10 @@ fn lock() -> std::sync::MutexGuard<'static, ()> {
 /// Tests the build process with the `--out-dir` argument, ensuring output is directed to a specific temporary directory.
 #[test]
 fn test_build_out_dir() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     let _test_dir = build_out_dir().wrap_err("Failed to build with out-dir")?;
     println!("Out dir build done.");
-
-    core::mem::drop(_lock);
 
     Ok(())
 }
@@ -55,7 +34,6 @@ fn test_build_out_dir() -> color_eyre::Result<()> {
 /// Tests the build process for both normal and threaded VFS in "multi" memory mode.
 #[test]
 fn test_build_multi() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     let _test_dir_normal = build_normal(false).wrap_err("Failed to build normal multi")?;
@@ -63,23 +41,18 @@ fn test_build_multi() -> color_eyre::Result<()> {
     let _test_dir_threads = build_threads(false).wrap_err("Failed to build threads multi")?;
     println!("Threads multi build done.");
 
-    core::mem::drop(_lock);
-
     Ok(())
 }
 
 /// Tests the build process for both normal and threaded VFS in "single" memory mode.
 #[test]
 fn test_build_single() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     let _test_dir_normal = build_normal(true).wrap_err("Failed to build normal single")?;
     println!("Normal single build done.");
     let _test_dir_threads = build_threads(true).wrap_err("Failed to build threads single")?;
     println!("Threads single build done.");
-
-    core::mem::drop(_lock);
 
     Ok(())
 }
@@ -173,7 +146,6 @@ impl core::ops::Drop for Resetter<'_> {
 /// Each combination is run in an isolated directory.
 #[test]
 fn all_features_without_threads() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     let run = || -> color_eyre::Result<TestDir> {
@@ -206,8 +178,6 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
     let _t7 = set_features(&["multi_memory", "unstable_print_debug"], run)
         .wrap_err("Failed to run with multi_memory + unstable_print_debug")?;
 
-    core::mem::drop(_lock);
-
     Ok(())
 }
 
@@ -215,7 +185,6 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
 /// Each combination is run in an isolated directory.
 #[test]
 fn all_features_with_threads() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     let run = || -> color_eyre::Result<TestDir> {
@@ -245,8 +214,6 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
     let _t4 = set_features(&["multi_memory", "threads", "unstable_print_debug"], run)
         .wrap_err("Failed to run with multi_memory + threads + unstable_print_debug")?;
 
-    core::mem::drop(_lock);
-
     Ok(())
 }
 
@@ -255,7 +222,6 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
 /// This ensures the build process succeeds even if the VFS doesn't fully utilize the threaded capabilities it enables.
 #[test]
 fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     let fn_ = |m: bool| -> color_eyre::Result<TestDir> {
@@ -273,15 +239,12 @@ fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
     let _t1 = fn_(false).wrap_err("Failed to run no_thread_with_thread_feature_vfs single")?;
     let _t2 = fn_(true).wrap_err("Failed to run no_thread_with_thread_feature_vfs multi")?;
 
-    core::mem::drop(_lock);
-
     Ok(())
 }
 
 /// Tests the `--keep-build-artifacts` argument.
 #[test]
 fn test_keep_build_artifacts() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     // Test with keep_build_artifacts = true
@@ -348,8 +311,6 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
         "Expected no .opt.wasm files to exist when keep_build_artifacts is false"
     );
 
-    core::mem::drop(_lock);
-
     Ok(())
 }
 
@@ -358,7 +319,6 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 #[test]
 #[ignore]
 fn doc_gen_imports_exports() -> color_eyre::Result<()> {
-    let _lock = lock();
     color_eyre::install().ok();
 
     fn process_wasm_file(
@@ -514,7 +474,5 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
     }
 
     std::fs::write("IMPORTS_EXPORTS_EVOLUTION_DETAILED.md", md_output)?;
-
-    core::mem::drop(_lock);
     Ok(())
 }

@@ -150,6 +150,33 @@ pub fn run_wasi_virt_layer(
         cmd.args(other_args);
     }
 
+    let cmd_line = {
+        let mut args = vec!["cargo r -r --".to_string()];
+
+        let mut skip_next = false;
+        for a in cmd.get_args() {
+            if skip_next {
+                skip_next = false;
+                continue;
+            }
+
+            let s = a.to_string_lossy();
+            if s == "--out-dir" {
+                skip_next = true;
+                continue;
+            }
+
+            if s == "--lock-file" {
+                skip_next = true;
+                continue;
+            }
+
+            args.push(s.into_owned());
+        }
+
+        args.join(" ")
+    };
+
     let result = || -> color_eyre::Result<TestDir> {
         cmd.current_dir(THIS_FOLDER).assert().try_success()?;
 
@@ -166,5 +193,7 @@ pub fn run_wasi_virt_layer(
         Ok(TestDir::new(final_dist_path))
     };
 
-    result().context(format!("Error with cmd {cmd:?} in dir {}", THIS_FOLDER))
+    result().context(format!(
+        "Error with cmd {cmd:?} in dir {THIS_FOLDER}. Try running: {cmd_line}"
+    ))
 }

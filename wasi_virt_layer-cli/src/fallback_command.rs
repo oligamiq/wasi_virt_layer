@@ -1,7 +1,12 @@
 use std::{
+    fs::File,
     io::{Read as _, Seek as _},
-    process::Command,
+    path::Path,
 };
+
+use eyre::Context as _;
+use fs2::FileExt as _;
+use tempfile::Builder as TempFileBuilder;
 
 pub struct FallbackCommand<F>
 where
@@ -13,6 +18,8 @@ where
 }
 
 const DISABLE_FALLBACK: bool = true;
+
+pub struct CommandLock(File);
 
 impl<F> FallbackCommand<F>
 where
@@ -130,23 +137,69 @@ pub struct FallbackOutput {
     pub success: bool,
 }
 
-fn get_temp_filepath() -> String {
-    let now = std::time::SystemTime::now();
-    let timestamp = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+impl CommandLock {
+    pub fn acquire() -> eyre::Result<Self> {
+        let lock_path = get_temp_lock_filepath();
 
+        if let Some(parent) = Path::new(&lock_path).parent() {
+            std::fs::create_dir_all(parent)
+                .wrap_err_with(|| format!("Failed to create temp lock dir: {}", parent.display()))?;
+        }
+
+        let lock_file = File::create(&lock_path)
+            .wrap_err_with(|| format!("Failed to create lock file: {lock_path}"))?;
+        lock_file
+            .lock_exclusive()
+            .wrap_err_with(|| format!("Failed to lock command file: {lock_path}"))?;
+
+        Ok(Self(lock_file))
+    }
+}
+
+impl Drop for CommandLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
+fn get_temp_filepath() -> String {
+    let mut builder = TempFileBuilder::new();
+    let prefix = format!("tmp_{}_", env!("CARGO_PKG_NAME"));
+    builder.prefix(&prefix);
+    builder.suffix(".log");
+
+    #[cfg(windows)]
+    let builder = builder.tempfile_in(
+        dirs::data_local_dir()
+            .unwrap()
+            .join("Temp"),
+    );
+
+    #[cfg(unix)]
+    let builder = builder.tempfile_in("/tmp");
+
+    let file = builder.expect("Failed to create temp log file");
+    let (_file, path) = file.keep().expect("Failed to persist temp log file");
+
+    path.to_string_lossy().into_owned()
+}
+
+fn get_temp_lock_filepath() -> String {
     #[cfg(windows)]
     return dirs::data_local_dir()
         .unwrap()
         .join("Temp")
-        .join(format!("tmp_{}_{timestamp}.log", env!("CARGO_PKG_NAME")))
+        .join(env!("CARGO_PKG_NAME"))
+        .join("command.lock")
         .to_string_lossy()
         .into();
 
     #[cfg(unix)]
-    return format!("/tmp/tmp_{}_{timestamp}.log", env!("CARGO_PKG_NAME"));
+    return Path::new("/tmp")
+        .join(env!("CARGO_PKG_NAME"))
+        .join("command.lock")
+        .to_string_lossy()
+        .into_owned();
 }
 
 /// require mutex
