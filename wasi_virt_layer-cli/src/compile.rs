@@ -66,6 +66,7 @@ pub fn build_vfs(
         if threads {
             args.insert(0, "+nightly");
 
+            // https://github.com/rust-lang/rust/pull/151309
             // args.insert(0, "+nightly-2025-12-20");
         }
         args.push("--package");
