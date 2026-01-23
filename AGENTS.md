@@ -24,7 +24,7 @@ This file aggregates all development instructions, workflows, and rules for agen
 | Action | Command | Notes |
 | :--- | :--- | :--- |
 | **Check** | `cargo check -r` | Workspace-wide, release profile |
-| **Test (All)** | `cargo test -r` | Runs full suite |
+| **Test (Nextest)** | `cargo nextest run -r --fail-fast` | Recommended for fast fail verification |
 | **Run CLI** | `cargo r -r -- <args>` | Preferred method for running the tool |
 | **Format** | `cargo fmt` | Standard rustfmt |
 | **Lint** | `cargo clippy --all-targets --all-features -D warnings` | |
@@ -38,9 +38,6 @@ This file aggregates all development instructions, workflows, and rules for agen
 
 ### Example Runs (from README)
 ```bash
-# Basic example
-cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
-
 # Threads example (single memory)
 cargo r -r -- -p threads_vfs test_threads -t single --threads true
 
@@ -54,7 +51,7 @@ cargo r -- -p threads_vfs test_threads -t multi --threads true
 1.  **Understand:** Use `grep`, `glob`, and `read` to analyze context.
 2.  **Plan:** Create a step-by-step plan.
 3.  **Implement:** Edit files, strictly following `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` if touching generators.
-4.  **Verify:** Run tests (`cargo test -r`) and linters.
+4.  **Verify:** Run tests (`cargo nextest run -r --fail-fast`) and linters.
 5.  **Refine:** Fix any issues found during verification.
 
 ### 4.2. Refactoring Generators
