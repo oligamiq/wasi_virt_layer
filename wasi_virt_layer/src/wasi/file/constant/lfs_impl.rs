@@ -4,21 +4,21 @@ use crate::__private::wasip1::Dircookie;
 use crate::{
     memory::WasmAccess,
     wasi::file::{
-        FilestatWithoutDevice, Wasip1FileTrait, Wasip1LFS,
         constant::{
             lfs::VFSConstNormalLFS,
             lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
         },
         stdio::StdIO,
+        FilestatWithoutDevice, Wasip1FileTrait, Wasip1LFS,
     },
 };
 
 impl<
-    ROOT: VFSConstNormalFilesTy<File, FLAT_LEN>,
-    File: Wasip1FileTrait + 'static + Copy,
-    const FLAT_LEN: usize,
-    StdIo: StdIO + 'static,
-> Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
+        ROOT: VFSConstNormalFilesTy<File, FLAT_LEN>,
+        File: Wasip1FileTrait + 'static + Copy,
+        const FLAT_LEN: usize,
+        StdIo: StdIO + 'static,
+    > Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
 {
     type Inode = usize;
     const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;

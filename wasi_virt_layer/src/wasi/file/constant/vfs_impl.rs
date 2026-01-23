@@ -3,7 +3,7 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::{
     memory::WasmAccess,
-    wasi::file::{Wasip1FileSystem, Wasip1LFS, constant::vfs::Wasip1ConstVFS},
+    wasi::file::{constant::vfs::Wasip1ConstVFS, Wasip1FileSystem, Wasip1LFS},
 };
 
 impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
@@ -102,6 +102,20 @@ where
         match self.fd_filestat_get_raw::<Wasm>(fd) {
             Ok(filestat) => {
                 Wasm::store_le(filestat_ptr, filestat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
+
+    fn fd_fdstat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        fdstat_ptr: *mut wasip1::Fdstat,
+    ) -> wasip1::Errno {
+        match self.fd_fdstat_get_raw::<Wasm>(fd) {
+            Ok(fdstat) => {
+                Wasm::store_le(fdstat_ptr, fdstat);
                 wasip1::ERRNO_SUCCESS
             }
             Err(e) => e,
