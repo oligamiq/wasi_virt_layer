@@ -1,125 +1,115 @@
 # Agent Playbook for `wasi_virt_layer`
-# Purpose
-- Give repo-ready instructions for autonomous agents working here.
-- Keep this file in sync with project conventions; update when rules change.
 
-# Quick References
-- Workspace root: `D:/projects/wasi_virt_layer` (Rust 2024 edition, rustc >= 1.89.0).
-- Core crates: `wasi_virt_layer` (library), `wasi_virt_layer-cli` (CLI), examples under `examples/`.
-- Ref docs: `GEMINI.md` (this file must stay consistent), `wasi_virt_layer-cli/IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` for generator refactors.
-- No Cursor/Copilot repo rules found.
+This file aggregates all development instructions, workflows, and rules for agents working on `wasi_virt_layer`. It combines information from `GEMINI.md` and developer notes from `README.md`.
 
-# Toolchain & Env
-- Rust stable, edition 2024; prefer `rustup override set stable` if needed.
-- Uses `color-eyre` + `eyre`; install hooks via `color_eyre::install()` when adding binaries/tests.
-- Default features: workspace-wide; crate features: `std`, `alloc`, `threads`, `multi_memory`, `unstable_print_debug` (opt-in, unstable).
+## 1. Project Overview
+`wasi_virt_layer` provides a virtualization layer for WASI modules, combining a virtual file system (VFS) WASM module with main WASM modules.
+- **Core crates:** `wasi_virt_layer` (library), `wasi_virt_layer-cli` (CLI).
+- **Workspace root:** `D:/projects/wasi_virt_layer` (Rust 2024, rustc >= 1.89.0).
 
-# Build & Check
-- Workspace check (release profile): `cargo check -r`.
-- Library only: `cargo check -p wasi_virt_layer`.
-- CLI only: `cargo check -p wasi_virt_layer-cli`.
-- Release build CLI (preferred for actual runs): `cargo r -r -- <args>` from `wasi_virt_layer-cli` binary.
-- Add `RUSTFLAGS="-Dwarnings"` if you need strictness.
+## 2. Core Mandates & Constraints
+- **Conventions First:** Adhere strictly to existing code style, naming, and architecture.
+- **No Assumptions:** Verify library usage before importing.
+- **Sparse Comments:** Explain *why*, not *what*.
+- **Git Safety:**
+  - No direct `git add/commit` commands. Propose changes and messages instead.
+  - Check `git status`, `git diff`, and `git log` before proposing.
+  - Never push without explicit request.
+  - Confirm changes to `Cargo.toml`, CI files, or shared configs.
+- **Documentation:** Keep this file (`AGENTS.md`) and `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` updated.
 
-# Format & Lint
-- Formatting: default rustfmt (no custom config). Run `cargo fmt` or check with `cargo fmt -- --check`.
-- Linting: `cargo clippy --all-targets --all-features -D warnings` (if time is tight, run per-package).
-- Keep imports rustfmt-ordered; avoid manual grouping unless rustfmt disagrees.
+## 3. Build, Run, & Test Commands
 
-# Tests
-- Full suite (release): `cargo test -r`.
-- Package-specific: `cargo test -r -p wasi_virt_layer` or `cargo test -r -p wasi_virt_layer-cli`.
-- Single integration test file: `cargo test -r -p wasi_virt_layer-cli --test <file_stem>`.
-- Single test case filter: `cargo test -r -p wasi_virt_layer-cli --test <file_stem> <test_fn_substring>`.
-- Short run for examples (if needed): `cargo test -r -p wasi_virt_layer --lib <filter>`.
-- Tests live mainly in `wasi_virt_layer-cli/tests/`; helpers in `wasi_virt_layer-cli/tests/utils.rs`.
+### Basic Workflow
+| Action | Command | Notes |
+| :--- | :--- | :--- |
+| **Check** | `cargo check -r` | Workspace-wide, release profile |
+| **Test (All)** | `cargo test -r` | Runs full suite |
+| **Run CLI** | `cargo r -r -- <args>` | Preferred method for running the tool |
+| **Format** | `cargo fmt` | Standard rustfmt |
+| **Lint** | `cargo clippy --all-targets --all-features -D warnings` | |
 
-# CLI Usage & Outputs
-- Main binary: `wasi_virt_layer` (from `wasi_virt_layer-cli`).
-- Typical run: `cargo r -r -- -p <vfs_package_or_component> <wasm_path_or_component>`.
-- Flags of note: `--threads <true|false>`, `-t/--target-memory <single|multi>`, `--no-transpile`, `--adjust-abi`, `--dwarf <bool>`, `--keep-build-artifacts`.
-- Outputs: components/files under chosen `--out-dir` (default `dist`); may emit JS runner unless `--no-transpile`.
+### Specific Test Patterns
+- **Library only:** `cargo check -p wasi_virt_layer`
+- **CLI only:** `cargo check -p wasi_virt_layer-cli`
+- **Single Integration Test:** `cargo test -r -p wasi_virt_layer-cli --test <file_stem>`
+- **Filter Test Case:** `cargo test -r -p wasi_virt_layer-cli --test <file_stem> <test_fn_substring>`
+- **Examples (Short run):** `cargo test -r -p wasi_virt_layer --lib <filter>`
 
-# Workspace Conventions
-- Avoid changing workspace `Cargo.toml` (deps, profiles) without explicit user confirmation (per `GEMINI.md`).
-- When editing generator logic, consult `wasi_virt_layer-cli/IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` to avoid ABI/name drift.
-- Release workflow uses `cargo-dist`; no need to touch `.github/workflows/release.yml` unless asked.
+### Example Runs (from README)
+```bash
+# Basic example
+cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm
 
-# Error Handling
-- Use `eyre::Result` / `color-eyre` for CLI and tests; prefer `wrap_err` / `Context` for additional detail.
-- For library code, prefer lightweight errors; avoid panics except for impossible states.
-- In CLI flows, fail fast with contextual messages; surface actionable guidance when skipping steps (e.g., `--no-transpile`).
+# Threads example (single memory)
+cargo r -r -- -p threads_vfs test_threads -t single --threads true
 
-# Logging & Output
-- Logging via `env_logger` + `log`; default filter `Info`. Respect existing levels.
-- Keep stdout for user-facing info; use `println!` sparingly, prefer `log::{info, warn, error, debug}`.
+# Threads example (multi memory)
+cargo r -- -p threads_vfs test_threads -t multi --threads true
+```
 
-# Imports & Modules
-- Follow rustfmt ordering; group std, third-party, crate-local in natural order when rustfmt allows.
-- Prefer module-level `use` blocks; keep `pub use` re-exports minimal and intentional.
-- Macros: helper macros (e.g., `add_generator!`) live near use-sites; keep macro visibility private unless required.
+## 4. Development Workflow
 
-# Types & Naming
-- Use descriptive type aliases sparingly; rely on concrete types for clarity.
-- Enum/struct names are PascalCase; functions snake_case; constants SCREAMING_SNAKE; modules snake_case.
-- Feature flags: keep names in sync with `Cargo.toml` (`threads`, `multi_memory`, `unstable_print_debug`).
-- Avoid abbreviated arg names unless already common in file (e.g., `vfs`, `wasm`).
+### 4.1. Task Execution Strategy
+1.  **Understand:** Use `grep`, `glob`, and `read` to analyze context.
+2.  **Plan:** Create a step-by-step plan.
+3.  **Implement:** Edit files, strictly following `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` if touching generators.
+4.  **Verify:** Run tests (`cargo test -r`) and linters.
+5.  **Refine:** Fix any issues found during verification.
 
-# Formatting & Style
-- Derive defaults where possible; manual impls only when needed.
-- Keep comments minimal and purpose-driven (why > what), per `GEMINI.md` sparse-comment rule.
-- Prefer iterator/functional style when readable; otherwise straightforward loops.
-- Favor early returns for validation; avoid deep nesting in CLI orchestration.
+### 4.2. Refactoring Generators
+**CRITICAL:** When modifying `generator` modules or ABI logic:
+- Consult `wasi_virt_layer-cli/IMPORTS_EXPORTS_EVOLUTION_DETAILED.md`.
+- Ensure import/export names match exactly at each stage.
+- Preserve debug generators (`Debug*`) unless explicitly pruned.
 
-# Feature & Config Handling
-- Feature checks occur via `config_checker::FeatureChecker`; keep new feature toggles consistent.
-- Restorers (`TomlRestorers`) must be updated when you mutate manifests during CLI runs; ensure cleanup paths are balanced.
-- Threads/memory flags must stay consistent between CLI args and manifest feature checks; use `TargetMemoryType` helpers.
+### 4.3. Integration Testing Details
+Tests live in `wasi_virt_layer-cli/tests/` and use `utils.rs`.
+- Use `run_wasi_virt_layer` helper to abstract CLI execution.
+- **Output Isolation:** Use `OutDir::Random` to avoid collisions during parallel tests.
+- **Artifacts:** Use `keep_build_artifacts: true` in `run_wasi_virt_layer` if you need to debug intermediate WASM files.
 
-# Testing Patterns
-- Integration helpers: `run_wasi_virt_layer` in `wasi_virt_layer-cli/tests/utils.rs` sets up CLI runs and cleans temp dirs (via `TestDir` drop).
-- Use `OutDir::{Default, Path(&str), Random}` to isolate outputs per test and avoid collisions.
-- When adding tests that need temp artifacts, honor `keep_build_artifacts` flag semantics.
-- Add new dev-deps under `[dev-dependencies]` after user confirmation (see `Cargo.toml`).
+## 5. Technical Notes & Troubleshooting
 
-# Performance & Safety
-- Avoid unnecessary cloning of wasm/module buffers; pass references where possible.
-- Watch for `threads` feature interactions: ensure ABI adjustments cover both single/multi memory paths.
-- Preserve `non-recursive` ABI adjustments when touching `abi_connect` logic.
+### Feature Flags
+- **Workspace:** `std`, `alloc`, `threads`, `multi_memory`, `unstable_print_debug`.
+- **Consistency:** Ensure CLI args (e.g., `--threads`) match the manifest feature flags checked by `config_checker`.
 
-# Git & Process Rules (for agents)
-- Before proposing commits, inspect `git status`, `git diff`, `git log -n 3` to match style.
-- Always propose a draft commit message; never push without explicit request.
-- Direct git commands for staging/committing/restoring are disallowed per `GEMINI.md`; rely on provided tooling/user approval.
-- Confirm with user before changing shared configs (workspace `Cargo.toml`, CI, release files).
+### Known Issues & Debugging (from README)
+- **Threads & Memory:**
+  - `single_memory` may fail where `multi_memory` succeeds in threaded contexts.
+  - Pay attention to the order of thread creation:
+    - VFS -> Body: (Check status)
+    - Body -> Body: Success
+    - VFS -> VFS: Success
+- **Reset Behavior:**
+  - Without `_reset()`, both single and multi memory modes might appear to succeed.
+  - With `test_threads::_reset(); _start(); _main();`: Multi-memory succeeds; Single-memory might panic with `unreachable`.
+- **Build Caching:** Watch out for build target directory caching (`--no-cache` might be needed).
+- **Recursion:** Self-calling binaries (fallback mechanisms) are tricky.
+- **CLI Arguments:** Extremely long arguments might cause failures.
 
-# Documentation & Examples
-- README at root has CLI walkthrough; keep examples aligned when updating flags.
-- Example runs (from README):
-  - `cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm`
-  - `cargo r -r -- -p threads_vfs test_threads -t single --threads true`
+### Deno Usage
+Generated artifacts (in `dist/`) can often be run with Deno:
+```bash
+deno run dist/test_run.ts
+```
 
-# When Refactoring Generators
-- Always cross-check names/ABI expectations with `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md`.
-- Maintain `add_generators_by_type!` ordering and coverage; adding/removing generators requires reviewing downstream consumers.
-- Preserve debug generators (`Debug*`) unless explicitly pruned; they are used for diagnostics.
+## 6. Roadmap & TODOs
+- [ ] Support non-binary Wasm modules
+- [ ] Enable specifying multiple Wasm modules
+- [ ] Support `self` not passed in `plug_thread!`
+- [ ] Support `self` binary
+- [ ] Support flush sync to file system
+- [ ] Fake global allocator / center allocator merged with VFS
+- [ ] Access Time Trait
+- [ ] Multiple LFS file systems (VFS)
+- [ ] Static file system
+- [ ] Separate mode (connect function by javascript)
+- [ ] Threading VFS with non-threading WASM
+- [ ] Validator with error on threads
+- [ ] Unicode support
+- [ ] Async WIT support
 
-# Adding New Files
-- Prefer existing style; keep filenames snake_case for Rust modules.
-- Avoid adding configs like rustfmt/clippy unless requested.
-
-# PR/CI Awareness
-- Release workflow triggered by tags; uses `cargo-dist`. Do not depend on GH secrets locally.
-- No other workflows found; run local checks manually (fmt, clippy, test).
-
-# Quick Start for New Agents
-- Run `cargo fmt -- --check`, `cargo clippy --all-targets --all-features -D warnings`, then `cargo test -r`.
-- For targeted work: `cargo check -r -p <crate>` plus focused test filters.
-- Keep error contexts rich with `wrap_err`; prefer `?` propagation.
-
-# Maintenance Notes
-- Keep this file ~150 lines; update when commands/rules change.
-- If you change workflow or add features/flags, document the new usage here and in `GEMINI.md`.
-- If you add Cursor/Copilot rules, reference them explicitly here.
-
-# End
+## 7. Non-Goals & Limitations
+- **wasm-bindgen:** Not supported because it cannot use WASI.
