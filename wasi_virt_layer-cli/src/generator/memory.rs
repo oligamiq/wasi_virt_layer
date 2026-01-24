@@ -10,6 +10,18 @@ use crate::{
     util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
 };
 
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum MemoryUniqueName<'a> {
+    MemoryCopyFrom(&'a WasmName),
+    MemoryCopyTo(&'a WasmName),
+    MemoryTrap(&'a WasmName),
+    MemoryTrapAnchor(&'a WasmName),
+    MemoryDirector(&'a WasmName),
+    MemoryDirectorAnchor(&'a WasmName),
+    Memory(&'a WasmName),
+}
+
 #[derive(Debug, Default)]
 pub struct TemporaryRefugeMemory {
     pub memory_count: usize,
@@ -145,7 +157,7 @@ impl Generator for TemporaryRefugeMemory {
             .iter_mut()
             .find(|export| export.name == "memory")
             .unwrap()
-            .name = format!("__wasip1_vfs_{}_memory", external.name);
+            .name = UniqueName::Memory(&MemoryUniqueName::Memory(&external.name)).to_string();
 
         Ok(())
     }
@@ -274,10 +286,6 @@ impl Generator for TemporaryRefugeMemory {
     }
 }
 
-fn with_name(wasm: &WasmName, name: &str) -> String {
-    format!("__wasip1_vfs_{wasm}_{name}")
-}
-
 /// When exchanging data via Wasip1ABI,
 /// there are operations involving writing to
 /// and reading from memory.
@@ -326,7 +334,10 @@ impl Generator for MemoryBridge {
             let wasm_mem = ctx.target_used_memory_id.as_ref().unwrap()[wasm];
             let vfs_mem = ctx.vfs_used_memory_id.unwrap();
 
-            if let Some(id) = (UniqueName::NAMESPACE, &with_name(wasm, "memory_copy_from"))
+            if let Some(id) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::Memory(&MemoryUniqueName::MemoryCopyFrom(wasm)),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -351,7 +362,10 @@ impl Generator for MemoryBridge {
                     .wrap_err_with(|| eyre::eyre!("Failed to replace memory_copy_from"))?;
             }
 
-            if let Some(id) = (UniqueName::NAMESPACE, &with_name(wasm, "memory_copy_to"))
+            if let Some(id) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::Memory(&MemoryUniqueName::MemoryCopyTo(wasm)),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -404,7 +418,10 @@ impl Generator for MemoryTrap {
         }
 
         for wasm in &ctx.target_names {
-            if let Some(id) = (UniqueName::NAMESPACE, &with_name(wasm, "memory_trap"))
+            if let Some(id) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::Memory(&MemoryUniqueName::MemoryTrap(wasm)),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {
@@ -451,7 +468,8 @@ impl Generator for MemoryTrap {
         }
 
         for wasm in &ctx.target_names {
-            let trap_export_name = format!("__wasip1_vfs_{wasm}_memory_trap_anchor");
+            let trap_export_name =
+                UniqueName::Memory(&MemoryUniqueName::MemoryTrapAnchor(wasm)).to_string();
             let trap_id = trap_export_name
                 .get_fid(&module.exports)
                 .wrap_err_with(|| {
@@ -497,7 +515,7 @@ impl Generator for MemoryTrap {
 
             if let Some(id) = (
                 UniqueName::NAMESPACE,
-                &format!("__wasip1_vfs_{wasm}_memory_director"),
+                &UniqueName::Memory(&MemoryUniqueName::MemoryDirector(wasm)),
             )
                 .get_fid(&module.imports)
                 .ok()
@@ -516,9 +534,11 @@ impl Generator for MemoryTrap {
                     .wrap_err_with(|| eyre::eyre!("Failed to replace imported function"))?;
 
                 if ctx.unstable_print_debug {
-                    module
-                        .exports
-                        .add(&format!("__wasip1_vfs_{wasm}_memory_director_anchor"), id);
+                    module.exports.add(
+                        &UniqueName::Memory(&MemoryUniqueName::MemoryDirectorAnchor(wasm))
+                            .to_string(),
+                        id,
+                    );
                 }
             }
         }

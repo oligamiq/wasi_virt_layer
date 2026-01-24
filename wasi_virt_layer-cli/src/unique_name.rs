@@ -1,6 +1,6 @@
 use crate::{
     generator::{
-        abi_connect::Wasip1ABIName, shared_global::SharedGlobalFnsName,
+        abi_connect::Wasip1ABIName, memory::MemoryUniqueName, shared_global::SharedGlobalFnsName,
         special_func::SpecialFuncUniqueName, start_section::StartAlternativeName,
         threads::ThreadsSpawnName,
     },
@@ -15,6 +15,7 @@ pub enum UniqueName<'a, 'b> {
     Wasip1ABI(&'a Wasip1ABIName<'b>),
     ThreadsSpawn(&'a ThreadsSpawnName<'b>),
     SpecialFunc(&'a SpecialFuncUniqueName<'b>),
+    Memory(&'a MemoryUniqueName<'b>),
 }
 
 macro_rules! fmt {
@@ -99,6 +100,8 @@ impl UniqueName<'_, '_> {
     pub const WASIP1_ABI: &'static str = "";
     /// todo!(); to unique names
     pub const THREADS_SPAWN: &'static str = "";
+    /// todo!(); to unique names
+    pub const MEMORY: &'static str = "";
 
     fn to_str(&self) -> String {
         match self {
@@ -167,6 +170,20 @@ impl UniqueName<'_, '_> {
                     }
                 }
             }
+            UniqueName::Memory(t) => {
+                let name = t.as_ref();
+                match t {
+                    MemoryUniqueName::MemoryCopyFrom(wasm)
+                    | MemoryUniqueName::MemoryCopyTo(wasm)
+                    | MemoryUniqueName::MemoryTrap(wasm)
+                    | MemoryUniqueName::MemoryTrapAnchor(wasm)
+                    | MemoryUniqueName::MemoryDirector(wasm)
+                    | MemoryUniqueName::MemoryDirectorAnchor(wasm)
+                    | MemoryUniqueName::Memory(wasm) => {
+                        fmt!(Memory; "{wasm}_{name}")
+                    }
+                }
+            }
         }
     }
 }
@@ -214,6 +231,12 @@ impl<'a> From<&'a ThreadsSpawnName<'_>> for UniqueName<'_, 'a> {
 impl<'a> From<&'a SpecialFuncUniqueName<'_>> for UniqueName<'_, 'a> {
     fn from(value: &'a SpecialFuncUniqueName<'_>) -> Self {
         UniqueName::SpecialFunc(value)
+    }
+}
+
+impl<'a> From<&'a MemoryUniqueName<'_>> for UniqueName<'_, 'a> {
+    fn from(value: &'a MemoryUniqueName<'_>) -> Self {
+        UniqueName::Memory(value)
     }
 }
 
@@ -323,6 +346,24 @@ impl<'a> UniqueNameIterator<'a> for SpecialFuncUniqueName<'a> {
     }
 }
 
+impl<'a> UniqueNameIterator<'a> for MemoryUniqueName<'a> {
+    type REQUIRED = WasmName;
+
+    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
+        let v = vec![
+            MemoryUniqueName::MemoryCopyFrom(require),
+            MemoryUniqueName::MemoryCopyTo(require),
+            MemoryUniqueName::MemoryTrap(require),
+            MemoryUniqueName::MemoryTrapAnchor(require),
+            MemoryUniqueName::MemoryDirector(require),
+            MemoryUniqueName::MemoryDirectorAnchor(require),
+            MemoryUniqueName::Memory(require),
+        ];
+        assert_eq!(v.len(), MemoryUniqueName::COUNT);
+        v
+    }
+}
+
 #[cfg(test)]
 mod unique_name_iterator_tests {
     use std::collections::HashSet;
@@ -344,18 +385,21 @@ mod unique_name_iterator_tests {
         let t4 = Wasip1ABIName::iter_unique_names(&requires);
         let t5 = ThreadsSpawnName::iter_unique_names(&requires);
         let t6 = SpecialFuncUniqueName::iter_unique_names(&require_import);
+        let t7 = MemoryUniqueName::iter_unique_names(&require_import);
         let t1 = t1.iter().map(UniqueName::EachReset);
         let t2 = t2.iter().map(Into::into);
         let t3 = t3.iter().map(Into::into);
         let t4 = t4.iter().map(Into::into);
         let t5 = t5.iter().map(Into::into);
         let t6 = t6.iter().map(Into::into);
+        let t7 = t7.iter().map(Into::into);
         let t = t1
             .chain(t2)
             .chain(t3)
             .chain(t4)
             .chain(t5)
             .chain(t6)
+            .chain(t7)
             .collect::<Vec<UniqueName>>();
 
         // Check whether there is the same output destination
