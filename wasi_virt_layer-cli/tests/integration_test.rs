@@ -25,6 +25,9 @@ use wasi_virt_layer_cli::unique_name::UniqueName;
 fn test_build_out_dir() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
+    // rm onetime dir if it exists
+    let _ = std::fs::remove_dir_all(format!("{THIS_FOLDER}/tmp"));
+
     let _test_dir = build_out_dir().wrap_err("Failed to build with out-dir")?;
     println!("Out dir build done.");
 
