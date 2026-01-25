@@ -16,6 +16,7 @@ This file aggregates all development instructions, workflows, and rules for agen
   - Check `git status`, `git diff`, and `git log` before proposing.
   - Never push without explicit request.
   - Confirm changes to `Cargo.toml`, CI files, or shared configs.
+- **Existing Warnings:** Do not fix pre-existing warnings. Only address warnings introduced by your changes.
 - **Documentation:** Keep this file (`AGENTS.md`) and `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` updated.
 
 ## 3. Build, Run, & Test Commands
