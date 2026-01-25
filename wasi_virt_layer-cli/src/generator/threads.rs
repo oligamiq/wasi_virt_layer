@@ -7,8 +7,8 @@ use crate::{
     generator::{Generator, GeneratorCtx},
     unique_name::UniqueName,
     util::{
-        WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,
-        WasmName, gen_component_name,
+        gen_component_name, WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _,
+        WalrusUtilModule as _, WasmName,
     },
 };
 
@@ -30,6 +30,8 @@ pub enum ThreadsSpawnName<'a> {
     WasiThreadStartDestination(&'a WasmName),
     WasiThreadSpawn(&'a WasmName),
     WasiThreadStartAnchor(&'a WasmName),
+    ThreadInitializer,
+    OldStart,
 }
 
 /// The thread spawn process itself within the VFS is also caught,
@@ -236,7 +238,7 @@ pub struct ThreadsSpawnPatch;
 
 impl Generator for ThreadsSpawnPatch {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        let initializer = "__wasip1_vfs_thread_initializer"
+        let initializer = UniqueName::ThreadsSpawn(&ThreadsSpawnName::ThreadInitializer)
             .get_fid(&module.exports)
             .ok();
 
@@ -262,7 +264,10 @@ impl Generator for ThreadsSpawnPatch {
 
         if ctx.unstable_print_debug {
             if let Some(old_start) = old_start {
-                module.exports.add("__vfs_old_start", old_start);
+                module.exports.add(
+                    &UniqueName::ThreadsSpawn(&ThreadsSpawnName::OldStart).to_string(),
+                    old_start,
+                );
             }
         }
 

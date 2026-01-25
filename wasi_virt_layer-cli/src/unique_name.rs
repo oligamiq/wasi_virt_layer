@@ -9,7 +9,6 @@ use crate::{
 
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub enum UniqueName<'a, 'b> {
-    EachReset(&'a WasmName),
     StartAlternative(&'a StartAlternativeName),
     SharedGlobalFns(&'a SharedGlobalFnsName),
     Wasip1ABI(&'a Wasip1ABIName<'b>),
@@ -93,19 +92,17 @@ impl UniqueName<'_, '_> {
 
     pub const START_ALTERNATIVE: &'static str = "start_alt_";
     pub const SHARED_GLOBAL_FNS: &'static str = "memory_grow_";
+    /// todo!(); to identified unique names
     pub const SPECIAL_FUNC: &'static str = "";
-    /// todo!(); to unique names
-    pub const EACH_RESET: &'static str = "";
-    /// todo!(); to unique names
+    /// todo!(); to identified unique names
     pub const WASIP1_ABI: &'static str = "";
-    /// todo!(); to unique names
+    /// todo!(); to identified unique names
     pub const THREADS_SPAWN: &'static str = "";
-    /// todo!(); to unique names
+    /// todo!(); to identified unique names
     pub const MEMORY: &'static str = "";
 
     fn to_str(&self) -> String {
         match self {
-            UniqueName::EachReset(name) => fmt!(EachReset; "{name}_reset"),
             UniqueName::StartAlternative(alt) => {
                 let alt_name = alt.as_ref();
                 match alt {
@@ -164,6 +161,9 @@ impl UniqueName<'_, '_> {
                     }
                     SpecialFuncUniqueName::MainVoid(wasm) => {
                         fmt!(SpecialFunc; "{wasm}___{name}")
+                    }
+                    SpecialFuncUniqueName::Reset(wasm) => {
+                        fmt!(SpecialFunc; "{wasm}_{name}")
                     }
                     _ => {
                         fmt!(SpecialFunc; "{name}")
@@ -286,6 +286,8 @@ impl<'a> UniqueNameIterator<'a> for SharedGlobalFnsName {
             SharedGlobalFnsName::GlobalAltInitOnce,
             SharedGlobalFnsName::GlobalAltPos,
             SharedGlobalFnsName::Locker(*require),
+            SharedGlobalFnsName::LockerBase,
+            SharedGlobalFnsName::MemoryGrowAlt,
         ];
         assert_eq!(v.len(), SharedGlobalFnsName::COUNT);
         v
@@ -323,6 +325,8 @@ impl<'a> UniqueNameIterator<'a> for ThreadsSpawnName<'a> {
             ThreadsSpawnName::WasiThreadStart(wasm),
             ThreadsSpawnName::WasiThreadStartAnchor(wasm),
             ThreadsSpawnName::WasiThreadStartDestination(wasm),
+            ThreadsSpawnName::ThreadInitializer,
+            ThreadsSpawnName::OldStart,
         ];
         assert_eq!(v.len(), ThreadsSpawnName::COUNT);
         v
@@ -340,6 +344,7 @@ impl<'a> UniqueNameIterator<'a> for SpecialFuncUniqueName<'a> {
             SpecialFuncUniqueName::StartInitOld,
             SpecialFuncUniqueName::Start(require),
             SpecialFuncUniqueName::MainVoid(require),
+            SpecialFuncUniqueName::Reset(require),
         ];
         assert_eq!(v.len(), SpecialFuncUniqueName::COUNT);
         v
@@ -379,22 +384,19 @@ mod unique_name_iterator_tests {
         let require_name = "#original_name";
         let require_num = 5;
         let requires = (require_import.clone(), require_name);
-        let t1 = WasmName::iter_unique_names(&require_import);
         let t2 = StartAlternativeName::iter_unique_names(&require_import);
         let t3 = SharedGlobalFnsName::iter_unique_names(&require_num);
         let t4 = Wasip1ABIName::iter_unique_names(&requires);
         let t5 = ThreadsSpawnName::iter_unique_names(&requires);
         let t6 = SpecialFuncUniqueName::iter_unique_names(&require_import);
         let t7 = MemoryUniqueName::iter_unique_names(&require_import);
-        let t1 = t1.iter().map(UniqueName::EachReset);
         let t2 = t2.iter().map(Into::into);
         let t3 = t3.iter().map(Into::into);
         let t4 = t4.iter().map(Into::into);
         let t5 = t5.iter().map(Into::into);
         let t6 = t6.iter().map(Into::into);
         let t7 = t7.iter().map(Into::into);
-        let t = t1
-            .chain(t2)
+        let t = t2
             .chain(t3)
             .chain(t4)
             .chain(t5)

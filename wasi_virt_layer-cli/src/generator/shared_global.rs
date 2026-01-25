@@ -4,8 +4,8 @@ use walrus::FunctionId;
 use crate::{
     args::TargetMemoryType,
     generator::{
-        Generator,
         start_section::{StartFnInfo, StartFnPriority, StartSource},
+        Generator,
     },
     instrs::InstrRewrite as _,
     unique_name::UniqueName,
@@ -58,6 +58,10 @@ pub enum SharedGlobalFnsName {
     GlobalAltInitOnce,
     GlobalAltPos,
     Locker(usize),
+    #[strum(serialize = "locker")]
+    LockerBase,
+    #[strum(serialize = "alt")]
+    MemoryGrowAlt,
 }
 
 impl SharedGlobalFnsName {
@@ -337,13 +341,18 @@ impl SharedGlobal {
         mem_id: walrus::MemoryId,
         is_debug: bool,
     ) -> eyre::Result<(walrus::FunctionId, String)> {
-        let alt_id = ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
+        let alt_id = (
+            "wasip1-vfs_single_memory",
+            &UniqueName::SharedGlobalFns(&SharedGlobalFnsName::MemoryGrowAlt),
+        )
             .get_fid(&module.imports)?;
-        let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
+        let base_locker = UniqueName::SharedGlobalFns(&SharedGlobalFnsName::LockerBase)
+            .get_fid(&module.exports)?;
 
         let locker_id = module.copy_func(base_locker)?;
 
-        let export_name = format!("__wasip1_vfs_memory_grow_locker_{}", mem_id.index());
+        let export_name =
+            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::Locker(mem_id.index())).to_string();
         // todo!(); This is essential for it to function.
         {
             module.exports.add(&export_name, locker_id);
@@ -372,9 +381,13 @@ impl SharedGlobal {
     fn remove_gen_custom_locker_base(module: &mut walrus::Module, debug: bool) -> eyre::Result<()> {
         use walrus::ir::*;
 
-        let alt_id = ("wasip1-vfs_single_memory", "__wasip1_vfs_memory_grow_alt")
+        let alt_id = (
+            "wasip1-vfs_single_memory",
+            &UniqueName::SharedGlobalFns(&SharedGlobalFnsName::MemoryGrowAlt),
+        )
             .get_fid(&module.imports)?;
-        let base_locker = "__wasip1_vfs_memory_grow_locker".get_fid(&module.exports)?;
+        let base_locker = UniqueName::SharedGlobalFns(&SharedGlobalFnsName::LockerBase)
+            .get_fid(&module.exports)?;
         if !debug {
             module.funcs.delete(base_locker);
             module.funcs.delete(alt_id);

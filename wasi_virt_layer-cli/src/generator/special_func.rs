@@ -17,6 +17,7 @@ pub enum SpecialFuncUniqueName<'a> {
     StartInitOld,
     Start(&'a WasmName),
     MainVoid(&'a WasmName),
+    Reset(&'a WasmName),
 }
 
 /// To enable the reset function,
@@ -90,27 +91,30 @@ impl Generator for ResetFunc {
         let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
 
         for wasm in &ctx.target_names {
-            if let Some(reset) = (UniqueName::NAMESPACE, &UniqueName::EachReset(wasm))
+            if let Some(reset) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::SpecialFunc(&SpecialFuncUniqueName::Reset(wasm)),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {
                 let global = ctx.target_used_global_id.as_ref().unwrap()[wasm]
-                .iter()
-                .copied()
-                .map(|g| module.globals.get(g))
-                .filter(|g| g.mutable)
-                .filter_map(|g| {
-                    if let GlobalKind::Local(ConstExpr::Value(v)) = g.kind {
-                        Some((g.id(), v.clone()))
-                    } else {
-                        log::warn!(
+                    .iter()
+                    .copied()
+                    .map(|g| module.globals.get(g))
+                    .filter(|g| g.mutable)
+                    .filter_map(|g| {
+                        if let GlobalKind::Local(ConstExpr::Value(v)) = g.kind {
+                            Some((g.id(), v.clone()))
+                        } else {
+                            log::warn!(
                             "Global segment {:?} is not a value, we support only local variables",
                             g.kind
                         );
-                        None
-                    }
-                })
-                .collect::<Box<_>>();
+                            None
+                        }
+                    })
+                    .collect::<Box<_>>();
 
                 let data_range = module
                     .data
@@ -418,7 +422,11 @@ impl Generator for MainVoidFunc {
                         .flat_read(
                             |instr, _| {
                                 if let walrus::ir::Instr::Call(c) = instr {
-                                    if c.func == main_void_func_id { 1 } else { 0 }
+                                    if c.func == main_void_func_id {
+                                        1
+                                    } else {
+                                        0
+                                    }
                                 } else {
                                     0
                                 }
