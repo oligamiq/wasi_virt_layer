@@ -2494,17 +2494,13 @@ pub mod bits {
         type Output = Self;
 
         fn bitand(self, rhs: Self) -> Self::Output {
-            FeatureCombinationIteratorInnerBits {
-                0:  self.0 & rhs.0,
-            }
+            FeatureCombinationIteratorInnerBits { 0: self.0 & rhs.0 }
         }
     }
 
     impl core::ops::BitAndAssign for FeatureCombinationIteratorInnerBits {
         fn bitand_assign(&mut self, rhs: Self) {
-
-                self.0 &= rhs.0;
-
+            self.0 &= rhs.0;
         }
     }
 
@@ -2512,15 +2508,13 @@ pub mod bits {
         type Output = Self;
 
         fn bitor(self, rhs: Self) -> Self::Output {
-            FeatureCombinationIteratorInnerBits {
-                0: self.0 | rhs.0,
-            }
+            FeatureCombinationIteratorInnerBits { 0: self.0 | rhs.0 }
         }
     }
 
     impl core::ops::BitOrAssign for FeatureCombinationIteratorInnerBits {
         fn bitor_assign(&mut self, rhs: Self) {
-                self.0 |= rhs.0;
+            self.0 |= rhs.0;
         }
     }
 
@@ -2528,9 +2522,7 @@ pub mod bits {
         type Output = Self;
 
         fn bitxor(self, rhs: Self) -> Self::Output {
-            FeatureCombinationIteratorInnerBits {
-                0: self.0 ^ rhs.0,
-            }
+            FeatureCombinationIteratorInnerBits { 0: self.0 ^ rhs.0 }
         }
     }
 
@@ -2538,9 +2530,7 @@ pub mod bits {
         type Output = Self;
 
         fn not(self) -> Self::Output {
-            FeatureCombinationIteratorInnerBits {
-                0: !self.0,
-            }
+            FeatureCombinationIteratorInnerBits { 0: !self.0 }
         }
     }
 
@@ -2619,10 +2609,10 @@ pub mod bits {
         }
 
         pub const fn from_number(num: u64) -> Self {
-                let mut bits: FeatureCombinationIteratorInnerBitsInner =
-                    FeatureCombinationIteratorInnerBitsInner::ZERO;
-                bits.data[0] = num;
-                FeatureCombinationIteratorInnerBits { 0: bits }
+            let mut bits: FeatureCombinationIteratorInnerBitsInner =
+                FeatureCombinationIteratorInnerBitsInner::ZERO;
+            bits.data[0] = num;
+            FeatureCombinationIteratorInnerBits { 0: bits }
         }
 
         pub fn from_one_pos(pos: usize) -> Self {
@@ -2704,9 +2694,9 @@ impl Iterator for BitIterator {
     type Item = FeatureCombinationIteratorInnerBits;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let count = core::mem::size_of::<FeatureCombinationIteratorInnerBits>() * 8 - self.current.trailing_zeros();
-        if count > self.kind as usize
-        {
+        let count = core::mem::size_of::<FeatureCombinationIteratorInnerBits>() * 8
+            - self.current.trailing_zeros();
+        if count > self.kind as usize {
             None
         } else {
             let result = self.current;
@@ -2717,7 +2707,8 @@ impl Iterator for BitIterator {
                 if flag.is_zero() {
                     break;
                 } else {
-                    self.current += FeatureCombinationIteratorInnerBits::from_one_pos(flag.leading_zeros());
+                    self.current +=
+                        FeatureCombinationIteratorInnerBits::from_one_pos(flag.leading_zeros());
                 }
             }
             Some(result)
@@ -2839,11 +2830,14 @@ where
                 FeatureCombinationIteratorInnerBits::ZERO,
             ))
             .map(|(includes, mut bit_array)| {
-                let indices = includes.into_iter().map(|v| {
-                    let index = map[&v.borrow()];
-                    bit_array.set(index, true);
-                    index
-                }).collect::<Vec<_>>();
+                let indices = includes
+                    .into_iter()
+                    .map(|v| {
+                        let index = map[&v.borrow()];
+                        bit_array.set(index, true);
+                        index
+                    })
+                    .collect::<Vec<_>>();
                 (indices, bit_array)
             })
             .collect::<(Vec<_>, Vec<_>)>();
@@ -2902,7 +2896,7 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashSet;
+    use std::{collections::HashSet, sync::Arc};
 
     use clap::builder::Str;
 
@@ -2930,12 +2924,10 @@ mod tests {
         let count = BitIterator::new(10).count();
         assert_eq!(count, 1024);
 
-
         let mut generator = BitIterator::new(5);
         generator.register_skip(1);
         generator.register_skip(3);
         let bits = generator.collect::<Vec<_>>();
-
 
         assert_eq!(
             &bits
@@ -2976,12 +2968,14 @@ mod tests {
 
         assert_eq!(combinations, expected);
 
-
         let data = vec![
             (String::from("A"), vec![]),
             (String::from("B"), vec![String::from("A")]),
             (String::from("C"), vec![String::from("A")]),
-            (String::from("D"), vec![String::from("B"), String::from("C")]),
+            (
+                String::from("D"),
+                vec![String::from("B"), String::from("C")],
+            ),
         ];
         let data_ref = data
             .iter()
@@ -2989,8 +2983,8 @@ mod tests {
             .collect::<Vec<_>>();
 
         let iterator = data
-        .clone()
-        .into_iter()
+            .clone()
+            .into_iter()
             .collect::<FeatureCombinationIterator<_, String>>();
 
         let iterator2 = data_ref
@@ -3012,5 +3006,18 @@ mod tests {
         ];
 
         assert_eq!(combinations, expected);
+
+        let data = data
+            .iter()
+            .map(|(u, v)| (Arc::new(u.clone()), v))
+            .collect::<Vec<_>>();
+
+        let iterator = data
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
+
+        println!("Iterator created: {:?}", iterator);
+
+        let combinations = iterator.collect::<Vec<_>>();
     }
 }
