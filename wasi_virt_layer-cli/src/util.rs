@@ -7,6 +7,7 @@ use std::{
     sync::atomic::AtomicUsize,
 };
 
+use bitvec::array::BitArray;
 use compact_str::CompactString;
 use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
@@ -2429,8 +2430,480 @@ pub fn gen_component_name(namespace: &str, name: &str) -> String {
     format!("[static]{namespace}.{}-import", name.replace("_", "-"))
 }
 
+#[derive(Debug)]
+pub struct BitIterator {
+    current: FeatureCombinationIteratorInnerBits,
+    skip: FeatureCombinationIteratorInnerBits, // if this bit is set, skip this iteration
+    kind: u8,
+}
+
+impl BitIterator {
+    const MAX_KIND: u8 = core::mem::size_of::<FeatureCombinationIteratorInnerBits>() as u8 * 8;
+
+    pub fn new(kind: u8) -> Self {
+        if kind >= Self::MAX_KIND {
+            panic!("Kind must be between 0 and {}", Self::MAX_KIND - 1);
+        }
+
+        BitIterator {
+            current: FeatureCombinationIteratorInnerBits::ZERO,
+            kind,
+            skip: FeatureCombinationIteratorInnerBits::ZERO,
+        }
+    }
+
+    pub fn now(&self) -> FeatureCombinationIteratorInnerBits {
+        self.current
+    }
+
+    pub fn register_skip(&mut self, bit: u8) {
+        if bit >= Self::MAX_KIND {
+            panic!("Bit must be between 0 and {}", Self::MAX_KIND - 1);
+        }
+        self.skip.set(bit as usize, true);
+    }
+
+    pub fn skip_raw(&mut self, mask: FeatureCombinationIteratorInnerBits) {
+        self.skip |= mask;
+    }
+
+    pub fn unregister_skip(&mut self, bit: u8) {
+        if bit >= Self::MAX_KIND {
+            panic!("Bit must be between 0 and {}", Self::MAX_KIND - 1);
+        }
+        self.skip.set(bit as usize, false);
+    }
+
+    pub fn unregister_skip_raw(&mut self, mask: FeatureCombinationIteratorInnerBits) {
+        self.skip &= !mask;
+    }
+
+    pub fn clear_skip(&mut self) {
+        self.skip = FeatureCombinationIteratorInnerBits::ZERO;
+    }
+}
+
+pub mod bits {
+    use bitvec::prelude::*;
+    type FeatureCombinationIteratorInnerBitsInner = BitArray<[u64; 2]>;
+
+    #[derive(Copy, Clone, Debug)]
+    pub struct FeatureCombinationIteratorInnerBits(FeatureCombinationIteratorInnerBitsInner);
+
+    impl core::ops::BitAnd for FeatureCombinationIteratorInnerBits {
+        type Output = Self;
+
+        fn bitand(self, rhs: Self) -> Self::Output {
+            FeatureCombinationIteratorInnerBits {
+                0:  self.0 & rhs.0,
+            }
+        }
+    }
+
+    impl core::ops::BitAndAssign for FeatureCombinationIteratorInnerBits {
+        fn bitand_assign(&mut self, rhs: Self) {
+
+                self.0 &= rhs.0;
+
+        }
+    }
+
+    impl core::ops::BitOr for FeatureCombinationIteratorInnerBits {
+        type Output = Self;
+
+        fn bitor(self, rhs: Self) -> Self::Output {
+            FeatureCombinationIteratorInnerBits {
+                0: self.0 | rhs.0,
+            }
+        }
+    }
+
+    impl core::ops::BitOrAssign for FeatureCombinationIteratorInnerBits {
+        fn bitor_assign(&mut self, rhs: Self) {
+                self.0 |= rhs.0;
+        }
+    }
+
+    impl core::ops::BitXor for FeatureCombinationIteratorInnerBits {
+        type Output = Self;
+
+        fn bitxor(self, rhs: Self) -> Self::Output {
+            FeatureCombinationIteratorInnerBits {
+                0: self.0 ^ rhs.0,
+            }
+        }
+    }
+
+    impl core::ops::Not for FeatureCombinationIteratorInnerBits {
+        type Output = Self;
+
+        fn not(self) -> Self::Output {
+            FeatureCombinationIteratorInnerBits {
+                0: !self.0,
+            }
+        }
+    }
+
+    impl core::ops::AddAssign for FeatureCombinationIteratorInnerBits {
+        fn add_assign(&mut self, rhs: Self) {
+            // arbitrary-precision integer
+            let raw_lhs = &mut self.0.data;
+            let raw_rhs = &rhs.0.data;
+            let mut carry = 0u64;
+
+            for i in 0..raw_lhs.len() {
+                let (sum1, carry1) = raw_lhs[i].overflowing_add(raw_rhs[i]);
+                let (sum2, carry2) = sum1.overflowing_add(carry);
+                raw_lhs[i] = sum2;
+                carry = (carry1 as u64) + (carry2 as u64);
+            }
+        }
+    }
+
+    impl core::cmp::PartialOrd for FeatureCombinationIteratorInnerBits {
+        fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
+            self.0.partial_cmp(&other.0)
+        }
+    }
+
+    impl core::cmp::Ord for FeatureCombinationIteratorInnerBits {
+        fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+            self.0.cmp(&other.0)
+        }
+    }
+
+    impl core::cmp::PartialEq for FeatureCombinationIteratorInnerBits {
+        fn eq(&self, other: &Self) -> bool {
+            self.0 == other.0
+        }
+    }
+
+    impl core::cmp::Eq for FeatureCombinationIteratorInnerBits {}
+
+    impl core::ops::Index<usize> for FeatureCombinationIteratorInnerBits {
+        type Output = bool;
+
+        fn index(&self, index: usize) -> &bool {
+            &self.0[index]
+        }
+    }
+
+    impl FeatureCombinationIteratorInnerBits {
+        pub const ZERO: Self = FeatureCombinationIteratorInnerBits {
+            0: FeatureCombinationIteratorInnerBitsInner::ZERO,
+        };
+        pub const ONE: Self = Self::from_number(1);
+
+        pub fn set(&mut self, index: usize, value: bool) {
+            self.0.set(index, value);
+        }
+
+        pub fn is_zero(&self) -> bool {
+            self.0 == FeatureCombinationIteratorInnerBitsInner::ZERO
+        }
+
+        pub fn is_full(&self) -> bool {
+            self.0.all()
+        }
+
+        pub fn leading_zeros(&self) -> usize {
+            self.0.leading_zeros()
+        }
+
+        pub fn trailing_zeros(&self) -> usize {
+            self.0.trailing_zeros()
+        }
+
+        pub fn as_raw_slice(&self) -> &[u64] {
+            self.0.as_raw_slice()
+        }
+
+        pub const fn from_number(num: u64) -> Self {
+                let mut bits: FeatureCombinationIteratorInnerBitsInner =
+                    FeatureCombinationIteratorInnerBitsInner::ZERO;
+                bits.data[0] = num;
+                FeatureCombinationIteratorInnerBits { 0: bits }
+        }
+
+        pub fn from_one_pos(pos: usize) -> Self {
+            let mut bits: FeatureCombinationIteratorInnerBitsInner =
+                FeatureCombinationIteratorInnerBitsInner::ZERO;
+            bits.set(pos, true);
+            FeatureCombinationIteratorInnerBits { 0: bits }
+        }
+
+        pub fn increment(&mut self) {
+            // arbitrary-precision integer
+            let raw = &mut self.0.data;
+            let mut carry = 1u64;
+
+            for i in 0..raw.len() {
+                let (new_value, new_carry) = raw[i].overflowing_add(carry);
+                raw[i] = new_value;
+                carry = if new_carry { 1 } else { 0 };
+                if carry == 0 {
+                    break;
+                }
+            }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::FeatureCombinationIteratorInnerBits;
+
+        #[test]
+        fn test_increment() {
+            let mut s = FeatureCombinationIteratorInnerBits::ZERO;
+            assert_eq!(s.leading_zeros(), 128);
+            s.set(1, true);
+            println!("{:?}", s.as_raw_slice());
+            assert_eq!(s.leading_zeros(), 1);
+
+            let mut a = FeatureCombinationIteratorInnerBits::ONE;
+            a.increment();
+            assert_eq!(a.as_raw_slice()[0], 2);
+
+            let mut b = FeatureCombinationIteratorInnerBits::from_number(u64::MAX);
+            b.increment();
+            assert_eq!(b.as_raw_slice()[0], 0);
+            assert_eq!(b.as_raw_slice()[1], 1);
+
+            let mut c = FeatureCombinationIteratorInnerBits::from_number(u64::MAX);
+            c.set(64, true);
+            c.increment();
+            assert_eq!(c.as_raw_slice()[0], 0);
+            assert_eq!(c.as_raw_slice()[1], 2);
+        }
+
+        #[test]
+        fn test_add_assign() {
+            let mut a = FeatureCombinationIteratorInnerBits::from_number(1);
+            let b = FeatureCombinationIteratorInnerBits::from_number(2);
+            a += b;
+            assert_eq!(a.as_raw_slice()[0], 3);
+
+            let mut c = FeatureCombinationIteratorInnerBits::from_number(u64::MAX);
+            let d = FeatureCombinationIteratorInnerBits::from_number(1);
+            c += d;
+            assert_eq!(c.as_raw_slice()[0], 0);
+            assert_eq!(c.as_raw_slice()[1], 1);
+
+            let mut e = FeatureCombinationIteratorInnerBits::from_number(u64::MAX);
+            e.set(64, true);
+            let f = FeatureCombinationIteratorInnerBits::from_number(1);
+            e += f;
+            assert_eq!(e.as_raw_slice()[0], 0);
+            assert_eq!(e.as_raw_slice()[1], 2);
+        }
+    }
+}
+pub use bits::FeatureCombinationIteratorInnerBits;
+
+impl Iterator for BitIterator {
+    type Item = FeatureCombinationIteratorInnerBits;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let count = core::mem::size_of::<FeatureCombinationIteratorInnerBits>() * 8 - self.current.trailing_zeros();
+        if count > self.kind as usize
+        {
+            None
+        } else {
+            let result = self.current;
+            self.current.increment();
+
+            loop {
+                let flag = self.current & self.skip;
+                if flag.is_zero() {
+                    break;
+                } else {
+                    self.current += FeatureCombinationIteratorInnerBits::from_one_pos(flag.leading_zeros());
+                }
+            }
+            Some(result)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct FeatureCombinationIterator<C: Borrow<T>, T: ?Sized> {
+    features: Vec<(C, FeatureCombinationIteratorInnerBits)>,
+    current: BitIterator,
+    __marker: std::marker::PhantomData<T>,
+}
+
+impl<'a, T: 'a + ?Sized, B: Borrow<T>, C: Borrow<T>, I: IntoIterator<Item = B>> FromIterator<(C, I)>
+    for FeatureCombinationIterator<C, T>
+where
+    for<'c> &'c T: std::cmp::Eq + std::hash::Hash,
+{
+    fn from_iter<U: IntoIterator<Item = (C, I)>>(iter: U) -> Self {
+        // What T refers to
+        let data = iter
+            .into_iter()
+            .map(|(v, includes)| (v, includes.into_iter().collect::<Vec<_>>()))
+            .collect::<Vec<_>>();
+
+        // Referring to T
+        let includes = {
+            let mut map = data
+                .iter()
+                .map(|(v, _)| (v.borrow(), vec![]))
+                .collect::<HashMap<&T, Vec<&C>>>();
+            data.iter().for_each(|(t, inc)| {
+                inc.iter().for_each(|v| {
+                    map.get_mut(&v.borrow()).unwrap().push(t);
+                });
+            });
+            map
+        };
+
+        let num = includes
+            .iter()
+            .map(|(v, _)| -(includes[v].len() as isize))
+            .collect::<Vec<_>>();
+        let mut data = data.into_iter().zip(num).collect::<Vec<_>>();
+
+        // TODO!(); fix with behavior change
+        // data.sort_by_key(|(_, v)| *v);
+        let mut data: Vec<(C, Vec<B>)> = data.into_iter().map(|(v, _)| v).collect();
+
+        // TODO!(); fix
+        // Ensure that values referencing themselves are always placed on the right.
+        // if sortable, swap with a value that does not reference itself so we check it.
+        // let mut count = 0i32;
+        // let s = loop {
+        //     let mut changed = false;
+        //     for i in 0..data.len() {
+        //         let (ref_value, ref_includes) = &data[i];
+        //         if ref_includes
+        //             .iter()
+        //             .any(|v| v.borrow() == ref_value.borrow())
+        //         {
+        //             // Find a value to swap with
+        //             for j in (i + 1)..data.len() {
+        //                 let (swap_value, swap_includes) = &data[j];
+        //                 if !swap_includes
+        //                     .iter()
+        //                     .any(|v| v.borrow() == ref_value.borrow())
+        //                 {
+        //                     data.swap(i, j);
+        //                     changed = true;
+        //                     break;
+        //                 }
+        //             }
+        //         }
+        //     }
+        //     if !changed {
+        //         break true;
+        //     }
+        //     if count.checked_add(1).is_none() {
+        //         break false;
+        //     }
+        //     count += 1;
+        //     if count > 1 << data.len() {
+        //         break false;
+        //     }
+        // };
+
+        let (data, includes): (Vec<_>, Vec<_>) = data.into_iter().collect::<(Vec<_>, Vec<_>)>();
+
+        let len = data.len();
+
+        let map = data
+            .iter()
+            .enumerate()
+            .map(|(i, v)| (v.borrow(), i))
+            .collect::<HashMap<&T, usize>>();
+
+        // let features = includes
+        //     .into_iter()
+        //     .zip(core::iter::repeat(
+        //         FeatureCombinationIteratorInnerBits::ZERO,
+        //     ))
+        //     .map(|(includes, mut bit_array)| {
+        //         includes.into_iter().for_each(|v| {
+        //             bit_array.set(map[&v.borrow()], true);
+        //         });
+        //         bit_array
+        //     })
+        //     .collect::<Vec<_>>()
+        //     .into_iter()
+        //     .zip(data)
+        //     .map(|(bits, v)| (v, bits))
+        //     .collect::<Vec<_>>();
+
+        let (features_base, features) = includes
+            .into_iter()
+            .zip(core::iter::repeat(
+                FeatureCombinationIteratorInnerBits::ZERO,
+            ))
+            .map(|(includes, mut bit_array)| {
+                let indices = includes.into_iter().map(|v| {
+                    let index = map[&v.borrow()];
+                    bit_array.set(index, true);
+                    index
+                }).collect::<Vec<_>>();
+                (indices, bit_array)
+            })
+            .collect::<(Vec<_>, Vec<_>)>();
+        let features = features_base
+            .into_iter()
+            .zip(features.iter().cloned())
+            .map(|(indices, mut inner_features)| {
+                for included in indices {
+                    inner_features |= features[included];
+                }
+                inner_features
+            })
+            .zip(data)
+            .map(|(bits, v)| (v, bits))
+            .collect::<Vec<_>>();
+
+        FeatureCombinationIterator {
+            features,
+            current: BitIterator::new(len as u8),
+            __marker: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
+    for FeatureCombinationIterator<C, T>
+{
+    type Item = std::collections::HashSet<C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let bits = self.current.next()?;
+        let next = self.current.now();
+
+        // println!("current bits: {:?}", bits.as_raw_slice());
+
+        let mut result = std::collections::HashSet::new();
+        for (i, (feature, feature_bits)) in self.features.iter().enumerate() {
+            match (bits[i], next[i]) {
+                (true, false) => {
+                    // println!("Skipping for bits {:?}", bits);
+                    self.current.unregister_skip_raw(*feature_bits);
+                }
+                (false, true) => {
+                    // println!("Unskipping for bits {:?}", bits);
+                    self.current.skip_raw(*feature_bits);
+                }
+                _ => {}
+            }
+            if bits[i] {
+                result.insert(feature.clone());
+            }
+        }
+        Some(result)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]
@@ -2438,5 +2911,67 @@ mod tests {
         let path = camino::Utf8Path::new("name.opt.adjusted.wasm");
         let file_name = path.get_file_main_name();
         assert_eq!(file_name.unwrap(), "name");
+    }
+
+    #[test]
+    fn test_bit_generator() {
+        let bits = BitIterator::new(3).collect::<Vec<_>>();
+
+        assert_eq!(
+            &bits
+                .iter()
+                .map(|b| b.as_raw_slice()[0])
+                .collect::<Vec<u64>>(),
+            &[0b000, 0b001, 0b010, 0b011, 0b100, 0b101, 0b110, 0b111]
+        );
+
+        let count = BitIterator::new(10).count();
+        assert_eq!(count, 1024);
+
+
+        let mut generator = BitIterator::new(5);
+        generator.register_skip(1);
+        generator.register_skip(3);
+        let bits = generator.collect::<Vec<_>>();
+
+
+        assert_eq!(
+            &bits
+                .iter()
+                .map(|b| b.as_raw_slice()[0])
+                .collect::<Vec<u64>>(),
+            &[
+                0b00000, 0b00001, 0b00100, 0b00101, 0b10000, 0b10001, 0b10100, 0b10101
+            ]
+        );
+    }
+
+    #[test]
+    fn test_feature_combination_iterator() {
+        let data = vec![
+            ("A", vec![]),
+            ("B", vec!["A"]),
+            ("C", vec!["A"]),
+            ("D", vec!["B", "C"]),
+        ];
+
+        let iterator = data
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, str>>();
+
+        println!("Iterator created: {:?}", iterator);
+
+        let combinations = iterator.collect::<Vec<_>>();
+
+        let expected = vec![
+            HashSet::from([]),
+            HashSet::from(["A"]),
+            HashSet::from(["B"]),
+            HashSet::from(["C"]),
+            HashSet::from(["C", "B"]),
+            HashSet::from(["D"]),
+        ];
+
+        assert_eq!(combinations, expected);
     }
 }

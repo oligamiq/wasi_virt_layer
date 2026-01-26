@@ -28,6 +28,7 @@
         "Filestat",
         "funcs",
         "heapless",
+        "includer",
         "instrs",
         "iovec",
         "iovs",
