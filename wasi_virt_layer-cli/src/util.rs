@@ -105,7 +105,11 @@ pub(crate) trait WalrusUtilExport: Debug {
     fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()>;
     /// As it deletes based on the fid, it may involve functions that export the same function.
     fn erase_with<A>(&mut self, as_fn: impl WalrusFID<A>, debug: bool) -> eyre::Result<()> {
-        if !debug { self.erase(as_fn) } else { Ok(()) }
+        if !debug {
+            self.erase(as_fn)
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -2759,43 +2763,96 @@ where
         // data.sort_by_key(|(_, v)| *v);
         let mut data: Vec<(C, Vec<B>)> = data.into_iter().map(|(v, _)| v).collect();
 
-        // TODO!(); fix
+        // Check for non-trivial cycles (mutual references)
+        {
+            let index_map: std::collections::HashMap<&T, usize> = data
+                .iter()
+                .enumerate()
+                .map(|(i, (v, _))| (v.borrow(), i))
+                .collect();
+
+            let mut visited = vec![0u8; data.len()]; // 0: White, 1: Gray, 2: Black
+            let mut stack = Vec::new();
+
+            for i in 0..data.len() {
+                if visited[i] != 0 {
+                    continue;
+                }
+
+                stack.push((i, 0));
+                visited[i] = 1; // Gray
+
+                while let Some((u, dep_idx)) = stack.last_mut() {
+                    let u = *u;
+                    let deps = &data[u].1;
+                    if *dep_idx < deps.len() {
+                        let dep = &deps[*dep_idx];
+                        *dep_idx += 1;
+
+                        if let Some(&v) = index_map.get(&dep.borrow()) {
+                            if u == v {
+                                continue;
+                            }
+                            if visited[v] == 1 {
+                                panic!("Mutual reference detected!");
+                            }
+                            if visited[v] == 0 {
+                                visited[v] = 1;
+                                stack.push((v, 0));
+                            }
+                        }
+                    } else {
+                        // Finished processing u
+                        visited[u] = 2; // Black
+                        stack.pop();
+                    }
+                }
+            }
+        }
+
         // Ensure that values referencing themselves are always placed on the right.
         // if sortable, swap with a value that does not reference itself so we check it.
-        // let mut count = 0i32;
-        // let s = loop {
-        //     let mut changed = false;
-        //     for i in 0..data.len() {
-        //         let (ref_value, ref_includes) = &data[i];
-        //         if ref_includes
-        //             .iter()
-        //             .any(|v| v.borrow() == ref_value.borrow())
-        //         {
-        //             // Find a value to swap with
-        //             for j in (i + 1)..data.len() {
-        //                 let (swap_value, swap_includes) = &data[j];
-        //                 if !swap_includes
-        //                     .iter()
-        //                     .any(|v| v.borrow() == ref_value.borrow())
-        //                 {
-        //                     data.swap(i, j);
-        //                     changed = true;
-        //                     break;
-        //                 }
-        //             }
-        //         }
-        //     }
-        //     if !changed {
-        //         break true;
-        //     }
-        //     if count.checked_add(1).is_none() {
-        //         break false;
-        //     }
-        //     count += 1;
-        //     if count > 1 << data.len() {
-        //         break false;
-        //     }
-        // };
+        let mut count = 0i32;
+        loop {
+            let mut changed = false;
+            for i in 0..data.len() {
+                let mut swap_idx = None;
+                {
+                    let (ref_value, ref_includes) = &data[i];
+                    if ref_includes
+                        .iter()
+                        .any(|v| v.borrow() == ref_value.borrow())
+                    {
+                        // Find a value to swap with
+                        for j in (i + 1)..data.len() {
+                            let (_, swap_includes) = &data[j];
+                            if !swap_includes
+                                .iter()
+                                .any(|v| v.borrow() == ref_value.borrow())
+                            {
+                                swap_idx = Some(j);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if let Some(j) = swap_idx {
+                    data.swap(i, j);
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+            if count.checked_add(1).is_none() {
+                break;
+            }
+            count += 1;
+            if count as u128 > 1u128.checked_shl(data.len() as u32).unwrap_or(u128::MAX) {
+                panic!("Mutual reference detected!");
+            }
+        }
 
         let (data, includes): (Vec<_>, Vec<_>) = data.into_iter().collect::<(Vec<_>, Vec<_>)>();
 
@@ -2934,9 +2991,7 @@ mod tests {
                 .iter()
                 .map(|b| b.as_raw_slice()[0])
                 .collect::<Vec<u64>>(),
-            &[
-                0b00000, 0b00001, 0b00100, 0b00101, 0b10000, 0b10001, 0b10100, 0b10101
-            ]
+            &[0b00000, 0b00001, 0b00100, 0b00101, 0b10000, 0b10001, 0b10100, 0b10101]
         );
     }
 
@@ -3019,5 +3074,23 @@ mod tests {
         println!("Iterator created: {:?}", iterator);
 
         let combinations = iterator.collect::<Vec<_>>();
+    }
+
+    #[test]
+    #[should_panic(expected = "Mutual reference detected!")]
+    fn test_feature_combination_iterator_mutual_ref() {
+        use std::collections::HashSet;
+
+        // A includes B
+        // B includes A
+        // Cycle!
+        let data = vec![
+            (String::from("A"), vec![String::from("B")]),
+            (String::from("B"), vec![String::from("A")]),
+        ];
+
+        let _iterator = data
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
     }
 }
