@@ -11,8 +11,18 @@ pub struct TomlRestorer {
     changed: String,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct TomlRestorers(Vec<TomlRestorer>);
+
+impl Drop for TomlRestorers {
+    fn drop(&mut self) {
+        for restorer in &self.0 {
+            if std::thread::panicking() {
+                let _ = std::fs::write(&restorer.path, &restorer.original);
+            }
+        }
+    }
+}
 
 impl TomlRestorers {
     pub fn new() -> Self {
@@ -33,8 +43,9 @@ impl TomlRestorers {
         self.0.push(restorer);
     }
 
-    pub fn restore(self) -> eyre::Result<()> {
-        for restorer in self.0 {
+    pub fn restore(mut self) -> eyre::Result<()> {
+        let restorers = std::mem::take(&mut self.0);
+        for restorer in restorers {
             restorer.restore()?;
         }
         Ok(())

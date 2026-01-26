@@ -168,7 +168,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         parsed_args.adjust_abi,
         parsed_args.keep_build_artifacts,
         memory_type,
-        toml_restores.clone(),
+        toml_restores,
         parsed_args.get_wasm_memory_hints(),
     )?;
 
