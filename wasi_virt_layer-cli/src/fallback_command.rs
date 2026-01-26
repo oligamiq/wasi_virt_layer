@@ -142,8 +142,9 @@ impl CommandLock {
         let lock_path = get_temp_lock_filepath();
 
         if let Some(parent) = Path::new(&lock_path).parent() {
-            std::fs::create_dir_all(parent)
-                .wrap_err_with(|| format!("Failed to create temp lock dir: {}", parent.display()))?;
+            std::fs::create_dir_all(parent).wrap_err_with(|| {
+                format!("Failed to create temp lock dir: {}", parent.display())
+            })?;
         }
 
         let lock_file = File::create(&lock_path)
@@ -169,11 +170,7 @@ fn get_temp_filepath() -> String {
     builder.suffix(".log");
 
     #[cfg(windows)]
-    let builder = builder.tempfile_in(
-        dirs::data_local_dir()
-            .unwrap()
-            .join("Temp"),
-    );
+    let builder = builder.tempfile_in(dirs::data_local_dir().unwrap().join("Temp"));
 
     #[cfg(unix)]
     let builder = builder.tempfile_in("/tmp");

@@ -2,12 +2,12 @@ use crate::__private::wasip1;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
+        FilestatWithoutDevice, Wasip1FileTrait,
         constant::{
             lfs_impl::VFSConstNormalAddInfo,
             lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
         },
         stdio::StdIO,
-        FilestatWithoutDevice, Wasip1FileTrait,
     },
 };
 
@@ -22,11 +22,11 @@ pub struct VFSConstNormalLFS<
 }
 
 impl<
-        ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
-        File: Wasip1FileTrait + 'static + Copy,
-        const FLAT_LEN: usize,
-        StdIo: StdIO + 'static,
-    > VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo>
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+> VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo>
 {
     pub const fn new() -> Self {
         Self {

@@ -3,7 +3,7 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::{
     memory::WasmAccess,
-    wasi::file::{constant::vfs::Wasip1ConstVFS, Wasip1FileSystem, Wasip1LFS},
+    wasi::file::{Wasip1FileSystem, Wasip1LFS, constant::vfs::Wasip1ConstVFS},
 };
 
 impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem

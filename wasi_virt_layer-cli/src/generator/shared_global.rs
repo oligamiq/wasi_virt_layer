@@ -4,8 +4,8 @@ use walrus::FunctionId;
 use crate::{
     args::TargetMemoryType,
     generator::{
-        start_section::{StartFnInfo, StartFnPriority, StartSource},
         Generator,
+        start_section::{StartFnInfo, StartFnPriority, StartSource},
     },
     instrs::InstrRewrite as _,
     unique_name::UniqueName,

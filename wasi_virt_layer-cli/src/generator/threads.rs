@@ -7,8 +7,8 @@ use crate::{
     generator::{Generator, GeneratorCtx},
     unique_name::UniqueName,
     util::{
-        gen_component_name, WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _,
-        WalrusUtilModule as _, WasmName,
+        WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,
+        WasmName, gen_component_name,
     },
 };
 

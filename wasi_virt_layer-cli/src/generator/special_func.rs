@@ -422,11 +422,7 @@ impl Generator for MainVoidFunc {
                         .flat_read(
                             |instr, _| {
                                 if let walrus::ir::Instr::Call(c) = instr {
-                                    if c.func == main_void_func_id {
-                                        1
-                                    } else {
-                                        0
-                                    }
+                                    if c.func == main_void_func_id { 1 } else { 0 }
                                 } else {
                                     0
                                 }
