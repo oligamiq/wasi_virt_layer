@@ -12,6 +12,7 @@ pub mod abi;
 pub mod args;
 pub mod compile;
 pub mod config_checker;
+pub mod ctrlc_handler;
 pub mod down_color;
 pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
 pub mod generator;
@@ -59,7 +60,27 @@ macro_rules! add_generator {
 }
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
-    let _command_lock = CommandLock::acquire()?;
+    ctrlc_handler::init();
+
+    let command_lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire()?)));
+    let cl_clone = command_lock.clone();
+    ctrlc_handler::register(move || {
+        if let Ok(mut lock) = cl_clone.lock() {
+            if let Some(l) = lock.take() {
+                drop(l);
+            }
+        }
+    });
+
+    struct MainCommandLockGuard(std::sync::Arc<std::sync::Mutex<Option<CommandLock>>>);
+    impl Drop for MainCommandLockGuard {
+        fn drop(&mut self) {
+            if let Ok(mut lock) = self.0.lock() {
+                let _ = lock.take();
+            }
+        }
+    }
+    let _command_lock_guard = MainCommandLockGuard(command_lock);
 
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Info)
@@ -70,6 +91,10 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     let package = parsed_args.get_package()?;
 
     let mut toml_restores = TomlRestorers::new();
+    let tr_clone = toml_restores.clone();
+    ctrlc_handler::register(move || {
+        tr_clone.restore_if_needed();
+    });
 
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());

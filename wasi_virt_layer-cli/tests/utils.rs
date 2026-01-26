@@ -89,14 +89,50 @@ pub enum OutDir<'a> {
 #[derive(Debug)]
 pub struct TestDir(pub Utf8PathBuf);
 
+static TEST_DIRS: std::sync::OnceLock<
+    std::sync::Arc<std::sync::Mutex<std::collections::HashSet<Utf8PathBuf>>>,
+> = std::sync::OnceLock::new();
+
+fn get_test_dirs() -> std::sync::Arc<std::sync::Mutex<std::collections::HashSet<Utf8PathBuf>>> {
+    TEST_DIRS
+        .get_or_init(|| {
+            let dirs = std::sync::Arc::new(std::sync::Mutex::new(std::collections::HashSet::<
+                Utf8PathBuf,
+            >::new()));
+            let dirs_clone = dirs.clone();
+
+            let _ = ctrlc::set_handler(move || {
+                if let Ok(dirs) = dirs_clone.lock() {
+                    for dir in dirs.iter() {
+                        if let Some(parent) = dir.parent() {
+                            if parent.starts_with(THIS_FOLDER)
+                                && parent != Utf8Path::new(THIS_FOLDER)
+                            {
+                                let _ = std::fs::remove_dir_all(parent);
+                            }
+                        }
+                    }
+                }
+                std::process::exit(130);
+            });
+
+            dirs
+        })
+        .clone()
+}
+
 impl TestDir {
     pub fn new(path: impl Into<Utf8PathBuf>) -> Self {
-        Self(path.into())
+        let path = path.into();
+        get_test_dirs().lock().unwrap().insert(path.clone());
+        Self(path)
     }
 }
 
 impl Drop for TestDir {
     fn drop(&mut self) {
+        get_test_dirs().lock().unwrap().remove(&self.0);
+
         // The path often contains a "dist" folder which is inside the actual temporary folder.
         // We need to delete the parent of "dist".
         if let Some(parent) = self.0.parent() {
