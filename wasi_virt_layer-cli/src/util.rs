@@ -2904,6 +2904,8 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
 mod tests {
     use std::collections::HashSet;
 
+    use clap::builder::Str;
+
     use super::*;
 
     #[test]
@@ -2970,6 +2972,43 @@ mod tests {
             HashSet::from(["C"]),
             HashSet::from(["C", "B"]),
             HashSet::from(["D"]),
+        ];
+
+        assert_eq!(combinations, expected);
+
+
+        let data = vec![
+            (String::from("A"), vec![]),
+            (String::from("B"), vec![String::from("A")]),
+            (String::from("C"), vec![String::from("A")]),
+            (String::from("D"), vec![String::from("B"), String::from("C")]),
+        ];
+        let data_ref = data
+            .iter()
+            .map(|(v, inc)| (v, inc.iter().map(|s| s).collect::<Vec<_>>()))
+            .collect::<Vec<_>>();
+
+        let iterator = data
+        .clone()
+        .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
+
+        let iterator2 = data_ref
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
+
+        println!("Iterator created: {:?}", iterator);
+
+        let combinations = iterator.collect::<Vec<_>>();
+        let combinations2 = iterator2.collect::<Vec<_>>();
+
+        let expected = vec![
+            HashSet::from([]),
+            HashSet::from([String::from("A")]),
+            HashSet::from([String::from("B")]),
+            HashSet::from([String::from("C")]),
+            HashSet::from([String::from("C"), String::from("B")]),
+            HashSet::from([String::from("D")]),
         ];
 
         assert_eq!(combinations, expected);
