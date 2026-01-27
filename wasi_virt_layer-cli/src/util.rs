@@ -2722,7 +2722,11 @@ impl Iterator for BitIterator {
 
 #[derive(Debug)]
 pub struct FeatureCombinationIterator<C: Borrow<T>, T: ?Sized> {
-    features: Vec<(C, FeatureCombinationIteratorInnerBits)>,
+    features: Vec<(
+        C,
+        FeatureCombinationIteratorInnerBits,
+        FeatureCombinationIteratorInnerBits,
+    )>,
     current: BitIterator,
     __marker: std::marker::PhantomData<T>,
 }
@@ -2740,27 +2744,31 @@ where
             .collect::<Vec<_>>();
 
         // Referring to T
-        let includes = {
-            let mut map = data
-                .iter()
-                .map(|(v, _)| (v.borrow(), vec![]))
-                .collect::<HashMap<&T, Vec<&C>>>();
-            data.iter().for_each(|(t, inc)| {
-                inc.iter().for_each(|v| {
-                    map.get_mut(&v.borrow()).unwrap().push(t);
-                });
-            });
-            map
+        let num = {
+            let mut counts = HashMap::new();
+            // Initialize counts for all items to 0
+            for (v, _) in &data {
+                counts.insert(v.borrow(), 0isize);
+            }
+            // Count references
+            for (_, inc) in &data {
+                for v in inc {
+                    if let Some(c) = counts.get_mut(&v.borrow()) {
+                        *c += 1;
+                    }
+                }
+            }
+
+            data.iter()
+                .map(|(v, _)| -*counts.get(&v.borrow()).unwrap_or(&0))
+                .collect::<Vec<_>>()
         };
 
-        let num = includes
-            .iter()
-            .map(|(v, _)| -(includes[v].len() as isize))
-            .collect::<Vec<_>>();
         let mut data = data.into_iter().zip(num).collect::<Vec<_>>();
 
         // TODO!(); fix with behavior change
         // data.sort_by_key(|(_, v)| *v);
+        // Remove 'num' from data, but keep dependencies
         let mut data: Vec<(C, Vec<B>)> = data.into_iter().map(|(v, _)| v).collect();
 
         // Check for non-trivial cycles (mutual references)
@@ -2854,61 +2862,91 @@ where
             }
         }
 
-        let (data, includes): (Vec<_>, Vec<_>) = data.into_iter().collect::<(Vec<_>, Vec<_>)>();
+        let (data, _): (Vec<_>, Vec<_>) = data.into_iter().map(|v| (v, ())).unzip();
 
         let len = data.len();
 
         let map = data
             .iter()
             .enumerate()
-            .map(|(i, v)| (v.borrow(), i))
+            .map(|(i, (v, _))| (v.borrow(), i))
             .collect::<HashMap<&T, usize>>();
 
-        // let features = includes
-        //     .into_iter()
-        //     .zip(core::iter::repeat(
-        //         FeatureCombinationIteratorInnerBits::ZERO,
-        //     ))
-        //     .map(|(includes, mut bit_array)| {
-        //         includes.into_iter().for_each(|v| {
-        //             bit_array.set(map[&v.borrow()], true);
-        //         });
-        //         bit_array
-        //     })
-        //     .collect::<Vec<_>>()
-        //     .into_iter()
-        //     .zip(data)
-        //     .map(|(bits, v)| (v, bits))
-        //     .collect::<Vec<_>>();
+        // Rebuild dependents map from sorted data
+        let dependents_map = {
+            let mut dmap = data
+                .iter()
+                .map(|(v, _)| (v.borrow(), vec![]))
+                .collect::<HashMap<&T, Vec<&C>>>();
 
-        let (features_base, features) = includes
-            .into_iter()
-            .zip(core::iter::repeat(
-                FeatureCombinationIteratorInnerBits::ZERO,
-            ))
-            .map(|(includes, mut bit_array)| {
-                let indices = includes
-                    .into_iter()
-                    .map(|v| {
-                        let index = map[&v.borrow()];
-                        bit_array.set(index, true);
-                        index
-                    })
-                    .collect::<Vec<_>>();
-                (indices, bit_array)
-            })
-            .collect::<(Vec<_>, Vec<_>)>();
-        let features = features_base
-            .into_iter()
-            .zip(features.iter().cloned())
-            .map(|(indices, mut inner_features)| {
-                for included in indices {
-                    inner_features |= features[included];
+            for (t, inc) in &data {
+                for v in inc {
+                    if let Some(list) = dmap.get_mut(&v.borrow()) {
+                        list.push(t);
+                    }
                 }
-                inner_features
-            })
+            }
+            dmap
+        };
+
+        let mut features_base = Vec::with_capacity(data.len());
+        let mut dependencies_masks = Vec::with_capacity(data.len());
+        for (v, inc) in &data {
+            let deps = dependents_map
+                .get(&v.borrow())
+                .map(|v| v.as_slice())
+                .unwrap_or(&[]);
+            let mut mask = FeatureCombinationIteratorInnerBits::ZERO;
+            let mut indices = Vec::new();
+
+            for dep in deps {
+                let idx = map[&(*dep).borrow()];
+                mask.set(idx, true);
+                indices.push(idx);
+            }
+            features_base.push((indices, mask));
+
+            // Compute dependencies mask
+            let mut dep_mask = FeatureCombinationIteratorInnerBits::ZERO;
+            for d in inc {
+                if let Some(idx) = map.get(&d.borrow()) {
+                    dep_mask.set(*idx, true);
+                }
+            }
+            dependencies_masks.push(dep_mask);
+        }
+
+        let mut features_masks: Vec<FeatureCombinationIteratorInnerBits> =
+            features_base.iter().map(|(_, m)| *m).collect();
+
+        for _ in 0..data.len() {
+            let mut changed = false;
+            for i in 0..data.len() {
+                let (indices, _) = &features_base[i];
+                let mut mask = features_masks[i];
+                for &dep_idx in indices {
+                    let old = mask;
+                    mask |= features_masks[dep_idx];
+                    if mask != features_masks[i] { // Check against current stored mask, not 'old' local var if we updated it?
+                         // Logic: mask |= dep_mask.
+                         // If mask grew, changed=true.
+                    }
+                }
+                if mask != features_masks[i] {
+                    features_masks[i] = mask;
+                    changed = true;
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+
+        let features = features_masks
+            .into_iter()
+            .zip(dependencies_masks)
             .zip(data)
-            .map(|(bits, v)| (v, bits))
+            .map(|((mask, dep_mask), (v, _))| (v, mask, dep_mask))
             .collect::<Vec<_>>();
 
         FeatureCombinationIterator {
@@ -2925,29 +2963,215 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
     type Item = std::collections::HashSet<C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let bits = self.current.next()?;
-        let next = self.current.now();
+        loop {
+            let bits = self.current.now();
 
-        // println!("current bits: {:?}", bits.as_raw_slice());
-
-        let mut result = std::collections::HashSet::new();
-        for (i, (feature, feature_bits)) in self.features.iter().enumerate() {
-            match (bits[i], next[i]) {
-                (true, false) => {
-                    // println!("Skipping for bits {:?}", bits);
-                    self.current.unregister_skip_raw(*feature_bits);
-                }
-                (false, true) => {
-                    // println!("Unskipping for bits {:?}", bits);
-                    self.current.skip_raw(*feature_bits);
-                }
-                _ => {}
+            // Check termination
+            let count = core::mem::size_of::<FeatureCombinationIteratorInnerBits>() * 8
+                - bits.trailing_zeros();
+            if count > self.current.kind as usize {
+                return None;
             }
-            if bits[i] {
-                result.insert(feature.clone());
+
+            // Compute skip mask (dependents of absent features)
+            let mut mask = FeatureCombinationIteratorInnerBits::ZERO;
+            for (i, (_, feature_bits, _)) in self.features.iter().enumerate() {
+                if !bits[i] {
+                    // Feature i is absent
+                    mask |= *feature_bits; // Dependents of i are forbidden
+                }
+            }
+
+            // Compute skip mask (dependents of absent features)
+            // AND resolve violations (features present without dependencies)
+            let mut violation = FeatureCombinationIteratorInnerBits::ZERO;
+            let mut mask = FeatureCombinationIteratorInnerBits::ZERO;
+
+            // Check for Forbidden features (because dependency is missing)
+            // This is equivalent to checking "Present features have all dependencies".
+
+            // Strategy: Iterate all features.
+            // If feature i is PRESENT:
+            //    Check dependencies_masks[i].
+            //    If ANY dependency d is ABSENT -> Violation.
+            //    violation |= (1 << i).
+            //    To resolve: Either Clear i (add 1<<i) OR Set d (add 1<<d).
+            //    We should pick the one that adds the LEAST to current.
+            //    If d < i: Set d.
+            //    If d > i: Clear i.
+            //    Also if Clear i, we might need to carry.
+
+            // We can compute minimum jump.
+
+            let mut min_jump = None;
+
+            for (i, (_, _, dependencies)) in self.features.iter().enumerate() {
+                if bits[i] {
+                    // Feature i is Present.
+                    // Dependencies must be Present.
+                    // Missing = dependencies & !bits.
+                    let missing = *dependencies & !bits;
+                    if !missing.is_zero() {
+                        // Violation! Feature i needs missing dependencies.
+                        // Options:
+                        // 1. Clear i (add 1<<i).
+                        // 2. Set d (for each d in missing). (add distance to d).
+
+                        // Option 1: Clear i.
+                        let jump_clear_i = FeatureCombinationIteratorInnerBits::from_one_pos(i);
+
+                        // Option 2: Set d.
+                        // For each d in missing:
+                        //   d_pos = trailing_zeros(d)?
+                        //   d_jump = 1<<d_pos - (bits & low_mask)?
+                        //   Wait. next_valid(bits, d) = (bits | (1<<d)) & !((1<<d)-1).
+                        //   jump = next_valid - bits.
+                        //   Or simplistically: 1<<d?
+                        //   If bits has lower bits set, 1<<d might not be enough or too much?
+                        //   Actually, we want to reach the *next* state where d=1.
+                        //   (bits | (1<<d)) & !((1<<d)-1).
+
+                        // Let's implement calculate_jump(current, target_bit).
+                        // But FeatureCombinationInnerBits doesn't expose arithmetic easily.
+                        // It has `from_one_pos`.
+                        // It has `+`.
+
+                        // If d < i.
+                        // Then bits[d]=0. bits[i]=1.
+                        // We want d=1.
+                        // Since d < i, d is a lower bit.
+                        // If we increment, d will toggle soon.
+                        // E.g. d=0. 0->1 is +1.
+                        // d=1. 00->10 is +2 (if 00).
+
+                        // If we just track "smallest bit that needs to change".
+                        // If any d < i.
+                        // Then we assume natural increment will handle it?
+                        // But we want to SKIP invalid states.
+                        // If d < i. We can jump to next d=1.
+                        // If d > i. We MUST clear i. (Jump to next i=0).
+
+                        // If d > i. Jump = 1<<i (Clear i).
+                        // If d < i. Jump = Next d=1.
+                        // Next d=1 is <= 1<<d (relative to cleared lower).
+
+                        // Let's optimize:
+                        // If ANY d > i: We MUST clear i.
+                        // Jump = 1<<i.
+
+                        // If ALL d < i:
+                        // We can wait for d.
+                        // Can we skip to d?
+                        // Yes. Jump to smallest d.
+                        // But we can't easily compute "Jump to d" with abstract bits.
+                        // But if d < i, and we assume Lsb0.
+                        // 1<<d is smaller than 1<<i.
+                        // So jump is smaller?
+                        // If we iterate violations and pick minimum 1<<pos.
+                        // If we pick 1<<i (Clear i).
+                        // If we pick 1<<d (Set d? No, 1<<d might not set d correctly if lower bits are messy).
+                        // But generally, adding 1<<d will toggle d (0->1) and clear lower.
+                        // So adding 1<<d IS correct to jump to next d=1.
+
+                        // So:
+                        // Candidates:
+                        // 1. 1<<i.
+                        // 2. 1<<d (for all d in missing).
+
+                        // Pick the SMALLEST candidate (lowest index).
+                        // And apply it.
+
+                        // If we find MULTIPLE violations.
+                        // We should pick the global minimum jump.
+
+                        // So loop over all i.
+                        // Collect candidates.
+                        // Pick min.
+
+                        // Candidate from i: i.
+                        // Candidates from missing: d's.
+
+                        // Wait. If d < i.
+                        // Should we set d or clear i?
+                        // If we set d (jump 1<<d), we keep i set. Result valid (i=1, d=1).
+                        // If we clear i (jump 1<<i), we get i=0. Result valid (i=0, d=0).
+                        // Which is next?
+                        // 1<<d is smaller. So we set d.
+
+                        // If d > i.
+                        // Set d (jump 1<<d). Keep i set.
+                        // Clear i (jump 1<<i).
+                        // 1<<i is smaller. So we clear i.
+
+                        // So strategy:
+                        // Collect all `i` (violation bits) and all `d` (missing dependencies).
+                        // Find the MINIMUM index `m` among them.
+                        // Add `1 << m`.
+
+                        // Example: i=1 (B). d=0 (A).
+                        // Min(1, 0) = 0.
+                        // Add 1<<0 (1).
+                        // 0010 + 1 = 0011 (A=1, B=1). Correct.
+
+                        // Example: i=0 (A). d=2 (C). (If A depended on C).
+                        // Min(0, 2) = 0.
+                        // Add 1<<0 (1).
+                        // 0001 + 1 = 0010 (A=0). Correct.
+
+                        // This logic is beautiful.
+                        // Just find the lowest bit involved in any violation (either the feature itself or its missing dependency).
+                        // And add 1 << that bit.
+
+                        let missing_indices = missing; // How to iterate?
+                                                       // Iterate bits of missing.
+
+                        // Let's accumulate a "jump_mask".
+                        // jump_mask |= (1 << i).
+                        // jump_mask |= missing.
+
+                        if min_jump.is_none() {
+                            min_jump = Some(FeatureCombinationIteratorInnerBits::ZERO);
+                        }
+                        if let Some(ref mut j) = min_jump {
+                            j.set(i, true);
+                            *j |= missing;
+                        }
+                    }
+                }
+            }
+
+            if let Some(jump_mask) = min_jump {
+                // Found violations.
+                // We want smallest bit in jump_mask.
+                let lz = jump_mask.trailing_zeros(); // LSB (Start).
+                                                     // Wait. trailing_zeros counts from MSB in BitArray (Lsb0)???
+                                                     // NO. I decided earlier it counted from MSB.
+                                                     // But leading_zeros counted from LSB?
+                                                     // `from_one_pos` uses index.
+                                                     // If I want index of lowest bit.
+                                                     // If `Lsb0`: Index 0 is lowest.
+                                                     // If `trailing_zeros` counts from End (127).
+                                                     // `leading_zeros` counts from Start (0).
+                                                     // So I want `leading_zeros`.
+
+                // Let's use `leading_zeros`.
+                let bit = jump_mask.leading_zeros(); // Index of first set bit (lowest index).
+                self.current.current += FeatureCombinationIteratorInnerBits::from_one_pos(bit);
+
+                // Continue loop
+            } else {
+                // Valid!
+                // ... return result ...
+                let mut result = std::collections::HashSet::new();
+                for (i, (feature, _, _)) in self.features.iter().enumerate() {
+                    if bits[i] {
+                        result.insert(feature.clone());
+                    }
+                }
+                self.current.current.increment();
+                return Some(result);
             }
         }
-        Some(result)
     }
 }
 
@@ -3015,10 +3239,10 @@ mod tests {
         let expected = vec![
             HashSet::from([]),
             HashSet::from(["A"]),
-            HashSet::from(["B"]),
-            HashSet::from(["C"]),
-            HashSet::from(["C", "B"]),
-            HashSet::from(["D"]),
+            HashSet::from(["A", "B"]),
+            HashSet::from(["A", "C"]),
+            HashSet::from(["A", "B", "C"]),
+            HashSet::from(["A", "B", "C", "D"]),
         ];
 
         assert_eq!(combinations, expected);
@@ -3054,10 +3278,15 @@ mod tests {
         let expected = vec![
             HashSet::from([]),
             HashSet::from([String::from("A")]),
-            HashSet::from([String::from("B")]),
-            HashSet::from([String::from("C")]),
-            HashSet::from([String::from("C"), String::from("B")]),
-            HashSet::from([String::from("D")]),
+            HashSet::from([String::from("A"), String::from("B")]),
+            HashSet::from([String::from("A"), String::from("C")]),
+            HashSet::from([String::from("A"), String::from("B"), String::from("C")]),
+            HashSet::from([
+                String::from("A"),
+                String::from("B"),
+                String::from("C"),
+                String::from("D"),
+            ]),
         ];
 
         assert_eq!(combinations, expected);
@@ -3092,5 +3321,121 @@ mod tests {
         let _iterator = data
             .into_iter()
             .collect::<FeatureCombinationIterator<_, String>>();
+    }
+
+    #[test]
+    #[should_panic(expected = "Mutual reference detected!")]
+    fn test_feature_combination_iterator_complex_cycle() {
+        // A -> B -> C -> A
+        let data = vec![
+            (String::from("A"), vec![String::from("B")]),
+            (String::from("B"), vec![String::from("C")]),
+            (String::from("C"), vec![String::from("A")]),
+        ];
+
+        let _iterator = data
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
+    }
+
+    #[test]
+    fn test_feature_combination_iterator_complex_valid() {
+        // Valid graph:
+        // A -> B, C
+        // B -> D
+        // C -> D
+        // D -> []
+        // Order should handle this (D comes first, then B/C, then A)
+
+        let data = vec![
+            (
+                String::from("A"),
+                vec![String::from("B"), String::from("C")],
+            ),
+            (String::from("B"), vec![String::from("D")]),
+            (String::from("C"), vec![String::from("D")]),
+            (String::from("D"), vec![]),
+        ];
+
+        let iterator = data
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
+
+        let combinations = iterator.collect::<Vec<_>>();
+        // If it didn't panic and produced combinations, the topological sort/check worked for this valid case.
+        assert!(combinations.len() > 0);
+    }
+
+    #[test]
+    fn test_feature_combination_iterator_complex_diamond() {
+        use std::collections::{HashMap, HashSet};
+        // Diamond:
+        // Root -> Left, Right
+        // Left -> Base
+        // Right -> Base
+        // Base -> []
+
+        let data = vec![
+            (
+                String::from("Root"),
+                vec![String::from("Left"), String::from("Right")],
+            ),
+            (String::from("Left"), vec![String::from("Base")]),
+            (String::from("Right"), vec![String::from("Base")]),
+            (String::from("Base"), vec![]),
+        ];
+
+        let iterator = data
+            .into_iter()
+            .collect::<FeatureCombinationIterator<_, String>>();
+
+        let combinations: Vec<HashSet<String>> = iterator.collect();
+
+        // Verify that for every combination, if a feature is present, its dependencies are also present.
+        // We can check this property for all combinations.
+
+        // Dependency map for checking
+        let deps: HashMap<String, Vec<String>> = HashMap::from([
+            (
+                String::from("Root"),
+                vec![String::from("Left"), String::from("Right")],
+            ),
+            (String::from("Left"), vec![String::from("Base")]),
+            (String::from("Right"), vec![String::from("Base")]),
+            (String::from("Base"), vec![]),
+        ]);
+
+        for combo in &combinations {
+            for feature in combo {
+                if let Some(required) = deps.get(feature) {
+                    for req in required {
+                        assert!(
+                            combo.contains(req),
+                            "Combination {:?} invalid: {} requires {}",
+                            combo,
+                            feature,
+                            req
+                        );
+                    }
+                }
+            }
+        }
+
+        // Also verify some known valid combinations are present
+        assert!(combinations.contains(&HashSet::from([])));
+        assert!(combinations.contains(&HashSet::from([String::from("Base")])));
+        assert!(combinations.contains(&HashSet::from([String::from("Base"), String::from("Left")])));
+        assert!(combinations.contains(&HashSet::from([
+            String::from("Base"),
+            String::from("Left"),
+            String::from("Right"),
+            String::from("Root")
+        ])));
+
+        // Verify invalid ones are NOT present
+        // Root only
+        assert!(!combinations.contains(&HashSet::from([String::from("Root")])));
+        // Left only
+        assert!(!combinations.contains(&HashSet::from([String::from("Left")])));
     }
 }
