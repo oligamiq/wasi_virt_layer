@@ -1,0 +1,11 @@
+[book]
+title = "wasi-virt-layer"
+author = "wasi-virt-layer"
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "light"
+preferred-dark-theme = "navy"
+
+[preprocessor.copy]
