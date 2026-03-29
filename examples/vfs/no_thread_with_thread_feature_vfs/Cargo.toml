@@ -4,14 +4,14 @@ authors.workspace = true
 version.workspace = true
 edition.workspace = true
 description.workspace = true
-license.workspace = true
+license = "CC0-1.0"
 rust-version.workspace = true
 keywords.workspace = true
 repository.workspace = true
 documentation.workspace = true
 homepage.workspace = true
 readme.workspace = true
-publish=false
+publish = false
 
 [dependencies]
 wasi_virt_layer = { workspace = true, features = ["threads"] }
