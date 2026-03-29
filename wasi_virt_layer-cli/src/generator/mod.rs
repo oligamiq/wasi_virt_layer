@@ -968,7 +968,7 @@ impl ComponentRunner {
     /// return is_threads, core_name, mem_size
     pub fn component_to_files(
         &mut self,
-        parsed_args: &args::Args,
+        parsed_args: &args::BuildArgs,
         dwarf: bool,
     ) -> eyre::Result<(bool, CompactString, HashMap<CompactString, (u64, u64)>)> {
         let out_dir = &parsed_args.out_dir;

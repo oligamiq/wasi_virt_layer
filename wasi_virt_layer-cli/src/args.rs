@@ -1,15 +1,34 @@
 use std::collections::HashMap;
 
 use camino::Utf8PathBuf;
-use clap::{Parser, command};
+use clap::{Parser, Subcommand};
 use compact_str::CompactString;
 use eyre::Context as _;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
 
 #[derive(Parser, Debug)]
-#[command(version, about)]
-pub struct Args {
+#[clap(author, version, about, long_about = None)]
+#[clap(propagate_version = true)]
+pub struct Cli {
+    #[clap(subcommand)]
+    pub command: Command,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    Build(BuildArgs),
+    New(NewArgs),
+}
+
+#[derive(Parser, Debug)]
+pub struct NewArgs {
+    /// Path to the new crate
+    pub path: Utf8PathBuf,
+}
+
+#[derive(Parser, Debug)]
+pub struct BuildArgs {
     /// Path to the wasip1 wasm file
     /// This allow 4 patterns:
     /// 1. only manifest path, like `./Cargo.toml` or `./some/dir/Cargo.toml`
@@ -64,14 +83,14 @@ pub struct Args {
     pub dwarf: Option<bool>,
 }
 
-impl Args {
+impl BuildArgs {
     pub fn new(args: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let args = args
             .into_iter()
             .map(Into::<String>::into)
             .map(Into::<std::ffi::OsString>::into)
             .collect::<Vec<_>>();
-        let parsed = Args::parse_from(args);
+        let parsed = BuildArgs::parse_from(args);
         if parsed.wasm.is_empty()
             && !parsed
                 .package

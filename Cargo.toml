@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "wasi_virt_layer-cli",
     "wasi_virt_layer",
+    "examples/bare/ls",
     "examples/vfs/example",
     "examples/test_wasm/example",
     "examples/vfs/rustc_vfs",
