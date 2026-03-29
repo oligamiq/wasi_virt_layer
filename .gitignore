@@ -12,3 +12,5 @@
 
 # Python must not exist in the repository, but if it does, ignore it.
 *.py
+
+/docs/plans
