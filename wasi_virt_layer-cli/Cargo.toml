@@ -28,7 +28,7 @@ serde_json = "1.0.142"
 walrus = "0.26.0"
 # wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
 wit-component = "0.245.1"
-walrus-simple-interpreter = "0.2.3"
+walrus-simple-interpreter = "0.3.0"
 strum = { version = "0.28.0", features = ["derive"] }
 toml_edit = "0.25.8"
 itertools = "0.14.0"

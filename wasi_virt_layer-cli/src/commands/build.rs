@@ -1,10 +1,7 @@
 use eyre::Context as _;
 
 use crate::{
-    args::{BuildArgs, TargetMemoryType},
-    config_checker::{FeatureChecker, HasFeature, TomlRestorers},
-    generator::{self, WasmPath},
-    test_run, util,
+    args::{self, BuildArgs, TargetMemoryType}, config_checker::{FeatureChecker, HasFeature, TomlRestorers}, ctrlc_handler, generator::{self, WasmPath}, test_run, unique_name::UniqueName, util
 };
 
 macro_rules! add_generator {
@@ -44,7 +41,7 @@ macro_rules! add_generator {
     }};
 }
 
-pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {    let parsed_args = args::Args::new(args);
+pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
     let package = parsed_args.get_package()?;
 
     let mut toml_restores = TomlRestorers::new();
@@ -180,7 +177,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {    let parsed_args = 
 
 fn last(
     component_runner: &mut generator::ComponentRunner,
-    parsed_args: &args::Args,
+    parsed_args: &args::BuildArgs,
     dwarf: Option<bool>,
 ) -> eyre::Result<()> {
     let (threads, name, memory) = component_runner

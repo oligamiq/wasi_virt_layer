@@ -648,7 +648,7 @@ impl WalrusUtilModule for walrus::Module {
 
                 for (fid, _, _) in using_funcs {
                     let arg_ptr =
-                        std::sync::Arc::new(std::sync::Mutex::new(Option::<Vec<u32>>::None));
+                        std::sync::Arc::new(std::sync::Mutex::new(Option::<Vec<u64>>::None));
                     let arg_ptr_c = arg_ptr.clone();
 
                     let ret_mem_id_c = ret_mem_id.clone();
@@ -685,7 +685,7 @@ impl WalrusUtilModule for walrus::Module {
                             .iter()
                             .map(|arg| {
                                 if let ir::Value::I32(arg) = arg {
-                                    Ok(*arg as u32)
+                                    Ok(*arg as u64)
                                 } else {
                                     Err(anyhow::anyhow!("Invalid argument type"))
                                 }

@@ -120,11 +120,11 @@ impl Generator for ResetFunc {
                     .data
                     .iter()
                     .filter_map(|data| {
-                        match data.kind {
-                            DataKind::Active { memory, offset } if memory == wasm_mem => {
+                        match &data.kind {
+                            DataKind::Active { memory, offset } if *memory == wasm_mem => {
                                 if let ConstExpr::Value(v) = offset {
                                     if let ir::Value::I32(offset) = v {
-                                        Some((offset, data.value.len()))
+                                        Some((*offset, data.value.len()))
                                     } else {
                                         log::warn!(
                                             "Data segment {:?} is not i32, we support only i32",
