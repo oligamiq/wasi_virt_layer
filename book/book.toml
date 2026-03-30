@@ -1,6 +1,6 @@
 [book]
 title = "wasi-virt-layer"
-author = "wasi-virt-layer"
+authors = ["oligami <nziq53@gmail.com>"]
 language = "en"
 src = "src"
 
