@@ -68,6 +68,9 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
     let vfs_package = parsed_args
         .get_package()
         .wrap_err("Failed to get package")?;
+
+    log::info!("Using package: {}", vfs_package.name()?);
+
     let vfs_manifest_path = vfs_package.manifest_path().unwrap();
     let vfs_root_manifest_path = vfs_package.root_manifest_path().unwrap();
 

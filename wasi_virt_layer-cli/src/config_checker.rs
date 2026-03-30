@@ -239,7 +239,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
             .get(crate_name)
             .map_or(true, |inner| inner.is_none())
         {
-            eyre::bail!("Crate `{crate_name}` not found in dependencies");
+            eyre::bail!("Required crate `{crate_name}` not found in dependencies");
         }
 
         let crate_setting = &doc["dependencies"][crate_name];
