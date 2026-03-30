@@ -4,7 +4,7 @@ authors.workspace = true
 version.workspace = true
 edition.workspace = true
 description.workspace = true
-license.workspace = true
+license = "CC0-1.0"
 rust-version.workspace = true
 keywords.workspace = true
 repository.workspace = true
@@ -13,7 +13,7 @@ homepage.workspace = true
 readme.workspace = true
 
 [dependencies]
-wit-bindgen = "0.43.0"
+wit-bindgen = "0.54.0"
 const_struct = "0.6.2"
 
 [dependencies.wasi_virt_layer]

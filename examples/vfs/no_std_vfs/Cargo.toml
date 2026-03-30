@@ -14,9 +14,12 @@ readme.workspace = true
 publish = false
 
 [dependencies]
-wasi_virt_layer = { workspace = true, default-features = false , features = ["multi_memory", "unstable_print_debug"] }
+wasi_virt_layer = { workspace = true, default-features = false, features = [
+    "multi_memory",
+    "unstable_print_debug",
+] }
 const_struct = "0.6.2"
-wit-bindgen = "0.43.0"
+wit-bindgen = "0.54.0"
 
 [lib]
 crate-type = ["cdylib"]
