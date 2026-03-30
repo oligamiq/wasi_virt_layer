@@ -8,9 +8,13 @@ pub fn new(args: NewArgs) -> eyre::Result<()> {
         return Err(eyre::eyre!("Directory already exists"));
     }
 
-    let name = path.file_name().ok_or_else(|| eyre::eyre!("Failed to get file name"))?;
+    let name = path
+        .file_name()
+        .ok_or_else(|| eyre::eyre!("Failed to get file name"))?;
 
-    let dir = path.parent().ok_or_else(|| eyre::eyre!("Failed to get parent directory"))?;
+    let dir = path
+        .parent()
+        .ok_or_else(|| eyre::eyre!("Failed to get parent directory"))?;
     if !dir.exists() {
         std::fs::create_dir_all(&dir)?;
     }
@@ -60,7 +64,8 @@ package component-abi:host;
 world component-abi {
   export main: func();
 }
-"#.trim_ascii();
+"#
+.trim_ascii();
 
 const SRC_TEMPLATE: &str = r#"
 use const_struct::const_struct;
@@ -137,4 +142,5 @@ mod fs {
     }, my_wasm);
 }
 
-"#.trim_ascii();
+"#
+.trim_ascii();

@@ -656,7 +656,7 @@ version = "0.1.1"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1222,6 +1222,15 @@ name = "ls"
 version = "0.1.1"
 
 [[package]]
+name = "ls-vfs"
+version = "0.1.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "memchr"
 version = "2.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1241,7 +1250,7 @@ name = "no_std_vfs"
 version = "0.1.1"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1250,7 +1259,7 @@ name = "no_thread_with_thread_feature_vfs"
 version = "0.1.1"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1532,7 +1541,7 @@ name = "rustc_vfs"
 version = "0.1.1"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1872,7 +1881,7 @@ name = "thread_pool_vfs"
 version = "0.1.1"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.43.0",
 ]
 
@@ -1882,7 +1891,7 @@ version = "0.1.1"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.43.0",
 ]
 
@@ -2108,6 +2117,19 @@ dependencies = [
  "const_struct",
  "dashmap",
  "parking_lot",
+ "paste",
+ "wasi",
+ "wit-bindgen 0.44.0",
+]
+
+[[package]]
+name = "wasi_virt_layer"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c429320537d42ee4f9b3d03b6ed5bc642f7470debac464947cc0dca53870890"
+dependencies = [
+ "const_for",
+ "const_struct",
  "paste",
  "wasi",
  "wit-bindgen 0.44.0",
@@ -2543,6 +2565,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen"
+version = "0.54.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2bb00254d5051d69730ee32580b7373592f10ad786757c372f0f2c7b61f86a2c"
+dependencies = [
+ "bitflags",
+ "wit-bindgen-rust-macro 0.54.0",
+]
+
+[[package]]
 name = "wit-bindgen-core"
 version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2569,6 +2601,17 @@ name = "wit-bindgen-core"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3deda4b7e9f522d994906f6e6e0fc67965ea8660306940a776b76732be8f3933"
+dependencies = [
+ "anyhow",
+ "heck 0.5.0",
+ "wit-parser 0.245.1",
+]
+
+[[package]]
+name = "wit-bindgen-core"
+version = "0.54.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99cdef5ccf0b0e9bf30868d6f9c5ed116c84ae95f84ba29d2216d3e922de3963"
 dependencies = [
  "anyhow",
  "heck 0.5.0",
@@ -2628,6 +2671,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "wit-bindgen-rust"
+version = "0.54.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e76541e2f37ac1729db85765729daa0f3c2b5975d66699114d107525f6d6c8d5"
+dependencies = [
+ "anyhow",
+ "heck 0.5.0",
+ "indexmap 2.13.0",
+ "prettyplease",
+ "syn 2.0.117",
+ "wasm-metadata 0.245.1",
+ "wit-bindgen-core 0.54.0",
+ "wit-component 0.245.1",
+]
+
+[[package]]
 name = "wit-bindgen-rust-macro"
 version = "0.43.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2655,6 +2714,21 @@ dependencies = [
  "syn 2.0.117",
  "wit-bindgen-core 0.51.0",
  "wit-bindgen-rust 0.51.0",
+]
+
+[[package]]
+name = "wit-bindgen-rust-macro"
+version = "0.54.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a284e17b2bc808c72ba008f6694626fa76bcac608b3d1ed0880f9add3f558f8e"
+dependencies = [
+ "anyhow",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+ "wit-bindgen-core 0.54.0",
+ "wit-bindgen-rust 0.54.0",
 ]
 
 [[package]]

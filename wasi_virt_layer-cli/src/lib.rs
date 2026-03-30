@@ -2,11 +2,15 @@ use clap::Parser;
 use eyre::Context;
 
 use crate::{
-    args::{BuildArgs, TargetMemoryType}, commands::{build::build, new::new}, config_checker::{FeatureChecker, HasFeature, TomlRestorers}, generator::WasmPath
+    args::{BuildArgs, TargetMemoryType},
+    commands::{build::build, new::new},
+    config_checker::{FeatureChecker, HasFeature, TomlRestorers},
+    generator::WasmPath,
 };
 
 pub mod abi;
 pub mod args;
+pub mod commands;
 pub mod compile;
 pub mod config_checker;
 pub mod down_color;
@@ -15,7 +19,6 @@ pub mod generator;
 pub mod instrs;
 pub mod test_run;
 pub mod util;
-pub mod commands;
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
     env_logger::Builder::new()

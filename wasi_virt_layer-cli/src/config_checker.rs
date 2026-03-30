@@ -215,8 +215,8 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
             HasFeature::EnabledOnNormal
         } else {
             // check workspace
-            match &crate_setting["workspace"] {
-                v if v.as_bool().unwrap_or(false) => {
+            match &crate_setting.get("workspace") {
+                Some(v) if v.as_bool().unwrap_or(false) => {
                     let doc = self.read_workspace_manifest::<Document<String>>()?;
 
                     let crate_setting = &doc["workspace"]["dependencies"][crate_name];
@@ -227,6 +227,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
                         HasFeature::Disabled
                     }
                 }
+                None => HasFeature::Disabled,
                 _ => HasFeature::Disabled,
             }
         })

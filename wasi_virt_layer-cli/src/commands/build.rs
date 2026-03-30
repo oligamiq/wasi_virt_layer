@@ -1,6 +1,11 @@
 use eyre::Context as _;
 
-use crate::{args::{BuildArgs, TargetMemoryType}, config_checker::{FeatureChecker, HasFeature, TomlRestorers}, generator::{self, WasmPath}, test_run, util};
+use crate::{
+    args::{BuildArgs, TargetMemoryType},
+    config_checker::{FeatureChecker, HasFeature, TomlRestorers},
+    generator::{self, WasmPath},
+    test_run, util,
+};
 
 macro_rules! add_generator {
     ($runner:expr) => {{
