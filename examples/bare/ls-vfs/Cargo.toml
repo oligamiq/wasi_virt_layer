@@ -13,7 +13,8 @@ readme.workspace = true
 
 [dependencies]
 const_struct = "0.6.2"
-wasi_virt_layer = "0.1.1"
+# wasi_virt_layer = "0.1.1"
+wasi_virt_layer.workspace = true
 wit-bindgen = "0.54.0"
 
 [lib]

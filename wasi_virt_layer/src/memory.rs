@@ -2,9 +2,23 @@ use crate::__private::wasip1;
 
 /// By entering the names of the files to be combined, a bridge for the combination is created.
 /// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
+/// ```
+/// use wasi_virt_layer::prelude::*;
+///
+/// import_wasm!(my_wasm);
+/// ```
 #[macro_export]
 macro_rules! import_wasm {
+    (anonymous) => {
+        compile_error!("This name is reserved for internal use. Please choose another name for your import.");
+    };
+    (<anonymous>) => {
+        import_wasm!(@inner, anonymous);
+    };
     ($name:ident) => {
+        import_wasm!(@inner, $name);
+    };
+    (@inner, $name:ident) => {
         $crate::__private::paste::paste! {
             #[allow(non_camel_case_types)]
             #[derive(Debug, Clone, Copy)]

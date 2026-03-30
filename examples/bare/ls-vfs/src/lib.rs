@@ -8,13 +8,13 @@ wit_bindgen::generate!({
     world: "component-abi",
 });
 
-import_wasm!(ls);
+import_wasm!(<anonymous>);
 
 impl Guest for ComponentABI {
     fn main() {
-        ls::_reset();
-        ls::_start();
-        ls::_main();
+        anonymous::_reset();
+        anonymous::_start();
+        anonymous::_main();
     }
 }
 
@@ -22,7 +22,7 @@ export!(ComponentABI);
 
 mod process {
     use super::*;
-    plug_process!(DefaultProcess, ls, self);
+    plug_process!(DefaultProcess, anonymous, self);
 }
 
 mod env {
@@ -33,7 +33,7 @@ mod env {
         environ: &["HOME=~/"],
     };
 
-    plug_env!(@const, HostEnvTy, ls);
+    plug_env!(@const, HostEnvTy, anonymous);
 }
 
 mod fs {
@@ -74,5 +74,5 @@ mod fs {
     plug_fs!(@const, {
         #[allow(static_mut_refs)]
         unsafe { &mut VIRTUAL_FILE_SYSTEM }
-    }, ls);
+    }, anonymous);
 }
