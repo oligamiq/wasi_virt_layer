@@ -1,0 +1,9 @@
+// wit is only kebab-case
+package spawn-vfs-and-body-vfs:host;
+
+world init {
+  export init: func();
+  export start: func();
+  export main: func();
+}
+

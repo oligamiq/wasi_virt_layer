@@ -4,11 +4,21 @@ use walrus::*;
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
-    util::{
-        NAMESPACE, ResultUtil as _, WalrusFID, WalrusUtilExport as _, WalrusUtilFuncs as _,
-        WalrusUtilImport as _, WalrusUtilModule as _,
-    },
+    unique_name::UniqueName,
+    util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _, WasmName},
 };
+
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum SpecialFuncUniqueName<'a> {
+    Resetter(&'a WasmName),
+    ResetOnThread,
+    ResetOnThreadOnce,
+    StartInitOld,
+    Start(&'a WasmName),
+    MainVoid(&'a WasmName),
+    Reset(&'a WasmName),
+}
 
 /// To enable the reset function,
 /// a memory area shall be provided
@@ -81,26 +91,30 @@ impl Generator for ResetFunc {
         let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
 
         for wasm in &ctx.target_names {
-            let reset_name = format!("__wasip1_vfs_{wasm}_reset");
-
-            if let Some(reset) = (NAMESPACE, &reset_name).get_fid(&module.imports).ok() {
+            if let Some(reset) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::SpecialFunc(&SpecialFuncUniqueName::Reset(wasm)),
+            )
+                .get_fid(&module.imports)
+                .ok()
+            {
                 let global = ctx.target_used_global_id.as_ref().unwrap()[wasm]
-                .iter()
-                .copied()
-                .map(|g| module.globals.get(g))
-                .filter(|g| g.mutable)
-                .filter_map(|g| {
-                    if let GlobalKind::Local(ConstExpr::Value(v)) = g.kind {
-                        Some((g.id(), v.clone()))
-                    } else {
-                        log::warn!(
+                    .iter()
+                    .copied()
+                    .map(|g| module.globals.get(g))
+                    .filter(|g| g.mutable)
+                    .filter_map(|g| {
+                        if let GlobalKind::Local(ConstExpr::Value(v)) = g.kind {
+                            Some((g.id(), v.clone()))
+                        } else {
+                            log::warn!(
                             "Global segment {:?} is not a value, we support only local variables",
                             g.kind
                         );
-                        None
-                    }
-                })
-                .collect::<Box<_>>();
+                            None
+                        }
+                    })
+                    .collect::<Box<_>>();
 
                 let data_range = module
                     .data
@@ -192,9 +206,11 @@ impl Generator for ResetFunc {
                     .wrap_err_with(|| eyre::eyre!("Failed to replace reset function for {wasm}"))?;
 
                 if ctx.unstable_print_debug {
-                    module
-                        .exports
-                        .add(&format!("__wasip1_vfs_{wasm}_resetter"), resetter);
+                    module.exports.add(
+                        &UniqueName::SpecialFunc(&SpecialFuncUniqueName::Resetter(wasm))
+                            .to_string(),
+                        resetter,
+                    );
                 }
 
                 let mut func_body = module
@@ -221,9 +237,13 @@ impl Generator for ResetFunc {
         // As the start section is also invoked when spawning threads,
         // ensure it is called only once if threads are enabled.
         let init_id = if ctx.threads {
-            let reset_on_thread = "__wasip1_vfs_reset_on_thread".get_fid(&module.exports)?;
-            let reset_on_thread_once =
-                (NAMESPACE, "__wasip1_vfs_reset_on_thread_once").get_fid(&module.imports)?;
+            let reset_on_thread = UniqueName::SpecialFunc(&SpecialFuncUniqueName::ResetOnThread)
+                .get_fid(&module.exports)?;
+            let reset_on_thread_once = (
+                UniqueName::NAMESPACE,
+                &UniqueName::SpecialFunc(&SpecialFuncUniqueName::ResetOnThreadOnce),
+            )
+                .get_fid(&module.imports)?;
 
             // module.imports.erase(reset_on_thread_once)?;
 
@@ -233,8 +253,6 @@ impl Generator for ResetFunc {
             module.renew_call_fn(reset_on_thread_once, initializers)?;
 
             reset_on_thread
-
-            // initializers
         } else {
             initializers
         };
@@ -257,7 +275,10 @@ impl Generator for ResetFunc {
 
         if let Some(start) = old_start {
             if ctx.unstable_print_debug {
-                module.exports.add("__wasip1_vfs_start_init_old", start);
+                module.exports.add(
+                    &UniqueName::SpecialFunc(&SpecialFuncUniqueName::StartInitOld).to_string(),
+                    start,
+                );
             }
         }
 
@@ -302,7 +323,8 @@ impl Generator for StartFunc {
         module
             .exports
             .get_mut(module.exports.get_exported_func(id).unwrap().id())
-            .name = format!("__wasip1_vfs_{wasm}__start", wasm = external.name);
+            .name =
+            UniqueName::SpecialFunc(&SpecialFuncUniqueName::Start(&external.name)).to_string();
 
         Ok(())
     }
@@ -314,7 +336,11 @@ impl Generator for StartFunc {
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
             module.renew_call_fn(
-                (NAMESPACE, &format!("__wasip1_vfs_{wasm}__start")).get_fid(&module.imports)?,
+                (
+                    UniqueName::NAMESPACE,
+                    &UniqueName::SpecialFunc(&SpecialFuncUniqueName::Start(wasm)),
+                )
+                    .get_fid(&module.imports)?,
                 ctx.start_func_id.as_ref().unwrap()[wasm],
                 // Export already removed by StartFuncIdVisitor
             )?;
@@ -339,7 +365,8 @@ impl Generator for MainVoidFunc {
         module
             .exports
             .get_mut(module.exports.get_exported_func(id).unwrap().id())
-            .name = format!("__wasip1_vfs_{wasm}___main_void", wasm = external.name);
+            .name =
+            UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(&external.name)).to_string();
 
         Ok(())
     }
@@ -350,11 +377,15 @@ impl Generator for MainVoidFunc {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
-            if let Some(fid) = (NAMESPACE, &format!("__wasip1_vfs_{wasm}___main_void"))
+            if let Some(fid) = (
+                UniqueName::NAMESPACE,
+                &UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)),
+            )
                 .get_fid(&module.imports)
                 .ok()
             {
-                let main_void_func_name = format!("__wasip1_vfs_{wasm}___main_void");
+                let main_void_func_name =
+                    UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string();
                 let main_void_func_id = main_void_func_name.get_fid(&module.exports)?;
                 let start_fn_id = ctx.start_func_id.as_ref().unwrap()[wasm];
 
@@ -452,7 +483,8 @@ impl Generator for MainVoidFunc {
                 )?;
             } else {
                 log::warn!(
-                    "No main_void found for {wasm}. You can use __wasip1_vfs_{wasm}___main_void directly"
+                    "No main_void found for {wasm}. You can use {} directly",
+                    UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string()
                 );
             }
         }

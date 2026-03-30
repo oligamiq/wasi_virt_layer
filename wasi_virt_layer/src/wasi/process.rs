@@ -23,12 +23,6 @@ impl ProcessExit for DefaultProcess {
 
 #[macro_export]
 macro_rules! plug_process {
-    ($($wasm:ident),*) => {
-        $crate::__as_t!(@through, $($wasm),* => $crate::plug_process, @inner);
-    };
-    (@inner, $($wasm:ident),*) => {
-        $crate::plug_process!($crate::process::DefaultProcess, $($wasm),*);
-    };
     ($ty:ty, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
             $(
@@ -42,5 +36,11 @@ macro_rules! plug_process {
                 }
             )*
         }
+    };
+    ($($wasm:ident),*) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_process, @inner);
+    };
+    (@inner, $($wasm:ident),*) => {
+        $crate::plug_process!($crate::process::DefaultProcess, $($wasm),*);
     };
 }

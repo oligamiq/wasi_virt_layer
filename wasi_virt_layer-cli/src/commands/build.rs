@@ -44,24 +44,20 @@ macro_rules! add_generator {
     }};
 }
 
-pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
+pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {    let parsed_args = args::Args::new(args);
     let package = parsed_args.get_package()?;
 
     let mut toml_restores = TomlRestorers::new();
+    let tr_clone = toml_restores.clone();
+    ctrlc_handler::register(move || {
+        tr_clone.restore_if_needed();
+    });
 
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());
         add_generator!(component_runner);
 
-        let (threads, name, memory) = component_runner
-            .component_to_files(&parsed_args, parsed_args.dwarf.unwrap_or(false))
-            .wrap_err("Failed to run component to files")?;
-
-        if threads {
-            test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
-        } else {
-            test_run::gen_test_run(name, &parsed_args.out_dir);
-        }
+        last(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 
         return Ok(());
     }
@@ -77,7 +73,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
             "multi_memory",
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            util::CRATE_NAME,
+            UniqueName::CRATE_NAME,
         );
 
         if let Some(target_memory_type) = parsed_args.target_memory_type {
@@ -101,7 +97,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
             "threads",
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            util::CRATE_NAME,
+            UniqueName::CRATE_NAME,
         );
         if let Some(threads) = parsed_args.threads {
             if let Some(restorer) = threads_feature_checker.set(threads)? {
@@ -120,7 +116,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         let checker = FeatureChecker::new_no_feature(
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            util::CRATE_NAME,
+            UniqueName::CRATE_NAME,
         );
 
         toml_restores.push(checker.set_dwarf(dwarf)?);
@@ -135,7 +131,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
             "unstable_print_debug",
             &vfs_manifest_path,
             &vfs_root_manifest_path,
-            util::CRATE_NAME,
+            UniqueName::CRATE_NAME,
         );
 
         matches!(
@@ -151,15 +147,17 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         dwarf,
         unstable_print_debug,
         parsed_args.no_transpile,
+        parsed_args.adjust_abi,
+        parsed_args.keep_build_artifacts,
         memory_type,
-        toml_restores.clone(),
+        toml_restores,
         parsed_args.get_wasm_memory_hints(),
     )?;
 
     add_generator!(generator);
 
     let mut component_runner = generator
-        .run_layers_to_component(&parsed_args.out_dir)
+        .run_layers_to_component(&parsed_args.out_dir, parsed_args.keep_build_artifacts)
         .wrap_err("Failed to run layers to component")?;
 
     if parsed_args.no_transpile {
@@ -173,14 +171,28 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         return Ok(());
     }
 
-    let (_, name, memory) = component_runner
-        .component_to_files(&parsed_args, dwarf)
+    last(&mut component_runner, &parsed_args, Some(dwarf))?;
+
+    Ok(())
+}
+
+// deno run dist/example_vfs.js
+
+fn last(
+    component_runner: &mut generator::ComponentRunner,
+    parsed_args: &args::Args,
+    dwarf: Option<bool>,
+) -> eyre::Result<()> {
+    let (threads, name, memory) = component_runner
+        .component_to_files(&parsed_args, dwarf.unwrap_or(false), parsed_args.adjust_abi)
         .wrap_err("Failed to run component to files")?;
 
-    if threads {
-        test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
-    } else {
-        test_run::gen_test_run(name, &parsed_args.out_dir);
+    if !parsed_args.adjust_abi {
+        if threads {
+            test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
+        } else {
+            test_run::gen_test_run(name, &parsed_args.out_dir);
+        }
     }
 
     Ok(())

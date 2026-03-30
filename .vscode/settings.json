@@ -2,10 +2,10 @@
     "rust-analyzer.linkedProjects": [
         "${workspaceFolder}/Cargo.toml",
     ],
-    // "rust-analyzer.cargo.target": "wasm32-wasip1-threads",
-    // "rust-analyzer.cargo.features": [
-    //     "threads"
-    // ],
+    "rust-analyzer.cargo.target": "wasm32-wasip1-threads",
+    "rust-analyzer.cargo.features": [
+        "threads"
+    ],
     "cSpell.words": [
         "atim",
         "BADF",
@@ -19,6 +19,7 @@
         "dirflags",
         "environc",
         "Errno",
+        "EVENTTYPE",
         "ewrite",
         "Exitcode",
         "Fdflags",
@@ -27,6 +28,7 @@
         "Filestat",
         "funcs",
         "heapless",
+        "includer",
         "instrs",
         "iovec",
         "iovs",
@@ -34,7 +36,6 @@
         "Itertools",
         "Linkcount",
         "lookupflags",
-        "lstring",
         "mtim",
         "namlen",
         "nlink",
@@ -44,6 +45,7 @@
         "NOTDIR",
         "NOTSUP",
         "nread",
+        "nsubscriptions",
         "nwritten",
         "Oflags",
         "oneoff",
@@ -53,6 +55,7 @@
         "readlink",
         "repr",
         "sched",
+        "Subclockflags",
         "TRUNC",
         "Uninit",
         "wasi",

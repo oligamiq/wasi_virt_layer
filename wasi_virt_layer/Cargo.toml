@@ -31,6 +31,8 @@ parking_lot = { version = "0.12.4", optional = true }
 backtrace = { version = "0.3.75", optional = true, default-features = false, features = [
     "std",
 ] }
+# arc-slice = "0.1.0"
+flume = { version = "0.11.1", default-features = false, features = ["select"] }
 
 # [dev-dependencies]
 # wasi preview1 latest

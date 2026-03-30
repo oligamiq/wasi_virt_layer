@@ -3,12 +3,9 @@ use strum::VariantNames;
 use crate::{
     abi::Wasip1ABIFunc,
     generator::Generator,
-    util::{CORE_MODULE_ROOT, WalrusUtilExport as _, WalrusUtilImport as _},
+    unique_name::UniqueName,
+    util::{WalrusUtilExport as _, WalrusUtilImport as _, gen_component_name},
 };
-
-fn gen_component_name(namespace: &str, name: &str) -> String {
-    format!("[static]{namespace}.{}-import", name.replace("_", "-"))
-}
 
 /// Apply the patch to use wit-bindgen.
 /// As it will be rejected otherwise,
@@ -22,17 +19,22 @@ impl Generator for PatchComponent {
         module: &mut walrus::Module,
         _: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
-        for (name, (namespace, root)) in <Wasip1ABIFunc as VariantNames>::VARIANTS
-            .iter()
-            .zip(core::iter::repeat(("wasip1", CORE_MODULE_ROOT)))
+        for (name, (namespace, root)) in
+            <Wasip1ABIFunc as VariantNames>::VARIANTS
+                .iter()
+                .zip(core::iter::repeat((
+                    UniqueName::WASIP1_ABI_MODULE_ALT,
+                    UniqueName::CORE_MODULE_ROOT,
+                )))
         {
             let component_name = gen_component_name(namespace, name);
 
             module.exports.erase(&format!("{name}_import_anchor"))?;
 
-            module
-                .imports
-                .may_swap_import((root, &component_name), ("wasi_snapshot_preview1", name))?;
+            module.imports.may_swap_import(
+                (root, &component_name),
+                (UniqueName::WASIP1_ABI_MODULE, name),
+            )?;
         }
 
         Ok(())

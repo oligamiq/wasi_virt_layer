@@ -205,6 +205,12 @@ pub trait Wasip1FileSystem {
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
+    fn fd_fdstat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        fdstat: *mut wasip1::Fdstat,
+    ) -> wasip1::Errno;
+
     fn fd_read_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
@@ -229,7 +235,7 @@ pub trait Wasip1FileSystem {
 
 #[macro_export]
 macro_rules! plug_fs {
-    (@const, $state:expr, $($wasm:ident),*) => {
+    (@const, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @const, $state);
 
         // To prevent unused errors from occurring
@@ -240,7 +246,7 @@ macro_rules! plug_fs {
         }
     };
 
-    (@inner, @const, $state:expr, $($wasm:ident),*) => {
+    (@inner, @const, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__private::paste::paste! {
             $(
                 #[cfg(target_os = "wasi")]
@@ -357,6 +363,17 @@ macro_rules! plug_fs {
                     let state = $state;
                     $crate::__as_t!(@as_t, $wasm);
                     $crate::file::Wasip1FileSystem::fd_filestat_get_raw::<T>(state, fd, filestat)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_fdstat_get>](
+                    fd: $crate::__private::wasip1::Fd,
+                    fdstat: *mut $crate::__private::wasip1::Fdstat,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_fdstat_get_raw::<T>(state, fd, fdstat)
                 }
             )*
         }

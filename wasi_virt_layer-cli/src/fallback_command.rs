@@ -1,7 +1,12 @@
 use std::{
+    fs::File,
     io::{Read as _, Seek as _},
-    process::Command,
+    path::Path,
 };
+
+use eyre::Context as _;
+use fs2::FileExt as _;
+use tempfile::Builder as TempFileBuilder;
 
 pub struct FallbackCommand<F>
 where
@@ -11,6 +16,10 @@ where
     args: Vec<String>,
     func: Option<F>,
 }
+
+const DISABLE_FALLBACK: bool = true;
+
+pub struct CommandLock(File);
 
 impl<F> FallbackCommand<F>
 where
@@ -41,7 +50,7 @@ where
     }
 
     pub fn spawn(&mut self) -> std::io::Result<FallbackChild> {
-        let mut cmd = Command::new(&self.bin);
+        let mut cmd = std::process::Command::new(&self.bin);
         cmd.args(&self.args);
         let piped_out = std::process::Stdio::piped();
         let piped_err = std::process::Stdio::piped();
@@ -49,6 +58,10 @@ where
         cmd.stderr(piped_err);
         match cmd.spawn() {
             Ok(child) => Ok(FallbackChild::new_process(child)),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && DISABLE_FALLBACK => {
+                let _ = self.func.take();
+                Err(e)
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 // Fallback to the provided function
                 let args = self.args.clone();
@@ -124,23 +137,66 @@ pub struct FallbackOutput {
     pub success: bool,
 }
 
-fn get_temp_filepath() -> String {
-    let now = std::time::SystemTime::now();
-    let timestamp = now
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_millis();
+impl CommandLock {
+    pub fn acquire() -> eyre::Result<Self> {
+        let lock_path = get_temp_lock_filepath();
 
+        if let Some(parent) = Path::new(&lock_path).parent() {
+            std::fs::create_dir_all(parent).wrap_err_with(|| {
+                format!("Failed to create temp lock dir: {}", parent.display())
+            })?;
+        }
+
+        let lock_file = File::create(&lock_path)
+            .wrap_err_with(|| format!("Failed to create lock file: {lock_path}"))?;
+        lock_file
+            .lock_exclusive()
+            .wrap_err_with(|| format!("Failed to lock command file: {lock_path}"))?;
+
+        Ok(Self(lock_file))
+    }
+}
+
+impl Drop for CommandLock {
+    fn drop(&mut self) {
+        let _ = self.0.unlock();
+    }
+}
+
+fn get_temp_filepath() -> String {
+    let mut builder = TempFileBuilder::new();
+    let prefix = format!("tmp_{}_", env!("CARGO_PKG_NAME"));
+    builder.prefix(&prefix);
+    builder.suffix(".log");
+
+    #[cfg(windows)]
+    let builder = builder.tempfile_in(dirs::data_local_dir().unwrap().join("Temp"));
+
+    #[cfg(unix)]
+    let builder = builder.tempfile_in("/tmp");
+
+    let file = builder.expect("Failed to create temp log file");
+    let (_file, path) = file.keep().expect("Failed to persist temp log file");
+
+    path.to_string_lossy().into_owned()
+}
+
+fn get_temp_lock_filepath() -> String {
     #[cfg(windows)]
     return dirs::data_local_dir()
         .unwrap()
         .join("Temp")
-        .join(format!("tmp_{}_{timestamp}.log", env!("CARGO_PKG_NAME")))
+        .join(env!("CARGO_PKG_NAME"))
+        .join("command.lock")
         .to_string_lossy()
         .into();
 
     #[cfg(unix)]
-    return format!("/tmp/tmp_{}_{timestamp}.log", env!("CARGO_PKG_NAME"));
+    return Path::new("/tmp")
+        .join(env!("CARGO_PKG_NAME"))
+        .join("command.lock")
+        .to_string_lossy()
+        .into_owned();
 }
 
 /// require mutex
@@ -187,6 +243,10 @@ mod tests {
     /// if not use nocapture arg, skip test.
     /// because gag crate require it.
     fn test_fallback_command() {
+        if DISABLE_FALLBACK {
+            return;
+        }
+
         let _lock = MUTEX.lock().unwrap();
         if !check_gag() {
             return;

@@ -2,7 +2,7 @@
 name = "example_vfs"
 version.workspace = true
 edition.workspace = true
-publish=false
+publish = false
 
 [dependencies]
 wit-bindgen = "0.43.0"

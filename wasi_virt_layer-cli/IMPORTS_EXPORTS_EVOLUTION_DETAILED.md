@@ -1,0 +1,87 @@
+# Imports/Exports Evolution Detailed
+
+This document tracks the evolution of imports and exports across different stages of the `wasi_virt_layer` transformation process. It serves as a reference for understanding how symbols are renamed, merged, and redirected.
+
+## Stage 1: Initial WASM (Input)
+
+- **Imports:**
+  - `wasi_snapshot_preview1` functions (e.g., `fd_write`, `environ_get`)
+  - Any custom imports defined by the module.
+
+- **Exports:**
+  - `memory` (usually)
+  - `_start` (entry point)
+  - Any custom exports.
+
+## Stage 2: Generator Processing
+
+During this stage, the `wasi_virt_layer-cli` processes the input WASM modules.
+
+### Renaming & Unification
+
+- **UniqueName System:**
+  - `UniqueName` is used to generate collision-free names for internal functions and exports.
+  - Prefix: `__wasip1_vfs_` (defined as `UniqueName::PREFIX`)
+
+### Special Functions (`SpecialFuncUniqueName`)
+
+- `__wasip1_vfs_{wasm}_resetter`: Resets memory/state for a specific WASM module.
+- `__wasip1_vfs_reset_on_thread`: Global reset trigger.
+- `__wasip1_vfs_reset_on_thread_once`: Ensures reset happens only once per thread context.
+- `__wasip1_vfs_start_init_old`: Original `_start` function (renamed).
+- `__wasip1_vfs_{wasm}__start`: Wrapper around the original start function.
+- `__wasip1_vfs_{wasm}___main_void`: Void main function wrapper.
+
+### Memory Management (`MemoryUniqueName`)
+
+- `__wasip1_vfs_{wasm}_memory_copy_from`: Copies data from module memory to VFS memory.
+- `__wasip1_vfs_{wasm}_memory_copy_to`: Copies data from VFS memory to module memory.
+- `__wasip1_vfs_{wasm}_memory_trap`: Helper for memory access checks (if enabled).
+- `__wasip1_vfs_{wasm}_memory_trap_anchor`: Export anchor for trap function.
+- `__wasip1_vfs_{wasm}_memory_director`: Manages memory offsets/pointers.
+- `__wasip1_vfs_{wasm}_memory_director_anchor`: Export anchor for director function.
+- `__wasip1_vfs_{wasm}_memory`: Renamed export of the module's memory.
+
+### Threading (`ThreadsSpawnName`)
+
+- `__wasip1_vfs_{wasm}_{import}`: Anchor for thread spawn imports.
+- `__wasip1_vfs_is_root_spawn`: Checks if the current thread is the root.
+- `__wasip1_vfs_wasi_thread_spawn_self`: Spawns a thread for the VFS itself.
+- `__wasip1_vfs_self_wasi_thread_start`: Entry point for VFS thread.
+- `__wasip1_vfs_self_wasi_thread_start_anchor`: Anchor for VFS thread start.
+- `__wasip1_vfs_real_thread_spawn_fn`: The actual underlying thread spawn function.
+- `__wasip1_vfs_wasi_thread_start_entry`: Entry point wrapper for threads.
+- `__wasip1_vfs_{name}_{wasm}`: Thread spawn wrapper for a specific module.
+- `__wasip1_vfs_{wasm}_{name}`: Thread start wrapper for a specific module.
+
+### ABI Connection (`Wasip1ABIName`)
+
+- `__wasip1_vfs_{name}_{import}`: Connects module imports to VFS exports (self-default).
+- `__wasip1_vfs_{wasm}_{import}`: Connects module imports to VFS exports (target-temporal).
+
+### Shared Globals (`SharedGlobalFnsName`)
+
+- `__wasip1_vfs_memory_grow_{n}`: Shared memory grow function (locked).
+- `__wasip1_vfs_global_alt_set`: Alternative global set.
+- `__wasip1_vfs_global_alt_get`: Alternative global get.
+- `__wasip1_vfs_global_alt_get_no_wait`: Non-blocking global get.
+- `__wasip1_vfs_global_alt_init_once`: One-time global initialization.
+- `__wasip1_vfs_global_alt_pos`: Global position tracker.
+
+### Start Section (`StartAlternativeName`)
+
+- `__wasip1_vfs_start_alt_{name}_{wasm}`: Alternative start function (specific module).
+- `__wasip1_vfs_start_alt_{name}`: Alternative start function (VFS).
+- `__wasip1_vfs_start_alt_after_memory_reset`: Start hook after memory reset.
+
+## Stage 3: Output (Combined WASM)
+
+- **Exports:**
+  - `_start`: The main entry point (orchestrates everything).
+  - `wasi:thread/spawn`: Thread spawn export (if threads enabled).
+  - `memory`: The unified/exported memory.
+  - (Optional) `__wasip1_vfs_*` exports if debug mode is enabled.
+
+- **Imports:**
+  - `wasi_snapshot_preview1` (resolved internally or passed through).
+  - Host functions (e.g., `wasi:thread/spawn` if not polyfilled).

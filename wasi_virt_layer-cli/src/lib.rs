@@ -5,7 +5,9 @@ use crate::{
     args::{BuildArgs, TargetMemoryType},
     commands::{build::build, new::new},
     config_checker::{FeatureChecker, HasFeature, TomlRestorers},
+    fallback_command::CommandLock,
     generator::WasmPath,
+    unique_name::UniqueName,
 };
 
 pub mod abi;
@@ -13,14 +15,38 @@ pub mod args;
 pub mod commands;
 pub mod compile;
 pub mod config_checker;
+pub mod ctrlc_handler;
 pub mod down_color;
-pub mod fallback_command;
+pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
 pub mod generator;
 pub mod instrs;
 pub mod test_run;
+pub mod unique_name;
 pub mod util;
 
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
+    ctrlc_handler::init();
+
+    let command_lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire()?)));
+    let cl_clone = command_lock.clone();
+    ctrlc_handler::register(move || {
+        if let Ok(mut lock) = cl_clone.lock() {
+            if let Some(l) = lock.take() {
+                drop(l);
+            }
+        }
+    });
+
+    struct MainCommandLockGuard(std::sync::Arc<std::sync::Mutex<Option<CommandLock>>>);
+    impl Drop for MainCommandLockGuard {
+        fn drop(&mut self) {
+            if let Ok(mut lock) = self.0.lock() {
+                let _ = lock.take();
+            }
+        }
+    }
+    let _command_lock_guard = MainCommandLockGuard(command_lock);
+
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Info)
         .init();
@@ -38,5 +64,3 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         args::Command::New(new_args) => new(new_args),
     }
 }
-
-// deno run dist/example_vfs.js

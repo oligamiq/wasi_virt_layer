@@ -1,0 +1,8 @@
+[test-groups]
+serial = { max-threads = 1 }
+
+[[profile.default.overrides]]
+filter = 'package(wasi_virt_layer-cli) and (test(test_build) or test(all_features) or test(test_keep_build_artifacts) or test(test_no_thread_with_thread_feature_vfs) or test(test_fallback) or test(test_get_file_main_name) or test(test_unique_name)) or package(wasi_virt_layer) and (test(test_file_flat_iterate) or test(test_const_binary_map) or test(test_quick_sort) or test(test_wasm_path_components)) or package(threads_vfs) and (test(test_files))'
+test-group = 'serial'
+slow-timeout = { period = "300s", terminate-after = 600 }
+# cargo nextest show-config test-groups
