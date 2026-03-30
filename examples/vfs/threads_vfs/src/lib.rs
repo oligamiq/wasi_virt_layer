@@ -1,5 +1,5 @@
 use const_struct::const_struct;
-use wasi_virt_layer::{file::*, plug_process, prelude::*, thread::DirectThreadPool};
+use wasi_virt_layer::{file::*, plug_process, prelude::*};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -64,8 +64,12 @@ const FILES: NormalFILES = ConstFiles!([(
     ],
 )]);
 
-plug_thread!(DirectThreadPool, self, test_threads);
-plug_process!(test_threads, self);
+plug_thread!(
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new() },
+    self,
+    test_threads
+);
+plug_process!(wasi_virt_layer::process::DefaultProcess, test_threads, self);
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
     environ: &[

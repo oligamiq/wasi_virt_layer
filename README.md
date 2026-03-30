@@ -38,6 +38,7 @@ For further details, please refer to the example.
 # TODO!
 - Support non-binary Wasm modules
 - Enable specifying multiple Wasm modules
+- Support self is not passed in plug_thread!
 - Support self binary
 - support flush sync to file system
 - Fake global allocator and center allocator and merge with vfs
@@ -47,8 +48,9 @@ For further details, please refer to the example.
 - Feature Access time etc traits
 - Separate mode (connect function by javascript)
 - threading vfs with non threading wasm
-- valider with error on threads
+- validator with error on threads
 - Unicode support
+- Async wit support
 
 # run example
 ```bash
@@ -64,6 +66,11 @@ cargo r -r -- -p threads_vfs test_threads -t single --threads true
 
 # goal
 
+# development
+install `cargo binstall cargo-nextest -y`
+install deno
+- `cargo nextest run -r --fail-fast`
+
 # メモ
 cargo r -- -p threads_vfs test_threads -t multi --threads true
 _resetなしだとsingleもmultiも成功
@@ -78,3 +85,14 @@ build target dirのキャッシュ(--no-cache)
 同時実行対策
 超絶長い引数で失敗するかも
 自分自身を呼び出す（フォールバック）
+
+## 色んなスレッド作成の順番での失敗か
+single_memory failed
+multi_memory OK
+VFS -> Body
+
+success
+Body -> Body
+
+success
+VFS -> VFS

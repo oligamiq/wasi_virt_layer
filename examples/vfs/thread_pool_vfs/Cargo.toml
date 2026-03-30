@@ -14,9 +14,13 @@ readme.workspace = true
 publish = false
 
 [dependencies]
-wasi_virt_layer = { workspace = true, features = ["threads"] }
+wit-bindgen = "0.54.0"
 const_struct = "0.6.2"
-wit-bindgen = "0.43.0"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+default-features = false
+features = ["threads", "unstable_print_debug"]
 
 [lib]
 crate-type = ["cdylib"]

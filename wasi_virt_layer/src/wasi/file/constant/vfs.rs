@@ -252,6 +252,22 @@ where
         })
     }
 
+    pub(crate) fn fd_fdstat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+    ) -> Result<wasip1::Fdstat, wasip1::Errno> {
+        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+
+        let filestat = lfs.fd_filestat_get_raw::<Wasm>(inode)?;
+
+        Ok(wasip1::Fdstat {
+            fs_filetype: filestat.filetype,
+            fs_flags: 0,
+            fs_rights_base: !0,
+            fs_rights_inheriting: !0,
+        })
+    }
+
     pub(crate) fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> Result<(), wasip1::Errno> {
         if self.remove_inode(fd).is_none() {
             return Err(wasip1::ERRNO_BADF);

@@ -321,7 +321,7 @@ impl InitOnce {
         }
     }
 
-    pub fn call_once<F: FnOnce()>(&self, f: F) {
+    pub fn call_once(&self, f: impl FnOnce()) {
         if !self
             .is_init
             .swap(true, core::sync::atomic::Ordering::SeqCst)
@@ -342,18 +342,22 @@ impl InitOnce {
 /// Note: This ABI call is low-level. Please verify the ABI thoroughly.
 ///
 /// ```rust
+/// use wasi_virt_layer::wasip1;
+///
 /// unsafe fn fd_read(
 ///     fd: wasip1::Fd,
 ///     iovs: wasip1::IovecArray<'_>,
 /// ) -> Result<wasip1::Size, wasip1::Errno> {
+///     use crate::*;
+///
 ///     let mut rp0 = core::mem::MaybeUninit::<wasip1::Size>::uninit();
-
+///
 ///     let fd = fd as i32;
 ///     let iovs_ptr = iovs.as_ptr() as i32;
 ///     let iovs_len = iovs.len() as i32;
 ///     let rp0_ptr = rp0.as_mut_ptr() as i32;
-
-///     let ret = crate::non_recursive_wasi_snapshot_preview1!(
+///
+///     let ret = wasi_virt_layer::non_recursive_wasi_snapshot_preview1!(
 ///         fd_read(
 ///             fd: i32,
 ///             iovs_ptr: i32,
@@ -361,7 +365,7 @@ impl InitOnce {
 ///             rp0_ptr: i32
 ///         ) -> i32
 ///     );
-
+///
 ///     match ret {
 ///         0 => Ok(unsafe { core::ptr::read(rp0.as_mut_ptr() as i32 as *const wasip1::Size) }),
 ///         _ => Err(unsafe { core::mem::transmute::<u16, wasip1::Errno>(ret as u16) }),

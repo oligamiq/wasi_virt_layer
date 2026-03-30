@@ -78,6 +78,16 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get() -> i32 {
     //     out(b"\n");
     // }
     core::mem::drop(_guard);
+
+    // Implementation for the 5-second panic check should be added here
+    // static TIME: std::sync::LazyLock<std::time::Instant> =
+    //     std::sync::LazyLock::new(|| std::time::Instant::now());
+
+    // if TIME.elapsed().as_secs() > 5 {
+    //     out(b"Error: Global variable read lock has been held for over 5 seconds!\n");
+    //     panic!("Global variable read lock timeout");
+    // }
+
     // out(b"unlocked global read\n");
     i
 }

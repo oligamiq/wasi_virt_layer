@@ -11,16 +11,32 @@ pub struct TomlRestorer {
     changed: String,
 }
 
+use std::sync::{Arc, Mutex};
+
 #[derive(Debug, Clone)]
-pub struct TomlRestorers(Vec<TomlRestorer>);
+pub struct TomlRestorers {
+    inner: Arc<Mutex<Vec<TomlRestorer>>>,
+}
+
+impl Drop for TomlRestorers {
+    fn drop(&mut self) {
+        if std::thread::panicking() {
+            self.restore_if_needed();
+        }
+    }
+}
 
 impl TomlRestorers {
     pub fn new() -> Self {
-        Self(Vec::new())
+        Self {
+            inner: Arc::new(Mutex::new(Vec::new())),
+        }
     }
 
     pub fn with(restorer: TomlRestorer) -> Self {
-        Self(vec![restorer])
+        Self {
+            inner: Arc::new(Mutex::new(vec![restorer])),
+        }
     }
 
     pub fn extend(&mut self, restorers: Vec<TomlRestorer>) {
@@ -30,11 +46,29 @@ impl TomlRestorers {
     }
 
     pub fn push(&mut self, restorer: TomlRestorer) {
-        self.0.push(restorer);
+        self.inner.lock().unwrap().push(restorer);
+    }
+
+    /// Restore if any restorers are present. This does not consume the restorers, but clears them after restoring.
+    pub fn restore_if_needed(&self) {
+        if let Ok(mut restorers) = self.inner.lock() {
+            if !restorers.is_empty() {
+                for restorer in restorers.iter() {
+                    let _ = std::fs::write(&restorer.path, &restorer.original);
+                }
+                restorers.clear();
+            }
+        }
     }
 
     pub fn restore(self) -> eyre::Result<()> {
-        for restorer in self.0 {
+        let mut restorers_lock = self
+            .inner
+            .lock()
+            .map_err(|_| eyre::eyre!("Failed to lock restorers"))?;
+        let restorers = std::mem::take(&mut *restorers_lock);
+        drop(restorers_lock); // Release lock before I/O
+        for restorer in restorers {
             restorer.restore()?;
         }
         Ok(())
@@ -215,8 +249,8 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
             HasFeature::EnabledOnNormal
         } else {
             // check workspace
-            match &crate_setting["workspace"] {
-                v if v.as_bool().unwrap_or(false) => {
+            match &crate_setting.get("workspace") {
+                Some(v) if v.as_bool().unwrap_or(false) => {
                     let doc = self.read_workspace_manifest::<Document<String>>()?;
 
                     let crate_setting = &doc["workspace"]["dependencies"][crate_name];
@@ -227,6 +261,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
                         HasFeature::Disabled
                     }
                 }
+                None => HasFeature::Disabled,
                 _ => HasFeature::Disabled,
             }
         })

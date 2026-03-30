@@ -108,6 +108,20 @@ where
         }
     }
 
+    fn fd_fdstat_get_raw<Wasm: WasmAccess>(
+        &mut self,
+        fd: Fd,
+        fdstat_ptr: *mut wasip1::Fdstat,
+    ) -> wasip1::Errno {
+        match self.fd_fdstat_get_raw::<Wasm>(fd) {
+            Ok(fdstat) => {
+                Wasm::store_le(fdstat_ptr, fdstat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
+
     fn fd_read_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
