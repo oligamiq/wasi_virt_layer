@@ -47,3 +47,7 @@ opt-level = 3
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[workspace.metadata.release]
+tag-name = "v{{version}}"
+shared-version = true
