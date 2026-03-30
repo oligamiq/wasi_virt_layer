@@ -40,5 +40,101 @@ pub fn new(args: NewArgs) -> eyre::Result<()> {
             .status()?;
     }
 
+    // Rewrite src/lib.rs
+    let lib_rs_path = path.join("src").join("lib.rs");
+    std::fs::write(lib_rs_path, SRC_TEMPLATE)?;
+
+    // Create @/wit/component-abi.wit
+    let wit_dir = path.join("wit");
+    std::fs::create_dir_all(&wit_dir)?;
+
+    let wit_path = wit_dir.join("component-abi.wit");
+    std::fs::write(wit_path, WIT_TEMPLATE)?;
+
     Ok(())
 }
+
+const WIT_TEMPLATE: &str = r#"
+package component-abi:host;
+
+world component-abi {
+  export main: func();
+}
+"#.trim_ascii();
+
+const SRC_TEMPLATE: &str = r#"
+use const_struct::const_struct;
+use wasi_virt_layer::{file::*, prelude::*};
+
+struct ComponentABI;
+
+wit_bindgen::generate!({
+    // the name of the world in the `*.wit` input file
+    world: "component-abi",
+});
+
+import_wasm!(my_wasm);
+
+impl Guest for ComponentABI {
+    fn main() {
+        my_wasm::_reset();
+        my_wasm::_start();
+        my_wasm::_main();
+    }
+}
+
+mod env {
+    use super::*;
+
+    #[const_struct]
+    const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
+        environ: &[
+            "HOME=~/",
+        ],
+    };
+
+    plug_env!(@const, HostEnvTy, self);
+}
+
+mod fs {
+    use super::*;
+
+    const FILE_COUNT: usize = 10;
+
+    #[const_struct]
+    const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
+        ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
+        (
+            ".",
+            [
+                ("hey", WasiConstFile::new("Hey!")),
+                (
+                    "hello",
+                    [
+                        ("world", WasiConstFile::new("Hello, world!")),
+                        ("everyone", WasiConstFile::new("Hello, everyone!")),
+                    ]
+                )
+            ]
+        ),
+        (
+            "~",
+            [
+                ("home", WasiConstFile::new("This is home")),
+                ("user", WasiConstFile::new("This is user")),
+            ]
+        )
+    ]);
+
+    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
+
+    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
+        Wasip1ConstVFS::new(VFSConstNormalLFS::new());
+
+    plug_fs!(@const, {
+        #[allow(static_mut_refs)]
+        unsafe { &mut VIRTUAL_FILE_SYSTEM }
+    }, my_wasm);
+}
+
+"#.trim_ascii();
