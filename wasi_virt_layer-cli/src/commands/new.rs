@@ -69,7 +69,7 @@ world component-abi {
 
 const SRC_TEMPLATE: &str = r#"
 use const_struct::const_struct;
-use wasi_virt_layer::{file::*, prelude::*};
+use wasi_virt_layer::{file::*, prelude::*, process::*};
 
 struct ComponentABI;
 
@@ -88,17 +88,22 @@ impl Guest for ComponentABI {
     }
 }
 
+export!(ComponentABI);
+
+mod process {
+    use super::*;
+    plug_process!(DefaultProcess, my_wasm, self);
+}
+
 mod env {
     use super::*;
 
     #[const_struct]
     const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
-        environ: &[
-            "HOME=~/",
-        ],
+        environ: &["HOME=~/"],
     };
 
-    plug_env!(@const, HostEnvTy, self);
+    plug_env!(@const, HostEnvTy, my_wasm);
 }
 
 mod fs {
@@ -141,6 +146,5 @@ mod fs {
         unsafe { &mut VIRTUAL_FILE_SYSTEM }
     }, my_wasm);
 }
-
 "#
 .trim_ascii();

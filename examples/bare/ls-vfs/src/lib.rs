@@ -1,7 +1,6 @@
 use const_struct::const_struct;
-use wasi_virt_layer::{file::*, prelude::*};
+use wasi_virt_layer::{file::*, prelude::*, process::*};
 
-#[allow(dead_code)]
 struct ComponentABI;
 
 wit_bindgen::generate!({
@@ -19,16 +18,22 @@ impl Guest for ComponentABI {
     }
 }
 
+export!(ComponentABI);
+
+mod process {
+    use super::*;
+    plug_process!(DefaultProcess, ls, self);
+}
+
 mod env {
     use super::*;
 
     #[const_struct]
-    #[allow(dead_code)]
     const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
         environ: &["HOME=~/"],
     };
 
-    plug_env!(@const, HostEnvTy, self);
+    plug_env!(@const, HostEnvTy, ls);
 }
 
 mod fs {

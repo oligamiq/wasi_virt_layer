@@ -105,11 +105,7 @@ pub(crate) trait WalrusUtilExport: Debug {
     fn erase<A>(&mut self, as_fn: impl WalrusFID<A>) -> eyre::Result<()>;
     /// As it deletes based on the fid, it may involve functions that export the same function.
     fn erase_with<A>(&mut self, as_fn: impl WalrusFID<A>, debug: bool) -> eyre::Result<()> {
-        if !debug {
-            self.erase(as_fn)
-        } else {
-            Ok(())
-        }
+        if !debug { self.erase(as_fn) } else { Ok(()) }
     }
 }
 
@@ -2928,8 +2924,8 @@ where
                     let old = mask;
                     mask |= features_masks[dep_idx];
                     if mask != features_masks[i] { // Check against current stored mask, not 'old' local var if we updated it?
-                         // Logic: mask |= dep_mask.
-                         // If mask grew, changed=true.
+                        // Logic: mask |= dep_mask.
+                        // If mask grew, changed=true.
                     }
                 }
                 if mask != features_masks[i] {
@@ -3123,7 +3119,7 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
                         // And add 1 << that bit.
 
                         let missing_indices = missing; // How to iterate?
-                                                       // Iterate bits of missing.
+                        // Iterate bits of missing.
 
                         // Let's accumulate a "jump_mask".
                         // jump_mask |= (1 << i).
@@ -3144,15 +3140,15 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
                 // Found violations.
                 // We want smallest bit in jump_mask.
                 let lz = jump_mask.trailing_zeros(); // LSB (Start).
-                                                     // Wait. trailing_zeros counts from MSB in BitArray (Lsb0)???
-                                                     // NO. I decided earlier it counted from MSB.
-                                                     // But leading_zeros counted from LSB?
-                                                     // `from_one_pos` uses index.
-                                                     // If I want index of lowest bit.
-                                                     // If `Lsb0`: Index 0 is lowest.
-                                                     // If `trailing_zeros` counts from End (127).
-                                                     // `leading_zeros` counts from Start (0).
-                                                     // So I want `leading_zeros`.
+                // Wait. trailing_zeros counts from MSB in BitArray (Lsb0)???
+                // NO. I decided earlier it counted from MSB.
+                // But leading_zeros counted from LSB?
+                // `from_one_pos` uses index.
+                // If I want index of lowest bit.
+                // If `Lsb0`: Index 0 is lowest.
+                // If `trailing_zeros` counts from End (127).
+                // `leading_zeros` counts from Start (0).
+                // So I want `leading_zeros`.
 
                 // Let's use `leading_zeros`.
                 let bit = jump_mask.leading_zeros(); // Index of first set bit (lowest index).
@@ -3215,7 +3211,9 @@ mod tests {
                 .iter()
                 .map(|b| b.as_raw_slice()[0])
                 .collect::<Vec<u64>>(),
-            &[0b00000, 0b00001, 0b00100, 0b00101, 0b10000, 0b10001, 0b10100, 0b10101]
+            &[
+                0b00000, 0b00001, 0b00100, 0b00101, 0b10000, 0b10001, 0b10100, 0b10101
+            ]
         );
     }
 
@@ -3424,7 +3422,9 @@ mod tests {
         // Also verify some known valid combinations are present
         assert!(combinations.contains(&HashSet::from([])));
         assert!(combinations.contains(&HashSet::from([String::from("Base")])));
-        assert!(combinations.contains(&HashSet::from([String::from("Base"), String::from("Left")])));
+        assert!(
+            combinations.contains(&HashSet::from([String::from("Base"), String::from("Left")]))
+        );
         assert!(combinations.contains(&HashSet::from([
             String::from("Base"),
             String::from("Left"),
