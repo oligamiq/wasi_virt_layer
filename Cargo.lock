@@ -651,11 +651,11 @@ dependencies = [
 
 [[package]]
 name = "example_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1030,14 +1030,14 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "ls"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "ls-vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.1",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1070,19 +1070,19 @@ dependencies = [
 
 [[package]]
 name = "no_std_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "no_thread_with_thread_feature_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1352,10 +1352,10 @@ checksum = "b50b8869d9fc858ce7266cce0194bd74df58b9d0e3f6df3a9fc8eb470d95c09d"
 
 [[package]]
 name = "rustc_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1475,14 +1475,14 @@ dependencies = [
 
 [[package]]
 name = "spawn_vfs_and_body_example"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "spawn_vfs_and_body_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1617,15 +1617,15 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test_pool_thread"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "test_threads"
-version = "0.1.1"
+version = "0.1.2"
 
 [[package]]
 name = "test_wasm"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "walkdir",
 ]
@@ -1672,29 +1672,29 @@ dependencies = [
 
 [[package]]
 name = "thread_direct_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "thread_pool_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "threads_vfs"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.2",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1844,6 +1844,19 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 [[package]]
 name = "wasi_virt_layer"
 version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9c429320537d42ee4f9b3d03b6ed5bc642f7470debac464947cc0dca53870890"
+dependencies = [
+ "const_for",
+ "const_struct",
+ "paste",
+ "wasi",
+ "wit-bindgen 0.44.0",
+]
+
+[[package]]
+name = "wasi_virt_layer"
+version = "0.1.2"
 dependencies = [
  "backtrace",
  "const_for",
@@ -1858,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "wasi_virt_layer-cli"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2217,6 +2230,15 @@ dependencies = [
 
 [[package]]
 name = "wit-bindgen"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "04bd9ed271234163b18c92783b0d406f08ca32c232e972f207a68c7b324c44bf"
+dependencies = [
+ "wit-bindgen-rt",
+]
+
+[[package]]
+name = "wit-bindgen"
 version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d7249219f66ced02969388cf2bb044a09756a083d0fab1e566056b04d9fbcaa5"
@@ -2265,6 +2287,15 @@ dependencies = [
  "anyhow",
  "heck 0.5.0",
  "wit-parser 0.245.1",
+]
+
+[[package]]
+name = "wit-bindgen-rt"
+version = "0.44.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "653c85dd7aee6fe6f4bded0d242406deadae9819029ce6f7d258c920c384358a"
+dependencies = [
+ "bitflags",
 ]
 
 [[package]]
