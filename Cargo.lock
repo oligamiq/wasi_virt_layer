@@ -1886,6 +1886,7 @@ dependencies = [
  "paste",
  "regex",
  "serde_json",
+ "smallvec",
  "strsim",
  "strum 0.28.0",
  "tempfile",

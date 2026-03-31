@@ -14,12 +14,13 @@ macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
             abi_connect, check, debug, memory, patch_component, shared_global, special_func,
-            threads,
+            threads, anonymous,
         };
 
         generator::add_generators_by_type!(
             $runner,
             check::IsRustWasm,
+            anonymous::Anonymous,
             check::CheckUseLibrary,
             check::CheckVFSMemoryType,
             check::CheckUnusedThreads,

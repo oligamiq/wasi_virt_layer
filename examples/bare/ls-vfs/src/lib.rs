@@ -33,7 +33,7 @@ mod env {
         environ: &["HOME=~/"],
     };
 
-    plug_env!(@const, HostEnvTy, anonymous);
+    plug_env!(@const, HostEnvTy, anonymous, self);
 }
 
 mod fs {

@@ -7,6 +7,7 @@ pub mod shared_global;
 pub mod special_func;
 pub mod start_section;
 pub mod threads;
+pub mod anonymous;
 
 use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
 
@@ -685,6 +686,12 @@ impl GeneratorRunner {
             .ok_or_else(|| eyre::eyre!("Failed to get VFS name"))?;
 
         let target_names = wasm_name_holder_iter.collect::<Box<_>>();
+
+        // log targeting info
+        for name in target_names.iter() {
+            log::info!("Targeting module: {name}");
+        }
+        log::info!("VFS module: {vfs_name}");
 
         let target_names_with_self = target_names
             .iter()

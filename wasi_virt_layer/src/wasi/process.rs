@@ -24,6 +24,10 @@ impl ProcessExit for DefaultProcess {
 #[macro_export]
 macro_rules! plug_process {
     ($ty:ty, $($wasm:ident),*) => {
+        const _ : () = {
+            type __TYPE = $ty;
+        };
+
         $crate::__private::paste::paste! {
             $(
                 #[unsafe(no_mangle)]

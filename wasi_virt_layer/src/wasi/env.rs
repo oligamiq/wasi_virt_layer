@@ -66,6 +66,10 @@ macro_rules! plug_env {
     };
 
     (@inner, @const, $ty:ty, $($wasm:ident),*) => {
+        const _: () = {
+            type __TYPE = $ty;
+        };
+
         $crate::__private::paste::paste! {
             $(
                 #[unsafe(no_mangle)]

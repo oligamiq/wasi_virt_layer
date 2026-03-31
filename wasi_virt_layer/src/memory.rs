@@ -19,11 +19,11 @@ macro_rules! import_wasm {
         import_wasm!(@inner, $name);
     };
     (@inner, $name:ident) => {
-        $crate::__private::paste::paste! {
-            #[allow(non_camel_case_types)]
-            #[derive(Debug, Clone, Copy)]
-            struct $name;
+        #[allow(non_camel_case_types)]
+        #[derive(Debug, Clone, Copy)]
+        struct $name;
 
+        $crate::__private::paste::paste! {
             #[doc(hidden)]
             #[cfg(target_os = "wasi")]
             #[link(wasm_import_module = "wasip1-vfs")]

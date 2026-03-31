@@ -10,7 +10,7 @@ use crate::{
     util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
 };
 
-#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq, strum::VariantNames)]
 #[strum(serialize_all = "snake_case")]
 pub enum MemoryUniqueName<'a> {
     MemoryCopyFrom(&'a WasmName),
