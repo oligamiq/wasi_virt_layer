@@ -14,6 +14,8 @@ alloc = []
 multi_memory = ["alloc"]
 std = ["alloc", "wasip1/std"]
 threads = ["std", "dep:parking_lot", "dep:dashmap"]
+trace = ["trace-fs"]
+trace-fs = []
 # this is unstable
 unstable_print_debug = ["std", "dep:backtrace"]
 

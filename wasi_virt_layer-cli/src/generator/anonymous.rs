@@ -58,10 +58,6 @@ impl Generator for Anonymous {
             let target_export_name = format!("{PREFIX}{only_target}{postfix}");
             if let Some(export) = module.exports.iter_mut().find(|e| e.name == anonymous_export_name) {
                 export.name = target_export_name;
-            } else {
-                eyre::bail!(
-                    "VFS wasm requires export `{anonymous_export_name}`, but it is not found. Please check the VFS wasm or specify the target explicitly instead of `<anonymous>`."
-                );
             }
         }
 
@@ -97,11 +93,6 @@ impl Generator for Anonymous {
                         import.name = format!("{PREFIX}{only_target}_{f}");
                     }
                 }
-        }
-
-        // Display all exports after rewrite.
-        for export in module.exports.iter() {
-            log::info!("Export: {}", export.name);
         }
 
         Ok(())

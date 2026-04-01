@@ -39,7 +39,13 @@ where
 
     #[cfg(not(feature = "threads"))]
     pub const fn new(lfs: LFS) -> Self {
-        let map: [Option<(LFS::Inode, usize)>; FLAT_LEN] = [const { None }; FLAT_LEN];
+        let mut map: [Option<(LFS::Inode, usize)>; FLAT_LEN] = [const { None }; FLAT_LEN];
+
+        use const_for::const_for;
+
+        const_for!(i in 0..LFS::PRE_OPEN.len() => {
+            map[i] = Some((LFS::PRE_OPEN[i], i));
+        });
 
         Self { lfs, map }
     }
@@ -104,6 +110,11 @@ where
         }
 
         unreachable!();
+    }
+
+    #[inline]
+    pub fn get_lfs(&mut self) -> &mut LFS {
+        &mut self.lfs
     }
 
     #[inline]
