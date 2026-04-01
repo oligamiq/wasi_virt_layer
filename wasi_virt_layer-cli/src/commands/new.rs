@@ -1,23 +1,35 @@
+use camino::Utf8Path;
+use eyre::Context;
+
 use crate::args::NewArgs;
 
 pub fn new(args: NewArgs) -> eyre::Result<()> {
-    let path = args.path;
+    let NewArgs { path, threads } = args;
 
     // If already exists
     if path.exists() {
-        return Err(eyre::eyre!("Directory already exists"));
+        eyre::bail!("Path already exists");
     }
 
     let name = path
         .file_name()
         .ok_or_else(|| eyre::eyre!("Failed to get file name"))?;
 
-    let dir = path
-        .parent()
-        .ok_or_else(|| eyre::eyre!("Failed to get parent directory"))?;
-    if !dir.exists() {
-        std::fs::create_dir_all(&dir)?;
+    let dir = match path.parent() {
+        Some(parent) if parent != "" => {
+            if !parent.exists() {
+                std::fs::create_dir_all(parent)?;
+            }
+            parent.to_path_buf().canonicalize()
+                .with_context(|| format!("Failed to canonicalize parent directory `{parent}`"))
+        }
+        _ => std::env::current_dir()
+            .context("Failed to get current directory")
+            .and_then(|d| d.canonicalize().with_context(|| "Failed to canonicalize current directory"))
     }
+    .context("Failed to get parent directory")?;
+
+    log::info!("Creating new crate at `{path}` with name `{name}`");
 
     // run `cargo init` in the new directory
     std::process::Command::new("cargo")
@@ -25,35 +37,50 @@ pub fn new(args: NewArgs) -> eyre::Result<()> {
         .arg("--lib")
         .arg(&name)
         .current_dir(&dir)
-        .status()?;
+        .status()
+        .context("Failed to initialize new crate")?;
+
+    log::info!("Adding dependencies");
 
     // setting lib
     // [lib]
     // crate-type = ["cdylib"]
     let cargo_toml_path = path.join("Cargo.toml");
-    let mut cargo_toml = std::fs::read_to_string(&cargo_toml_path)?;
+    let mut cargo_toml = std::fs::read_to_string(&cargo_toml_path)
+        .context("Failed to read Cargo.toml")?;
     cargo_toml.push_str("\n[lib]\ncrate-type = [\"cdylib\"]\n");
-    std::fs::write(cargo_toml_path, cargo_toml)?;
+    std::fs::write(cargo_toml_path, cargo_toml)
+        .context("Failed to write Cargo.toml")?;
 
-    let dependencies = ["wasi-virt-layer", "wit-bindgen", "const_struct"];
+    let dependencies = ["wasi-virt-layer", "const_struct"];
     for dependency in dependencies {
         std::process::Command::new("cargo")
             .arg("add")
             .arg(dependency)
             .current_dir(&path)
-            .status()?;
+            .status()
+            .context(format!("Failed to add dependency {dependency}"))?;
     }
+
+    std::process::Command::new("cargo")
+        .args(["add", "wit-bindgen", "--no-default-features", "--features", "macros,std"])
+        .current_dir(&path)
+        .status()
+        .context(format!("Failed to add dependency wit-bindgen"))?;
 
     // Rewrite src/lib.rs
     let lib_rs_path = path.join("src").join("lib.rs");
-    std::fs::write(lib_rs_path, SRC_TEMPLATE)?;
+    std::fs::write(lib_rs_path, SRC_TEMPLATE)
+        .context("Failed to write src/lib.rs")?;
 
     // Create @/wit/component-abi.wit
     let wit_dir = path.join("wit");
-    std::fs::create_dir_all(&wit_dir)?;
+    std::fs::create_dir_all(&wit_dir)
+        .context("Failed to create wit directory")?;
 
     let wit_path = wit_dir.join("component-abi.wit");
-    std::fs::write(wit_path, WIT_TEMPLATE)?;
+    std::fs::write(wit_path, WIT_TEMPLATE)
+        .context("Failed to write component-abi.wit")?;
 
     Ok(())
 }

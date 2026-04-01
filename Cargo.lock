@@ -655,7 +655,7 @@ version = "0.1.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1037,7 +1037,7 @@ name = "ls-vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1073,7 +1073,7 @@ name = "no_std_vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1082,7 +1082,7 @@ name = "no_thread_with_thread_feature_vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1355,7 +1355,7 @@ name = "rustc_vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1482,7 +1482,7 @@ name = "spawn_vfs_and_body_vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1675,7 +1675,7 @@ name = "thread_direct_vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1684,7 +1684,7 @@ name = "thread_pool_vfs"
 version = "0.1.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1694,7 +1694,7 @@ version = "0.1.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer",
+ "wasi_virt_layer 0.1.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1851,6 +1851,20 @@ dependencies = [
  "dashmap",
  "flume",
  "parking_lot",
+ "paste",
+ "wasi",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
+name = "wasi_virt_layer"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e767b9e4d6b1573657383df424f0fddcc67c40fe703f24e7d9c5bb69afce5184"
+dependencies = [
+ "const_for",
+ "const_struct",
+ "flume",
  "paste",
  "wasi",
  "wit-bindgen 0.54.0",

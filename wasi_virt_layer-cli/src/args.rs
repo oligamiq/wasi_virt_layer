@@ -25,6 +25,9 @@ pub enum Command {
 pub struct NewArgs {
     /// Path to the new crate
     pub path: Utf8PathBuf,
+
+    #[arg(long, default_value = "false")]
+    pub threads: bool,
 }
 
 #[derive(Parser, Debug)]

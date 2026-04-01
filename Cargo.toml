@@ -15,8 +15,7 @@ members = [
     "examples/vfs/no_std_vfs",
     "examples/vfs/no_thread_with_thread_feature_vfs",
     "examples/vfs/spawn_vfs_and_body_vfs",
-    "examples/test_wasm/spawn_vfs_and_body_example",
-    "examples/bare/ls-vfs",
+    "examples/test_wasm/spawn_vfs_and_body_example", "examples/bare/ls-vfs",
 ]
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
