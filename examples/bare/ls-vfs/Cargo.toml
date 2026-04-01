@@ -12,7 +12,7 @@ homepage.workspace = true
 readme.workspace = true
 
 [dependencies]
-const_struct = "0.6.2"
+const_struct = "0.6.3"
 wit-bindgen = "0.54.0"
 
 [dependencies.wasi_virt_layer]

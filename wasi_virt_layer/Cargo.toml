@@ -22,7 +22,7 @@ unstable_print_debug = ["std", "dep:backtrace"]
 
 [dependencies]
 wit-bindgen = { version = "0.54.0", default-features = false }
-const_struct = "0.6.2"
+const_struct = "0.6.3"
 const_for = "0.1.5"
 paste = "1.0.15"
 dashmap = { version = "6.1.0", optional = true }

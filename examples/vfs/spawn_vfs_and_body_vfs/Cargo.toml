@@ -14,7 +14,7 @@ readme.workspace = true
 
 [dependencies]
 wit-bindgen = "0.54.0"
-const_struct = "0.6.2"
+const_struct = "0.6.3"
 
 [dependencies.wasi_virt_layer]
 workspace = true
