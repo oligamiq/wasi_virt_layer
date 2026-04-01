@@ -8,6 +8,7 @@ pub mod special_func;
 pub mod start_section;
 pub mod threads;
 pub mod anonymous;
+pub mod producer;
 
 use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
 
