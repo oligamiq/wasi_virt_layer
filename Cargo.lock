@@ -1852,7 +1852,7 @@ dependencies = [
  "flume",
  "parking_lot",
  "paste",
- "wasi",
+ "wasip1",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1914,6 +1914,12 @@ dependencies = [
  "windows-sys",
  "wit-component 0.245.1",
 ]
+
+[[package]]
+name = "wasip1"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5e26842486624357dbeb8f0381cf1fb42f022291fd787d4a816768fec8cc760"
 
 [[package]]
 name = "wasip2"

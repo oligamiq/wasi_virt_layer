@@ -42,4 +42,4 @@ flume = { version = "0.12.0", default-features = false, features = ["select"] }
 # wasmtime-wasi = "17.0.3"
 
 [target.'cfg(target_os = "wasi")'.dependencies]
-wasip1 = { version = "0.11.1", default-features = false, package = "wasi" }
+wasip1 = { version = "1.0.0", default-features = false }

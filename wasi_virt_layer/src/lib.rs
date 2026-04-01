@@ -1,4 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+pub mod wasip1_derive;
 
 #[cfg(feature = "simple-debug")]
 pub mod simple_debug;
