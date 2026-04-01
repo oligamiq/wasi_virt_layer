@@ -591,19 +591,15 @@ impl Generator for DebugExportVFSFunctions {
 }
 
 #[derive(Debug, Default)]
-pub struct DebugBase;
+pub struct SimpleDebug;
 
-impl Generator for DebugBase {
+impl Generator for SimpleDebug {
     fn post_combine(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &crate::generator::GeneratorCtx,
+        _: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
-        if !ctx.unstable_print_debug {
-            return Ok(());
-        }
-
-        if let Some(id) = "debug_wasip1_vfs_pre_init".get_fid(&module.exports).ok() {
+        if let Some(id) = "simple_debug_wasip1_vfs_pre_init".get_fid(&module.exports).ok() {
             let start = module.funcs.get_mut(module.start.unwrap());
             start
                 .kind

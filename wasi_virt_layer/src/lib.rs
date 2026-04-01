@@ -1,5 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+#[cfg(feature = "simple-debug")]
+pub mod simple_debug;
+
 // #[cfg(target_os = "wasi")]
 // #[cfg(feature = "std")]
 // #[cfg(feature = "unstable_print_debug")]

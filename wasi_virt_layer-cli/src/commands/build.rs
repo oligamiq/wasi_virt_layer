@@ -37,7 +37,7 @@ macro_rules! add_generator {
             abi_connect::ConnectWasip1ABI,
             abi_connect::ConnectWasip1ThreadsABI,
             abi_connect::NonRecursiveWasiABI,
-            debug::DebugBase,
+            debug::SimpleDebug,
             debug::DebugCallMemoryGrow,
             debug::DebugExportVFSFunctions,
             debug::DebugCallFunctionSmallScale,

@@ -207,16 +207,3 @@ unsafe extern "C" fn debug_blind_print_etc_flag() {
 //     num_to_str(idx, out);
 //     out(b"\n");
 // }
-
-thread_local! {
-    static IS_PRE_INIT: UnsafeCell<bool> = UnsafeCell::new(true);
-}
-
-#[unsafe(no_mangle)]
-extern "C" fn debug_wasip1_vfs_pre_init() {
-    IS_PRE_INIT.with(|c| unsafe { *c.get() = false });
-}
-
-pub fn is_pre_init() -> bool {
-    IS_PRE_INIT.with(|c| unsafe { *c.get() })
-}

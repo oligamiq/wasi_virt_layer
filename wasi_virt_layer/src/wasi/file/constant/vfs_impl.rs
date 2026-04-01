@@ -26,28 +26,8 @@ macro_rules! trace_fs {
             };
 
             let b = msg.as_bytes();
-            // let _ = lfs.fd_write_stderr_raw::<$wasm>(b.as_ptr(), b.len());
-            // crate::debug::out(b);
 
-            // TODO: Create simple debug feature and move this function to there.
-            fn out(buf: &[u8]) {
-                unsafe {
-                    let ciovec_arr = [wasip1::Ciovec {
-                        buf: buf.as_ptr() as *const u8,
-                        buf_len: buf.len(),
-                    }];
-
-                    let mut rp0 = core::mem::MaybeUninit::<wasip1::Size>::uninit();
-                    wasip1::wasi_snapshot_preview1::fd_write(
-                        wasip1::FD_STDERR as i32,
-                        ciovec_arr.as_ptr() as i32,
-                        1,
-                        rp0.as_mut_ptr() as i32,
-                    );
-                }
-            }
-
-            out(b);
+            $crate::simple_debug::simple_debug_print(b);
         }
     };
 }
