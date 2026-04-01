@@ -1,14 +1,14 @@
 pub mod abi_connect;
+pub mod anonymous;
 pub mod check;
 pub mod debug;
 pub mod memory;
 pub mod patch_component;
+pub mod producer;
 pub mod shared_global;
 pub mod special_func;
 pub mod start_section;
 pub mod threads;
-pub mod anonymous;
-pub mod producer;
 
 use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
 

@@ -5,8 +5,12 @@
 use smallvec::SmallVec;
 use strum::VariantNames;
 
-use crate::{abi::Wasip1ABIFunc, generator::{Generator, GeneratorCtx, memory::MemoryUniqueName}, unique_name::{UniqueName}, util::WasmName};
-
+use crate::{
+    abi::Wasip1ABIFunc,
+    generator::{Generator, GeneratorCtx, memory::MemoryUniqueName},
+    unique_name::UniqueName,
+    util::WasmName,
+};
 
 #[derive(Debug, Default)]
 pub struct Anonymous;
@@ -32,9 +36,11 @@ impl Generator for Anonymous {
             })
             .collect::<Vec<_>>();
 
-        let collected = ctx.target_names.iter().filter(
-            |t| !anonymous_targets.iter().any(|at| at == t.as_ref()),
-        ).collect::<SmallVec<[_; 1]>>();
+        let collected = ctx
+            .target_names
+            .iter()
+            .filter(|t| !anonymous_targets.iter().any(|at| at == t.as_ref()))
+            .collect::<SmallVec<[_; 1]>>();
 
         if collected.len() == 0 {
             return Ok(());
@@ -56,7 +62,11 @@ impl Generator for Anonymous {
         for postfix in EXPORT_POSTFIXS {
             let anonymous_export_name = format!("{PREFIX}anonymous{postfix}");
             let target_export_name = format!("{PREFIX}{only_target}{postfix}");
-            if let Some(export) = module.exports.iter_mut().find(|e| e.name == anonymous_export_name) {
+            if let Some(export) = module
+                .exports
+                .iter_mut()
+                .find(|e| e.name == anonymous_export_name)
+            {
                 export.name = target_export_name;
             }
         }
@@ -66,13 +76,14 @@ impl Generator for Anonymous {
                 .name
                 .strip_prefix(PREFIX)
                 .and_then(|s| s.strip_prefix("anonymous_"))
+            {
+                if let Some(f) = Wasip1ABIFunc::VARIANTS
+                    .iter()
+                    .find(|v| anonymous_suffix == **v)
                 {
-                    if let Some(f) = Wasip1ABIFunc::VARIANTS.iter().find(|v| anonymous_suffix == **v)
-                    {
-                        export.name = format!("{PREFIX}{only_target}_{f}");
-                    }
+                    export.name = format!("{PREFIX}{only_target}_{f}");
                 }
-
+            }
         }
 
         const NAMESPACE: &str = UniqueName::NAMESPACE;
@@ -80,19 +91,24 @@ impl Generator for Anonymous {
         // TODO! Implement in `<>UniqueName` and use it.
         const EXTRA_IMPORTS: &[&str] = &["_start", "__main_void", "reset"];
 
-        for import in module.imports.iter_mut().filter(
-            |import| import.module == NAMESPACE
-        ) {
+        for import in module
+            .imports
+            .iter_mut()
+            .filter(|import| import.module == NAMESPACE)
+        {
             if let Some(anonymous_suffix) = import
                 .name
                 .strip_prefix(PREFIX)
                 .and_then(|s| s.strip_prefix("anonymous_"))
+            {
+                if let Some(f) = MemoryUniqueName::VARIANTS
+                    .iter()
+                    .chain(EXTRA_IMPORTS)
+                    .find(|v| anonymous_suffix == **v)
                 {
-                    if let Some(f) = MemoryUniqueName::VARIANTS.iter().chain(EXTRA_IMPORTS).find(|v| anonymous_suffix == **v)
-                    {
-                        import.name = format!("{PREFIX}{only_target}_{f}");
-                    }
+                    import.name = format!("{PREFIX}{only_target}_{f}");
                 }
+            }
         }
 
         Ok(())

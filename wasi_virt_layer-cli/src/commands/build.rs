@@ -13,8 +13,8 @@ use crate::{
 macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
-            abi_connect, check, debug, memory, patch_component, shared_global, special_func,
-            threads, anonymous, producer,
+            abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
+            special_func, threads,
         };
 
         generator::add_generators_by_type!(

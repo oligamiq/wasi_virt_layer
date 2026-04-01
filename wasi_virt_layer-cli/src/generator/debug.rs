@@ -599,7 +599,10 @@ impl Generator for SimpleDebug {
         module: &mut walrus::Module,
         _: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
-        if let Some(id) = "simple_debug_wasip1_vfs_pre_init".get_fid(&module.exports).ok() {
+        if let Some(id) = "simple_debug_wasip1_vfs_pre_init"
+            .get_fid(&module.exports)
+            .ok()
+        {
             let start = module.funcs.get_mut(module.start.unwrap());
             start
                 .kind

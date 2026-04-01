@@ -1248,12 +1248,7 @@ pub struct Prestat {
 #[allow(unused)]
 /// Ref https://docs.rs/wasi/0.11.1+wasi-snapshot-preview1/wasi/wasi_snapshot_preview1/index.html
 pub mod wasi_snapshot_preview1 {
-    pub unsafe extern "C" fn fd_write(
-        arg0: i32,
-        arg1: i32,
-        arg2: i32,
-        arg3: i32,
-    ) -> i32 {
+    pub unsafe extern "C" fn fd_write(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32 {
         unimplemented!("wasi_snapshot_preview1::fd_write");
     }
 }

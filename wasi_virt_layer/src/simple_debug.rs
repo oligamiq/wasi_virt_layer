@@ -55,7 +55,9 @@ mod non_threads {
 
     unsafe impl<T> Sync for NonThreadSafeCell<T> {}
 
-    static IS_PRE_INIT: NonThreadSafeCell<bool> = NonThreadSafeCell { value: UnsafeCell::new(true) };
+    static IS_PRE_INIT: NonThreadSafeCell<bool> = NonThreadSafeCell {
+        value: UnsafeCell::new(true),
+    };
 
     #[unsafe(no_mangle)]
     extern "C" fn simple_debug_wasip1_vfs_pre_init() {
@@ -68,4 +70,3 @@ mod non_threads {
 }
 #[cfg(not(feature = "threads"))]
 pub(crate) use non_threads::is_pre_init;
-
