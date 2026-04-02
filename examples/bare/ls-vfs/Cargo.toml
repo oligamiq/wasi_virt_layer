@@ -13,8 +13,18 @@ readme.workspace = true
 
 [dependencies]
 const_struct = "0.6.3"
-wasi_virt_layer = "0.1.5"
-wit-bindgen = { version = "0.54.0", default-features = false, features = ["macros", "std"] }
+wit-bindgen = { version = "0.54.0", default-features = false, features = [
+    "macros",
+    "std",
+] }
+
+[dependencies.wasi_virt_layer]
+# version = "0.1.5"
+workspace = true
+features = [
+    # "trace-fs"
+    # "std",
+]
 
 [lib]
 crate-type = ["cdylib"]
