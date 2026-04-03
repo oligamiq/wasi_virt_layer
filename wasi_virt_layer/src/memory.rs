@@ -390,7 +390,7 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
     }
 }
 
-pub trait WasmAccess: Copy {
+pub trait WasmAccess: Copy + core::fmt::Debug {
     const NAME: &'static str;
 
     /// Copies data from the source pointer to the offset.

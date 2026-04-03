@@ -357,9 +357,9 @@ checksum = "d9c50fcfdf972929aff202c16b80086aa3cfc6a3a820af714096c58c7c1d0582"
 
 [[package]]
 name = "const_struct"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0ef5fbacc5acb331cee3fcc5e67fb44e3e1c59ae472a6bf8b91006a6c57bed0"
+checksum = "04207617e66ca2c3e0c7847ac072f5e921c498f0b0979f56874c669907835832"
 dependencies = [
  "const_struct_derive",
  "crc",
@@ -368,9 +368,9 @@ dependencies = [
 
 [[package]]
 name = "const_struct_derive"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "653267b3e659df681a910b840bb1adc35a1514be21d5081bc9426dc9d5d79e51"
+checksum = "a826a86812811697608b61d703f3129cc3247c15163358353e38c0c3ced08e5a"
 dependencies = [
  "convert_case",
  "crc",
@@ -871,9 +871,9 @@ checksum = "964de6e86d545b246d84badc0fef527924ace5134f30641c203ef52ba83f58d5"
 
 [[package]]
 name = "indexmap"
-version = "2.13.0"
+version = "2.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
+checksum = "45a8a2b9cb3e0b0c1803dbb0758ffac5de2f425b23c28f518faabd9d805342ff"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.1",

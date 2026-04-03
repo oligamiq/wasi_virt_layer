@@ -35,7 +35,7 @@ macro_rules! trace_fs {
 impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
     for Wasip1ConstVFS<LFS, FLAT_LEN>
 where
-    LFS::Inode: Copy,
+    LFS::Inode: Copy + core::fmt::Debug,
 {
     fn fd_write_raw<Wasm: WasmAccess>(
         &mut self,

@@ -7,9 +7,10 @@ use crate::{memory::WasmAccess, wasi::file::Wasip1LFS};
 
 /// small posix like virtual file system
 /// but inode has some metadata
-pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize>
+#[derive(Debug)]
+pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync + core::fmt::Debug, const FLAT_LEN: usize>
 where
-    LFS::Inode: Copy,
+    LFS::Inode: Copy + core::fmt::Debug,
 {
     lfs: LFS,
     // (inode, cursor)
@@ -19,9 +20,9 @@ where
     map: [Option<(LFS::Inode, usize)>; FLAT_LEN],
 }
 
-impl<LFS: Wasip1LFS + Sync, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN>
+impl<LFS: Wasip1LFS + Sync + core::fmt::Debug, const FLAT_LEN: usize> Wasip1ConstVFS<LFS, FLAT_LEN>
 where
-    LFS::Inode: Copy,
+    LFS::Inode: Copy + core::fmt::Debug,
 {
     #[cfg(feature = "threads")]
     pub const fn new(lfs: LFS) -> Self {

@@ -14,7 +14,7 @@ use crate::{
 };
 
 impl<
-    ROOT: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    ROOT: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,

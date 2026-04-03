@@ -449,7 +449,7 @@ impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {
     }
 }
 
-pub trait WasiConstPrimitiveFile {
+pub trait WasiConstPrimitiveFile: core::fmt::Debug {
     fn len(&self) -> usize;
     fn pread_raw<Wasm: WasmAccess>(
         &self,

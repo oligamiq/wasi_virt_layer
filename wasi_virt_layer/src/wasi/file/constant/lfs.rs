@@ -11,8 +11,9 @@ use crate::{
     },
 };
 
+#[derive(Debug)]
 pub struct VFSConstNormalLFS<
-    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
@@ -22,7 +23,7 @@ pub struct VFSConstNormalLFS<
 }
 
 impl<
-    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN>,
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,

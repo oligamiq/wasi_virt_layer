@@ -18,7 +18,7 @@ wasi_virt_layer = { workspace = true, default-features = false, features = [
     "multi_memory",
     "unstable_print_debug",
 ] }
-const_struct = "0.6.3"
+const_struct = "0.6.4"
 wit-bindgen = "0.54.0"
 
 [lib]

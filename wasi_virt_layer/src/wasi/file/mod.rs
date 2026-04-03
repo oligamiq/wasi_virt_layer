@@ -28,8 +28,8 @@ pub struct FilestatWithoutDevice {
 }
 
 /// small posix like local file system
-pub trait Wasip1LFS {
-    type Inode: 'static;
+pub trait Wasip1LFS: core::fmt::Debug {
+    type Inode: 'static + core::fmt::Debug;
     const PRE_OPEN: &'static [Self::Inode];
 
     fn fd_write_raw<Wasm: WasmAccess>(
@@ -113,7 +113,7 @@ pub trait Wasip1LFS {
     ) -> Result<Self::Inode, wasip1::Errno>;
 }
 
-pub trait Wasip1FileTrait {
+pub trait Wasip1FileTrait: core::fmt::Debug {
     fn size(&self) -> usize;
 
     /// Reads data from the file into the provided buffer.
@@ -157,7 +157,7 @@ pub trait Wasip1FileTrait {
     }
 }
 
-pub trait Wasip1FileSystem {
+pub trait Wasip1FileSystem: core::fmt::Debug {
     fn fd_write_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,

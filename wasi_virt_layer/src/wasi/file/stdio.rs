@@ -5,6 +5,7 @@ use crate::__private::wasip1::Size;
 use crate::memory::WasmAccess;
 use crate::transporter::Wasip1Transporter;
 
+#[derive(Debug)]
 pub struct DefaultStdIO;
 
 impl StdIO for DefaultStdIO {
@@ -38,7 +39,7 @@ impl StdIO for DefaultStdIO {
     }
 }
 
-pub trait StdIO {
+pub trait StdIO: core::fmt::Debug {
     #[allow(unused_variables)]
     fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
