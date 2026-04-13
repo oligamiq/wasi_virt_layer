@@ -224,6 +224,7 @@ fn get_fid(module: &mut walrus::Module, name: &str) -> eyre::Result<Option<walru
         .transpose()
 }
 
+/// Appends a debug tracking invocation prior to executing exported core logical executions.
 pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result<()> {
     let name = "debug_call_indirect";
     if let Some(e) = get_fid(module, name)?.map(|fid| {
@@ -280,6 +281,7 @@ pub fn generate_debug_call_function(module: &mut walrus::Module) -> eyre::Result
     Ok(())
 }
 
+/// Conditionally traces function executions immediately before process termination sequence steps.
 pub fn generate_debug_call_function_last(module: &mut walrus::Module) -> eyre::Result<()> {
     use walrus::ir::*;
     use walrus::*;
@@ -402,6 +404,7 @@ pub fn generate_debug_call_function_last(module: &mut walrus::Module) -> eyre::R
     Ok(())
 }
 
+/// Inspects the module signature to detect if the development debug feature anchor remains exported.
 pub fn has_debug(module: &walrus::Module) -> bool {
     module
         .exports
@@ -410,6 +413,7 @@ pub fn has_debug(module: &walrus::Module) -> bool {
 }
 
 #[derive(Debug, Default)]
+/// Patches multi-threading components logging whenever memory bounds dynamically change allocation capacity.
 pub struct DebugCallMemoryGrow {
     has: Option<bool>,
 }
@@ -546,6 +550,7 @@ impl Generator for DebugCallMemoryGrow {
 }
 
 #[derive(Debug, Default)]
+/// Promotes hidden internal VFS function calls explicitly to an export footprint to verify during automated debugging tests.
 pub struct DebugExportVFSFunctions;
 
 impl Generator for DebugExportVFSFunctions {
@@ -591,6 +596,7 @@ impl Generator for DebugExportVFSFunctions {
 }
 
 #[derive(Debug, Default)]
+/// Lightweight proxy wrapper activating quick diagnostic telemetry checks natively handled internally.
 pub struct SimpleDebug;
 
 impl Generator for SimpleDebug {
@@ -617,6 +623,7 @@ impl Generator for SimpleDebug {
 }
 
 #[derive(Debug, Default)]
+/// Patches specific functions ensuring memory constraints and low-level calls explicitly emit observable runtime execution traces.
 pub struct DebugCallFunctionSmallScale;
 
 impl Generator for DebugCallFunctionSmallScale {
@@ -636,6 +643,7 @@ impl Generator for DebugCallFunctionSmallScale {
 }
 
 #[derive(Debug, Default)]
+/// Main diagnostic component intercepting standard entry point events yielding logging output directly evaluating runtime states.
 pub struct DebugCallFunctionMain;
 
 impl Generator for DebugCallFunctionMain {

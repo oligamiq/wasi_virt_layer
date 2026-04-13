@@ -46,25 +46,36 @@ use crate::{
 ///             }
 ///         }
 ///     });
+/// Generator responsible for managing globally shared variables to enable multi-threading atomic modifications.
 #[derive(Debug, Default)]
 pub struct SharedGlobal;
 
+/// Enum containing identifiers for alternative shared global function replacements and locker usages.
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
 pub enum SharedGlobalFnsName {
+    /// Wrapper replacing a global variable assignment internally without locking overhead.
     GlobalAltSet,
+    /// Thread-safe wrapper evaluating and retrieving the global value.
     GlobalAltGet,
+    /// Fast wrapper evaluating the global value bypassing thread synchronization lock operations.
     GlobalAltGetNoWait,
+    /// Singleton wrapper assigning an initializing value solely on a one-time startup sequence.
     GlobalAltInitOnce,
+    /// Utility function yielding the exact offset index memory location storing the global proxy.
     GlobalAltPos,
+    /// Locking function instance controlling concurrent memory accesses for a specific table identified by index.
     Locker(usize),
     #[strum(serialize = "locker")]
+    /// Uniquely identified primary initial lock mechanism controlling baseline single-memory environments.
     LockerBase,
     #[strum(serialize = "alt")]
+    /// Replaced function logic hooking WebAssembly natively executed `memory.grow` allocation algorithms.
     MemoryGrowAlt,
 }
 
 impl SharedGlobalFnsName {
+    /// Checks whether the provided string identifier maps to a locker operation, extracting its index.
     pub fn check_locker(str: impl AsRef<str>) -> Option<SharedGlobalFnsName> {
         let s = str.as_ref();
         let prefix = crate::unique_name::fmt!(SharedGlobalFns; "{}", SharedGlobalFnsName::Locker(0).as_ref());

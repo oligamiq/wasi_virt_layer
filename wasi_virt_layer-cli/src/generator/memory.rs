@@ -10,15 +10,23 @@ use crate::{
     util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
 };
 
+/// Encapsulates naming variants reserved for VFS memory interactions.
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq, strum::VariantNames)]
 #[strum(serialize_all = "snake_case")]
 pub enum MemoryUniqueName<'a> {
+    /// Copies contents from Target Memory to VFS Memory.
     MemoryCopyFrom(&'a WasmName),
+    /// Copies contents from VFS Memory to Target Memory.
     MemoryCopyTo(&'a WasmName),
+    /// Emplaces a runtime trap to deduce pointer arithmetic limits.
     MemoryTrap(&'a WasmName),
+    /// Serves as a linked anchor ensuring `MemoryTrap` preserves its compiled identity.
     MemoryTrapAnchor(&'a WasmName),
+    /// Wraps dynamic function dispatch controlling pointers to merged targets.
     MemoryDirector(&'a WasmName),
+    /// Serves as a linked anchor preserving the compiled `MemoryDirector` identity.
     MemoryDirectorAnchor(&'a WasmName),
+    /// The fundamental reference identifying the exported memory location of the underlying module.
     Memory(&'a WasmName),
 }
 
@@ -31,10 +39,12 @@ pub enum MemoryUniqueName<'a> {
 /// or re-shares the memory so the VFS has correct access to the target modules' structures.
 #[derive(Debug, Default)]
 pub struct TemporaryRefugeMemory {
+    /// Indicates the overall tracked quantity of memory blocks actively transpiled.
     pub memory_count: usize,
 }
 
 impl TemporaryRefugeMemory {
+    /// Standardizes the component structure and ensures temporary threading parameters accommodate memory translations.
     pub fn ready_component_and_transpile(
         &mut self,
         module: &mut walrus::Module,

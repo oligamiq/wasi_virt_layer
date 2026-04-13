@@ -1,5 +1,6 @@
 use crate::generator::{Generator, GeneratorCtx};
 
+/// Generator that adds `wasi-virt-layer` as a processed producer to the final binary metric.
 #[derive(Debug, Default)]
 pub struct Producer;
 

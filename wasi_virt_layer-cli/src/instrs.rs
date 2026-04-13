@@ -2,17 +2,22 @@ use eyre::Context as _;
 use walrus::ir::*;
 use walrus::*;
 
+/// Trait for rewriting or modifying instructions sequentially in a local function.
 pub trait InstrRewrite {
     // todo!(); Change it to match "read"
+    /// Rewrites instructions using a callback that returns `T`, tracking sequence IDs.
     fn rewrite<T>(
         &mut self,
         find: impl FnMut(&mut Instr, (usize, InstrSeqId)) -> T,
     ) -> eyre::Result<Vec<T>>;
 
+    /// Retains instructions that match the specified callback condition.
     fn retain(&mut self, keep: impl FnMut(&Instr, (usize, InstrSeqId)) -> bool);
 }
 
+/// Trait for reading instructions sequentially in a local function without modifying them.
 pub trait InstrRead {
+    /// Reads and iterates over instructions using a callback, tracking sequence IDs.
     fn read<T>(&self, find: impl FnMut(&Instr, (usize, InstrSeqId)) -> T) -> eyre::Result<Vec<T>>;
 }
 

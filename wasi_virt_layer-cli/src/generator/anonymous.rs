@@ -12,6 +12,7 @@ use crate::{
     util::WasmName,
 };
 
+/// Generator component translating un-named single targets into explicit generic bindings.
 #[derive(Debug, Default)]
 pub struct Anonymous;
 

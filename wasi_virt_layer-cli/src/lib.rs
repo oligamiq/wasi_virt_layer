@@ -15,9 +15,13 @@ use crate::{
     unique_name::UniqueName,
 };
 
+/// WASI ABI transformation and generation constants.
 pub mod abi;
+/// CLI argument parsing structures and definitions.
 pub mod args;
+/// Handlers for various CLI subcommands.
 pub mod commands;
+/// Compilation routines for Wasm virtual filesystems.
 pub mod compile;
 /// Checks and manages features required in Cargo configs.
 pub mod config_checker;
@@ -26,10 +30,15 @@ pub mod ctrlc_handler;
 pub mod down_color;
 /// Contains fallback execution processes (managed via locks).
 pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
+/// Internal generators for modifying and stitching Wasm structures.
 pub mod generator;
+/// Instruction scanning and rewriting utilities for Walrus IR.
 pub mod instrs;
+/// Utilities for running integration tests against Wasm runtimes.
 pub mod test_run;
+/// Utilities for generating globally unique IDs/names within Wasm modules.
 pub mod unique_name;
+/// General utility functions for CLI logic and AST operations.
 pub mod util;
 
 /// Central execution entrypoint for the CLI logic

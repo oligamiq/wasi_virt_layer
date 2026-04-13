@@ -10,20 +10,29 @@ use crate::{
     util::{WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName},
 };
 
+/// Dictates the execution phase for added start functions.
 #[derive(Debug, Clone)]
 pub enum StartFnPriority {
+    /// Evaluated aggressively right after resetting the memory module.
     AfterMemoryReset,
+    /// Highest priority, placed right before finalizing processing.
     AfterAll,
 }
 
+/// Aggregates priority and source information for a start function.
 #[derive(Debug)]
 pub struct StartFnInfo {
+    /// Priority of this start evaluation logic.
     pub priority: StartFnPriority,
+    /// Generational strategy mapping for initializing source routines.
     pub source: StartSource,
 }
 
+/// Specifies how the start function should be provided or rewritten.
 pub enum StartSource {
+    /// Targets an existing exported function.
     ExportFunc(String),
+    /// Represents an internal rewriting closure applied sequentially.
     Rewrite(Option<Box<dyn FnOnce(&mut walrus::Module, &GeneratorCtx) -> eyre::Result<()>>>),
 }
 
@@ -42,6 +51,7 @@ impl core::fmt::Debug for StartSource {
 
 #[derive(Debug, Clone, strum::AsRefStr, strum::EnumCount, PartialEq, Eq, Hash)]
 #[strum(serialize_all = "snake_case")]
+/// Alternatives internally tracked to swap initial execution targets safely.
 pub enum StartAlternativeName {
     /// Initialize each target wasm module
     WasmName(WasmName),
@@ -52,6 +62,7 @@ pub enum StartAlternativeName {
     AfterMemoryReset,
 }
 
+/// Common mutable state shared across the start section generator and builder.
 #[derive(Debug, Default)]
 pub struct StartSectionCommon {
     /// Additional start functions.
@@ -62,6 +73,7 @@ pub struct StartSectionCommon {
 }
 
 impl StartSectionCommon {
+    /// Retrieves the function ID assigned for the VFS start component.
     pub fn vfs_start_fid(&self) -> (WasmName, FunctionId) {
         self.start_alternatives
             .iter()
@@ -72,10 +84,12 @@ impl StartSectionCommon {
             .expect("VFS start alternative must exist")
     }
 
+    /// Iterates over all start alternatives and their resolved function IDs.
     pub fn iter(&self) -> impl Iterator<Item = (&StartAlternativeName, FunctionId)> {
         self.start_alternatives.iter().map(|(a, b)| (a, *b))
     }
 
+    /// Returns function IDs for the target WebAssembly module initializations.
     pub fn target_wasm_fids(&self) -> impl Iterator<Item = (&WasmName, FunctionId)> {
         self.start_alternatives
             .iter()
@@ -85,6 +99,7 @@ impl StartSectionCommon {
             })
     }
 
+    /// Verifies that the start section has not already been built.
     pub fn check_is_builded(&self) {
         if self.is_builded {
             panic!("StartSectionCommon has already been built");
@@ -92,12 +107,14 @@ impl StartSectionCommon {
     }
 }
 
+/// Generator responsible for replacing the Wasm start section.
 #[derive(Debug, Default)]
 pub struct StartSectionGenerator {
     common: Option<Arc<parking_lot::Mutex<StartSectionCommon>>>,
 }
 
 impl StartSectionGenerator {
+    /// Initializes the generator with required placeholders and state.
     pub fn init(
         &mut self,
         module: &mut walrus::Module,
@@ -158,6 +175,7 @@ impl StartSectionGenerator {
         }
     }
 
+    /// Spawns a builder object to enqueue hooks and references.
     pub fn builder(&self) -> StartSectionBuilder {
         match &self.common {
             None => panic!("StartSectionGenerator is not initialized"),
@@ -173,6 +191,7 @@ impl StartSectionGenerator {
         }
     }
 
+    /// Finalizes the start sequence replacement within the designated Wasm module.
     pub fn build(self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         let common = self.common.unwrap();
         let mut common = common.lock();
@@ -205,12 +224,14 @@ impl StartSectionGenerator {
 
 impl Generator for StartSectionGenerator {}
 
+/// Shared reference builder for managing initialization hooks safely.
 #[derive(Debug, Clone)]
 pub struct StartSectionBuilder {
     common: Arc<parking_lot::Mutex<StartSectionCommon>>,
 }
 
 impl StartSectionBuilder {
+    /// Iterates through collected start alternative bindings.
     pub fn iter(&self) -> Vec<(StartAlternativeName, FunctionId)> {
         self.common
             .lock()
@@ -220,10 +241,12 @@ impl StartSectionBuilder {
             .collect::<Vec<_>>()
     }
 
+    /// Fetches the ID mapped to the main VFS initialization function.
     pub fn vfs_start_fid(&self) -> (WasmName, FunctionId) {
         self.common.lock().vfs_start_fid()
     }
 
+    /// Returns the FID assigned for execution after memory resets flow.
     pub fn after_memory_reset_fid(&self) -> FunctionId {
         self.common
             .lock()
@@ -233,6 +256,7 @@ impl StartSectionBuilder {
             .expect("AfterMemoryReset start alternative must exist")
     }
 
+    /// Retrieves registered function IDs designated to target specific Wasm scopes.
     pub fn target_wasm_fids(&self) -> Vec<(WasmName, FunctionId)> {
         self.common
             .lock()
@@ -241,6 +265,7 @@ impl StartSectionBuilder {
             .collect::<Vec<_>>()
     }
 
+    /// Enqueues an additional start function for the final module load phase.
     pub fn add_start_fn(&self, info: StartFnInfo) {
         self.common.lock().check_is_builded();
 

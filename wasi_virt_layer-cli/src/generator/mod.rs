@@ -1,13 +1,24 @@
+/// Module for ABI connection generation and overrides.
 pub mod abi_connect;
+/// Utilities for handling anonymous and generic WASM rewrites.
 pub mod anonymous;
+/// Type-checking routines for imported/exported functions.
 pub mod check;
+/// Internal debug formatting and trace generators.
 pub mod debug;
+/// Generates and bridges memory copy, trap, and related VFS interactions.
 pub mod memory;
+/// Routines for stripping or patching unused WASM components.
 pub mod patch_component;
+/// Embeds module metadata.
 pub mod producer;
+/// Low-level multi-threading global locks and shared allocations.
 pub mod shared_global;
+/// Bridges custom initializers, `_start`, `main_void`, and reset routines.
 pub mod special_func;
+/// Handles re-writing of the WASM start section routines.
 pub mod start_section;
+/// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
 
 use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
@@ -30,6 +41,7 @@ use crate::{
     },
 };
 
+/// Represents the generation context, holding configuration arguments and targeted module info.
 #[derive(Debug)]
 pub struct GeneratorCtx {
     pub vfs_name: WasmName,
@@ -57,6 +69,7 @@ pub struct GeneratorCtx {
     pub start_section_builder: Option<start_section::StartSectionBuilder>,
 }
 
+/// Sub-context for extracting and storing component variables during execution.
 #[derive(Debug, Default)]
 pub struct ComponentCtx {
     vfs_name: Option<WasmName>,
@@ -118,6 +131,7 @@ impl FromStr for CompressNames {
     }
 }
 
+/// A generator acting as a visitor that propagates component contextual data.
 #[derive(Debug, Default)]
 pub struct ComponentCtxVisitor {
     vfs_name: Option<CompactString>,
@@ -270,6 +284,7 @@ impl ComponentCtx {
     }
 }
 
+/// Defines the core trait for WASM transformations, hooks, and component optimizations over the build lifecycle.
 pub trait Generator: std::fmt::Debug + std::any::Any {
     /// Operations performed on the built VFS module.
     #[allow(unused_variables)]
@@ -504,6 +519,7 @@ impl<'a> Generator for &'a mut (dyn Generator + 'a) {
     }
 }
 
+/// Stores the identity of an external loaded Wasm target.
 #[derive(Debug)]
 pub struct ModuleExternal {
     pub name: WasmName,
@@ -514,6 +530,7 @@ impl ModuleExternal {
     }
 }
 
+/// Coordinates iterating over registered generators and merging external module logic into the VFS.
 #[derive(Debug)]
 pub struct GeneratorRunner {
     pub checkers: Vec<Box<dyn Generator + 'static>>,
@@ -526,11 +543,15 @@ pub struct GeneratorRunner {
     pub wasm_name_holder: WasmNameHolder,
 }
 
+/// Coordinates individual logic for specific component processing.
 #[derive(Debug)]
 pub struct ComponentRunner {
     pub generators: Vec<Box<dyn Generator + 'static>>,
+    /// Encapsulates contextual settings across all generator components during transpilation.
     pub ctx: Option<ComponentCtx>,
+    /// Specifies the target active WASM module destination.
     pub path: WasmPath,
+    /// Manages dynamically generated and globally referenced named functions.
     pub wasm_name_holder: Option<WasmNameHolder>,
 }
 
@@ -663,6 +684,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
 }
 
 impl GeneratorRunner {
+    /// Initializes a `GeneratorRunner` capturing all parameters needed for complete application-level transpilation mapping.
     pub fn new(
         path: WasmPath,
         targets: Box<[WasmPath]>,
@@ -735,14 +757,17 @@ impl GeneratorRunner {
         })
     }
 
+    /// Registers a custom generator to be applied sequentially during transformation phases.
     pub fn add_generator<G: Generator + 'static>(&mut self, generator: G) {
         self.generators.push(Box::new(generator));
     }
 
+    /// Registers a diagnostic validation checker resolving pre or post-conditions automatically.
     pub fn checker(&mut self, checker: impl Generator + 'static) {
         self.checkers.push(Box::new(checker));
     }
 
+    /// Resolves and retrieves a shared reference to a specific structured generator dynamically at runtime.
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
         fn downcast_ref<T: 'static>(b: &dyn std::any::Any) -> Option<&'_ T> {
             if b.is::<T>() {
@@ -765,6 +790,7 @@ impl GeneratorRunner {
     #[deprecated(
         note = "Ensure this function is self-contained. This is a temporary measure for debugging purposes."
     )]
+    /// Provides direct immutable access tracking the primary target structural path configuration.
     pub const fn path(&self) -> &WasmPath {
         &self.path
     }
@@ -772,14 +798,17 @@ impl GeneratorRunner {
     #[deprecated(
         note = "Ensure this function is self-contained. This is a temporary measure for debugging purposes."
     )]
+    /// Directly evaluates currently linked ancillary wasm dependencies.
     pub const fn targets(&self) -> &Box<[WasmPath]> {
         &self.targets
     }
 
+    /// Securely uncovers operational variables tracking internal generational properties dynamically.
     pub const fn ctx(&self) -> &GeneratorCtx {
         &self.ctx
     }
 
+    /// Confirms mapping configurations and statically evaluates lazy initializations strictly allocating paths.
     pub fn definitely(&mut self) -> eyre::Result<()> {
         self.path.definitely(self.ctx.threads)?;
         for target in &mut self.targets {
@@ -788,6 +817,7 @@ impl GeneratorRunner {
         Ok(())
     }
 
+    /// Primary operation chaining logic seamlessly running structural modifiers across all layered stages sequentially terminating out into WebAssembly components.
     pub fn run_layers_to_component(
         mut self,
         out_dir: &Utf8PathBuf,
@@ -1027,6 +1057,7 @@ impl GeneratorRunner {
 }
 
 impl ComponentRunner {
+    /// Instantiates a fresh `ComponentRunner` targeting a specific underlying WebAssembly structure.
     pub fn new(path: WasmPath) -> Self {
         Self {
             generators: Vec::new(),
@@ -1036,10 +1067,12 @@ impl ComponentRunner {
         }
     }
 
+    /// Installs a specific invariant-checking generator executing without altering primary execution pathways.
     pub fn checker(&mut self, checker: impl Generator + 'static) {
         self.generators.push(Box::new(checker));
     }
 
+    /// Quickly constructs a runner wrapping a pre-defined array containing generator strategies.
     pub fn with_generators(path: WasmPath, generators: Vec<Box<dyn Generator + 'static>>) -> Self {
         Self {
             generators,
@@ -1049,10 +1082,12 @@ impl ComponentRunner {
         }
     }
 
+    /// Queues an advanced generative instruction step executed successively upon evaluation.
     pub fn add_generator<G: Generator + 'static>(&mut self, generator: G) {
         self.generators.push(Box::new(generator));
     }
 
+    /// Allows querying the internal generator stack dynamically retrieving explicitly modeled type structures.
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
         fn downcast_ref<T: 'static>(b: &dyn std::any::Any) -> Option<&'_ T> {
             if b.is::<T>() {
@@ -1446,13 +1481,19 @@ impl Generator for StartFuncIdVisitor {
     }
 }
 
+/// Represents the resolution state and file format targeting for manipulating WebAssembly modules intelligently.
 #[derive(Debug, Clone)]
 pub enum WasmPath {
+    /// Indicates the target still needs compilation through standard cargo dependencies.
     Maybe {
+        /// Fully resolved physical path to the corresponding Cargo.toml manifest definition.
         manifest_path: Utf8PathBuf,
+        /// Specified internal crate package identifier.
         package: String,
     },
+    /// A strictly resolved raw WebAssembly binary file ready for patching operations.
     Definitely(Utf8PathBuf),
+    /// A completed explicitly transpiled WebAssembly Component standard architecture module.
     Component(Utf8PathBuf),
 }
 
@@ -1499,6 +1540,7 @@ impl FromStr for WasmPath {
 }
 
 impl WasmPath {
+    /// Computes the unique short name used during module linking and identification.
     pub fn name(&self) -> eyre::Result<CompactString> {
         match self {
             WasmPath::Maybe { package, .. } => Ok(package.to_compact_string()),
@@ -1508,6 +1550,7 @@ impl WasmPath {
         }
     }
 
+    /// Exposes the manifest path conditionally if the dependency is unresolved logically.
     pub fn manifest_path(&self) -> Option<&Utf8PathBuf> {
         match self {
             WasmPath::Maybe { manifest_path, .. } => Some(manifest_path),
@@ -1515,6 +1558,7 @@ impl WasmPath {
         }
     }
 
+    /// Calculates the overarching workspace root via dependency graphing context implicitly.
     pub fn root_manifest_path(&self) -> Option<Utf8PathBuf> {
         match self {
             WasmPath::Maybe { manifest_path, .. } => {
@@ -1529,6 +1573,7 @@ impl WasmPath {
         }
     }
 
+    /// Statically assigns an unresolved target using defined package specifications.
     pub const fn with_maybe(manifest_path: Utf8PathBuf, package: String) -> Self {
         Self::Maybe {
             manifest_path,
@@ -1536,6 +1581,7 @@ impl WasmPath {
         }
     }
 
+    /// Constructs an unresolved dependency resolving package tracking inherently from a file manifest dynamically.
     pub fn with_maybe_only_manifest(manifest_path: Utf8PathBuf) -> eyre::Result<Self> {
         let cargo_metadata = {
             let mut metadata_command = cargo_metadata::MetadataCommand::new();
@@ -1550,6 +1596,7 @@ impl WasmPath {
         })
     }
 
+    /// Assesses global cargo metadata configuring definitions matching solely the provided string identifier.
     pub fn with_maybe_only_package(package: String) -> eyre::Result<Self> {
         let cargo_metadata = {
             let metadata_command = cargo_metadata::MetadataCommand::new();
@@ -1563,6 +1610,7 @@ impl WasmPath {
         })
     }
 
+    /// Loads an unresolved dependency using current environment cargo bounds natively.
     pub fn with_maybe_none() -> eyre::Result<Self> {
         let cargo_metadata = {
             let metadata_command = cargo_metadata::MetadataCommand::new();
@@ -1576,6 +1624,7 @@ impl WasmPath {
         })
     }
 
+    /// Scans an exact provided `.wasm` artifact verifying magic byte signatures correctly to assign a resolution state.
     pub fn with_wasm(path: Utf8PathBuf) -> eyre::Result<Self> {
         if path.extension() != Some("wasm") {
             eyre::bail!("Wasm file does not have .wasm extension: {path}");
@@ -1605,6 +1654,7 @@ impl WasmPath {
         Ok(Self::Definitely(path))
     }
 
+    /// Forcefully invokes internal compiling mechanisms translating a declarative specification down into an executable binary structurally.
     pub fn definitely(&mut self, threads: bool) -> eyre::Result<()> {
         if let WasmPath::Maybe {
             manifest_path,
@@ -1638,6 +1688,7 @@ impl WasmPath {
         }
     }
 
+    /// Forcefully overrides the explicitly resolved file path for definite path targets.
     pub fn set_path(&mut self, path: Utf8PathBuf) -> eyre::Result<()> {
         if matches!(self, WasmPath::Maybe { .. }) {
             eyre::bail!("WasmPath is not definitely set: {path}")
@@ -1647,6 +1698,7 @@ impl WasmPath {
     }
 }
 
+/// Coordinates the underlying binary `wasm-merge` utility invocations to bundle outputs physically.
 pub fn merge(
     vfs: &Utf8PathBuf,
     wasm: &[impl AsRef<std::path::Path>],

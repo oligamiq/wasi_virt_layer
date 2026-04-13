@@ -8,15 +8,23 @@ use crate::{
     util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _, WasmName},
 };
 
+/// Defines unique names associated with special life-cycle functions (startup, reset, main execution).
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum SpecialFuncUniqueName<'a> {
+    /// Function that initializes memory resets.
     Resetter(&'a WasmName),
+    /// Function that handles thread resets.
     ResetOnThread,
+    /// Function that ensures thread reset occurs precisely once.
     ResetOnThreadOnce,
+    /// Preserved original initialization function.
     StartInitOld,
+    /// The primary start wrapper routine function.
     Start(&'a WasmName),
+    /// Early application termination safe wrapper function.
     MainVoid(&'a WasmName),
+    /// State reset function generated for given module.
     Reset(&'a WasmName),
 }
 
@@ -30,6 +38,7 @@ pub struct VFSExternalMemoryManager {
 }
 
 impl VFSExternalMemoryManager {
+    /// Creates a new active memory manager segment and allocates a local memory space.
     pub fn new(module: &mut walrus::Module) -> Self {
         let mem_id = module.memories.add_local(true, false, 0, None, None);
 
@@ -40,10 +49,12 @@ impl VFSExternalMemoryManager {
         }
     }
 
+    /// Gets the allocated Memory ID managed by this external manager.
     pub fn memory_id(&self) -> MemoryId {
         self.mem_id
     }
 
+    /// Provisions requested memory size and returns the beginning pointer/offset.
     pub fn alloc(&mut self, size: usize) -> usize {
         let ptr = self.current_size * 64 * 1024 + self.external_size;
         self.external_size += size;
@@ -51,6 +62,7 @@ impl VFSExternalMemoryManager {
         ptr
     }
 
+    /// Commits size configurations on the generated memory instance, optionally enabling thread sharing.
     pub fn flush(mut self, module: &mut walrus::Module, threads: bool) -> eyre::Result<MemoryId> {
         let external_size = (0..=0x10000)
             .find(|i| *i * 64 * 1024 >= self.external_size)
@@ -71,6 +83,7 @@ impl VFSExternalMemoryManager {
     }
 }
 
+/// Handles the generation of memory state reset functionalities.
 #[derive(Debug, Default)]
 pub struct ResetFunc;
 
@@ -308,6 +321,7 @@ impl Generator for ResetFunc {
     }
 }
 
+/// Manages redirection of `_start` calls from targets into safe wrappers.
 #[derive(Debug, Default)]
 pub struct StartFunc;
 
@@ -350,6 +364,7 @@ impl Generator for StartFunc {
     }
 }
 
+/// Redirects early main exit functionalities to internal no-op executions seamlessly.
 #[derive(Debug, Default)]
 pub struct MainVoidFunc;
 

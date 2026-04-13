@@ -1957,7 +1957,9 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     }
 }
 
+/// Extension trait for Camino paths to extract the main module file name.
 pub trait CaminoUtilModule {
+    /// Gets the base compact string name without extension and specific postfixes.
     fn get_file_main_name(&self) -> Option<CompactString>;
 }
 
@@ -2003,7 +2005,9 @@ impl CaminoUtilModule for Path {
     }
 }
 
+/// Utility trait for converting generic or `anyhow` results into `eyre::Result`.
 pub trait ResultUtil<T> {
+    /// Converts the result into an `eyre::Result`.
     fn to_eyre(self) -> eyre::Result<T>;
 }
 
@@ -2024,7 +2028,9 @@ impl<T, I: Iterator> ResultUtil<T> for Result<T, itertools::ExactlyOneError<I>> 
     }
 }
 
+/// Normalization trait for value types (e.g., getting a zeroed-out value).
 pub trait Normal<T> {
+    /// Returns the generalized normal or default representation of a type.
     fn normal(self) -> eyre::Result<T>;
 }
 
@@ -2041,25 +2047,41 @@ impl Normal<walrus::ir::Value> for walrus::ValType {
     }
 }
 
+/// Provides unified Function ID resolution for different markers (like tuples of module/name).
 pub trait WalrusFID<Marker>: Copy {
+    /// Resolves and retrieves the FunctionId via an assisting context, erroring if not found.
     fn get_fid(self, assist: &impl WalrusFIDAssister) -> eyre::Result<FunctionId>;
+    /// Resolves and retrieves the FunctionId via an assisting context optionally.
     fn find_fid(self, assist: &impl WalrusFIDAssister) -> Option<FunctionId>;
+    /// Formats the identity marker into a standard string representation.
     fn as_str(self) -> String;
 }
 
+/// Provides the actual lookup operations for FID resolution.
 pub trait WalrusFIDAssister {
+    /// Gets a function ID by its existing ID, failing if it does not exist.
     fn get_fid_by_fid(&self, fid: FunctionId) -> eyre::Result<FunctionId>;
+    /// Attempts to find a function ID by its existing ID.
     fn find_fid_by_fid(&self, fid: FunctionId) -> Option<FunctionId>;
+    /// Gets a function ID by its name, failing if it does not exist.
     fn get_fid_by_name(&self, name: &str) -> eyre::Result<FunctionId>;
+    /// Attempts to find a function ID by its name.
     fn find_fid_by_name(&self, name: &str) -> Option<FunctionId>;
+    /// Gets a function ID by its module and name, failing if it does not exist.
     fn get_fid_by_double_name(&self, module: &str, name: &str) -> eyre::Result<FunctionId>;
+    /// Attempts to find a function ID by its module and name.
     fn find_fid_by_double_name(&self, module: &str, name: &str) -> Option<FunctionId>;
 }
 
+/// Marker for looking up FIDs by `FunctionId` values.
 pub struct FunctionIdMarker;
+/// Marker for looking up FIDs by string names.
 pub struct StrMarker;
+/// Marker for looking up FIDs using `UniqueName` constants.
 pub struct UniqueMarker;
+/// Marker for looking up FIDs by a module-name and item-name tuple.
 pub struct DoubleStrMarker;
+/// Marker for looking up FIDs using a string module-name and `UniqueName` item.
 pub struct StrAndUniqueNameMarker;
 
 impl<B: Borrow<FunctionId> + Copy> WalrusFID<FunctionIdMarker> for B {
@@ -2344,10 +2366,12 @@ impl WalrusFIDAssister for ModuleExports {
 //     Ok(())
 // }
 
+/// A container holding global statics for tracking Wasm Names.
 #[derive(Debug)]
 pub struct WasmNameHolder(&'static [compact_str::CompactString], &'static AtomicUsize);
 
 impl WasmNameHolder {
+    /// Creates a new `WasmNameHolder`, leaking the provided names into static memory.
     pub fn new(strings: Box<[compact_str::CompactString]>) -> Self {
         let count = Box::leak(Box::new(AtomicUsize::new(0)));
 
@@ -2355,6 +2379,7 @@ impl WasmNameHolder {
         WasmNameHolder(strings, count)
     }
 
+    /// Returns an iterator over the underlying tracked `WasmName` items.
     pub fn iter(&self) -> impl Iterator<Item = WasmName> {
         self.0.iter().map(|s| WasmName::new(s.as_str(), self.1))
     }
@@ -2375,9 +2400,10 @@ impl Drop for WasmNameHolder {
     }
 }
 
-/// Literal String
+/// Context-aware wrapper for a copied string slice with lifecycle tracking.
 pub struct WasmName(&'static str, &'static AtomicUsize);
 impl WasmName {
+    /// Creates a new tracked `WasmName`.
     pub fn new(s: &'static str, counter: &'static AtomicUsize) -> Self {
         counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         WasmName(s, counter)
@@ -2426,10 +2452,12 @@ impl Borrow<str> for WasmName {
     }
 }
 
+/// Generates a standardized static import string for WASM component architectures.
 pub fn gen_component_name(namespace: &str, name: &str) -> String {
     format!("[static]{namespace}.{}-import", name.replace("_", "-"))
 }
 
+/// Iterator for enumerating combinations of boolean features.
 #[derive(Debug)]
 pub struct BitIterator {
     current: FeatureCombinationIteratorInnerBits,
@@ -2440,6 +2468,7 @@ pub struct BitIterator {
 impl BitIterator {
     const MAX_KIND: u8 = core::mem::size_of::<FeatureCombinationIteratorInnerBits>() as u8 * 8;
 
+    /// Constructs a new `BitIterator` for a given feature count.
     pub fn new(kind: u8) -> Self {
         if kind >= Self::MAX_KIND {
             panic!("Kind must be between 0 and {}", Self::MAX_KIND - 1);
@@ -2452,10 +2481,12 @@ impl BitIterator {
         }
     }
 
+    /// Retrieves the current bit state representation.
     pub fn now(&self) -> FeatureCombinationIteratorInnerBits {
         self.current
     }
 
+    /// Registers a specific bit index to be skipped during iteration.
     pub fn register_skip(&mut self, bit: u8) {
         if bit >= Self::MAX_KIND {
             panic!("Bit must be between 0 and {}", Self::MAX_KIND - 1);
@@ -2463,10 +2494,12 @@ impl BitIterator {
         self.skip.set(bit as usize, true);
     }
 
+    /// Unregisters a raw mask of underlying bits from being skipped.
     pub fn skip_raw(&mut self, mask: FeatureCombinationIteratorInnerBits) {
         self.skip |= mask;
     }
 
+    /// Unregisters a specific skipped bit index.
     pub fn unregister_skip(&mut self, bit: u8) {
         if bit >= Self::MAX_KIND {
             panic!("Bit must be between 0 and {}", Self::MAX_KIND - 1);
@@ -2474,20 +2507,24 @@ impl BitIterator {
         self.skip.set(bit as usize, false);
     }
 
+    /// Unregisters an exact sequence of raw iteration bits.
     pub fn unregister_skip_raw(&mut self, mask: FeatureCombinationIteratorInnerBits) {
         self.skip &= !mask;
     }
 
+    /// Clears any registered skip states.
     pub fn clear_skip(&mut self) {
         self.skip = FeatureCombinationIteratorInnerBits::ZERO;
     }
 }
 
+/// Underlying bit representations for the iterator generator.
 pub mod bits {
     use bitvec::prelude::*;
     type FeatureCombinationIteratorInnerBitsInner = BitArray<[u64; 2]>;
 
     #[derive(Copy, Clone, Debug)]
+    /// Strongly typed inner bit representation optimized for combination tracking.
     pub struct FeatureCombinationIteratorInnerBits(FeatureCombinationIteratorInnerBitsInner);
 
     impl core::ops::BitAnd for FeatureCombinationIteratorInnerBits {
@@ -2579,35 +2616,44 @@ pub mod bits {
     }
 
     impl FeatureCombinationIteratorInnerBits {
+        /// Represents zero bits or no combinations active.
         pub const ZERO: Self = FeatureCombinationIteratorInnerBits {
             0: FeatureCombinationIteratorInnerBitsInner::ZERO,
         };
+        /// Represents a standard first iteration or bit-start active.
         pub const ONE: Self = Self::from_number(1);
 
+        /// Sets a specific position in the underlying representation.
         pub fn set(&mut self, index: usize, value: bool) {
             self.0.set(index, value);
         }
 
+        /// Checks if this completely represents zeros.
         pub fn is_zero(&self) -> bool {
             self.0 == FeatureCombinationIteratorInnerBitsInner::ZERO
         }
 
+        /// Checks if this is fully saturated.
         pub fn is_full(&self) -> bool {
             self.0.all()
         }
 
+        /// Counts empty zeroes towards the most significant bit.
         pub fn leading_zeros(&self) -> usize {
             self.0.leading_zeros()
         }
 
+        /// Counts empty zeroes towards the least significant bit.
         pub fn trailing_zeros(&self) -> usize {
             self.0.trailing_zeros()
         }
 
+        /// Retrieves memory layout mapping to underlying pointers.
         pub fn as_raw_slice(&self) -> &[u64] {
             self.0.as_raw_slice()
         }
 
+        /// Wraps static number initializations.
         pub const fn from_number(num: u64) -> Self {
             let mut bits: FeatureCombinationIteratorInnerBitsInner =
                 FeatureCombinationIteratorInnerBitsInner::ZERO;
@@ -2615,6 +2661,7 @@ pub mod bits {
             FeatureCombinationIteratorInnerBits { 0: bits }
         }
 
+        /// Generates an instance securely masked to the indicated position.
         pub fn from_one_pos(pos: usize) -> Self {
             let mut bits: FeatureCombinationIteratorInnerBitsInner =
                 FeatureCombinationIteratorInnerBitsInner::ZERO;
@@ -2622,6 +2669,7 @@ pub mod bits {
             FeatureCombinationIteratorInnerBits { 0: bits }
         }
 
+        /// Rapidly progresses to the next combination variant manually.
         pub fn increment(&mut self) {
             // arbitrary-precision integer
             let raw = &mut self.0.data;
@@ -2717,6 +2765,7 @@ impl Iterator for BitIterator {
 }
 
 #[derive(Debug)]
+/// Facilitates multi-state combination testing iteration mapping arrays.
 pub struct FeatureCombinationIterator<C: Borrow<T>, T: ?Sized> {
     features: Vec<(
         C,

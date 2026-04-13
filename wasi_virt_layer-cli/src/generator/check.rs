@@ -7,6 +7,7 @@ use crate::{
     util::{ResultUtil as _, WalrusFID as _, WalrusUtilModule},
 };
 
+/// Checks if the provided Wasm securely linked `wasi_virt_layer` anchors correctly.
 #[derive(Debug, Default)]
 pub struct CheckUseLibrary;
 
@@ -71,6 +72,7 @@ impl Generator for CheckUseLibrary {
     }
 }
 
+/// Strict check validating that compiled WASM matches intended thread-safe / single-threaded memory paradigms.
 #[derive(Debug, Default)]
 pub struct CheckVFSMemoryType;
 
@@ -90,6 +92,7 @@ impl Generator for CheckVFSMemoryType {
     }
 }
 
+/// Detects unused thread imports and efficiently cleans thread-related exports statically.
 #[derive(Debug, Default)]
 pub struct CheckUnusedThreads;
 
@@ -164,6 +167,7 @@ impl Generator for CheckUnusedThreads {
     }
 }
 
+/// Asserts the file comes from the Rust `rustc` compiler via `bindgen` standard structures.
 #[derive(Debug, Default)]
 pub struct IsRustWasm;
 
@@ -193,6 +197,7 @@ impl Generator for IsRustWasm {
     }
 }
 
+/// Quick invariant check asserting if Virtual Memory hooks exist inside Target Wasm representation.
 #[derive(Debug, Default)]
 pub struct CheckUseWasiVirtLayer;
 

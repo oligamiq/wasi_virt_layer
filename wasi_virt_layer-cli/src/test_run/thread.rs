@@ -2,6 +2,7 @@ use std::{collections::HashMap, io::Write as _};
 
 use compact_str::CompactString;
 
+/// Generates the HTML, TypeScript, and configuration files needed to run a thread-enabled WASM module in a browser/worker.
 pub fn gen_threads_run(
     wasm_name: impl AsRef<str>,
     mem_size: HashMap<CompactString, (u64, u64)>,

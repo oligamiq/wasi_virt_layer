@@ -12,25 +12,39 @@ use crate::{
     },
 };
 
+/// Constants and format builders for renaming Thread spawn imports and exports during patching.
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum ThreadsSpawnName<'a> {
+    /// Custom spawn anchor injected for bridging definitions.
     ImportAnchor(&'a str),
+    /// Flag indicating whether the current instance is the root spawner thread.
     IsRootSpawn,
     #[strum(serialize = "wasi_thread_spawn___self")]
+    /// Function identifier for native WASI spawn capability.
     WasiThreadSpawnSelf,
     #[strum(serialize = "__self_wasi_thread_start")]
+    /// The starting routine mapping on thread creation execution.
     SelfWasiThreadStart,
     #[strum(serialize = "__self_wasi_thread_start_anchor")]
+    /// The underlying static bridge to anchor thread origins.
     SelfWasiThreadStartAnchor,
+    /// Low level function signature to actually request system spawn.
     RealThreadSpawnFn,
+    /// Entry stub function used when entering newly spawned routines.
     WasiThreadStartEntry,
+    /// Specialized start function per WASM module target.
     WasiThreadStart(&'a WasmName),
     #[strum(serialize = "wasi_thread_start")]
+    /// Target resolving memory start capabilities per component.
     WasiThreadStartDestination(&'a WasmName),
+    /// Wraps dynamic spawn allocations over components.
     WasiThreadSpawn(&'a WasmName),
+    /// Cross-linking anchor marking a spawn location.
     WasiThreadStartAnchor(&'a WasmName),
+    /// Initializer function for thread memory limits scaling.
     ThreadInitializer,
+    /// Reference to the existing deprecated `_start` handling.
     OldStart,
 }
 

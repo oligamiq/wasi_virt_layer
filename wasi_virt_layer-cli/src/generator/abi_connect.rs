@@ -12,13 +12,24 @@ use crate::{
 };
 use eyre::WrapErr as _;
 
+/// Abstraction over internal representation name generations for hooking WASI implementations.
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum Wasip1ABIName<'a> {
     #[strum(serialize = "__self")]
-    SelfDefault { import: &'a str },
+    /// Reference to a self-contained import.
+    SelfDefault { 
+        /// Identifier string representation of the import.
+        import: &'a str 
+    },
     #[strum(serialize = "")]
-    TargetTemporal { wasm: &'a WasmName, import: &'a str },
+    /// Temporarily constructed linking to a specified module during intermediate compilation.
+    TargetTemporal { 
+        /// Specific wasm module binding origin.
+        wasm: &'a WasmName, 
+        /// Specific imported signature target.
+        import: &'a str 
+    },
 }
 
 /// Connect Wasip1 ABI

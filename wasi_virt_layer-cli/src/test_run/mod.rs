@@ -1,7 +1,9 @@
 use std::io::Write as _;
 
+/// Module encapsulating threaded WASI interactions validation.
 pub mod thread;
 
+/// Generates the necessary HTML and TypeScript files to run the given WASM file in a browser or worker environment without threads.
 pub fn gen_test_run(wasm_name: impl AsRef<str>, out_dir: impl AsRef<str>) {
     let wasm_name = wasm_name.as_ref();
 
