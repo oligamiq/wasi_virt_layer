@@ -18,17 +18,17 @@ use eyre::WrapErr as _;
 pub enum Wasip1ABIName<'a> {
     #[strum(serialize = "__self")]
     /// Reference to a self-contained import.
-    SelfDefault { 
+    SelfDefault {
         /// Identifier string representation of the import.
-        import: &'a str 
+        import: &'a str,
     },
     #[strum(serialize = "")]
     /// Temporarily constructed linking to a specified module during intermediate compilation.
-    TargetTemporal { 
+    TargetTemporal {
         /// Specific wasm module binding origin.
-        wasm: &'a WasmName, 
+        wasm: &'a WasmName,
         /// Specific imported signature target.
-        import: &'a str 
+        import: &'a str,
     },
 }
 

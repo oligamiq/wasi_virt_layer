@@ -1,4 +1,3 @@
-
 /// Trait for formatting WASIP1 structs into debug representation.
 pub trait Wasip1DebugTrait {
     /// Formats the struct.
