@@ -1,3 +1,5 @@
+#![warn(missing_docs)]
+
 use clap::Parser;
 use eyre::Context;
 
