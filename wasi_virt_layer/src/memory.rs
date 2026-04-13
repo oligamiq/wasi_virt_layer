@@ -7,6 +7,7 @@ use crate::__private::wasip1;
 ///
 /// import_wasm!(my_wasm);
 /// ```
+/// Macro for importing a WebAssembly module and generating its memory access bridge.
 #[macro_export]
 macro_rules! import_wasm {
     (anonymous) => {
@@ -252,6 +253,7 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
     unsafe { core::ptr::copy_nonoverlapping(src, ptr, 1) };
 }
 
+/// Provides access to an array in WASM memory.
 #[derive(Debug, Clone, Copy)]
 pub struct WasmArrayAccess<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
     ptr: *const T,
@@ -260,6 +262,7 @@ pub struct WasmArrayAccess<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
 }
 
 impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wasm> {
+    /// Creates a new `WasmArrayAccess`.
     #[inline(always)]
     pub fn new(ptr: *const T, len: usize) -> Self {
         {
@@ -271,6 +274,7 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wa
         }
     }
 
+    /// Retrieves the element at the given index.
     #[inline(always)]
     pub fn get(&self, index: usize) -> T {
         {
@@ -279,11 +283,13 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wa
         }
     }
 
+    /// Returns an iterator over the array elements.
     #[inline(always)]
     pub fn iter(&self) -> WasmArrayAccessIterator<T, Wasm> {
         WasmArrayAccessIterator::new(self.ptr, self.len)
     }
 
+    /// Returns the number of elements in the array.
     #[inline(always)]
     pub const fn len(&self) -> usize {
         self.len
@@ -310,6 +316,7 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> IntoIterator
     }
 }
 
+/// An iterator over elements in WASM memory.
 pub struct WasmArrayAccessIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
     ptr: *const T,
     len: usize,
@@ -317,6 +324,7 @@ pub struct WasmArrayAccessIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess>
 }
 
 impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessIterator<T, Wasm> {
+    /// Creates a new `WasmArrayAccessIterator`.
     pub fn new(ptr: *const T, len: usize) -> Self {
         Self {
             ptr,
@@ -340,6 +348,7 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator for WasmArrayAccessI
     }
 }
 
+/// A mutable iterator over elements in WASM memory.
 pub struct WasmArrayAccessMutIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
     ptr: *mut T,
     len: usize,
@@ -347,6 +356,7 @@ pub struct WasmArrayAccessMutIterator<T: core::fmt::Debug + Copy, Wasm: WasmAcce
 }
 
 impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIterator<T, Wasm> {
+    /// Creates a new `WasmArrayAccessMutIterator`.
     pub fn new(ptr: *mut T, len: usize) -> Self {
         Self {
             ptr,
@@ -356,12 +366,14 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIterator<T,
     }
 }
 
+/// A component representing a single mutable element in WASM memory.
 pub struct WasmArrayAccessMutIteratorComponent<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
     ptr: *mut T,
     __marker: core::marker::PhantomData<Wasm>,
 }
 
 impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIteratorComponent<T, Wasm> {
+    /// Creates a new `WasmArrayAccessMutIteratorComponent`.
     pub fn new(ptr: *mut T) -> Self {
         Self {
             ptr,
@@ -369,6 +381,7 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIteratorCom
         }
     }
 
+    /// Sets the value at the current position.
     pub fn set(&self, value: T) {
         unsafe { core::ptr::write(self.ptr, value) };
     }
@@ -393,15 +406,17 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
 pub trait WasmAccess: Copy + core::fmt::Debug {
     const NAME: &'static str;
 
-    /// Copies data from the source pointer to the offset.
+    /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy<T>(offset: *mut T, data: &[T]);
 
-    /// Copies data from the source pointer to the offset.
+    /// Copies data from the source pointer into the provided mutable slice of WASM memory.
     fn memcpy_to<T>(offset: &mut [T], src: *const T);
+    /// Stores a value in WASM memory at the given offset using little-endian encoding.
     fn store_le<T>(offset: *mut T, value: T);
+    /// Loads a value from WASM memory at the given offset using little-endian encoding.
     fn load_le<T: core::fmt::Debug + Copy>(offset: *const T) -> T;
 
-    /// utility internal
+    /// Helper method to create a `WasmArrayAccess` for the given pointer and length.
     fn as_array<'a, T: core::fmt::Debug + Copy>(
         ptr: *const T,
         len: usize,
@@ -412,7 +427,7 @@ pub trait WasmAccess: Copy + core::fmt::Debug {
         WasmArrayAccess::new(ptr, len)
     }
 
-    /// utility internal
+    /// Returns a box containing the data from the WASM array.
     #[cfg(feature = "alloc")]
     fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
     where
@@ -428,9 +443,11 @@ pub trait WasmAccess: Copy + core::fmt::Debug {
         buff
     }
 
+    /// Directs a pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director<T>(ptr: *const T) -> *const T;
 
+    /// Directs a mutable pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_mut<T>(ptr: *mut T) -> *mut T;
 
@@ -489,12 +506,14 @@ pub trait WasmAccess: Copy + core::fmt::Debug {
     fn _start();
 }
 
+/// Provides access to a file path in WASM memory.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WasmPathAccess<'a, Wasm: WasmAccess> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
 
 impl<'a, Wasm: WasmAccess> WasmPathAccess<'a, Wasm> {
+    /// Creates a new `WasmPathAccess`.
     #[inline(always)]
     pub fn new(ptr: *const u8, len: usize) -> Self {
         Self {
@@ -502,6 +521,7 @@ impl<'a, Wasm: WasmAccess> WasmPathAccess<'a, Wasm> {
         }
     }
 
+    /// Returns an iterator over the components of the path.
     #[inline(always)]
     pub fn components(&self) -> WasmPathComponents<'a, Wasm> {
         let path = self.path;
@@ -509,29 +529,29 @@ impl<'a, Wasm: WasmAccess> WasmPathAccess<'a, Wasm> {
     }
 }
 
+/// An iterator over the components of a WASM path.
 pub struct WasmPathComponents<'a, Wasm: WasmAccess> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
 
+/// A component of a WASM path.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum WasmPathComponent<'a, Wasm: WasmAccess> {
-    /// If wasi, root only "/"
+    /// The root directory, `/`.
     RootDir,
 
-    /// A reference to the current directory, i.e., `.`.
+    /// A reference to the current directory, `.`.
     CurDir,
 
-    /// A reference to the parent directory, i.e., `..`.
+    /// A reference to the parent directory, `..`.
     ParentDir,
 
-    /// A normal component, e.g., `a` and `b` in `a/b`.
-    ///
-    /// This variant is the most common one, it represents references to files
-    /// or directories.
+    /// A normal file or directory name.
     Normal(WasmArrayAccess<'a, u8, Wasm>),
 }
 
 impl<'a, Wasm: WasmAccess> WasmPathComponent<'a, Wasm> {
+    /// Compares the component with a string.
     pub fn eq_str(&self, other: &str) -> bool {
         match self {
             WasmPathComponent::RootDir => other == "/",

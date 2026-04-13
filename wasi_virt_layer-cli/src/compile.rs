@@ -40,6 +40,7 @@ impl<const T: usize, R: BufRead> Iterator for CustomReadIterator<T, R> {
     }
 }
 
+/// Compiles the VFS module from the specified manifest and crate.
 pub fn build_vfs(
     manifest_path: Option<&String>,
     building_crate: &cargo_metadata::Package,
@@ -302,6 +303,7 @@ crate-type = ["cdylib"]
     )?)
 }
 
+/// Resolves and returns the target package being built from cargo metadata.
 pub fn get_building_crate(
     metadata: &cargo_metadata::Metadata,
     package: &Option<String>,
@@ -349,6 +351,7 @@ pub fn get_building_crate(
     Ok(building_crate)
 }
 
+/// Optimizes a WebAssembly module using the `wasm-opt` utility.
 pub fn optimize_wasm(
     wasm_path: &camino::Utf8PathBuf,
     add_args: &[&str],
@@ -438,6 +441,7 @@ pub fn optimize_wasm(
     Ok(before_path)
 }
 
+/// Converts a WebAssembly module into a WebAssembly Component.
 pub fn wasm_to_component(
     wasm_path: &camino::Utf8PathBuf,
     wasm_names: &[impl AsRef<str>],

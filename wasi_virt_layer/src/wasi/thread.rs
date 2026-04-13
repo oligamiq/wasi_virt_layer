@@ -8,13 +8,16 @@ use std::{sync::Arc, thread::JoinHandle};
 #[allow(unused_imports)]
 use crate::{__private::wasip1, memory::WasmAccess};
 
+/// Trait for a virtual thread implementation.
 pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
+    /// Creates a new thread and returns its ID.
     fn new_thread(
         &mut self,
         accessor: ThreadAccessor,
         runner: ThreadRunner,
     ) -> Option<NonZero<u32>>;
 
+    /// Yields the execution of the current thread.
     #[inline(always)]
     fn sched_yield<Wasm: WasmAccess>(&mut self) -> wasip1::Errno {
         #[cfg(target_os = "wasi")]
@@ -33,6 +36,7 @@ pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
 /// ref ~/.rustup/toolchains/stable-x86_64-pc-windows-msvc/lib/rustlib/src/rust/library/std/src/sys/pal/wasi/thread.rs
 /// this type is *mut Box<dyn FnOnce()>
 /// but we can't use it directly, because ABI was not designed with this in mind
+/// A wrapper for a thread's entry point function.
 #[derive(Debug)]
 pub struct ThreadRunner {
     main: NonNull<Box<dyn FnOnce()>>,
@@ -41,38 +45,43 @@ pub struct ThreadRunner {
 unsafe impl Send for ThreadRunner {}
 
 impl ThreadRunner {
+    /// Creates a new `ThreadRunner` from a raw pointer to a boxed closure.
     pub fn __new(ptr: *mut Box<dyn FnOnce()>) -> Self {
         ThreadRunner {
             main: NonNull::new(ptr).unwrap(),
         }
     }
 
+    /// Returns the underlying raw pointer.
     pub const fn inner(self) -> *mut Box<dyn FnOnce()> {
         self.main.as_ptr()
     }
 }
 
-/// Thread Util on each wasm
+/// Trait for accessing WASM thread start and identification.
 pub trait ThreadAccess: Send + 'static + Copy {
-    /// If creation is failed, thread_id return None
-    /// Run given function(ThreadRunner) and wait
+    /// Calls the `wasi_thread_start` exported function in the WASM module.
     fn call_wasi_thread_start(&self, ptr: ThreadRunner, thread_id: Option<NonZero<u32>>);
-    /// Get wasm name on which create thread
+    /// Returns the name of the WASM module.
     fn as_name(&self) -> &'static str;
 
+    /// Returns the accessor as a unique `usize` value.
     fn as_usize(&self) -> usize;
 
+    /// Creates an accessor from a unique `usize` value.
     fn from_usize(v: usize) -> Self
     where
         Self: Sized;
 }
 
+/// A wrapper for a `ThreadAccess` implementor that can be safely passed between threads.
 pub struct ThreadAccessorWrapper<T: ThreadAccess> {
     inner: usize,
     _marker: core::marker::PhantomData<T>,
 }
 
 impl<T: ThreadAccess> ThreadAccessorWrapper<T> {
+    /// Creates a new `ThreadAccessorWrapper`.
     pub fn new(accessor: T) -> Self {
         ThreadAccessorWrapper {
             inner: accessor.as_usize(),
@@ -80,6 +89,7 @@ impl<T: ThreadAccess> ThreadAccessorWrapper<T> {
         }
     }
 
+    /// Returns the original accessor.
     pub fn as_accessor(&self) -> T {
         T::from_usize(self.inner)
     }
@@ -114,13 +124,18 @@ impl JoinPoolHandle {
     }
 }
 
+/// Options for waiting for threads in a thread pool to join.
 pub enum WaitThreadJoin {
+    /// No waiting required.
     None,
+    /// Wait for a single signal.
     Recv(std::sync::mpsc::Receiver<()>),
+    /// Wait for N signals.
     RecvN(flume::Receiver<()>, usize),
 }
 
 impl WaitThreadJoin {
+    /// Block until the join condition is met.
     pub fn wait(self) {
         match self {
             WaitThreadJoin::None => {}
@@ -215,6 +230,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
     }
 }
 
+/// A thread pool implementation for virtual threads.
 pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess> {
     max_threads: AtomicUsize,
     read_kept_workers_pool_size: AtomicUsize,
@@ -224,7 +240,7 @@ pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess> {
 }
 
 impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
-    /// You must call `init` after creating this struct.
+    /// Creates a new `VirtualThreadPool` without initialization.
     pub const unsafe fn const_new(max_threads: usize) -> Self {
         VirtualThreadPool {
             max_threads: AtomicUsize::new(max_threads),
@@ -235,7 +251,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         }
     }
 
-    /// You can call this multiple times, but only the first call takes effect.
+    /// Initializes the thread pool. This must be called before use.
     pub fn init(&mut self) {
         if self.kept_workers_pool.init() {
             let (sender, receiver) = flume::unbounded();
@@ -244,6 +260,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         }
     }
 
+    /// Sets the maximum capacity of the thread pool.
     pub fn set_capacity(&self, max_threads: usize) {
         self.max_threads.store(max_threads, Ordering::SeqCst);
     }
@@ -265,6 +282,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         r
     }
 
+    /// Adjusts the number of running worker threads to match the current capacity.
     pub fn flush_capacity(&self) -> WaitThreadJoin {
         let max_threads = self.max_threads.load(Ordering::SeqCst);
 
@@ -366,6 +384,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         }
     }
 
+    /// Runs a thread runner on an available worker thread.
     pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
         self.queue
             .lock()
@@ -402,11 +421,13 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 
 unsafe impl<ThreadAccessor: ThreadAccess> Send for VirtualThreadPool<ThreadAccessor> {}
 unsafe impl<ThreadAccessor: ThreadAccess> Sync for VirtualThreadPool<ThreadAccessor> {}
+/// A "pool" that spawns native threads directly for each request.
 pub struct DirectThreadPool<ThreadAccessor: ThreadAccess>(
     core::marker::PhantomData<ThreadAccessor>,
 );
 
 impl<ThreadAccessor: ThreadAccess> DirectThreadPool<ThreadAccessor> {
+    /// Creates a new `DirectThreadPool`.
     pub const fn new() -> Self {
         DirectThreadPool(core::marker::PhantomData)
     }
@@ -439,6 +460,7 @@ mod spawn {
         builder.spawn(f)
     }
 
+    /// Spawn a new thread using an unchecked closure.
     pub fn root_spawn_unchecked<F, T>(
         builder: std::thread::Builder,
         f: F,
@@ -490,6 +512,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     }
 }
 
+/// Plugs the thread ecosystem by defining necessary accessor enums and hooks.
 #[macro_export]
 macro_rules! plug_thread {
     ($pool:tt, $($wasm:ident),* $(,)?) => {

@@ -5,8 +5,7 @@ use parking_lot::RwLock;
 
 use crate::{memory::WasmAccess, wasi::file::Wasip1LFS};
 
-/// small posix like virtual file system
-/// but inode has some metadata
+/// A constant virtual file system implementation.
 #[derive(Debug)]
 pub struct Wasip1ConstVFS<LFS: Wasip1LFS + Sync + core::fmt::Debug, const FLAT_LEN: usize>
 where
@@ -24,6 +23,7 @@ impl<LFS: Wasip1LFS + Sync + core::fmt::Debug, const FLAT_LEN: usize> Wasip1Cons
 where
     LFS::Inode: Copy + core::fmt::Debug,
 {
+    /// Creates a new `Wasip1ConstVFS` with thread support.
     #[cfg(feature = "threads")]
     pub const fn new(lfs: LFS) -> Self {
         let mut map: [RwLock<Option<(LFS::Inode, usize)>>; FLAT_LEN] =
@@ -38,6 +38,7 @@ where
         Self { lfs, map }
     }
 
+    /// Creates a new `Wasip1ConstVFS` without thread support.
     #[cfg(not(feature = "threads"))]
     pub const fn new(lfs: LFS) -> Self {
         let mut map: [Option<(LFS::Inode, usize)>; FLAT_LEN] = [const { None }; FLAT_LEN];
@@ -51,6 +52,7 @@ where
         Self { lfs, map }
     }
 
+    /// Returns the inode associated with the given file descriptor.
     #[inline]
     pub fn get_inode(&self, fd: Fd) -> Option<LFS::Inode> {
         #[cfg(feature = "threads")]
@@ -67,6 +69,7 @@ where
         }
     }
 
+    /// Removes and returns the inode associated with the given file descriptor.
     #[inline]
     pub fn remove_inode(&mut self, fd: Fd) -> Option<LFS::Inode> {
         #[cfg(feature = "threads")]
@@ -87,6 +90,7 @@ where
         }
     }
 
+    /// Pushes a new inode into the file descriptor map and returns the new file descriptor.
     #[inline]
     pub fn push_inode(&mut self, inode: LFS::Inode) -> Fd {
         #[cfg(feature = "threads")]
@@ -113,11 +117,13 @@ where
         unreachable!();
     }
 
+    /// Returns a mutable reference to the underlying local file system.
     #[inline]
     pub fn get_lfs(&mut self) -> &mut LFS {
         &mut self.lfs
     }
 
+    /// Returns both the inode and a mutable reference to the local file system.
     #[inline]
     pub fn get_inode_and_lfs(&mut self, fd: Fd) -> Option<(LFS::Inode, &mut LFS)> {
         self.get_inode(fd).map(|inode| (inode, &mut self.lfs))

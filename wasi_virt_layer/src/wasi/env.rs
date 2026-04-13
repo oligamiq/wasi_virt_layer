@@ -55,6 +55,7 @@ use crate::memory::WasmAccess;
 /// });
 /// plug_env!(@static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
 /// ```
+/// Plugs the environment variable ecosystem.
 #[macro_export]
 macro_rules! plug_env {
     (@const, $ty:ty, $($wasm:ident),* $(,)?) => {
@@ -124,11 +125,14 @@ macro_rules! plug_env {
     };
 }
 
+/// A structure holding constant environment variables.
 #[const_struct]
 pub struct VirtualEnvConstState {
+    /// The environment variables as a slice of name-value pairs (e.g., "KEY=VALUE").
     pub environ: &'static [&'static str],
 }
 
+/// Inner function for retrieving constant environment variable sizes.
 #[inline]
 #[cfg(target_os = "wasi")]
 pub fn environ_sizes_get_const_inner<
@@ -155,6 +159,7 @@ pub fn environ_sizes_get_const_inner<
     ERRNO_SUCCESS
 }
 
+/// Inner function for retrieving constant environment variables.
 #[inline]
 #[cfg(target_os = "wasi")]
 pub fn environ_get_const_inner<
@@ -180,10 +185,15 @@ pub fn environ_get_const_inner<
     ERRNO_SUCCESS
 }
 
+/// Trait for a virtual environment implementation.
 pub trait VirtualEnv<'a> {
+    /// The type used for environment variable strings.
     type Str: AsRef<str>;
 
+    /// Returns the environment variables.
     fn get_environ(&'a mut self) -> &'a [Self::Str];
+
+    /// Returns the sizes of the environment variables.
     fn environ_sizes_get(&'a mut self) -> (Size, Size) {
         let environ = self.get_environ();
         let mut size = 0;
@@ -197,6 +207,7 @@ pub trait VirtualEnv<'a> {
         (size, count)
     }
 
+    /// Copies the environment variables into the provided buffers.
     fn environ_get<Wasm: WasmAccess>(
         &'a mut self,
         environ: *mut *const u8,
@@ -234,6 +245,7 @@ impl<'a, T: core::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<
     }
 }
 
+/// Inner function for retrieving dynamic environment variable sizes.
 #[cfg(target_os = "wasi")]
 pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
     state: &'a mut impl VirtualEnv<'a>,
@@ -248,6 +260,7 @@ pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
     ERRNO_SUCCESS
 }
 
+/// Inner function for retrieving dynamic environment variables.
 #[inline]
 #[cfg(target_os = "wasi")]
 pub fn environ_get_inner<'a, Wasm: WasmAccess>(

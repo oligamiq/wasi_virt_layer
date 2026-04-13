@@ -11,6 +11,7 @@ use crate::{
     },
 };
 
+/// A constant, normal local file system implementation.
 #[derive(Debug)]
 pub struct VFSConstNormalLFS<
     ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
@@ -29,6 +30,7 @@ impl<
     StdIo: StdIO + 'static,
 > VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo>
 {
+    /// Creates a new `VFSConstNormalLFS`.
     pub const fn new() -> Self {
         Self {
             add_info: [VFSConstNormalAddInfo::new(); FLAT_LEN],
@@ -36,12 +38,14 @@ impl<
         }
     }
 
+    /// Updates the access time for a given inode.
     #[inline]
     pub const fn update_access_time(&mut self, inode: usize, atime: usize) {
         let add_info = &mut self.add_info[inode];
         add_info.set_access_time(atime);
     }
 
+    /// Returns whether the given inode is a directory.
     #[inline]
     pub const fn is_dir(&self, inode: usize) -> bool {
         let (_, file_or_dir) = ConstRoot::FILES[inode];
@@ -51,6 +55,7 @@ impl<
         }
     }
 
+    /// Returns the parent inode of the given inode.
     #[inline]
     pub const fn parent_inode(&self, inode: usize) -> Option<usize> {
         let (_, file_or_dir) = ConstRoot::FILES[inode];
@@ -60,6 +65,7 @@ impl<
         }
     }
 
+    /// Resolves a path starting from a given inode to find its inode.
     pub fn get_inode_for_path<Wasm: WasmAccess>(
         &self,
         inode: usize,
@@ -107,10 +113,12 @@ impl<
         Some(current_inode)
     }
 
+    /// Returns the access time for a given inode.
     pub fn access_time(&self, inode: usize) -> wasip1::Timestamp {
         self.add_info[inode].access_time() as wasip1::Timestamp
     }
 
+    /// Creates file statistics for a given inode.
     pub fn filestat_from_inode(&self, inode: usize) -> FilestatWithoutDevice {
         FilestatWithoutDevice {
             ino: inode as _,

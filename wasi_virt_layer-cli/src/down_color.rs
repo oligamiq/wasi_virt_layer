@@ -22,6 +22,9 @@ static MAP16: LazyLock<HashMap<u8, (u8, u8, u8)>> = LazyLock::new(|| {
     map16
 });
 
+/// Reduces the saturation of ANSI color sequences in the input string.
+///
+/// It parses 24-bit RGB and 16-color sequences and adjusts them based on the provided ratio.
 pub fn reduce_saturation(input: &str, ratio: f32) -> String {
     // \x1b[38;2;R;G;Bm or \x1b[48;2;R;G;Bm
 

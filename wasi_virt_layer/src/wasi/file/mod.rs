@@ -10,6 +10,7 @@ use crate::__private::wasip1;
 
 use crate::__private::wasip1::*;
 
+/// File statistics excluding the device ID.
 pub struct FilestatWithoutDevice {
     /// File serial number.
     pub ino: Inode,
@@ -28,10 +29,14 @@ pub struct FilestatWithoutDevice {
 }
 
 /// small posix like local file system
+/// Trait for a local file system implementation.
 pub trait Wasip1LFS: core::fmt::Debug {
+    /// The type used for inodes.
     type Inode: 'static + core::fmt::Debug;
+    /// Pre-opened inodes.
     const PRE_OPEN: &'static [Self::Inode];
 
+    /// Writes raw data to a file.
     fn fd_write_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
@@ -39,20 +44,24 @@ pub trait Wasip1LFS: core::fmt::Debug {
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    /// Writes raw data to stdout.
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
         &mut self,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    /// Writes raw data to stderr.
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
         &mut self,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    /// Returns whether the inode is a directory.
     fn is_dir(&self, inode: Self::Inode) -> bool;
 
+    /// Reads directory entries.
     fn fd_readdir_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
@@ -61,6 +70,7 @@ pub trait Wasip1LFS: core::fmt::Debug {
         cookie: Dircookie,
     ) -> Result<(Size, Dircookie), wasip1::Errno>;
 
+    /// Retrieves file statistics for a path.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
@@ -69,11 +79,13 @@ pub trait Wasip1LFS: core::fmt::Debug {
         path_len: usize,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
+    /// Retrieves pre-open statistics.
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
+    /// Retrieves the name of a pre-opened directory.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
@@ -81,11 +93,13 @@ pub trait Wasip1LFS: core::fmt::Debug {
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno>;
 
+    /// Retrieves file statistics for a file descriptor.
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
+    /// Reads data from a file descriptor into a buffer at a given offset.
     fn fd_pread_raw<Wasm: WasmAccess>(
         &mut self,
         inode: Self::Inode,
@@ -94,12 +108,14 @@ pub trait Wasip1LFS: core::fmt::Debug {
         offset: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    /// Reads data from stdin.
     fn fd_read_stdin_raw<Wasm: WasmAccess>(
         &mut self,
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    /// Opens a path.
     fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
         dir_ino: Self::Inode,
@@ -113,7 +129,9 @@ pub trait Wasip1LFS: core::fmt::Debug {
     ) -> Result<Self::Inode, wasip1::Errno>;
 }
 
+/// Trait for a virtual file implementation.
 pub trait Wasip1FileTrait: core::fmt::Debug {
+    /// Returns the size of the file.
     fn size(&self) -> usize;
 
     /// Reads data from the file into the provided buffer.
@@ -127,6 +145,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
     /// but if the read function is implemented
     /// and the alloc feature is ON,
     /// this function is automatically implemented.
+    /// Reads data from the file into the provided buffer at a given offset.
     #[allow(unused_variables)]
     fn pread_raw<Wasm: WasmAccess>(
         &self,
@@ -157,7 +176,9 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
     }
 }
 
+/// Trait for a virtual file system implementation.
 pub trait Wasip1FileSystem: core::fmt::Debug {
+    /// Writes data to a file descriptor.
     fn fd_write_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
@@ -166,6 +187,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         nwritten: *mut Size,
     ) -> wasip1::Errno;
 
+    /// Reads directory entries from a file descriptor.
     fn fd_readdir_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
@@ -175,6 +197,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         nread: *mut Size,
     ) -> wasip1::Errno;
 
+    /// Retrieves file statistics for a path relative to a file descriptor.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
@@ -184,12 +207,14 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
+    /// Retrieves pre-open statistics for a file descriptor.
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
         prestat: *mut wasip1::Prestat,
     ) -> wasip1::Errno;
 
+    /// Retrieves the name of a pre-opened directory for a file descriptor.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
@@ -197,20 +222,24 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         dir_path_len: usize,
     ) -> wasip1::Errno;
 
+    /// Closes a file descriptor.
     fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno;
 
+    /// Retrieves file statistics for a file descriptor.
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
+    /// Retrieves file descriptor statistics.
     fn fd_fdstat_get_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
         fdstat: *mut wasip1::Fdstat,
     ) -> wasip1::Errno;
 
+    /// Reads data from a file descriptor into buffers.
     fn fd_read_raw<Wasm: WasmAccess>(
         &mut self,
         fd: Fd,
@@ -219,6 +248,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         nread: *mut Size,
     ) -> wasip1::Errno;
 
+    /// Opens a path relative to a file descriptor.
     fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
         dir_fd: Fd,
@@ -233,6 +263,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 }
 
+/// Plugs the file system ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_fs {
     (@const, $state:expr, $($wasm:ident),* $(,)?) => {

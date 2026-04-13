@@ -49,6 +49,7 @@ macro_rules! add_generator {
     }};
 }
 
+/// Executes the build command, coordinating the compilation and transformation of WASM modules.
 pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
     let package = parsed_args.get_package()?;
 

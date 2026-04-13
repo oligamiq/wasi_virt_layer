@@ -4,15 +4,19 @@ use const_struct::ConstStruct;
 use crate::{memory::WasmAccess, wasi::file::Wasip1FileTrait};
 
 /// A constant file system root that can be used in a WASI component.
+/// A constant file system structure for use in WASM modules.
 #[derive(ConstStruct, Debug)]
 pub struct VFSConstNormalFiles<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize> {
+    /// The flattened array of files and directories.
     pub files: [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
+    /// Indices of pre-opened directories.
     pub pre_open: &'static [usize],
 }
 
 impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
     VFSConstNormalFiles<File, FLAT_LEN>
 {
+    /// Creates a new `VFSConstNormalFiles`.
     pub const fn new(
         files: (
             [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
@@ -26,15 +30,17 @@ impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
     }
 }
 
+/// An inode in a constant VFS.
 #[derive(Clone, Copy, Debug)]
 pub enum VFSConstNormalInode<File: Wasip1FileTrait + 'static + Copy> {
-    /// file, parent
+    /// A regular file with its associated file data and parent index.
     File(File, usize),
-    /// (first index..last index), parent
+    /// A directory with its child range and optional parent index.
     Dir((usize, usize), Option<usize>),
 }
 
 impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
+    /// Returns the WASI file type of the inode.
     pub const fn filetype(&self) -> wasip1::Filetype {
         match self {
             Self::File(..) => wasip1::FILETYPE_REGULAR_FILE,
@@ -42,6 +48,7 @@ impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
         }
     }
 
+    /// Returns the size of the inode.
     pub fn size(&self) -> usize {
         match self {
             Self::File(file, _) => file.size(),
@@ -49,6 +56,7 @@ impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
         }
     }
 
+    /// Returns the parent inode index, if any.
     pub fn parent(&self) -> Option<usize> {
         match self {
             Self::File(_, parent) => Some(*parent),
@@ -57,6 +65,7 @@ impl<File: Wasip1FileTrait + 'static + Copy> VFSConstNormalInode<File> {
     }
 }
 
+/// Macro for defining constant file systems.
 #[macro_export]
 macro_rules! ConstFiles {
     (
@@ -438,19 +447,25 @@ macro_rules! ConstFiles {
     };
 }
 
+/// A wrapper for constant file data.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct WasiConstFile<File: WasiConstPrimitiveFile> {
+    /// The underlying file data.
     pub file: File,
 }
 
 impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {
+    /// Creates a new `WasiConstFile`.
     pub const fn new(file: File) -> Self {
         Self { file }
     }
 }
 
+/// Trait for constant primitive file data.
 pub trait WasiConstPrimitiveFile: core::fmt::Debug {
+    /// Returns the length of the file data.
     fn len(&self) -> usize;
+    /// Reads raw data from the file.
     fn pread_raw<Wasm: WasmAccess>(
         &self,
         buf_ptr: *mut u8,

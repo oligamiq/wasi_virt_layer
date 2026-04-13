@@ -2,6 +2,7 @@
 
 use crate::__private::wasip1;
 
+/// Transports data between the virtual layer and the underlying WASI system.
 pub struct Wasip1Transporter;
 
 #[cfg(not(feature = "multi_memory"))]
@@ -70,6 +71,7 @@ unsafe fn non_recursive_proc_exit(rval: wasip1::Exitcode) -> ! {
 }
 
 impl Wasip1Transporter {
+    /// Reads data from stdin into the provided buffer using a non-recursive WASI call.
     #[allow(unused_variables)]
     pub fn read_from_stdin(buf: &mut [u8]) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
@@ -88,6 +90,7 @@ impl Wasip1Transporter {
         }
     }
 
+    /// Reads data from stdin directly into WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
     pub fn read_from_stdin_direct<Wasm: WasmAccess>(
@@ -110,6 +113,7 @@ impl Wasip1Transporter {
         }
     }
 
+    /// Writes data to stdout from the provided buffer.
     #[allow(unused_variables)]
     pub fn write_to_stdout(data: &[u8]) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
@@ -128,6 +132,7 @@ impl Wasip1Transporter {
         }
     }
 
+    /// Writes data to stdout directly from WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
     pub fn write_to_stdout_direct<Wasm: WasmAccess>(
@@ -150,6 +155,7 @@ impl Wasip1Transporter {
         }
     }
 
+    /// Writes data to stderr from the provided buffer.
     #[allow(unused_variables)]
     pub fn write_to_stderr(data: &[u8]) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
@@ -168,6 +174,7 @@ impl Wasip1Transporter {
         }
     }
 
+    /// Writes data to stderr directly from WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
     pub fn write_to_stderr_direct<Wasm: WasmAccess>(
@@ -190,6 +197,7 @@ impl Wasip1Transporter {
         }
     }
 
+    /// Aborts the current process with the given exit code.
     #[allow(unused_variables)]
     pub fn process_abort(rval: wasip1::Exitcode) -> ! {
         #[cfg(not(target_os = "wasi"))]

@@ -32,24 +32,28 @@ impl Drop for TomlRestorers {
 }
 
 impl TomlRestorers {
+    /// Creates a new, empty collection of `TomlRestorer` instances.
     pub fn new() -> Self {
         Self {
             inner: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
+    /// Creates a new `TomlRestorers` collection initialized with a single restorer.
     pub fn with(restorer: TomlRestorer) -> Self {
         Self {
             inner: Arc::new(Mutex::new(vec![restorer])),
         }
     }
 
+    /// Extends the collection with multiple restorers.
     pub fn extend(&mut self, restorers: Vec<TomlRestorer>) {
         for restorer in restorers {
             self.push(restorer);
         }
     }
 
+    /// Adds a single restorer to the collection.
     pub fn push(&mut self, restorer: TomlRestorer) {
         self.inner.lock().unwrap().push(restorer);
     }
@@ -66,6 +70,7 @@ impl TomlRestorers {
         }
     }
 
+    /// Explicitly restores all recorded modifications and consumes the collection.
     pub fn restore(self) -> eyre::Result<()> {
         let mut restorers_lock = self
             .inner
@@ -81,6 +86,7 @@ impl TomlRestorers {
 }
 
 impl TomlRestorer {
+    /// Creates a new `TomlRestorer` recording the path, original content, and changed content.
     pub fn new(path: &Utf8PathBuf, original: String, changed: String) -> Self {
         Self {
             path: path.clone(),
@@ -89,12 +95,14 @@ impl TomlRestorer {
         }
     }
 
+    /// Reads the original state, writes new content, and returns a restorer for later reversion.
     pub fn with_write(path: &Utf8PathBuf, changed: String) -> eyre::Result<Self> {
         let file_data = fs::read_to_string(&path).wrap_err("Failed to read manifest file")?;
         fs::write(&path, &changed).wrap_err("Failed to write manifest file")?;
         Ok(Self::new(path, file_data, changed))
     }
 
+    /// Consumes the restorer by pushing it into a list and merging duplicates where possible.
     pub fn push(self, mut restorers: Vec<TomlRestorer>) -> Vec<TomlRestorer> {
         loop {
             let mut merged = vec![];
@@ -109,6 +117,7 @@ impl TomlRestorer {
         }
     }
 
+    /// Merges this restorer with another, reducing redundant entries for the same file.
     pub fn merge(&self, other: TomlRestorer) -> Vec<TomlRestorer> {
         if self.path != other.path {
             return vec![self.clone(), other];
@@ -133,6 +142,7 @@ impl TomlRestorer {
         }
     }
 
+    /// Reverts the file content to its original state recorded by this restorer.
     pub fn restore(self) -> eyre::Result<()> {
         fs::write(&self.path, self.original).wrap_err("Failed to write manifest file")?;
         Ok(())
@@ -162,6 +172,7 @@ pub struct FeatureChecker<'a, 'b, 'c, 'd> {
 }
 
 impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
+    /// Initializes a new `FeatureChecker` targeting a specific feature across manifest boundaries.
     pub const fn new(
         feature: &'a str,
         manifest_path: &'b Utf8PathBuf,
@@ -176,6 +187,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
         }
     }
 
+    /// Initializes a `FeatureChecker` without a specific feature target for general manifest checks.
     pub const fn new_no_feature(
         manifest_path: &'b Utf8PathBuf,
         root_manifest_path: &'c Utf8PathBuf,
@@ -230,6 +242,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
         Ok(doc)
     }
 
+    /// Investigates the current state of a feature within the manifest or workspace dependencies.
     pub fn has(&self) -> eyre::Result<HasFeature> {
         let Self {
             crate_name,
@@ -319,6 +332,7 @@ impl<'a, 'b, 'c, 'd> FeatureChecker<'a, 'b, 'c, 'd> {
         Ok(())
     }
 
+    /// Dynamically enabling or disabling a specific feature and returns a restorer if changed.
     pub fn set(&self, on: bool) -> eyre::Result<Option<TomlRestorer>> {
         let Self {
             feature,

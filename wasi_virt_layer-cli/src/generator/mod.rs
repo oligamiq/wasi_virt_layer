@@ -44,7 +44,9 @@ use crate::{
 /// Represents the generation context, holding configuration arguments and targeted module info.
 #[derive(Debug)]
 pub struct GeneratorCtx {
+    /// The name of the VFS module.
     pub vfs_name: WasmName,
+    /// The names of the target modules.
     pub target_names: Box<[WasmName]>,
     /// Including one's own WASI ABI
     pub target_names_with_self: Box<[WasmName]>,
@@ -59,25 +61,40 @@ pub struct GeneratorCtx {
     /// not start section.
     /// only post_combine.
     pub start_func_id: Option<HashMap<WasmName, walrus::FunctionId>>,
+    /// The memory type of the target modules (Single or Multi).
     pub target_memory_type: TargetMemoryType,
+    /// Whether to print unstable debug information.
     pub unstable_print_debug: bool,
+    /// Whether to include DWARF debug information.
     pub dwarf: bool,
+    /// Whether to enable multi-threading support.
     pub threads: bool,
+    /// Whether to skip transpilation.
     pub no_transpile: bool,
+    /// Whether to adjust the ABI for standard environments.
     pub adjust_abi: bool,
+    /// Whether to keep intermediate build artifacts.
     pub keep_build_artifacts: bool,
+    /// Builder for the start section, if applicable.
     pub start_section_builder: Option<start_section::StartSectionBuilder>,
 }
 
 /// Sub-context for extracting and storing component variables during execution.
 #[derive(Debug, Default)]
 pub struct ComponentCtx {
+    /// Optional name of the VFS module.
     vfs_name: Option<WasmName>,
+    /// Optional names of the target modules.
     target_names: Option<Box<[WasmName]>>,
+    /// Optional memory type of the target modules.
     target_memory_type: Option<TargetMemoryType>,
+    /// Optional flag for unstable debug printing.
     unstable_print_debug: Option<bool>,
+    /// Flag for including DWARF debug information.
     dwarf: bool,
+    /// Optional flag for multi-threading support.
     threads: Option<bool>,
+    /// Flag for ABI adjustment.
     adjust_abi: bool,
 }
 
@@ -144,6 +161,7 @@ pub struct ComponentCtxVisitor {
 }
 
 impl ComponentCtxVisitor {
+    /// Creates a new `ComponentCtxVisitor` with the specified context parameters.
     pub fn new(
         vfs_name: WasmName,
         target_names: Box<[WasmName]>,
@@ -239,6 +257,7 @@ impl Generator for ComponentCtxVisitor {
 }
 
 impl ComponentCtx {
+    /// Creates a new `ComponentCtx` with the specified context parameters.
     pub fn new(
         vfs_name: WasmName,
         target_names: Box<[WasmName]>,
@@ -259,26 +278,32 @@ impl ComponentCtx {
         }
     }
 
+    /// Returns the name of the VFS module.
     pub fn vfs_name(&self) -> &WasmName {
         self.vfs_name.as_ref().unwrap()
     }
 
+    /// Returns the names of the target modules.
     pub fn target_names(&self) -> &Box<[WasmName]> {
         self.target_names.as_ref().unwrap()
     }
 
+    /// Returns the memory type of the target modules.
     pub fn target_memory_type(&self) -> TargetMemoryType {
         self.target_memory_type.unwrap()
     }
 
+    /// Returns whether to print unstable debug information.
     pub fn unstable_print_debug(&self) -> bool {
         self.unstable_print_debug.unwrap()
     }
 
+    /// Returns whether to include DWARF debug information.
     pub fn dwarf(&self) -> bool {
         self.dwarf
     }
 
+    /// Returns whether to enable multi-threading support.
     pub fn threads(&self) -> bool {
         self.threads.unwrap()
     }
@@ -522,9 +547,12 @@ impl<'a> Generator for &'a mut (dyn Generator + 'a) {
 /// Stores the identity of an external loaded Wasm target.
 #[derive(Debug)]
 pub struct ModuleExternal {
+    /// The name of the external module.
     pub name: WasmName,
 }
+
 impl ModuleExternal {
+    /// Creates a new `ModuleExternal` with the specified name.
     pub fn new(name: &WasmName) -> Self {
         Self { name: name.clone() }
     }
@@ -533,19 +561,28 @@ impl ModuleExternal {
 /// Coordinates iterating over registered generators and merging external module logic into the VFS.
 #[derive(Debug)]
 pub struct GeneratorRunner {
+    /// The checkers used to validate the module.
     pub checkers: Vec<Box<dyn Generator + 'static>>,
+    /// The generators used to transform the module.
     pub generators: Vec<Box<dyn Generator + 'static>>,
+    /// The context used during generation.
     pub ctx: GeneratorCtx,
+    /// The path to the WASM module.
     pub path: WasmPath,
+    /// The paths to the target WASM modules.
     pub targets: Box<[WasmPath]>,
+    /// The TOML restorers used to reset configuration files.
     pub toml_restorers: Option<TomlRestorers>,
+    /// Memory hints for the target modules.
     pub memory_hint: HashMap<WasmName, usize>,
+    /// Holder for the names of the WASM modules.
     pub wasm_name_holder: WasmNameHolder,
 }
 
-/// Coordinates individual logic for specific component processing.
+/// A runner that coordinates the generation of a WebAssembly component.
 #[derive(Debug)]
 pub struct ComponentRunner {
+    /// The generators used to transform the component.
     pub generators: Vec<Box<dyn Generator + 'static>>,
     /// Encapsulates contextual settings across all generator components during transpilation.
     pub ctx: Option<ComponentCtx>,
@@ -1679,6 +1716,7 @@ impl WasmPath {
         Ok(())
     }
 
+    /// Returns the path to the WASM module.
     pub fn path(&self) -> eyre::Result<&Utf8PathBuf> {
         match self {
             WasmPath::Maybe { .. } => {

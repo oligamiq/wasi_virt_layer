@@ -1,7 +1,8 @@
 use crate::__private::wasip1;
 
-/// A simple debug implementation that can be used in the early stage of development.
-/// It provides a simple way to print debug information to stderr without relying on any complex infrastructure.
+/// Prints a simple debug message to stderr.
+/// This function is safe to call even in early initialization stages,
+/// although it will only output once `pre_init` has been called.
 pub fn simple_debug_print(buf: impl AsRef<[u8]>) {
     // We cannot call the import function until pre_init has been executed.
     // We do not use a queue because it requires memory allocation and is likely to corrupt the initialization.

@@ -22,6 +22,7 @@ static LOCK: std::sync::RwLock<()> = std::sync::RwLock::new(());
 static mut ALT_GLOBAL_VAR: i32 = 0;
 
 // It should already be in the write lock.
+/// Sets the alternative global variable for memory grow tracking.
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_set(v: i32) {
     // use crate::debug::*;
@@ -34,6 +35,7 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_set(v: i32) {
     unsafe { ALT_GLOBAL_VAR = v };
 }
 
+/// Initializes the alternative global variable once.
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_init_once(v: i32) {
     static INIT: InitOnce = InitOnce::new();
@@ -47,11 +49,13 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_init_once(v: i32) {
     });
 }
 
+/// Returns the memory address of the alternative global variable.
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_pos() -> i32 {
     &raw const ALT_GLOBAL_VAR as *const i32 as i32
 }
 
+/// Gets the alternative global variable without waiting for a lock.
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get_no_wait() -> i32 {
     // use crate::debug::*;
@@ -65,6 +69,7 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get_no_wait() -> i32 {
     i
 }
 
+/// Gets the alternative global variable, waiting for a read lock.
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get() -> i32 {
     // use crate::debug::*;

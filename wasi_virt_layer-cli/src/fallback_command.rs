@@ -8,6 +8,7 @@ use eyre::Context as _;
 use fs2::FileExt as _;
 use tempfile::Builder as TempFileBuilder;
 
+/// A command that can fall back to a Rust function if the binary is not found.
 pub struct FallbackCommand<F>
 where
     F: FnOnce(&[String]) -> i32 + Send + 'static,
@@ -19,12 +20,14 @@ where
 
 const DISABLE_FALLBACK: bool = true;
 
+/// A file-based lock to prevent concurrent execution of commands.
 pub struct CommandLock(File);
 
 impl<F> FallbackCommand<F>
 where
     F: FnOnce(&[String]) -> i32 + Send + 'static,
 {
+    /// Creates a new `FallbackCommand` with the specified binary and fallback function.
     pub fn new(bin: impl AsRef<str>, func: F) -> Self {
         Self {
             bin: bin.as_ref().to_string(),
@@ -33,11 +36,13 @@ where
         }
     }
 
+    /// Adds an argument to the command.
     pub fn arg(&mut self, arg: impl AsRef<str>) -> &mut Self {
         self.args.push(arg.as_ref().to_string());
         self
     }
 
+    /// Adds multiple arguments to the command.
     pub fn args<I, S>(&mut self, args: I) -> &mut Self
     where
         I: IntoIterator<Item = S>,
@@ -49,6 +54,7 @@ where
         self
     }
 
+    /// Spawns the command, either as a child process or as a fallback thread.
     pub fn spawn(&mut self) -> std::io::Result<FallbackChild> {
         let mut cmd = std::process::Command::new(&self.bin);
         cmd.args(&self.args);
@@ -99,8 +105,11 @@ where
     }
 }
 
+/// A handle to a spawned fallback command, which could be a process or a thread.
 pub enum FallbackChild {
+    /// A child process handle.
     Process(std::process::Child),
+    /// A handle to a thread running the fallback function.
     Thread(std::thread::JoinHandle<FallbackOutput>),
 }
 
@@ -113,6 +122,7 @@ impl FallbackChild {
         FallbackChild::Thread(handle)
     }
 
+    /// Waits for the command to finish and returns its output.
     pub fn wait_with_output(self) -> std::io::Result<FallbackOutput> {
         match self {
             FallbackChild::Process(child) => {
@@ -131,13 +141,18 @@ impl FallbackChild {
     }
 }
 
+/// The output of a finished fallback command.
 pub struct FallbackOutput {
+    /// The standard output of the command.
     pub stdout: Vec<u8>,
+    /// The standard error of the command.
     pub stderr: Vec<u8>,
+    /// Whether the command exited successfully.
     pub success: bool,
 }
 
 impl CommandLock {
+    /// Acquires the command lock.
     pub fn acquire() -> eyre::Result<Self> {
         let lock_path = get_temp_lock_filepath();
 

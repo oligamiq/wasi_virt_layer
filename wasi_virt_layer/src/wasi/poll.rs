@@ -1,7 +1,9 @@
 use crate::__private::wasip1::*;
 use crate::memory::WasmAccess;
 
+/// Trait for handling the `poll_oneoff` WASI function.
 pub trait PollOneoff {
+    /// Concurrently polls for events.
     fn poll_oneoff<Wasm: WasmAccess>(
         subscriptions: *const Subscription,
         events: *mut Event,
@@ -10,6 +12,7 @@ pub trait PollOneoff {
     ) -> Errno;
 }
 
+/// Default implementation of `PollOneoff`.
 pub struct DefaultPoll;
 
 impl PollOneoff for DefaultPoll {
@@ -37,6 +40,7 @@ impl PollOneoff for DefaultPoll {
     }
 }
 
+/// Plugs the poll ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_poll {
     ($ty:ty, $($wasm:ident),*) => {

@@ -1,9 +1,12 @@
 use crate::memory::WasmAccess;
 
+/// Trait for handling process exit.
 pub trait ProcessExit {
+    /// Exits the current process with the given code.
     fn proc_exit<Wasm: WasmAccess>(code: i32) -> !;
 }
 
+/// Default implementation of `ProcessExit`.
 pub struct DefaultProcess;
 
 impl ProcessExit for DefaultProcess {
@@ -21,6 +24,7 @@ impl ProcessExit for DefaultProcess {
     }
 }
 
+/// Plugs the process exit ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_process {
     ($ty:ty, $($wasm:ident),*) => {

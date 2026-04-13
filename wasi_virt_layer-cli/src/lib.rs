@@ -25,6 +25,7 @@ pub mod commands;
 pub mod compile;
 /// Checks and manages features required in Cargo configs.
 pub mod config_checker;
+/// Signal handler for graceful termination (e.g., Ctrl-C).
 pub mod ctrlc_handler;
 /// Helper logic to lower text colors and apply them.
 pub mod down_color;

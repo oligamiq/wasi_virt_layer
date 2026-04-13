@@ -344,20 +344,24 @@ impl<
     }
 }
 
+/// Additional information for a constant, normal VFS inode.
 #[derive(Copy, Clone, Debug)]
 pub struct VFSConstNormalAddInfo {
     atime: usize,
 }
 
 impl VFSConstNormalAddInfo {
+    /// Creates a new `VFSConstNormalAddInfo`.
     pub const fn new() -> Self {
         Self { atime: 0 }
     }
 
+    /// Returns the access time.
     pub const fn access_time(&self) -> usize {
         self.atime
     }
 
+    /// Sets the access time.
     pub const fn set_access_time(&mut self, atime: usize) {
         self.atime = atime;
     }

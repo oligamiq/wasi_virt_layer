@@ -7,8 +7,7 @@ pub mod process;
 #[cfg(feature = "threads")]
 pub mod thread;
 
-/// @through Iterate through the identifiers, replacing `self` with `__self`, and call the callback with all identifiers.
-/// @as_t Replace `self` with `__self` and call the callback with the identifier and type.
+/// Internal helper macro for handle `self` and other identifiers.
 #[macro_export]
 macro_rules! __as_t {
     (@as_t, self) => {

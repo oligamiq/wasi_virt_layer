@@ -7,30 +7,39 @@ use eyre::Context as _;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
 
+/// The main command-line interface for `wasi_virt_layer-cli`.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
 #[clap(propagate_version = true)]
 pub struct Cli {
+    /// The command to execute.
     #[clap(subcommand)]
     pub command: Command,
 }
 
 #[derive(Subcommand, Debug)]
+/// Supported subcommands for the CLI.
 pub enum Command {
+    /// Builds a virtualized WASM module.
     Build(BuildArgs),
+    /// Initializes a new WASI Virt Layer project.
     New(NewArgs),
 }
 
 #[derive(Parser, Debug)]
+/// Arguments for the `new` command.
 pub struct NewArgs {
-    /// Path to the new crate
+    /// The path where the new project will be created.
+    #[arg(value_name = "PATH")]
     pub path: Utf8PathBuf,
 
+    /// Whether to enable multi-threading support in the new project.
     #[arg(long, default_value = "false")]
     pub threads: bool,
 }
 
 #[derive(Parser, Debug)]
+/// Arguments for the `build` command.
 pub struct BuildArgs {
     /// Path to the wasip1 wasm file
     /// This allow 4 patterns:
@@ -40,20 +49,11 @@ pub struct BuildArgs {
     /// 4. direct path to wasm file, like `./target/wasm32-wasi/release/my_crate.wasm`
     pub wasm: Vec<WasmPath>,
 
+    /// Path to the primary package; used for single-package mode or component translation.
     #[arg(short, long)]
-    /// Path to the wasip1 wasm file
-    /// This allow 4 patterns:
-    /// 1. only manifest path, like `./Cargo.toml` or `./some/dir/Cargo.toml`
-    /// 2. only package name, like `my_package`
-    /// 3. manifest path and package name, like `./Cargo.toml::my_package` or `./some/dir/Cargo.toml::my_package`
-    /// 4. direct path to wasm file, like `./target/wasm32-wasi/release/my_crate.wasm`
-    /// 5. direct path to component file, like `./target/wasm32-wasi/release/my_crate.component.wasm`
-    ///      You can translate component to js directly.
     package: Option<WasmPath>,
 
-    /// Memory hints for the wasm files.
-    /// If the target Wasm file fails to detect the memory used
-    /// when handling the wasip1 instruction, you can use this to specify it.
+    /// Memory hints for the WASM files, used if automatic detection fails.
     #[arg(long)]
     wasm_memory_hint: Vec<isize>,
 
@@ -71,6 +71,7 @@ pub struct BuildArgs {
     pub no_transpile: bool,
 
     // transpile options
+    /// Options for transpiling to JavaScript.
     #[command(flatten)]
     pub transpile_opts: TranspileOpts,
 
@@ -96,6 +97,7 @@ pub struct BuildArgs {
 }
 
 impl BuildArgs {
+    /// Creates a new `BuildArgs` instance from iterator of strings.
     pub fn new(args: impl IntoIterator<Item = impl Into<String>>) -> Self {
         let args = args
             .into_iter()
@@ -119,6 +121,7 @@ impl BuildArgs {
         parsed
     }
 
+    /// Returns the memory hints for each target module.
     pub fn get_wasm_memory_hints(&self) -> Box<[Option<usize>]> {
         self.wasm_memory_hint
             .iter()
@@ -128,20 +131,24 @@ impl BuildArgs {
             .collect::<Box<_>>()
     }
 
+    /// Resolves and returns the path to the WASM package.
     pub fn get_package(&self) -> eyre::Result<WasmPath> {
         Ok(self.package.clone())
             .transpose()
             .unwrap_or_else(|| WasmPath::with_maybe_none())
     }
 
+    /// Returns the manifest path if specified.
     pub fn get_manifest_path(&self) -> Option<&Utf8PathBuf> {
         self.package.as_ref().and_then(|p| p.manifest_path())
     }
 
+    /// Retrieves the name of the package if available.
     pub fn get_package_name(&self) -> Option<CompactString> {
         self.package.clone().and_then(|p| p.name().ok())
     }
 
+    /// Transpiles the given WebAssembly component into JavaScript source files.
     pub fn transpile_to_js(
         &self,
         component: &[u8],
@@ -181,6 +188,7 @@ impl BuildArgs {
     }
 }
 
+/// Options for transpiling WebAssembly components into JavaScript.
 #[derive(Parser, Debug)]
 pub struct TranspileOpts {
     /// Disables generation of *.d.ts files and instead only generates *.js source files.
@@ -226,9 +234,10 @@ pub struct TranspileOpts {
 
     /// Whether to generate types for a guest module using module declarations.
     #[arg(long, default_value = "false")]
-    guest: bool,
+    pub guest: bool,
 }
 
+/// Represents a custom instantiation mode for the generated JavaScript.
 #[derive(Clone, Debug)]
 pub struct CustomInstantiationMode(Option<js_component_bindgen::InstantiationMode>);
 
@@ -265,19 +274,24 @@ pub(super) mod analysis {
     }
 }
 
+/// Specifies the memory architecture of the target WebAssembly module.
 #[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display)]
 pub enum TargetMemoryType {
+    /// Traditional single memory environment.
     #[strum(ascii_case_insensitive)]
     Single,
+    /// Multi-memory environment where modules have their own address spaces.
     #[strum(ascii_case_insensitive)]
     Multi,
 }
 
 impl TargetMemoryType {
+    /// Returns `true` if this memory type is `Multi`.
     pub fn is_multi(&self) -> bool {
         matches!(self, TargetMemoryType::Multi)
     }
 
+    /// Returns `true` if this memory type is `Single`.
     pub fn is_single(&self) -> bool {
         matches!(self, TargetMemoryType::Single)
     }

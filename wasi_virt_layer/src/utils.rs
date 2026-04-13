@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+/// A constant-time binary search map for use in `const` contexts.
 #[derive(Debug, Clone, Copy)]
 pub struct ConstBinaryMap<'a, K, V: Copy, const LEN: usize> {
     keys: [usize; LEN],
@@ -8,6 +9,7 @@ pub struct ConstBinaryMap<'a, K, V: Copy, const LEN: usize> {
 }
 
 impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
+    /// Creates a new `ConstBinaryMap` from separate keys and values arrays.
     pub const fn from_key_and_values(keys: [usize; LEN], values: [V; LEN]) -> Self {
         let mut tuples = merge_arrays_to_tuples(keys, values);
 
@@ -22,6 +24,7 @@ impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
         }
     }
 
+    /// Creates a new `ConstBinaryMap` from an array of key-value tuples.
     pub const fn from_key_values(mut key_values: [(usize, V); LEN]) -> Self {
         quicksort_internal(key_values.as_mut_ptr(), 0, (LEN - 1) as isize);
 
@@ -34,8 +37,7 @@ impl<'a, K, V: Copy, const LEN: usize> ConstBinaryMap<'a, K, V, LEN> {
         }
     }
 
-    /// this function is not slow
-    /// it is O(log n)
+    /// Retrieves a value by its key using binary search.
     pub const fn get(&'a self, key: usize) -> Option<&'a V> {
         let mut low = 0;
         let mut high = LEN as isize - 1;
@@ -185,7 +187,7 @@ pub(crate) const fn split_tuples_to_arrays<T: Copy, U: Copy, const N: usize>(
     (keys.build(), values.build())
 }
 
-/// This is very slow so use it only on const fn
+/// A fixed-capacity array builder that can be used in `const` context.
 #[derive(Debug, Clone, Copy)]
 pub struct StaticArrayBuilder<T: Copy, const N: usize> {
     data: [Option<T>; N],
@@ -193,6 +195,7 @@ pub struct StaticArrayBuilder<T: Copy, const N: usize> {
 }
 
 impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
+    /// Creates a new `StaticArrayBuilder`.
     pub const fn new() -> Self {
         Self {
             data: [None; N],
@@ -200,6 +203,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Pushes a value into the builder. Returns `Some(value)` if the builder is full.
     pub const fn push(&mut self, value: T) -> Option<T> {
         if self.len < N {
             self.data[self.len] = Some(value);
@@ -210,6 +214,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Removes the value at the given index.
     pub const fn remove(&mut self, index: usize) -> Option<T> {
         if index < N {
             let old_value = self.data[index];
@@ -228,6 +233,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Pops the last value from the builder.
     pub const fn pop(&mut self) -> Option<T> {
         if self.len > 0 {
             self.len -= 1;
@@ -237,10 +243,12 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Returns the number of elements in the builder.
     pub const fn len(&self) -> usize {
         self.len
     }
 
+    /// Returns a reference to the element at the given index.
     pub const fn get(&self, index: usize) -> Option<&T> {
         if index < N {
             self.data[index].as_ref()
@@ -249,6 +257,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Sets the value at the given index.
     pub const fn set(&mut self, index: usize, value: T) -> Option<T> {
         if index < N {
             let old_value = self.data[index];
@@ -259,10 +268,12 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Returns whether the builder is full.
     pub const fn check_len(&self) -> bool {
         self.len == N
     }
 
+    /// Builds the final array. Panics if the builder is not full.
     pub const fn build(self) -> [T; N] {
         use const_for::const_for;
 
@@ -279,6 +290,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         array
     }
 
+    /// Builds the final array. Panics if the builder is not full and `is_full` is true.
     pub const fn build_with_is_check(self, is_full: bool) -> [T; N] {
         use const_for::const_for;
 
@@ -298,6 +310,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
     }
 }
 
+/// Allocates a buffer and initializes it using the provided function.
 #[cfg(feature = "alloc")]
 pub unsafe fn alloc_buff<T, R>(
     size: usize,
@@ -310,17 +323,20 @@ pub unsafe fn alloc_buff<T, R>(
     (unsafe { buf.assume_init() }, result)
 }
 
+/// Utility for ensuring a function is called only once.
 pub struct InitOnce {
     is_init: core::sync::atomic::AtomicBool,
 }
 
 impl InitOnce {
+    /// Creates a new `InitOnce` instance.
     pub const fn new() -> Self {
         Self {
             is_init: core::sync::atomic::AtomicBool::new(false),
         }
     }
 
+    /// Calls the provided function once.
     pub fn call_once(&self, f: impl FnOnce()) {
         if !self
             .is_init

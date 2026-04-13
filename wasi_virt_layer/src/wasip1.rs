@@ -17,11 +17,15 @@ pub const FD_STDOUT: Fd = 1;
 pub const FD_STDERR: Fd = 2;
 
 use core::fmt;
+/// Buffer size.
 pub type Size = usize;
+/// File size.
 pub type Filesize = u64;
+/// Timestamp in nanoseconds.
 pub type Timestamp = u64;
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// Identifier for a clock.
 pub struct Clockid(u32);
 /// The clock measuring real time. Time value zero corresponds with
 /// 1970-01-01T00:00:00Z.
@@ -36,10 +40,12 @@ pub const CLOCKID_PROCESS_CPUTIME_ID: Clockid = Clockid(2);
 /// The CPU-time clock associated with the current thread.
 pub const CLOCKID_THREAD_CPUTIME_ID: Clockid = Clockid(3);
 impl Clockid {
+    /// Returns the raw underlying value of the clock identifier.
     pub const fn raw(&self) -> u32 {
         self.0
     }
 
+    /// Returns the name of the clock identifier as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "REALTIME",
@@ -49,6 +55,7 @@ impl Clockid {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the clock identifier.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => {
@@ -79,6 +86,7 @@ impl fmt::Debug for Clockid {
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// Error codes returned by functions.
 pub struct Errno(u16);
 /// No error occurred. System call completed successfully.
 pub const ERRNO_SUCCESS: Errno = Errno(0);
@@ -235,10 +243,12 @@ pub const ERRNO_XDEV: Errno = Errno(75);
 /// Extension: Capabilities insufficient.
 pub const ERRNO_NOTCAPABLE: Errno = Errno(76);
 impl Errno {
+    /// Returns the raw underlying value of the error code.
     pub const fn raw(&self) -> u16 {
         self.0
     }
 
+    /// Returns the name of the error code as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "SUCCESS",
@@ -321,6 +331,7 @@ impl Errno {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the error code.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => "No error occurred. System call completed successfully.",
@@ -424,6 +435,7 @@ extern crate std;
 #[cfg(feature = "std")]
 impl std::error::Error for Errno {}
 
+/// File descriptor rights.
 pub type Rights = u64;
 /// The right to invoke `fd_datasync`.
 /// If `path_open` is set, includes the right to invoke
@@ -498,9 +510,11 @@ pub const RIGHTS_SOCK_SHUTDOWN: Rights = 1 << 28;
 /// The right to invoke `sock_accept`.
 pub const RIGHTS_SOCK_ACCEPT: Rights = 1 << 29;
 
+/// A file descriptor.
 pub type Fd = u32;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// A scatter/gather buffer for input operations.
 pub struct Iovec {
     /// The address of the buffer to be filled.
     pub buf: *mut u8,
@@ -509,17 +523,22 @@ pub struct Iovec {
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// A scatter/gather buffer for output operations.
 pub struct Ciovec {
     /// The address of the buffer to be written.
     pub buf: *const u8,
     /// The length of the buffer to be written.
     pub buf_len: Size,
 }
+/// An array of input buffers.
 pub type IovecArray<'a> = &'a [Iovec];
+/// An array of output buffers.
 pub type CiovecArray<'a> = &'a [Ciovec];
+/// Relative offset within a file.
 pub type Filedelta = i64;
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// Relative seeking position.
 pub struct Whence(u8);
 /// Seek relative to start-of-file.
 pub const WHENCE_SET: Whence = Whence(0);
@@ -528,10 +547,12 @@ pub const WHENCE_CUR: Whence = Whence(1);
 /// Seek relative to end-of-file.
 pub const WHENCE_END: Whence = Whence(2);
 impl Whence {
+    /// Returns the raw underlying value of the whence identifier.
     pub const fn raw(&self) -> u8 {
         self.0
     }
 
+    /// Returns the name of the whence identifier as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "SET",
@@ -540,6 +561,7 @@ impl Whence {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the whence identifier.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => "Seek relative to start-of-file.",
@@ -559,11 +581,15 @@ impl fmt::Debug for Whence {
     }
 }
 
+/// A directory cookie.
 pub type Dircookie = u64;
+/// Length of a directory name.
 pub type Dirnamlen = u32;
+/// An inode number.
 pub type Inode = u64;
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// The type of a file.
 pub struct Filetype(u8);
 /// The type of the file descriptor or file is unknown or is different from any of the other types specified.
 pub const FILETYPE_UNKNOWN: Filetype = Filetype(0);
@@ -582,10 +608,12 @@ pub const FILETYPE_SOCKET_STREAM: Filetype = Filetype(6);
 /// The file refers to a symbolic link inode.
 pub const FILETYPE_SYMBOLIC_LINK: Filetype = Filetype(7);
 impl Filetype {
+    /// Returns the raw underlying value of the file type.
     pub const fn raw(&self) -> u8 {
         self.0
     }
 
+    /// Returns the name of the file type as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "UNKNOWN",
@@ -599,6 +627,7 @@ impl Filetype {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the file type.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => {
@@ -627,6 +656,7 @@ impl fmt::Debug for Filetype {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// A directory entry.
 pub struct Dirent {
     /// The offset of the next directory entry stored in this directory.
     pub d_next: Dircookie,
@@ -639,6 +669,7 @@ pub struct Dirent {
 }
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// File advisory information.
 pub struct Advice(u8);
 /// The application has no advice to give on its behavior with respect to the specified data.
 pub const ADVICE_NORMAL: Advice = Advice(0);
@@ -653,10 +684,12 @@ pub const ADVICE_DONTNEED: Advice = Advice(4);
 /// The application expects to access the specified data once and then not reuse it thereafter.
 pub const ADVICE_NOREUSE: Advice = Advice(5);
 impl Advice {
+    /// Returns the raw underlying value of the advice.
     pub const fn raw(&self) -> u8 {
         self.0
     }
 
+    /// Returns the name of the advice as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "NORMAL",
@@ -668,6 +701,7 @@ impl Advice {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the advice.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => {
@@ -698,6 +732,7 @@ impl fmt::Debug for Advice {
     }
 }
 
+/// Flags providing affect how a file descriptor behaves.
 pub type Fdflags = u16;
 /// Append mode: Data written to the file is always appended to the file's end.
 pub const FDFLAGS_APPEND: Fdflags = 1 << 0;
@@ -714,6 +749,7 @@ pub const FDFLAGS_SYNC: Fdflags = 1 << 4;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// File descriptor statistics.
 pub struct Fdstat {
     /// File type.
     pub fs_filetype: Filetype,
@@ -725,7 +761,9 @@ pub struct Fdstat {
     /// are created through this file descriptor, e.g., through `path_open`.
     pub fs_rights_inheriting: Rights,
 }
+/// Device ID.
 pub type Device = u64;
+/// Flags providing affect how file timestamps are adjusted.
 pub type Fstflags = u16;
 /// Adjust the last data access timestamp to the value stored in `filestat::atim`.
 pub const FSTFLAGS_ATIM: Fstflags = 1 << 0;
@@ -736,10 +774,12 @@ pub const FSTFLAGS_MTIM: Fstflags = 1 << 2;
 /// Adjust the last data modification timestamp to the time of clock `clockid::realtime`.
 pub const FSTFLAGS_MTIM_NOW: Fstflags = 1 << 3;
 
+/// Flags affecting path resolution.
 pub type Lookupflags = u32;
 /// As long as the resolved path corresponds to a symbolic link, it is expanded.
 pub const LOOKUPFLAGS_SYMLINK_FOLLOW: Lookupflags = 1 << 0;
 
+/// Open flags used by `path_open`.
 pub type Oflags = u16;
 /// Create file if it does not exist.
 pub const OFLAGS_CREAT: Oflags = 1 << 0;
@@ -750,9 +790,11 @@ pub const OFLAGS_EXCL: Oflags = 1 << 2;
 /// Truncate file to size 0.
 pub const OFLAGS_TRUNC: Oflags = 1 << 3;
 
+/// Number of hard links to an inode.
 pub type Linkcount = u64;
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// File statistics.
 pub struct Filestat {
     /// Device ID of device containing the file.
     pub dev: Device,
@@ -771,9 +813,11 @@ pub struct Filestat {
     /// Last file status change timestamp.
     pub ctim: Timestamp,
 }
+/// User-provided data that can be attached to subscriptions.
 pub type Userdata = u64;
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// Type of an event that can occur.
 pub struct Eventtype(u8);
 /// The time value of clock `subscription_clock::id` has
 /// reached timestamp `subscription_clock::timeout`.
@@ -785,10 +829,12 @@ pub const EVENTTYPE_FD_READ: Eventtype = Eventtype(1);
 /// available for writing. This event always triggers for regular files.
 pub const EVENTTYPE_FD_WRITE: Eventtype = Eventtype(2);
 impl Eventtype {
+    /// Returns the raw underlying value of the event type.
     pub const fn raw(&self) -> u8 {
         self.0
     }
 
+    /// Returns the name of the event type as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "CLOCK",
@@ -797,6 +843,7 @@ impl Eventtype {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the event type.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => {
@@ -825,12 +872,14 @@ impl fmt::Debug for Eventtype {
     }
 }
 
+/// Flags that can be associated with an event.
 pub type Eventrwflags = u16;
 /// The peer of this socket has closed or disconnected.
 pub const EVENTRWFLAGS_FD_READWRITE_HANGUP: Eventrwflags = 1 << 0;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// Event contents for `EVENTTYPE_FD_READ` or `EVENTTYPE_FD_WRITE`.
 pub struct EventFdReadwrite {
     /// The number of bytes available for reading or writing.
     pub nbytes: Filesize,
@@ -839,6 +888,7 @@ pub struct EventFdReadwrite {
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// An occurrence of an event.
 pub struct Event {
     /// User-provided value that got attached to `subscription::userdata`.
     pub userdata: Userdata,
@@ -850,6 +900,7 @@ pub struct Event {
     /// `eventtype::fd_write`. `eventtype::clock` events ignore this field.
     pub fd_readwrite: EventFdReadwrite,
 }
+/// Flags affecting a subscription to a clock.
 pub type Subclockflags = u16;
 /// If set, treat the timestamp provided in
 /// `subscription_clock::timeout` as an absolute timestamp of clock
@@ -860,6 +911,7 @@ pub const SUBCLOCKFLAGS_SUBSCRIPTION_CLOCK_ABSTIME: Subclockflags = 1 << 0;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// Subscription details for a clock event.
 pub struct SubscriptionClock {
     /// The clock against which to compare the timestamp.
     pub id: Clockid,
@@ -873,26 +925,35 @@ pub struct SubscriptionClock {
 }
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// Subscription details for a file descriptor read or write event.
 pub struct SubscriptionFdReadwrite {
     /// The file descriptor on which to wait for it to become ready for reading or writing.
     pub file_descriptor: Fd,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
+/// The union of subscription contents.
 pub union SubscriptionUU {
+    /// Subscription details for a clock event.
     pub clock: SubscriptionClock,
+    /// Subscription details for a file descriptor read event.
     pub fd_read: SubscriptionFdReadwrite,
+    /// Subscription details for a file descriptor write event.
     pub fd_write: SubscriptionFdReadwrite,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
+/// A container for the type-tagged subscription union.
 pub struct SubscriptionU {
+    /// The type of the event.
     pub tag: u8,
+    /// The subscription details.
     pub u: SubscriptionUU,
 }
 
 #[repr(C)]
 #[derive(Copy, Clone)]
+/// A request for an event.
 pub struct Subscription {
     /// User-provided value that is attached to the subscription in the
     /// implementation and returned through `event::userdata`.
@@ -900,9 +961,11 @@ pub struct Subscription {
     /// The type of the event to which to subscribe, and its contents
     pub u: SubscriptionU,
 }
+/// Exit code returned by processes.
 pub type Exitcode = u32;
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// Signal identifiers.
 pub struct Signal(u8);
 /// No signal. Note that POSIX has special semantics for `kill(pid, 0)`,
 /// so this value is reserved.
@@ -998,10 +1061,12 @@ pub const SIGNAL_PWR: Signal = Signal(29);
 /// Action: Terminates the process.
 pub const SIGNAL_SYS: Signal = Signal(30);
 impl Signal {
+    /// Returns the raw underlying value of the signal.
     pub const fn raw(&self) -> u8 {
         self.0
     }
 
+    /// Returns the name of the signal as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "NONE",
@@ -1038,6 +1103,7 @@ impl Signal {
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the signal.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => {
@@ -1178,17 +1244,21 @@ impl fmt::Debug for Signal {
     }
 }
 
+/// Flags affecting how a socket receive operation behaves.
 pub type Riflags = u16;
 /// Returns the message without removing it from the socket's receive queue.
 pub const RIFLAGS_RECV_PEEK: Riflags = 1 << 0;
 /// On byte-stream sockets, block until the full amount of data can be returned.
 pub const RIFLAGS_RECV_WAITALL: Riflags = 1 << 1;
 
+/// Flags providing information about a completed socket receive operation.
 pub type Roflags = u16;
 /// Returned by `sock_recv`: Message data has been truncated.
 pub const ROFLAGS_RECV_DATA_TRUNCATED: Roflags = 1 << 0;
 
+/// Flags affecting how a socket send operation behaves.
 pub type Siflags = u16;
+/// Flags affecting how a socket is shut down.
 pub type Sdflags = u8;
 /// Disables further receive operations.
 pub const SDFLAGS_RD: Sdflags = 1 << 0;
@@ -1197,20 +1267,24 @@ pub const SDFLAGS_WR: Sdflags = 1 << 1;
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Hash, Eq, PartialEq, Ord, PartialOrd)]
+/// Type of a pre-opened resource.
 pub struct Preopentype(u8);
 /// A pre-opened directory.
 pub const PREOPENTYPE_DIR: Preopentype = Preopentype(0);
 impl Preopentype {
+    /// Returns the raw underlying value of the pre-open type.
     pub const fn raw(&self) -> u8 {
         self.0
     }
 
+    /// Returns the name of the pre-open type as a string.
     pub fn name(&self) -> &'static str {
         match self.0 {
             0 => "DIR",
             _ => unsafe { core::hint::unreachable_unchecked() },
         }
     }
+    /// Returns a descriptive message for the pre-open type.
     pub fn message(&self) -> &'static str {
         match self.0 {
             0 => "A pre-opened directory.",
@@ -1230,25 +1304,33 @@ impl fmt::Debug for Preopentype {
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
+/// Information about a pre-opened directory.
 pub struct PrestatDir {
     /// The length of the directory name for use with `fd_prestat_dir_name`.
     pub pr_name_len: Size,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
+/// Union of possible pre-open statistics.
 pub union PrestatU {
+    /// Detailed information about the pre-opened directory.
     pub dir: PrestatDir,
 }
 #[repr(C)]
 #[derive(Copy, Clone)]
+/// Statistics about a pre-opened resource.
 pub struct Prestat {
+    /// The type of pre-opened resource.
     pub tag: u8,
+    /// Detailed information about the resource.
     pub u: PrestatU,
 }
 
 #[allow(unused)]
 /// Ref https://docs.rs/wasi/0.11.1+wasi-snapshot-preview1/wasi/wasi_snapshot_preview1/index.html
+/// This module contains the bindings for the WASI snapshot preview1 ABI.
 pub mod wasi_snapshot_preview1 {
+    /// Writes to a file descriptor.
     pub unsafe extern "C" fn fd_write(arg0: i32, arg1: i32, arg2: i32, arg3: i32) -> i32 {
         unimplemented!("wasi_snapshot_preview1::fd_write");
     }

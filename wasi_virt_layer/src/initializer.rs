@@ -11,6 +11,8 @@ unsafe extern "C" {
     fn __wasm_call_ctors();
 }
 
+/// Initializes thread-local storage and calls global constructors.
+/// This function is used to ensure proper thread initialization in WASI.
 #[cfg(feature = "threads")]
 #[cfg(target_arch = "wasm32")]
 #[unsafe(no_mangle)]

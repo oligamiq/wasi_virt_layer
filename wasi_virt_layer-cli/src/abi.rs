@@ -1,6 +1,9 @@
+/// Module for validating WASM modules against the expected WASI ABI.
 pub mod is_valid {
     use crate::unique_name::UniqueName;
 
+    /// Validates if a WASM module is suitable for component transformation,
+    /// ensuring no un-plugged custom WASIP1 imports remain.
     pub fn is_valid_wasm_for_component(
         wasm_bytes: &[u8],
         wasm_names: &[impl AsRef<str>],
@@ -69,24 +72,34 @@ pub mod is_valid {
         strum::EnumMessage,
     )]
     #[strum(serialize_all = "snake_case")]
+    /// Identifies specific WASI feature sets that need to be plugged during virtualization.
     pub enum Wasip1ABIPlugger {
+        /// Plugins for command-line arguments.
         PlugArgs,
+        /// Plugins for environment variables.
         PlugEnv,
         #[strum(
             message = "Plug Fs is complex and difficult so you should see the documentation for more details."
         )]
+        /// Plugins for file system operations.
         PlugFs,
         #[strum(message = "Plug Socks but this is not implemented")]
+        /// Plugins for socket operations (currently unimplemented).
         PlugSocks,
         #[strum(message = "Plug Clock but this is not implemented")]
+        /// Plugins for clock and timing operations (currently unimplemented).
         PlugClock,
         #[strum(message = "Plug Random but this is not implemented")]
+        /// Plugins for random number generation (currently unimplemented).
         PlugRandom,
         #[strum(message = "Plug Process is default so this message should not be shown")]
+        /// Plugins for process-related operations.
         PlugProcess,
         #[strum(message = "Plug Sched but this is not implemented")]
+        /// Plugins for scheduler operations (currently unimplemented).
         PlugSched,
         #[strum(message = "Plug Poll but this is not implemented")]
+        /// Plugins for polling operations (currently unimplemented).
         PlugPoll,
     }
 
@@ -142,6 +155,7 @@ pub mod is_valid {
         const PLUG_SCHED: &'static [Wasip1ABIFunc] = &[SchedYield];
         const PLUG_POLL: &'static [Wasip1ABIFunc] = &[PollOneoff];
 
+        /// Returns the list of `Wasip1ABIFunc` variants associated with this plugger.
         pub const fn variants(self) -> &'static [Wasip1ABIFunc] {
             match self {
                 Wasip1ABIPlugger::PlugEnv => Self::PLUG_ENV,
@@ -156,6 +170,7 @@ pub mod is_valid {
             }
         }
 
+        /// Identifies the appropriate `Wasip1ABIPlugger` for a specific WASI function.
         pub fn from_variant(func: &Wasip1ABIFunc) -> Option<Wasip1ABIPlugger> {
             use strum::IntoEnumIterator;
 
@@ -173,51 +188,97 @@ pub mod is_valid {
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
 )]
 #[strum(serialize_all = "snake_case")]
+/// Enumeration of all supported WASI preview1 functions.
 pub enum Wasip1ABIFunc {
+    /// environ_sizes_get
     EnvironSizesGet,
+    /// environ_get
     EnvironGet,
+    /// proc_exit
     ProcExit,
+    /// random_get
     RandomGet,
+    /// sched_yield
     SchedYield,
+    /// clock_time_get
     ClockTimeGet,
+    /// clock_res_get
     ClockResGet,
+    /// fd_advise
     FdAdvise,
+    /// fd_allocate
     FdAllocate,
+    /// fd_datasync
     FdDatasync,
+    /// fd_fdstat_set_flags
     FdFdstatSetFlags,
+    /// fd_fdstat_set_rights
     FdFdstatSetRights,
+    /// fd_fdstat_get
     FdFdstatGet,
+    /// fd_write
     FdWrite,
+    /// fd_pwrite
     FdPwrite,
+    /// fd_readdir
     FdReaddir,
+    /// fd_close
     FdClose,
+    /// fd_prestat_get
     FdPrestatGet,
+    /// fd_prestat_dir_name
     FdPrestatDirName,
+    /// fd_filestat_get
     FdFilestatGet,
+    /// fd_read
     FdRead,
+    /// fd_pread
     FdPread,
+    /// fd_filestat_set_size
     FdFilestatSetSize,
+    /// fd_filestat_set_times
     FdFilestatSetTimes,
+    /// fd_renumber
     FdRenumber,
+    /// fd_seek
     FdSeek,
+    /// fd_sync
     FdSync,
+    /// fd_tell
     FdTell,
+    /// path_create_directory
     PathCreateDirectory,
+    /// path_filestat_get
     PathFilestatGet,
+    /// path_filestat_set_times
     PathFilestatSetTimes,
+    /// path_link
     PathLink,
+    /// path_readlink
     PathReadlink,
+    /// path_remove_directory
     PathRemoveDirectory,
+    /// path_rename
     PathRename,
+    /// path_open
     PathOpen,
+    /// path_symlink
     PathSymlink,
+    /// path_unlink_file
     PathUnlinkFile,
+    /// poll_oneoff
     PollOneoff,
+    /// args_get
     ArgsGet,
+    /// args_sizes_get
     ArgsSizesGet,
+    /// sock_accept
     SockAccept,
+    /// sock_recv
     SockRecv,
+    /// sock_send
     SockSend,
+    /// sock_shutdown
     SockShutdown,
 }
 
@@ -225,7 +286,9 @@ pub enum Wasip1ABIFunc {
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
 )]
 #[strum(serialize_all = "kebab_case")]
+/// Enumeration of WASI threads functions.
 pub enum Wasip1ThreadsABIFunc {
+    /// thread_spawn
     ThreadSpawn,
 }
 
@@ -233,6 +296,8 @@ pub enum Wasip1ThreadsABIFunc {
     strum::EnumString, strum::VariantArray, strum::VariantNames, PartialEq, strum::Display,
 )]
 #[strum(serialize_all = "snake_case")]
+/// Enumeration of internal exports required by WASI threads.
 pub enum Wasip1ThreadsABIExportFunc {
+    /// wasi_thread_start
     WasiThreadStart,
 }

@@ -3,6 +3,7 @@ use eyre::Context;
 
 use crate::args::NewArgs;
 
+/// Executes the new command, initializing a new WASI Virt Layer project with a template.
 pub fn new(args: NewArgs) -> eyre::Result<()> {
     let NewArgs { path, threads } = args;
 
