@@ -201,6 +201,26 @@ fn last(
         } else {
             test_run::gen_test_run(name, &parsed_args.out_dir);
         }
+
+        let out_dir = &parsed_args.out_dir;
+        println!("\nBuild completed successfully!");
+        println!("To run the generated program:");
+        if threads {
+            println!("  cd {out_dir}");
+            println!("  bun install");
+            println!("  bun run run");
+            println!("\nOr run in browser:");
+            println!("  cd {out_dir}");
+            println!("  bun install");
+            println!("  bun run dev");
+        } else {
+            println!("  cd {out_dir}");
+            println!("  deno run -A test_run.ts");
+            println!("\nOr run in browser:");
+            println!("  cd {out_dir}");
+            println!("  bunx serve  # or python3 -m http.server");
+            println!("  open test_run.html in browser");
+        }
     }
 
     Ok(())
