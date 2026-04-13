@@ -37,6 +37,15 @@ pub enum ThreadsSpawnName<'a> {
 /// The thread spawn process itself within the VFS is also caught,
 /// but processing is performed to exclude only the root spawn from this.
 /// Relocate thread creation from root spawn to the outer layer
+///
+/// **Why this is needed:**
+/// Per `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md`, `wasi-threads:spawn` requires special handling
+/// because thread creation from the "root spawn" (the original process invoking `_start`)
+/// differs from spawning within explicitly created WASI threads.
+///
+/// This generator ensures that only the root spawn initiates the true thread start sequence
+/// on the host by intercepting `wasi_thread_spawn`. Real execution is forwarded via
+/// `__wasip1_vfs_real_thread_spawn_fn`, avoiding recursive or improper initializations.
 #[derive(Debug, Default)]
 pub struct ThreadsSpawn;
 
@@ -233,6 +242,11 @@ impl Generator for ThreadsSpawn {
 
 /// https://github.com/rust-lang/rust/issues/146843
 /// thread spawn is broken on wasm32-wasip1-threads for building library
+///
+/// **Why this is needed:**
+/// Currently, thread initialization routines (e.g. `__wasm_init_tls`) can be improperly tied
+/// or omitted during WASM generation (see rust-lang/rust#146843). This patching strategy
+/// wraps the original `_start` with an injected `ThreadInitializer` call if one is exported.
 #[derive(Debug, Default)]
 pub struct ThreadsSpawnPatch;
 

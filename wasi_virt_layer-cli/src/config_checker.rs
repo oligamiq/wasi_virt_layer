@@ -4,6 +4,8 @@ use camino::Utf8PathBuf;
 use eyre::Context as _;
 use toml_edit::{Document, DocumentMut, Item};
 
+/// Represents a single modification to a `Cargo.toml` file, storing both the original
+/// string and the applied changes so that it can be cleanly reverted later.
 #[derive(Debug, Clone)]
 pub struct TomlRestorer {
     path: Utf8PathBuf,
@@ -13,6 +15,9 @@ pub struct TomlRestorer {
 
 use std::sync::{Arc, Mutex};
 
+/// A thread-safe collection of `TomlRestorer` instances.
+///
+/// Automatically drops and reverts any `Cargo.toml` modifications if a thread panics.
 #[derive(Debug, Clone)]
 pub struct TomlRestorers {
     inner: Arc<Mutex<Vec<TomlRestorer>>>,
@@ -134,12 +139,20 @@ impl TomlRestorer {
     }
 }
 
+/// Indicates whether a feature is present and where it is enabled.
 pub enum HasFeature {
+    /// The feature is disabled.
     Disabled,
+    /// The feature is enabled directly in the crate's `Cargo.toml`.
     EnabledOnNormal,
+    /// The feature is inherited from the `[workspace.dependencies]` table.
     EnabledOnWorkspace,
 }
 
+/// Verifies and manipulates Cargo manifest features for a specific crate.
+///
+/// Handles both the crate's individual `Cargo.toml` and the root workspace
+/// `Cargo.toml` to accurately determine and adjust feature sets.
 #[derive(Debug)]
 pub struct FeatureChecker<'a, 'b, 'c, 'd> {
     feature: Option<&'a str>,

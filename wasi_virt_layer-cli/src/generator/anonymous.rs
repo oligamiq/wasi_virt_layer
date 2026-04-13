@@ -56,7 +56,11 @@ impl Generator for Anonymous {
         let only_target = &collected[0];
 
         // Rewrite <anonymous> to the only one target.
-        const EXPORT_POSTFIXS: &[&str] = &["__start_anchor", "_memory_trap_anchor", "_wasi_thread_start_anchor"];
+        const EXPORT_POSTFIXS: &[&str] = &[
+            "__start_anchor",
+            "_memory_trap_anchor",
+            "_wasi_thread_start_anchor",
+        ];
         const PREFIX: &str = UniqueName::PREFIX;
 
         for postfix in EXPORT_POSTFIXS {
@@ -97,7 +101,13 @@ impl Generator for Anonymous {
         const NAMESPACE: &str = UniqueName::NAMESPACE;
 
         // TODO! Implement in `<>UniqueName` and use it.
-        const EXTRA_IMPORTS: &[&str] = &["_start", "memory_trap", "__main_void", "reset", "wasi_thread_start"];
+        const EXTRA_IMPORTS: &[&str] = &[
+            "_start",
+            "memory_trap",
+            "__main_void",
+            "reset",
+            "wasi_thread_start",
+        ];
 
         for import in module
             .imports

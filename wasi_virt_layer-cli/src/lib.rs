@@ -1,4 +1,7 @@
 #![warn(missing_docs)]
+//! CLI tool for creating and inspecting WASI virtualized binaries.
+//!
+//! Provides commands and generator internals `wasi_virt_layer`.
 
 use clap::Parser;
 use eyre::Context;
@@ -16,9 +19,12 @@ pub mod abi;
 pub mod args;
 pub mod commands;
 pub mod compile;
+/// Checks and manages features required in Cargo configs.
 pub mod config_checker;
 pub mod ctrlc_handler;
+/// Helper logic to lower text colors and apply them.
 pub mod down_color;
+/// Contains fallback execution processes (managed via locks).
 pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
 pub mod generator;
 pub mod instrs;
@@ -26,6 +32,7 @@ pub mod test_run;
 pub mod unique_name;
 pub mod util;
 
+/// Central execution entrypoint for the CLI logic
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
     ctrlc_handler::init();
 

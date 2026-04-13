@@ -1,3 +1,4 @@
+#![allow(non_camel_case_types)]
 /// Copy from wasi crate
 /// Using them directly causes
 /// link errors when not targeting wasi,

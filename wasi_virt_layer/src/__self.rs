@@ -1,6 +1,7 @@
 use crate::__private::wasip1;
 use crate::memory::WasmAccess;
 
+/// Internal struct representing the host context itself for WasmAccess.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Copy)]
 pub struct __self;

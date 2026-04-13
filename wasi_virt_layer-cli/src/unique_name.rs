@@ -1,3 +1,5 @@
+//! Provides mechanisms to generate unique non-colliding crate identifiers and exports for WASM modules.
+
 use crate::{
     generator::{
         abi_connect::Wasip1ABIName, memory::MemoryUniqueName, shared_global::SharedGlobalFnsName,

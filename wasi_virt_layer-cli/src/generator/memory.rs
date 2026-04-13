@@ -22,6 +22,13 @@ pub enum MemoryUniqueName<'a> {
     Memory(&'a WasmName),
 }
 
+/// ABI Generator: Manages memory configurations temporarily during transpilation.
+///
+/// **Why this is needed:**
+/// Certain WebAssembly translating/optimizing tools cannot handle shared memory or multiple memories
+/// if threading features are disabled or unavailable in the environment. This generator temporarily
+/// unshares imported memory, performs the component transformations, and then properly re-links
+/// or re-shares the memory so the VFS has correct access to the target modules' structures.
 #[derive(Debug, Default)]
 pub struct TemporaryRefugeMemory {
     pub memory_count: usize,
@@ -291,6 +298,13 @@ impl Generator for TemporaryRefugeMemory {
 /// and reading from memory.
 /// However, as these cannot be accessed during compilation,
 /// alternative functions are employed. These shall be replaced.
+///
+/// **Why this is needed:**
+/// Since the VFS layer needs to transfer data between its own memory and the guest's memory
+/// when processing ABI calls, it defines `memory_copy_from` and `memory_copy_to` as external imports.
+/// Since `walrus` does not allow generating components with unknown raw imports, this generator
+/// patches those structural import declarations with native `memory.copy` WebAssembly instructions
+/// executing over the correct `multi-memory` tables.
 #[derive(Debug, Default)]
 pub struct MemoryBridge;
 
@@ -404,6 +418,13 @@ impl Generator for MemoryBridge {
 /// To implement this optimization,
 /// a function is provided to determine the pointer bias
 /// before memory consolidation.
+///
+/// **Why this is needed:**
+/// If running in `single_memory` mode (without the `multi_memory` WASM feature), all modules'
+/// memories are merged into one large address space. The VFS needs to know where the guest
+/// module's memory segment actually resides within this merged pool. This generator uses a trap
+/// mechanism to securely determine the actual pointer bias at runtime so external callers and
+/// the VFS can translate addresses correctly.
 #[derive(Debug, Default)]
 pub struct MemoryTrap;
 
