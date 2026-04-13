@@ -1,4 +1,5 @@
 #[allow(dead_code)]
+#[allow(missing_docs)]
 #[cfg(feature = "threads")]
 pub mod virtual_file_system_threads;
 #[cfg(feature = "threads")]
