@@ -56,7 +56,7 @@ impl Generator for Anonymous {
         let only_target = &collected[0];
 
         // Rewrite <anonymous> to the only one target.
-        const EXPORT_POSTFIXS: &[&str] = &["__start_anchor", "_memory_trap_anchor"];
+        const EXPORT_POSTFIXS: &[&str] = &["__start_anchor", "_memory_trap_anchor", "_wasi_thread_start_anchor"];
         const PREFIX: &str = UniqueName::PREFIX;
 
         for postfix in EXPORT_POSTFIXS {
@@ -86,10 +86,18 @@ impl Generator for Anonymous {
             }
         }
 
+        if let Some(special_anonymous_export) = module
+            .exports
+            .iter_mut()
+            .find(|e| e.name == format!("{PREFIX}wasi_thread_spawn_anonymous"))
+        {
+            special_anonymous_export.name = format!("{PREFIX}wasi_thread_spawn_{only_target}");
+        }
+
         const NAMESPACE: &str = UniqueName::NAMESPACE;
 
         // TODO! Implement in `<>UniqueName` and use it.
-        const EXTRA_IMPORTS: &[&str] = &["_start", "__main_void", "reset"];
+        const EXTRA_IMPORTS: &[&str] = &["_start", "memory_trap", "__main_void", "reset", "wasi_thread_start"];
 
         for import in module
             .imports
@@ -109,6 +117,16 @@ impl Generator for Anonymous {
                     import.name = format!("{PREFIX}{only_target}_{f}");
                 }
             }
+        }
+
+        // Print all exports
+        for export in module.exports.iter() {
+            log::info!("Export: {}", export.name);
+        }
+
+        // Print all imports
+        for import in module.imports.iter() {
+            log::info!("Import: {}.{}", import.module, import.name);
         }
 
         Ok(())

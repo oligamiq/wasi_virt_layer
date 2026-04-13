@@ -1,13 +1,14 @@
 use itertools::Itertools;
 use strum::VariantNames;
 
+use eyre::WrapErr as _;
 use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, threads::ThreadsSpawnName},
     unique_name::UniqueName,
     util::{
-        WalrusFID, WalrusUtilExport, WalrusUtilImport, WalrusUtilModule, WasmName,
-        gen_component_name,
+        ResultUtil as _, WalrusFID, WalrusFIDAssister as _, WalrusUtilExport, WalrusUtilImport,
+        WalrusUtilModule, WasmName, gen_component_name,
     },
 };
 
@@ -138,37 +139,73 @@ impl Generator for ConnectWasip1ThreadsABI {
     ) -> eyre::Result<()> {
         if ctx.threads {
             for wasm in &ctx.target_names {
-                if UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartDestination(wasm))
-                    .get_fid(&module.exports)
-                    .ok()
-                    .is_some()
-                {
+                let start_import = (
+                    UniqueName::NAMESPACE,
+                    &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStart(wasm)),
+                );
+
+                let dest_name =
+                    UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartDestination(wasm))
+                        .to_string();
+                let dest_fid = module.exports.get_fid_by_name(&dest_name).ok();
+
+                if let Some(_) = dest_fid {
                     module.connect_func_alt_with_remove_export(
-                        (
-                            UniqueName::NAMESPACE,
-                            &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStart(wasm)),
-                        ),
-                        &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartDestination(
-                            wasm,
-                        ))
-                        .to_string(),
+                        start_import,
+                        &dest_name,
                         ctx.unstable_print_debug,
                     )?;
+                } else {
+                    // Destination not found. We should still resolve the import to avoid component encoding failure.
+                    if let Ok(import_id) = start_import.get_fid(&module.imports) {
+                        log::warn!(
+                            "Thread start destination not found for {}, connecting to trap.",
+                            wasm
+                        );
+                        // Connect to trap
+                        module
+                            .replace_imported_func(import_id, |(body, _)| {
+                                body.unreachable();
+                            })
+                            .to_eyre()
+                            .wrap_err_with(|| {
+                                eyre::eyre!("Failed to replace missing thread start import")
+                            })?;
+                    }
+                }
 
-                    module.exports.erase_with(
+                module
+                    .exports
+                    .erase_with(
                         &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadStartAnchor(wasm)),
                         ctx.unstable_print_debug,
-                    )?;
+                    )
+                    .ok();
 
-                    module.connect_func_alt_with_remove_export(
-                        (
-                            UniqueName::WASIP1_THREADS_ABI_MODULE,
-                            &UniqueName::ThreadsSpawn(&&ThreadsSpawnName::WasiThreadSpawn(wasm)),
-                        ),
-                        &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadSpawn(wasm))
-                            .to_string(),
-                        ctx.unstable_print_debug,
-                    )?;
+                let spawn_import = (
+                    UniqueName::WASIP1_THREADS_ABI_MODULE,
+                    &UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadSpawn(wasm)),
+                );
+                let spawn_dest_name =
+                    UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadSpawn(wasm)).to_string();
+
+                if let Ok(import_id) = spawn_import.get_fid(&module.imports) {
+                    if let Ok(_) = module.exports.get_fid_by_name(&spawn_dest_name) {
+                        module.connect_func_alt_with_remove_export(
+                            spawn_import,
+                            &spawn_dest_name,
+                            ctx.unstable_print_debug,
+                        )?;
+                    } else {
+                        module
+                            .replace_imported_func(import_id, |(body, _)| {
+                                body.unreachable();
+                            })
+                            .to_eyre()
+                            .wrap_err_with(|| {
+                                eyre::eyre!("Failed to replace missing thread spawn import")
+                            })?;
+                    }
                 }
             }
         }
