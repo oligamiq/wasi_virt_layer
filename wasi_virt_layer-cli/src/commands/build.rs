@@ -1,13 +1,7 @@
-use eyre::Context as _;
-
 use crate::{
-    args::{self, BuildArgs, TargetMemoryType},
-    config_checker::{FeatureChecker, HasFeature, TomlRestorers},
-    ctrlc_handler,
+    args::BuildArgs,
+    commands::{postbuild, prebuild},
     generator::{self, WasmPath},
-    test_run,
-    unique_name::UniqueName,
-    util,
 };
 
 macro_rules! add_generator {
@@ -50,179 +44,33 @@ macro_rules! add_generator {
 }
 
 /// Executes the build command, coordinating the compilation and transformation of WASM modules.
+///
+/// This is a convenience command that runs `prebuild` followed by `postbuild`.
 pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
     let package = parsed_args.get_package()?;
-
-    let mut toml_restores = TomlRestorers::new();
-    let tr_clone = toml_restores.clone();
-    ctrlc_handler::register(move || {
-        tr_clone.restore_if_needed();
-    });
 
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());
         add_generator!(component_runner);
 
-        last(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
+        postbuild::run_postbuild(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 
         return Ok(());
     }
 
-    let vfs_package = parsed_args
-        .get_package()
-        .wrap_err("Failed to get package")?;
-
-    log::info!("Using package: {}", vfs_package.name()?);
-
-    let vfs_manifest_path = vfs_package.manifest_path().unwrap();
-    let vfs_root_manifest_path = vfs_package.root_manifest_path().unwrap();
-
-    let memory_type = {
-        let memory_type_checker = FeatureChecker::new(
-            "multi_memory",
-            &vfs_manifest_path,
-            &vfs_root_manifest_path,
-            UniqueName::CRATE_NAME,
-        );
-
-        if let Some(target_memory_type) = parsed_args.target_memory_type {
-            if let Some(restorer) = memory_type_checker.set(target_memory_type.is_multi())? {
-                toml_restores.push(restorer);
-            }
-
-            target_memory_type
-        } else {
-            match memory_type_checker.has()? {
-                HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace => {
-                    TargetMemoryType::Multi
-                }
-                HasFeature::Disabled => TargetMemoryType::Single,
-            }
-        }
-    };
-
-    let threads = {
-        let threads_feature_checker = FeatureChecker::new(
-            "threads",
-            &vfs_manifest_path,
-            &vfs_root_manifest_path,
-            UniqueName::CRATE_NAME,
-        );
-        if let Some(threads) = parsed_args.threads {
-            if let Some(restorer) = threads_feature_checker.set(threads)? {
-                toml_restores.push(restorer);
-            }
-            threads
-        } else {
-            matches!(
-                threads_feature_checker.has()?,
-                HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
-            )
-        }
-    };
-
-    let dwarf = if let Some(dwarf) = parsed_args.dwarf {
-        let checker = FeatureChecker::new_no_feature(
-            &vfs_manifest_path,
-            &vfs_root_manifest_path,
-            UniqueName::CRATE_NAME,
-        );
-
-        toml_restores.push(checker.set_dwarf(dwarf)?);
-
-        dwarf
-    } else {
-        false
-    };
-
-    let unstable_print_debug = {
-        let checker = FeatureChecker::new(
-            "unstable_print_debug",
-            &vfs_manifest_path,
-            &vfs_root_manifest_path,
-            UniqueName::CRATE_NAME,
-        );
-
-        matches!(
-            checker.has()?,
-            HasFeature::EnabledOnNormal | HasFeature::EnabledOnWorkspace
-        )
-    };
-
-    let mut generator = generator::GeneratorRunner::new(
-        package.clone(),
-        parsed_args.wasm.clone().into_boxed_slice(),
-        threads,
-        dwarf,
-        unstable_print_debug,
-        parsed_args.no_transpile,
+    let (mut component_runner, dwarf) = prebuild::run_prebuild_internal(
+        package,
+        &parsed_args.wasm,
+        parsed_args.target_memory_type,
+        parsed_args.threads,
+        parsed_args.dwarf,
         parsed_args.adjust_abi,
         parsed_args.keep_build_artifacts,
-        memory_type,
-        toml_restores,
+        &parsed_args.out_dir,
         parsed_args.get_wasm_memory_hints(),
     )?;
 
-    add_generator!(generator);
-
-    let mut component_runner = generator
-        .run_layers_to_component(&parsed_args.out_dir, parsed_args.keep_build_artifacts)
-        .wrap_err("Failed to run layers to component")?;
-
-    if parsed_args.no_transpile {
-        println!("Skipping transpile Component to JS as per --no-transpile flag...");
-        let path = component_runner.path.path()?;
-        let mut cmd = format!("cargo r -- -p {path}");
-        if dwarf {
-            cmd.push_str(" --dwarf true");
-        }
-        println!("You should custom component and run `{cmd}`");
-        return Ok(());
-    }
-
-    last(&mut component_runner, &parsed_args, Some(dwarf))?;
-
-    Ok(())
-}
-
-// deno run dist/example_vfs.js
-
-fn last(
-    component_runner: &mut generator::ComponentRunner,
-    parsed_args: &args::BuildArgs,
-    dwarf: Option<bool>,
-) -> eyre::Result<()> {
-    let (threads, name, memory) = component_runner
-        .component_to_files(&parsed_args, dwarf.unwrap_or(false), parsed_args.adjust_abi)
-        .wrap_err("Failed to run component to files")?;
-
-    if !parsed_args.adjust_abi {
-        if threads {
-            test_run::thread::gen_threads_run(name, memory, &parsed_args.out_dir);
-        } else {
-            test_run::gen_test_run(name, &parsed_args.out_dir);
-        }
-
-        let out_dir = &parsed_args.out_dir;
-        println!("\nBuild completed successfully!");
-        println!("To run the generated program:");
-        if threads {
-            println!("  cd {out_dir}");
-            println!("  bun install");
-            println!("  bun run run");
-            println!("\nOr run in browser:");
-            println!("  cd {out_dir}");
-            println!("  bun install");
-            println!("  bun run dev");
-        } else {
-            println!("  cd {out_dir}");
-            println!("  deno run -A test_run.ts");
-            println!("\nOr run in browser:");
-            println!("  cd {out_dir}");
-            println!("  bunx serve  # or python3 -m http.server");
-            println!("  open test_run.html in browser");
-        }
-    }
+    postbuild::run_postbuild(&mut component_runner, &parsed_args, Some(dwarf))?;
 
     Ok(())
 }

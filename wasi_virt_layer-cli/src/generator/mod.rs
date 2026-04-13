@@ -69,8 +69,6 @@ pub struct GeneratorCtx {
     pub dwarf: bool,
     /// Whether to enable multi-threading support.
     pub threads: bool,
-    /// Whether to skip transpilation.
-    pub no_transpile: bool,
     /// Whether to adjust the ABI for standard environments.
     pub adjust_abi: bool,
     /// Whether to keep intermediate build artifacts.
@@ -212,7 +210,6 @@ impl Generator for ComponentCtxVisitor {
             target_used_memory_id: _,
             target_used_global_id: _,
             start_func_id: _,
-            no_transpile: _,
             keep_build_artifacts: _,
             start_section_builder: _,
         } = ctx;
@@ -728,7 +725,6 @@ impl GeneratorRunner {
         threads: bool,
         dwarf: bool,
         unstable_print_debug: bool,
-        no_transpile: bool,
         adjust_abi: bool,
         keep_build_artifacts: bool,
         memory_type: TargetMemoryType,
@@ -776,7 +772,6 @@ impl GeneratorRunner {
                 unstable_print_debug,
                 dwarf,
                 threads,
-                no_transpile,
                 adjust_abi,
                 keep_build_artifacts,
                 vfs_used_memory_id: None,
@@ -1147,11 +1142,11 @@ impl ComponentRunner {
     /// return is_threads, core_name, mem_size
     pub fn component_to_files(
         &mut self,
-        parsed_args: &args::BuildArgs,
+        parsed_args: &(impl args::PostBuildContext + ?Sized),
         dwarf: bool,
         only_core: bool,
     ) -> eyre::Result<(bool, CompactString, HashMap<CompactString, (u64, u64)>)> {
-        let out_dir = &parsed_args.out_dir;
+        let out_dir = parsed_args.out_dir();
 
         let name = self.path.name()?;
 
@@ -1211,7 +1206,7 @@ impl ComponentRunner {
                 .as_ref()
                 .ok_or_else(|| eyre::eyre!("Failed to find core wasm"))?;
 
-            if !parsed_args.keep_build_artifacts {
+            if !parsed_args.keep_build_artifacts() {
                 std::fs::remove_file(&old_path)
                     .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
             }
@@ -1219,7 +1214,7 @@ impl ComponentRunner {
 
             Ok(core_wasm.clone())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts)?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
         self.generators.push(Box::new(mem_size_visitor));
@@ -1261,9 +1256,9 @@ impl ComponentRunner {
                     .post_components(module, self.ctx.as_ref().unwrap())
                     .wrap_err("Failed in run_post_components")
             })
-            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts)
+            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts)?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
 
         let dwarf = {
             let new_dwarf = self.ctx.as_ref().unwrap().dwarf;
@@ -1293,7 +1288,7 @@ impl ComponentRunner {
                     }
                 }
             })
-            .wrap_run(&mut self.path, dwarf, parsed_args.keep_build_artifacts)?;
+            .wrap_run(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
         }
 
         std::fs::rename(self.path.path()?, &core_wasm_path).wrap_err_with(|| {

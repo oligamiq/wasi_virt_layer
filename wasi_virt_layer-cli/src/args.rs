@@ -7,6 +7,22 @@ use eyre::Context as _;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
 
+/// Common interface for post-build (transpilation) arguments.
+pub trait PostBuildContext {
+    /// Returns the output directory path.
+    fn out_dir(&self) -> &Utf8PathBuf;
+    /// Returns whether to keep intermediate build artifacts.
+    fn keep_build_artifacts(&self) -> bool;
+    /// Returns whether to adjust the ABI.
+    fn adjust_abi(&self) -> bool;
+    /// Transpiles the given WebAssembly component into JavaScript source files.
+    fn transpile_to_js(
+        &self,
+        component: &[u8],
+        name: impl AsRef<str>,
+    ) -> Result<js_component_bindgen::Transpiled, eyre::Error>;
+}
+
 /// The main command-line interface for `wasi_virt_layer-cli`.
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None)]
@@ -20,8 +36,12 @@ pub struct Cli {
 #[derive(Subcommand, Debug)]
 /// Supported subcommands for the CLI.
 pub enum Command {
-    /// Builds a virtualized WASM module.
+    /// Builds a virtualized WASM module (prebuild + postbuild combined).
     Build(BuildArgs),
+    /// Generates a Component WASM from VFS and target WASM modules.
+    Prebuild(PreBuildArgs),
+    /// Transpiles a Component WASM into JavaScript files.
+    Postbuild(PostBuildArgs),
     /// Initializes a new WASI Virt Layer project.
     New(NewArgs),
 }
@@ -65,10 +85,6 @@ pub struct BuildArgs {
     /// Change crate feature flags based on the target memory type
     #[arg(short, long)]
     pub target_memory_type: Option<TargetMemoryType>,
-
-    /// Disable transpile to JS, you can use jco to transpile wasm to js.
-    #[arg(long, default_value = "false")]
-    pub no_transpile: bool,
 
     // transpile options
     /// Options for transpiling to JavaScript.
@@ -147,44 +163,146 @@ impl BuildArgs {
     pub fn get_package_name(&self) -> Option<CompactString> {
         self.package.clone().and_then(|p| p.name().ok())
     }
+}
 
-    /// Transpiles the given WebAssembly component into JavaScript source files.
-    pub fn transpile_to_js(
+impl PostBuildContext for BuildArgs {
+    fn out_dir(&self) -> &Utf8PathBuf {
+        &self.out_dir
+    }
+
+    fn keep_build_artifacts(&self) -> bool {
+        self.keep_build_artifacts
+    }
+
+    fn adjust_abi(&self) -> bool {
+        self.adjust_abi
+    }
+
+    fn transpile_to_js(
         &self,
         component: &[u8],
         name: impl AsRef<str>,
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
-        js_component_bindgen::transpile(
-            component,
-            js_component_bindgen::TranspileOpts {
-                name: name.as_ref().to_string(),
-                no_typescript: self.transpile_opts.no_typescript,
-                instantiation: self.transpile_opts.instantiation.clone().0,
-                import_bindings: self.transpile_opts.import_bindings.clone(),
-                map: {
-                    if let Some(opts_map) = &self.transpile_opts.map {
-                        let mut map = HashMap::new();
-                        for (k, v) in opts_map.iter() {
-                            map.insert(k.clone(), v.clone());
-                        }
-                        Some(map)
-                    } else {
-                        None
-                    }
-                },
-                no_nodejs_compat: self.transpile_opts.no_nodejs_compat,
-                base64_cutoff: self.transpile_opts.base64_cutoff,
-                tla_compat: self.transpile_opts.tla_compat,
-                valid_lifting_optimization: self.transpile_opts.valid_lifting_optimization,
-                tracing: self.transpile_opts.tracing,
-                no_namespaced_exports: self.transpile_opts.no_namespaced_exports,
-                multi_memory: true,
-                guest: self.transpile_opts.guest,
-                async_mode: None,
-            },
-        )
-        .to_eyre()
-        .wrap_err("Failed to transpile to JS. Consider the no_transpile option.")
+        self.transpile_opts.transpile_to_js(component, name)
+    }
+}
+
+#[derive(Parser, Debug)]
+/// Arguments for the `prebuild` command.
+pub struct PreBuildArgs {
+    /// Path to the wasip1 wasm file
+    /// This allow 4 patterns:
+    /// 1. only manifest path, like `./Cargo.toml` or `./some/dir/Cargo.toml`
+    /// 2. only package name, like `my_package`
+    /// 3. manifest path and package name, like `./Cargo.toml::my_package` or `./some/dir/Cargo.toml::my_package`
+    /// 4. direct path to wasm file, like `./target/wasm32-wasi/release/my_crate.wasm`
+    pub wasm: Vec<WasmPath>,
+
+    /// Path to the primary package.
+    #[arg(short, long)]
+    package: Option<WasmPath>,
+
+    /// Memory hints for the WASM files, used if automatic detection fails.
+    #[arg(long)]
+    wasm_memory_hint: Vec<isize>,
+
+    /// Output directory for the generated Component WASM
+    #[arg(long, default_value = "./dist")]
+    pub out_dir: Utf8PathBuf,
+
+    /// Target memory type
+    /// Change crate feature flags based on the target memory type
+    #[arg(short, long)]
+    pub target_memory_type: Option<TargetMemoryType>,
+
+    /// If wasm run on multiple threads, enable thread support
+    /// This will change the crate feature flags to enable multi-threading.
+    #[arg(long)]
+    pub threads: Option<bool>,
+
+    /// Enable dwarf
+    /// This is broken currently.
+    /// See https://github.com/wasm-bindgen/walrus/issues/258
+    #[arg(long)]
+    pub dwarf: Option<bool>,
+
+    /// Finally, align the ABI with wasip1-threads.
+    /// Only WASM will be generated.
+    #[arg(long, default_value = "false")]
+    pub adjust_abi: bool,
+
+    /// Keep all intermediate build artifacts instead of deleting them.
+    #[arg(long, default_value = "false")]
+    pub keep_build_artifacts: bool,
+}
+
+impl PreBuildArgs {
+    /// Returns the memory hints for each target module.
+    pub fn get_wasm_memory_hints(&self) -> Box<[Option<usize>]> {
+        self.wasm_memory_hint
+            .iter()
+            .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
+            .chain(std::iter::repeat(None))
+            .take(self.wasm.len())
+            .collect::<Box<_>>()
+    }
+
+    /// Resolves and returns the path to the WASM package.
+    pub fn get_package(&self) -> eyre::Result<WasmPath> {
+        Ok(self.package.clone())
+            .transpose()
+            .unwrap_or_else(|| WasmPath::with_maybe_none())
+    }
+}
+
+#[derive(Parser, Debug)]
+/// Arguments for the `postbuild` command.
+pub struct PostBuildArgs {
+    /// Path to the Component WASM file to transpile.
+    #[arg(short, long)]
+    pub package: WasmPath,
+
+    /// Output directory for the generated files
+    #[arg(long, default_value = "./dist")]
+    pub out_dir: Utf8PathBuf,
+
+    /// Options for transpiling to JavaScript.
+    #[command(flatten)]
+    pub transpile_opts: TranspileOpts,
+
+    /// Enable dwarf
+    #[arg(long)]
+    pub dwarf: Option<bool>,
+
+    /// Finally, align the ABI with wasip1-threads.
+    /// Only WASM will be generated.
+    #[arg(long, default_value = "false")]
+    pub adjust_abi: bool,
+
+    /// Keep all intermediate build artifacts instead of deleting them.
+    #[arg(long, default_value = "false")]
+    pub keep_build_artifacts: bool,
+}
+
+impl PostBuildContext for PostBuildArgs {
+    fn out_dir(&self) -> &Utf8PathBuf {
+        &self.out_dir
+    }
+
+    fn keep_build_artifacts(&self) -> bool {
+        self.keep_build_artifacts
+    }
+
+    fn adjust_abi(&self) -> bool {
+        self.adjust_abi
+    }
+
+    fn transpile_to_js(
+        &self,
+        component: &[u8],
+        name: impl AsRef<str>,
+    ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
+        self.transpile_opts.transpile_to_js(component, name)
     }
 }
 
@@ -204,7 +322,7 @@ pub struct TranspileOpts {
     #[arg(long, value_parser = analysis::analysis_import_bindings)]
     import_bindings: Option<js_component_bindgen::BindingsMode>,
 
-    /// Comma-separated list of “from-specifier=./to-specifier.js” mappings of component import specifiers to JS import specifiers.
+    /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of component import specifiers to JS import specifiers.
     #[arg(long, value_delimiter = ',', value_parser = analysis::parse_mapping, num_args = 0.., action = clap::ArgAction::Append)]
     map: Option<HashMap<String, String>>,
 
@@ -235,6 +353,47 @@ pub struct TranspileOpts {
     /// Whether to generate types for a guest module using module declarations.
     #[arg(long, default_value = "false")]
     pub guest: bool,
+}
+
+impl TranspileOpts {
+    /// Transpiles the given WebAssembly component into JavaScript source files.
+    pub fn transpile_to_js(
+        &self,
+        component: &[u8],
+        name: impl AsRef<str>,
+    ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
+        js_component_bindgen::transpile(
+            component,
+            js_component_bindgen::TranspileOpts {
+                name: name.as_ref().to_string(),
+                no_typescript: self.no_typescript,
+                instantiation: self.instantiation.clone().0,
+                import_bindings: self.import_bindings.clone(),
+                map: {
+                    if let Some(opts_map) = &self.map {
+                        let mut map = HashMap::new();
+                        for (k, v) in opts_map.iter() {
+                            map.insert(k.clone(), v.clone());
+                        }
+                        Some(map)
+                    } else {
+                        None
+                    }
+                },
+                no_nodejs_compat: self.no_nodejs_compat,
+                base64_cutoff: self.base64_cutoff,
+                tla_compat: self.tla_compat,
+                valid_lifting_optimization: self.valid_lifting_optimization,
+                tracing: self.tracing,
+                no_namespaced_exports: self.no_namespaced_exports,
+                multi_memory: true,
+                guest: self.guest,
+                async_mode: None,
+            },
+        )
+        .to_eyre()
+        .wrap_err("Failed to transpile to JS.")
+    }
 }
 
 /// Represents a custom instantiation mode for the generated JavaScript.

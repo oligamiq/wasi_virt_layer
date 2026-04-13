@@ -48,7 +48,7 @@ impl TemporaryRefugeMemory {
     pub fn ready_component_and_transpile(
         &mut self,
         module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
+        _ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         let mut is_first = false;
 
@@ -83,7 +83,7 @@ impl TemporaryRefugeMemory {
                 // but we cannot enable it because it in other crates.
                 // So, we set shared to false here temporarily.
                 if mem.shared {
-                    if ctx.no_transpile && !is_first {
+                    if !is_first {
                         is_first = true;
                         log::warn!(
                             r"Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is. {mem:?}"

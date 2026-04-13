@@ -4,15 +4,10 @@
 //! Provides commands and generator internals `wasi_virt_layer`.
 
 use clap::Parser;
-use eyre::Context;
 
 use crate::{
-    args::{BuildArgs, TargetMemoryType},
-    commands::{build::build, new::new},
-    config_checker::{FeatureChecker, HasFeature, TomlRestorers},
+    commands::{build::build, new::new, postbuild::postbuild, prebuild::prebuild},
     fallback_command::CommandLock,
-    generator::WasmPath,
-    unique_name::UniqueName,
 };
 
 /// WASI ABI transformation and generation constants.
@@ -80,6 +75,8 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     match parsed_args.command {
         args::Command::Build(build_args) => build(build_args),
+        args::Command::Prebuild(prebuild_args) => prebuild(prebuild_args),
+        args::Command::Postbuild(postbuild_args) => postbuild(postbuild_args),
         args::Command::New(new_args) => new(new_args),
     }
 }
