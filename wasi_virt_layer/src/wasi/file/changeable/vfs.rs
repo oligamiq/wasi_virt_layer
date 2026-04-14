@@ -149,8 +149,8 @@ where
     }
 }
 
-impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem
-    for ChangeableVFS<LFS, OpenFd>
+impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
+    Wasip1FileSystem for ChangeableVFS<LFS, OpenFd>
 where
     LFS::Inode: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
     OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,

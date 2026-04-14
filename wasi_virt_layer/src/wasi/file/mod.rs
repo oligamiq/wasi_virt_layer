@@ -1,6 +1,9 @@
 // https://docs.rs/wasmtime-wasi/17.0.3/wasmtime_wasi/struct.WasiCtx.html
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
+use std::borrow::Borrow;
+use std::ops::Deref;
+
 use crate::memory::WasmAccess;
 #[cfg(feature = "alloc")]
 pub mod changeable;
@@ -210,7 +213,7 @@ pub trait Wasip1ConstLFS: Wasip1LFS {
 }
 
 pub trait Wasip1DynamicLFS: Wasip1LFS {
-    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, &'a str)>;
+    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl Deref<Target = impl Borrow<str>> + 'a)> + 'a;
 }
 
 /// Trait for a virtual file implementation.

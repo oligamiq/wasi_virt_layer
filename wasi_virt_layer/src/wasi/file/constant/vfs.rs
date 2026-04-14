@@ -367,10 +367,16 @@ where
 
         #[cfg(not(feature = "threads"))]
         {
-            unsafe { &*self.map.get(fd as usize - 3).ok_or(wasip1::ERRNO_BADF)?.get() }
-                .as_ref()
-                .map(|(_, cursor)| cursor.cursor())
-                .ok_or(wasip1::ERRNO_BADF)
+            unsafe {
+                &*self
+                    .map
+                    .get(fd as usize - 3)
+                    .ok_or(wasip1::ERRNO_BADF)?
+                    .get()
+            }
+            .as_ref()
+            .map(|(_, cursor)| cursor.cursor())
+            .ok_or(wasip1::ERRNO_BADF)
         }
     }
 
@@ -388,10 +394,16 @@ where
 
         #[cfg(not(feature = "threads"))]
         {
-            unsafe { &mut *self.map.get(fd as usize - 3).ok_or(wasip1::ERRNO_BADF)?.get() }
-                .as_mut()
-                .map(|(_, cur)| cur.set_cursor(cursor))
-                .ok_or(wasip1::ERRNO_BADF)
+            unsafe {
+                &mut *self
+                    .map
+                    .get(fd as usize - 3)
+                    .ok_or(wasip1::ERRNO_BADF)?
+                    .get()
+            }
+            .as_mut()
+            .map(|(_, cur)| cur.set_cursor(cursor))
+            .ok_or(wasip1::ERRNO_BADF)
         }
     }
 

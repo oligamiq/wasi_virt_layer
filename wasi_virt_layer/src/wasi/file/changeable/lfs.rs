@@ -1,4 +1,5 @@
 use crate::__private::wasip1;
+use crate::wasi::file::Wasip1DynamicLFS;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
@@ -15,6 +16,8 @@ use dashmap::DashMap;
 
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
+use std::borrow::Borrow;
+use std::ops::Deref;
 
 /// A local file system that allows runtime modifications
 #[derive(Debug)]
@@ -45,7 +48,6 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
             __marker: core::marker::PhantomData,
         }
     }
-
 }
 
 impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
@@ -379,6 +381,25 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
             } else {
                 Err(wasip1::ERRNO_NOENT)
             }
+        }
+    }
+}
+
+impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1DynamicLFS
+    for ChangeableLFS<StdIo, AddInfo>
+{
+    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl Deref<Target = impl Borrow<str>> + 'a)> + 'a {
+        #[cfg(feature = "threads")]
+        {
+            self.preopens.iter().map(|entry| {
+                (*entry.key(), entry)
+            })
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &*self.preopens.get() }
+                .iter()
+                .map(|(inode, name)| (*inode, name.as_str()))
         }
     }
 }
