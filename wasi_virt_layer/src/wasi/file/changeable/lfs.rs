@@ -2,20 +2,24 @@ use crate::__private::wasip1;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
-        FilestatWithoutDevice, Wasip1LFS, WasiAddInfo, DefaultAddInfo,
+        DefaultAddInfo, FilestatWithoutDevice, WasiAddInfo, Wasip1LFS,
         changeable::inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata},
         stdio::StdIO,
     },
 };
-use alloc::{collections::BTreeMap, vec::Vec, string::String};
+use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use smallstr::SmallString;
+
+#[cfg(feature = "threads")]
+use dashmap::DashMap;
 
 /// A local file system that allows runtime modifications
 #[derive(Debug)]
 pub struct ChangeableLFS<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static = DefaultAddInfo> {
-    pub inodes: BTreeMap<InodeId, Inode<AddInfo>>,
-    pub next_inode_id: InodeId,
-    pub preopens: BTreeMap<InodeId, String>,
+    #[cfg(feature = "threads")]
+    pub inodes: DashMap<InodeId, Inode<AddInfo>>,
+    #[cfg(not(feature = "threads"))]
+    pub inodes: UnsafeCell<BTreeMap<InodeId, Inode<AddInfo>>>,
     __marker: core::marker::PhantomData<StdIo>,
 }
 
@@ -108,7 +112,10 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
                         // Compare the slice directly
                         let mut found = false;
                         for (name, &child_id) in dir_map.iter() {
-                            if wasm_array.len() == name.len() && (0..wasm_array.len()).all(|i| wasm_array.get(i) == name.as_bytes()[i]) {
+                            if wasm_array.len() == name.len()
+                                && (0..wasm_array.len())
+                                    .all(|i| wasm_array.get(i) == name.as_bytes()[i])
+                            {
                                 current_inode = child_id;
                                 found = true;
                                 break;
@@ -151,37 +158,54 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
                 m
             }),
         };
-        
+
         let new_id = self.allocate_inode(new_inode);
 
-        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&new_id) {
+        if let Some(Inode {
+            data: InodeData::Dir(map),
+            ..
+        }) = self.inodes.get_mut(&new_id)
+        {
             map.insert(SmallString::from_str("."), new_id);
         }
-        
-        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&parent_inode) {
+
+        if let Some(Inode {
+            data: InodeData::Dir(map),
+            ..
+        }) = self.inodes.get_mut(&parent_inode)
+        {
             map.insert(SmallString::from_str(name), new_id);
         } else {
             return Err(());
         }
-        
+
         Ok(new_id)
     }
 
     /// Adds a file with the given name and content to the given parent directory.
-    pub fn add_file(&mut self, parent_inode: InodeId, name: &str, content: Vec<u8>) -> Result<InodeId, ()> {
+    pub fn add_file(
+        &mut self,
+        parent_inode: InodeId,
+        name: &str,
+        content: Vec<u8>,
+    ) -> Result<InodeId, ()> {
         let new_inode = Inode {
             meta: InodeMetadata::new(wasip1::FILETYPE_REGULAR_FILE, !0),
             data: InodeData::File(content),
         };
-        
+
         let new_id = self.allocate_inode(new_inode);
-        
-        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&parent_inode) {
+
+        if let Some(Inode {
+            data: InodeData::Dir(map),
+            ..
+        }) = self.inodes.get_mut(&parent_inode)
+        {
             map.insert(SmallString::from_str(name), new_id);
         } else {
             return Err(());
         }
-        
+
         Ok(new_id)
     }
 
@@ -196,7 +220,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
     }
 }
 
-impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for ChangeableLFS<StdIo, AddInfo> {
+impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
+    for ChangeableLFS<StdIo, AddInfo>
+{
     type Inode = InodeId;
     const PRE_OPEN: &'static [Self::Inode] = &[];
 
@@ -295,13 +321,12 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
             if rem_len < entry_size {
                 break;
             }
-            
+
             // Write dirent
-            let entry_slice = unsafe {
-                core::slice::from_raw_parts(&entry as *const _ as *const u8, entry_size)
-            };
+            let entry_slice =
+                unsafe { core::slice::from_raw_parts(&entry as *const _ as *const u8, entry_size) };
             Wasm::memcpy(out_ptr, entry_slice);
-            
+
             out_ptr = unsafe { out_ptr.add(entry_size) };
             rem_len -= entry_size;
             total_written += entry_size;
@@ -336,7 +361,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         if flags & wasip1::LOOKUPFLAGS_SYMLINK_FOLLOW == wasip1::LOOKUPFLAGS_SYMLINK_FOLLOW {
-            target_inode = self.resolve_inode(target_inode, 0).ok_or(wasip1::ERRNO_LOOP)?;
+            target_inode = self
+                .resolve_inode(target_inode, 0)
+                .ok_or(wasip1::ERRNO_LOOP)?;
         }
 
         self.fd_filestat_get_raw::<Wasm>(target_inode)
@@ -350,7 +377,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
         Ok(wasip1::Prestat {
             tag: 0,
             u: wasip1::PrestatU {
-                dir: wasip1::PrestatDir { pr_name_len: name.len() as usize },
+                dir: wasip1::PrestatDir {
+                    pr_name_len: name.len() as usize,
+                },
             },
         })
     }
@@ -442,7 +471,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
             if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
                 return Err(wasip1::ERRNO_EXIST);
             }
-            if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY && !self.is_dir(inode) {
+            if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY && !self.is_dir(inode)
+            {
                 return Err(wasip1::ERRNO_NOTDIR);
             }
             if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
@@ -461,9 +491,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
                 if components.is_empty() {
                     return Err(wasip1::ERRNO_NOENT);
                 }
-                
-                // For simplicity, we assume creation only happens in `dir_ino` directly 
-                // and the path is just a single Normal component. 
+
+                // For simplicity, we assume creation only happens in `dir_ino` directly
+                // and the path is just a single Normal component.
                 // Full path traversal for creation is complex and not fully implemented here.
                 if components.len() == 1 {
                     if let WasmPathComponent::Normal(name) = &components[0] {
@@ -471,14 +501,14 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
                         for j in 0..name.len() {
                             s.push(name.get(j) as char);
                         }
-                        
+
                         let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
                         let filetype = if is_dir {
                             wasip1::FILETYPE_DIRECTORY
                         } else {
                             wasip1::FILETYPE_REGULAR_FILE
                         };
-                        
+
                         let data = if is_dir {
                             let mut map = DirMap::new();
                             map.insert(SmallString::from_str("."), 0); // Self (will update)
@@ -497,16 +527,24 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for Chang
 
                         // Update self reference if dir
                         if is_dir {
-                            if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&new_id) {
+                            if let Some(Inode {
+                                data: InodeData::Dir(map),
+                                ..
+                            }) = self.inodes.get_mut(&new_id)
+                            {
                                 map.insert(SmallString::from_str("."), new_id);
                             }
                         }
 
                         // Link in parent
-                        if let Some(Inode { data: InodeData::Dir(dir_map), .. }) = self.inodes.get_mut(&dir_ino) {
+                        if let Some(Inode {
+                            data: InodeData::Dir(dir_map),
+                            ..
+                        }) = self.inodes.get_mut(&dir_ino)
+                        {
                             dir_map.insert(s, new_id);
                         }
-                        
+
                         return Ok(new_id);
                     }
                 }

@@ -14,8 +14,14 @@ readme.workspace = true
 [dependencies]
 const_struct = "0.6.4"
 parking_lot = "0.12.5"
-wasi_virt_layer = { version = "0.1.5", features = ["threads"] }
-wit-bindgen = { version = "0.54.0", default-features = false, features = ["macros", "std"] }
+wit-bindgen = { version = "0.54.0", default-features = false, features = [
+    "macros",
+    "std",
+] }
+
+[dependencies.wasi_virt_layer]
+workspace = true
+features = ["threads"]
 
 [lib]
 crate-type = ["cdylib"]

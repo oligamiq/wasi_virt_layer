@@ -69,7 +69,8 @@ pub mod thread {
 /// Virtual File System operations and definitions.
 pub mod file {
     pub use crate::wasi::file::{
-        FilestatWithoutDevice, Wasip1FileSystem, Wasip1FileTrait, Wasip1LFS, WasiAddInfo, DefaultAddInfo, NoAddInfo,
+        DefaultAddInfo, FilestatWithoutDevice, NoAddInfo, WasiAddInfo, Wasip1FileSystem,
+        Wasip1FileTrait, Wasip1LFS,
         constant::{
             lfs::VFSConstNormalLFS,
             lfs_raw::{VFSConstNormalFiles, WasiConstFile},
@@ -77,7 +78,7 @@ pub mod file {
         },
         stdio::DefaultStdIO,
     };
-    
+
     #[cfg(feature = "alloc")]
     pub use crate::wasi::file::changeable::{
         inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata, OpenFd},

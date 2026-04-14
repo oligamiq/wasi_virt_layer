@@ -2,10 +2,8 @@ use crate::__private::wasip1;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
-        FilestatWithoutDevice, Wasip1FileTrait, WasiAddInfo, DefaultAddInfo,
-        constant::{
-            lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
-        },
+        DefaultAddInfo, FilestatWithoutDevice, WasiAddInfo, Wasip1FileTrait,
+        constant::lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
         stdio::StdIO,
     },
 };

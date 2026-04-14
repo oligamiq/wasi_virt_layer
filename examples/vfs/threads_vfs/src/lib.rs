@@ -95,11 +95,8 @@ mod fs {
 
     type LFS = VFSConstNormalLFS<FilesTy, F, FILE_COUNT, DefaultStdIO>;
 
-    static mut VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
+    static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
         Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
-    plug_fs!(@const, {
-        #[allow(static_mut_refs)]
-        unsafe { &mut VIRTUAL_FILE_SYSTEM }
-    }, test_threads, self);
+    plug_fs!(&VIRTUAL_FILE_SYSTEM, test_threads, self);
 }

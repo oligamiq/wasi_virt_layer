@@ -1,10 +1,11 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::Dircookie;
 
+use crate::wasi::file::Wasip1ConstLFS;
 use crate::{
     memory::WasmAccess,
     wasi::file::{
-        FilestatWithoutDevice, Wasip1FileTrait, Wasip1LFS, WasiAddInfo,
+        FilestatWithoutDevice, WasiAddInfo, Wasip1FileTrait, Wasip1LFS,
         constant::{
             lfs::VFSConstNormalLFS,
             lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
@@ -22,10 +23,9 @@ impl<
 > Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
 {
     type Inode = usize;
-    const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
 
     fn fd_write_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         _: Self::Inode,
         _: *const u8,
         _: usize,
@@ -34,7 +34,7 @@ impl<
     }
 
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         data: *const u8,
         data_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -53,7 +53,7 @@ impl<
     }
 
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         data: *const u8,
         data_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -76,7 +76,7 @@ impl<
     }
 
     fn fd_readdir_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         buf: *mut u8,
         buf_len: usize,
@@ -201,7 +201,7 @@ impl<
     }
 
     fn path_filestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         _: wasip1::Lookupflags,
         path_ptr: *const u8,
@@ -215,7 +215,7 @@ impl<
     }
 
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
         if !Self::PRE_OPEN.contains(&inode) {
@@ -236,7 +236,7 @@ impl<
     }
 
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
@@ -256,14 +256,14 @@ impl<
     }
 
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         Ok(self.filestat_from_inode(inode))
     }
 
     fn fd_pread_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         buf: *mut u8,
         buf_len: usize,
@@ -286,7 +286,7 @@ impl<
     }
 
     fn fd_read_stdin_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -306,7 +306,7 @@ impl<
     }
 
     fn path_open_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         dir_inode: Self::Inode,
         _: wasip1::Fdflags,
         path_ptr: *const u8,
@@ -343,4 +343,15 @@ impl<
             Err(wasip1::ERRNO_NOENT)
         }
     }
+}
+
+impl<
+    ROOT: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+    AddInfo: WasiAddInfo + 'static,
+> Wasip1ConstLFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
+{
+    const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
 }

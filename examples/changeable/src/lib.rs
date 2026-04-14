@@ -1,8 +1,6 @@
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasi_virt_layer::{
-    file::*, plug_process, prelude::*, process::DefaultProcess,
-};
+use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
 
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
@@ -59,28 +57,30 @@ plug_env!(@static, &mut VIRTUAL_ENV.lock(), ls);
 
 #[allow(dead_code)]
 mod fs {
+    use std::cell::{LazyCell, OnceCell};
+
     use super::*;
 
     type LFS = ChangeableLFS<DefaultStdIO>;
 
-    static VIRTUAL_FILE_SYSTEM: LazyLock<Mutex<ChangeableVFS<LFS>>> = LazyLock::new(|| {
+    static VIRTUAL_FILE_SYSTEM: LazyCell<ChangeableVFS<LFS>> = LazyCell::new(|| {
         let mut lfs = ChangeableLFS::new(); // Inode 0 is root "."
 
         // Create a dynamic directory and file
         let docs_inode = lfs.add_dir(0, "docs").unwrap();
-        lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec()).unwrap();
-        
+        lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
+            .unwrap();
+
         let sub_inode = lfs.add_dir(docs_inode, "sub").unwrap();
-        lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec()).unwrap();
+        lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
+            .unwrap();
 
         // Add a preopen entry for root "."
         lfs.add_preopen(0, ".");
-        
-        // Wrap in VFS
-        let vfs = ChangeableVFS::new(lfs, [0]);
 
-        Mutex::new(vfs)
+        // Wrap in VFS
+        ChangeableVFS::new(lfs, [0])
     });
 
-    plug_fs!(@static, &mut *VIRTUAL_FILE_SYSTEM.lock(), ls);
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }

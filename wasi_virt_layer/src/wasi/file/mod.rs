@@ -2,9 +2,9 @@
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
 use crate::memory::WasmAccess;
-pub mod constant;
 #[cfg(feature = "alloc")]
 pub mod changeable;
+pub mod constant;
 pub mod stdio;
 use crate::__private::wasip1;
 
@@ -36,17 +36,23 @@ pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
     const DEFAULT: Self;
 
     /// Returns the access time.
-    fn access_time(&self) -> Timestamp { 0 }
+    fn access_time(&self) -> Timestamp {
+        0
+    }
     /// Sets the access time.
     fn set_access_time(&mut self, _atime: Timestamp) {}
 
     /// Returns the modification time.
-    fn modification_time(&self) -> Timestamp { 0 }
+    fn modification_time(&self) -> Timestamp {
+        0
+    }
     /// Sets the modification time.
     fn set_modification_time(&mut self, _mtime: Timestamp) {}
 
     /// Returns the creation time.
-    fn creation_time(&self) -> Timestamp { 0 }
+    fn creation_time(&self) -> Timestamp {
+        0
+    }
     /// Sets the creation time.
     fn set_creation_time(&mut self, _ctime: Timestamp) {}
 }
@@ -71,29 +77,44 @@ pub struct DefaultAddInfo {
 }
 
 impl WasiAddInfo for DefaultAddInfo {
-    const DEFAULT: Self = Self { atim: 0, mtim: 0, ctim: 0 };
+    const DEFAULT: Self = Self {
+        atim: 0,
+        mtim: 0,
+        ctim: 0,
+    };
 
-    fn access_time(&self) -> Timestamp { self.atim }
-    fn set_access_time(&mut self, atime: Timestamp) { self.atim = atime; }
+    fn access_time(&self) -> Timestamp {
+        self.atim
+    }
+    fn set_access_time(&mut self, atime: Timestamp) {
+        self.atim = atime;
+    }
 
-    fn modification_time(&self) -> Timestamp { self.mtim }
-    fn set_modification_time(&mut self, mtime: Timestamp) { self.mtim = mtime; }
+    fn modification_time(&self) -> Timestamp {
+        self.mtim
+    }
+    fn set_modification_time(&mut self, mtime: Timestamp) {
+        self.mtim = mtime;
+    }
 
-    fn creation_time(&self) -> Timestamp { self.ctim }
-    fn set_creation_time(&mut self, ctime: Timestamp) { self.ctim = ctime; }
+    fn creation_time(&self) -> Timestamp {
+        self.ctim
+    }
+    fn set_creation_time(&mut self, ctime: Timestamp) {
+        self.ctim = ctime;
+    }
 }
 
 /// small posix like local file system
 /// Trait for a local file system implementation.
 pub trait Wasip1LFS: core::fmt::Debug {
     /// The type used for inodes.
-    type Inode: 'static + core::fmt::Debug;
     /// Pre-opened inodes.
-    const PRE_OPEN: &'static [Self::Inode];
+    type Inode: 'static + core::fmt::Debug;
 
     /// Writes raw data to a file.
     fn fd_write_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         data: *const u8,
         data_len: usize,
@@ -101,14 +122,14 @@ pub trait Wasip1LFS: core::fmt::Debug {
 
     /// Writes raw data to stdout.
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
     /// Writes raw data to stderr.
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
@@ -118,7 +139,7 @@ pub trait Wasip1LFS: core::fmt::Debug {
 
     /// Reads directory entries.
     fn fd_readdir_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         buf: *mut u8,
         buf_len: usize,
@@ -127,7 +148,7 @@ pub trait Wasip1LFS: core::fmt::Debug {
 
     /// Retrieves file statistics for a path.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
@@ -136,13 +157,13 @@ pub trait Wasip1LFS: core::fmt::Debug {
 
     /// Retrieves pre-open statistics.
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
     /// Retrieves the name of a pre-opened directory.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
@@ -150,13 +171,13 @@ pub trait Wasip1LFS: core::fmt::Debug {
 
     /// Retrieves file statistics for a file descriptor.
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
     /// Reads data from a file descriptor into a buffer at a given offset.
     fn fd_pread_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         inode: Self::Inode,
         buf: *mut u8,
         buf_len: usize,
@@ -165,14 +186,14 @@ pub trait Wasip1LFS: core::fmt::Debug {
 
     /// Reads data from stdin.
     fn fd_read_stdin_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
     /// Opens a path.
     fn path_open_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         dir_ino: Self::Inode,
         dir_flags: wasip1::Fdflags,
         path_ptr: *const u8,
@@ -182,6 +203,10 @@ pub trait Wasip1LFS: core::fmt::Debug {
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
     ) -> Result<Self::Inode, wasip1::Errno>;
+}
+
+pub trait Wasip1ConstLFS: Wasip1LFS {
+    const PRE_OPEN: &'static [Self::Inode];
 }
 
 /// Trait for a virtual file implementation.
@@ -235,7 +260,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
 pub trait Wasip1FileSystem: core::fmt::Debug {
     /// Writes data to a file descriptor.
     fn fd_write_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
         iovs_len: usize,
@@ -244,7 +269,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 
     /// Reads directory entries from a file descriptor.
     fn fd_readdir_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         buf: *mut u8,
         buf_len: usize,
@@ -254,7 +279,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 
     /// Retrieves file statistics for a path relative to a file descriptor.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
@@ -264,39 +289,39 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 
     /// Retrieves pre-open statistics for a file descriptor.
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         prestat: *mut wasip1::Prestat,
     ) -> wasip1::Errno;
 
     /// Retrieves the name of a pre-opened directory for a file descriptor.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> wasip1::Errno;
 
     /// Closes a file descriptor.
-    fn fd_close_raw<Wasm: WasmAccess>(&mut self, fd: Fd) -> wasip1::Errno;
+    fn fd_close_raw<Wasm: WasmAccess>(&self, fd: Fd) -> wasip1::Errno;
 
     /// Retrieves file statistics for a file descriptor.
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
     /// Retrieves file descriptor statistics.
     fn fd_fdstat_get_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         fdstat: *mut wasip1::Fdstat,
     ) -> wasip1::Errno;
 
     /// Reads data from a file descriptor into buffers.
     fn fd_read_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
         iovs_len: usize,
@@ -305,7 +330,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 
     /// Opens a path relative to a file descriptor.
     fn path_open_raw<Wasm: WasmAccess>(
-        &mut self,
+        &self,
         dir_fd: Fd,
         dir_flags: wasip1::Fdflags,
         path_ptr: *const u8,
@@ -321,12 +346,8 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 /// Plugs the file system ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_fs {
-    (@static, $state:expr, $($wasm:ident),* $(,)?) => {
-        $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @static, $state);
-    };
-
-    (@const, $state:expr, $($wasm:ident),* $(,)?) => {
-        $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @const, $state);
+    ($state:expr, $($wasm:ident),* $(,)?) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, $state);
 
         // To prevent unused errors from occurring
         $crate::__private::paste::paste! {
@@ -336,11 +357,7 @@ macro_rules! plug_fs {
         }
     };
 
-    (@inner, @static, $state:expr, $($wasm:ident),* $(,)?) => {
-        $crate::plug_fs!(@inner, @const, $state, $($wasm),*);
-    };
-
-    (@inner, @const, $state:expr, $($wasm:ident),* $(,)?) => {
+    (@inner, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__private::paste::paste! {
             $(
                 #[cfg(target_os = "wasi")]

@@ -1,7 +1,8 @@
-use crate::__private::wasip1;
+use crate::wasi::file::WasiAddInfo;
+use crate::wasi::file::constant::vfs::OpenFdInfoWithInode;
+use crate::{__private::wasip1, wasi::file::constant::vfs::OpenFdInfo};
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use smallstr::SmallString;
-use crate::wasi::file::WasiAddInfo;
 
 /// Unique identifier for an inode
 pub type InodeId = usize;
@@ -65,9 +66,7 @@ pub struct Inode<AddInfo: WasiAddInfo> {
 
 /// Represents an active, open file descriptor referencing an Inode
 #[derive(Debug, Clone)]
-pub struct OpenFd {
-    /// The target inode being accessed
-    pub inode_id: InodeId,
+pub struct DetailedOpenFd {
     /// The current byte offset within the file (for reads/writes)
     pub cursor: usize,
     /// The base rights granted to this file descriptor
@@ -76,4 +75,58 @@ pub struct OpenFd {
     pub inheriting_rights: wasip1::Rights,
     /// The flags used to open this file
     pub fd_flags: wasip1::Fdflags,
+}
+
+impl OpenFdInfo for DetailedOpenFd {
+    const DEFAULT: Self = Self {
+        cursor: 0,
+        base_rights: 0,
+        inheriting_rights: 0,
+        fd_flags: 0,
+    };
+
+    fn cursor(&self) -> usize {
+        self.cursor
+    }
+
+    fn set_cursor(&mut self, cursor: usize) {
+        self.cursor = cursor;
+    }
+
+    fn base_rights(&self) -> wasip1::Rights {
+        self.base_rights
+    }
+
+    fn set_base_rights(&mut self, base_rights: wasip1::Rights) {
+        self.base_rights = base_rights;
+    }
+
+    fn inheriting_rights(&self) -> wasip1::Rights {
+        self.inheriting_rights
+    }
+
+    fn set_inheriting_rights(&mut self, inheriting_rights: wasip1::Rights) {
+        self.inheriting_rights = inheriting_rights;
+    }
+
+    fn fd_flags(&self) -> wasip1::Fdflags {
+        self.fd_flags
+    }
+
+    fn set_fd_flags(&mut self, fd_flags: wasip1::Fdflags) {
+        self.fd_flags = fd_flags;
+    }
+}
+
+impl OpenFdInfoWithInode for DetailedOpenFd {
+    type InodeId = InodeId;
+
+    fn inode_id(&self) -> Self::InodeId {
+        // This is a placeholder. The actual implementation would need to store the inode ID.
+        0
+    }
+
+    fn set_inode_id(&mut self, _inode_id: Self::InodeId) {
+        // This is a placeholder. The actual implementation would need to store the inode ID.
+    }
 }
