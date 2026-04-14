@@ -292,7 +292,7 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
         Ok(wasip1::Prestat {
             tag: 0,
             u: wasip1::PrestatU {
-                dir: wasip1::PrestatDir { pr_name_len: 1 }, // "/"
+                dir: wasip1::PrestatDir { pr_name_len: 1 }, // "."
             },
         })
     }
@@ -306,7 +306,7 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
         if !Self::PRE_OPEN.contains(&inode) {
             return Err(wasip1::ERRNO_BADF);
         }
-        let root_name = b"/";
+        let root_name = b".";
         let copy_len = core::cmp::min(1, dir_path_len);
         if copy_len > 0 {
             Wasm::memcpy(dir_path_ptr, &root_name[..copy_len]);
@@ -374,115 +374,89 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
     fn path_open_raw<Wasm: WasmAccess>(
         &mut self,
         dir_ino: Self::Inode,
-        dir_flags: wasip1::Fdflags,
+        _: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
         o_flags: wasip1::Oflags,
         fs_rights_base: wasip1::Rights,
-        fs_rights_inheriting: wasip1::Rights,
-        fd_flags: wasip1::Fdflags,
+        _: wasip1::Rights,
+        _: wasip1::Fdflags,
     ) -> Result<Self::Inode, wasip1::Errno> {
-        // Simple create-or-open implementation
-        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
-        let components: Vec<_> = path.components().collect();
-
-        if components.is_empty() {
-            return Err(wasip1::ERRNO_NOENT);
-        }
-
-        // For simplicity, handle single-component paths or fully walked paths.
-        // A complete robust implementation would traverse all but the last component.
-        let mut parent_ino = dir_ino;
-        let mut last_name = None;
-
-        // Traverse all but the last component
-        for (i, comp) in components.iter().enumerate() {
-            if i == components.len() - 1 {
-                if let WasmPathComponent::Normal(name) = comp {
-                    let mut s = SmallString::<[u8; 32]>::new();
-                    for j in 0..name.len() {
-                        s.push(name.get(j) as char);
-                    }
-                    last_name = Some(s);
-                } else {
-                    // E.g., "." or ".."
-                    let current = self.get_inode_for_path::<Wasm>(dir_ino, path_ptr, path_len)
-                        .ok_or(wasip1::ERRNO_NOENT)?;
-                    return Ok(current);
-                }
-            } else {
-                // Manual traversal here would go step by step. We skip full implementation for brevity.
+        if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_ino, path_ptr, path_len) {
+            if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
+                return Err(wasip1::ERRNO_EXIST);
             }
-        }
-
-        let name = last_name.unwrap();
-        
-        let existing_inode = {
-            if let Some(Inode { data: InodeData::Dir(dir), .. }) = self.inodes.get(&parent_ino) {
-                dir.get(&name).copied()
-            } else {
+            if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY && !self.is_dir(inode) {
                 return Err(wasip1::ERRNO_NOTDIR);
             }
-        };
-
-        match existing_inode {
-            Some(inode) => {
-                if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
-                    return Err(wasip1::ERRNO_EXIST);
-                }
-                if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY && !self.is_dir(inode) {
-                    return Err(wasip1::ERRNO_NOTDIR);
-                }
-                if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
-                    if let Some(node) = self.inodes.get_mut(&inode) {
-                        if let InodeData::File(ref mut vec) = node.data {
-                            vec.clear();
-                        }
+            if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
+                if let Some(node) = self.inodes.get_mut(&inode) {
+                    if let InodeData::File(ref mut vec) = node.data {
+                        vec.clear();
                     }
                 }
-                Ok(inode)
             }
-            None => {
-                if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
-                    let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
-                    let filetype = if is_dir {
-                        wasip1::FILETYPE_DIRECTORY
-                    } else {
-                        wasip1::FILETYPE_REGULAR_FILE
-                    };
-                    
-                    let data = if is_dir {
-                        let mut map = DirMap::new();
-                        map.insert(SmallString::from_str("."), 0); // Self (will update)
-                        map.insert(SmallString::from_str(".."), parent_ino);
-                        InodeData::Dir(map)
-                    } else {
-                        InodeData::File(Vec::new())
-                    };
+            Ok(inode)
+        } else {
+            if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
+                let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+                let components: Vec<_> = path.components().collect();
 
-                    let new_inode = Inode {
-                        meta: InodeMetadata::new(filetype, fs_rights_base),
-                        data,
-                    };
-
-                    let new_id = self.allocate_inode(new_inode);
-
-                    // Update self reference if dir
-                    if is_dir {
-                        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&new_id) {
-                            map.insert(SmallString::from_str("."), new_id);
-                        }
-                    }
-
-                    // Link in parent
-                    if let Some(Inode { data: InodeData::Dir(dir_map), .. }) = self.inodes.get_mut(&parent_ino) {
-                        dir_map.insert(name, new_id);
-                    }
-                    
-                    Ok(new_id)
-                } else {
-                    Err(wasip1::ERRNO_NOENT)
+                if components.is_empty() {
+                    return Err(wasip1::ERRNO_NOENT);
                 }
+                
+                // For simplicity, we assume creation only happens in `dir_ino` directly 
+                // and the path is just a single Normal component. 
+                // Full path traversal for creation is complex and not fully implemented here.
+                if components.len() == 1 {
+                    if let WasmPathComponent::Normal(name) = &components[0] {
+                        let mut s = SmallString::<[u8; 32]>::new();
+                        for j in 0..name.len() {
+                            s.push(name.get(j) as char);
+                        }
+                        
+                        let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
+                        let filetype = if is_dir {
+                            wasip1::FILETYPE_DIRECTORY
+                        } else {
+                            wasip1::FILETYPE_REGULAR_FILE
+                        };
+                        
+                        let data = if is_dir {
+                            let mut map = DirMap::new();
+                            map.insert(SmallString::from_str("."), 0); // Self (will update)
+                            map.insert(SmallString::from_str(".."), dir_ino);
+                            InodeData::Dir(map)
+                        } else {
+                            InodeData::File(Vec::new())
+                        };
+
+                        let new_inode = Inode {
+                            meta: InodeMetadata::new(filetype, fs_rights_base),
+                            data,
+                        };
+
+                        let new_id = self.allocate_inode(new_inode);
+
+                        // Update self reference if dir
+                        if is_dir {
+                            if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&new_id) {
+                                map.insert(SmallString::from_str("."), new_id);
+                            }
+                        }
+
+                        // Link in parent
+                        if let Some(Inode { data: InodeData::Dir(dir_map), .. }) = self.inodes.get_mut(&dir_ino) {
+                            dir_map.insert(s, new_id);
+                        }
+                        
+                        return Ok(new_id);
+                    }
+                }
+                Err(wasip1::ERRNO_NOENT)
+            } else {
+                Err(wasip1::ERRNO_NOENT)
             }
         }
     }

@@ -5,6 +5,7 @@ members = [
     "wasi_virt_layer",
     "examples/bare/ls",
     "examples/vfs/example",
+    "examples/changeable",
     "examples/test_wasm/example",
     "examples/vfs/rustc_vfs",
     "examples/vfs/thread_direct_vfs",

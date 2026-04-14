@@ -158,7 +158,7 @@ where
                 cookie,
             ) {
                 Ok((0, _)) => {
-                    unsafe { *nread_ret = total_read as Size };
+                    Wasm::store_le(nread_ret, total_read as Size);
                     return wasip1::ERRNO_SUCCESS;
                 }
                 Ok((n, next_cookie)) => {
@@ -186,18 +186,18 @@ where
                 let mut written = 0;
                 for iovs in iovs_vec {
                     match fd {
-                        1 => match self.lfs.fd_write_stdout_raw::<Wasm>(iovs.buf, iovs.buf_len) {
+                        1 => match self.lfs.fd_write_stdout_raw::<Wasm>(iovs.buf as *const u8, iovs.buf_len) {
                             Ok(w) => written += w,
                             Err(e) => return e,
                         },
-                        2 => match self.lfs.fd_write_stderr_raw::<Wasm>(iovs.buf, iovs.buf_len) {
+                        2 => match self.lfs.fd_write_stderr_raw::<Wasm>(iovs.buf as *const u8, iovs.buf_len) {
                             Ok(w) => written += w,
                             Err(e) => return e,
                         },
                         _ => unreachable!(),
                     }
                 }
-                unsafe { *nwritten_ret = written as Size };
+                Wasm::store_le(nwritten_ret, written as Size);
                 wasip1::ERRNO_SUCCESS
             }
             fd => {
@@ -211,14 +211,14 @@ where
                 for iovs in iovs_vec {
                     match self.lfs.fd_write_raw::<Wasm>(
                         open_fd.inode_id.into(),
-                        iovs.buf,
+                        iovs.buf as *const u8,
                         iovs.buf_len,
                     ) {
                         Ok(w) => written += w,
                         Err(e) => return e,
                     }
                 }
-                unsafe { *nwritten_ret = written as Size };
+                Wasm::store_le(nwritten_ret, written as Size);
                 wasip1::ERRNO_SUCCESS
             }
         }
@@ -254,8 +254,7 @@ where
                     mtim: stat.mtim,
                     ctim: stat.ctim,
                 };
-                let slice = unsafe { core::slice::from_raw_parts_mut(filestat as *mut u8, core::mem::size_of::<wasip1::Filestat>()) };
-                Wasm::memcpy_to(slice, &s as *const _ as *const u8);
+                Wasm::store_le(filestat, s);
                 wasip1::ERRNO_SUCCESS
             }
             Err(e) => e,
@@ -274,8 +273,7 @@ where
 
         match self.lfs.fd_prestat_get_raw::<Wasm>(open_fd.inode_id.into()) {
             Ok(prestat) => {
-                let slice = unsafe { core::slice::from_raw_parts_mut(prestat_ret as *mut u8, core::mem::size_of::<wasip1::Prestat>()) };
-                Wasm::memcpy_to(slice, &prestat as *const _ as *const u8);
+                Wasm::store_le(prestat_ret, prestat);
                 wasip1::ERRNO_SUCCESS
             }
             Err(e) => e,
@@ -332,8 +330,7 @@ where
                     mtim: stat.mtim,
                     ctim: stat.ctim,
                 };
-                let slice = unsafe { core::slice::from_raw_parts_mut(filestat_ret as *mut u8, core::mem::size_of::<wasip1::Filestat>()) };
-                Wasm::memcpy_to(slice, &s as *const _ as *const u8);
+                Wasm::store_le(filestat_ret, s);
                 wasip1::ERRNO_SUCCESS
             }
             Err(e) => e,
@@ -358,8 +355,7 @@ where
                     fs_rights_base: open_fd.base_rights,
                     fs_rights_inheriting: open_fd.inheriting_rights,
                 };
-                let slice = unsafe { core::slice::from_raw_parts_mut(fdstat_ret as *mut u8, core::mem::size_of::<wasip1::Fdstat>()) };
-                Wasm::memcpy_to(slice, &s as *const _ as *const u8);
+                Wasm::store_le(fdstat_ret, s);
                 wasip1::ERRNO_SUCCESS
             }
             Err(e) => e,
@@ -378,12 +374,12 @@ where
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
                 let mut total_read = 0;
                 for iovs in iovs_vec {
-                    match self.lfs.fd_read_stdin_raw::<Wasm>(iovs.buf as *mut _, iovs.buf_len) {
+                    match self.lfs.fd_read_stdin_raw::<Wasm>(iovs.buf as *mut u8, iovs.buf_len) {
                         Ok(n) => total_read += n,
                         Err(e) => return e,
                     }
                 }
-                unsafe { *nread_ret = total_read as Size };
+                Wasm::store_le(nread_ret, total_read as Size);
                 wasip1::ERRNO_SUCCESS
             }
             1 | 2 => wasip1::ERRNO_BADF,
@@ -400,7 +396,7 @@ where
                 for iovs in iovs_vec {
                     match self.lfs.fd_pread_raw::<Wasm>(
                         open_fd.inode_id.into(),
-                        iovs.buf as *mut _,
+                        iovs.buf as *mut u8,
                         iovs.buf_len,
                         cursor,
                     ) {
@@ -413,7 +409,7 @@ where
                 }
 
                 let _ = self.set_cursor(fd, cursor);
-                unsafe { *nread_ret = total_read as Size };
+                Wasm::store_le(nread_ret, total_read as Size);
                 wasip1::ERRNO_SUCCESS
             }
         }
@@ -454,7 +450,7 @@ where
                     inheriting_rights: fs_rights_inheriting,
                     fd_flags,
                 });
-                unsafe { *fd_ret = new_fd };
+                Wasm::store_le(fd_ret, new_fd);
                 wasip1::ERRNO_SUCCESS
             }
             Err(e) => e,

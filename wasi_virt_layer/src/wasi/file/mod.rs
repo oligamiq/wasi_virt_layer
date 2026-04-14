@@ -268,6 +268,10 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 /// Plugs the file system ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_fs {
+    (@static, $state:expr, $($wasm:ident),* $(,)?) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @static, $state);
+    };
+
     (@const, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, @const, $state);
 
@@ -277,6 +281,10 @@ macro_rules! plug_fs {
                 let _ = $state;
             };
         }
+    };
+
+    (@inner, @static, $state:expr, $($wasm:ident),* $(,)?) => {
+        $crate::plug_fs!(@inner, @const, $state, $($wasm),*);
     };
 
     (@inner, @const, $state:expr, $($wasm:ident),* $(,)?) => {
