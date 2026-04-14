@@ -2,9 +2,8 @@ use crate::__private::wasip1;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
-        FilestatWithoutDevice, Wasip1FileTrait,
+        FilestatWithoutDevice, Wasip1FileTrait, WasiAddInfo, DefaultAddInfo,
         constant::{
-            lfs_impl::VFSConstNormalAddInfo,
             lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
         },
         stdio::StdIO,
@@ -18,8 +17,9 @@ pub struct VFSConstNormalLFS<
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
+    AddInfo: WasiAddInfo + 'static = DefaultAddInfo,
 > {
-    add_info: [VFSConstNormalAddInfo; FLAT_LEN],
+    add_info: [AddInfo; FLAT_LEN],
     __marker: core::marker::PhantomData<(ConstRoot, File, StdIo)>,
 }
 
@@ -28,19 +28,20 @@ impl<
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
-> VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo>
+    AddInfo: WasiAddInfo + 'static,
+> VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo, AddInfo>
 {
     /// Creates a new `VFSConstNormalLFS`.
     pub const fn new() -> Self {
         Self {
-            add_info: [VFSConstNormalAddInfo::new(); FLAT_LEN],
+            add_info: [AddInfo::DEFAULT; FLAT_LEN],
             __marker: core::marker::PhantomData,
         }
     }
 
     /// Updates the access time for a given inode.
     #[inline]
-    pub const fn update_access_time(&mut self, inode: usize, atime: usize) {
+    pub fn update_access_time(&mut self, inode: usize, atime: wasip1::Timestamp) {
         let add_info = &mut self.add_info[inode];
         add_info.set_access_time(atime);
     }
@@ -115,7 +116,7 @@ impl<
 
     /// Returns the access time for a given inode.
     pub fn access_time(&self, inode: usize) -> wasip1::Timestamp {
-        self.add_info[inode].access_time() as wasip1::Timestamp
+        self.add_info[inode].access_time()
     }
 
     /// Creates file statistics for a given inode.
@@ -125,9 +126,9 @@ impl<
             filetype: ConstRoot::FILES[inode].1.filetype(),
             nlink: 1,
             size: ConstRoot::FILES[inode].1.size() as _,
-            atim: self.access_time(inode),
-            mtim: 0,
-            ctim: 0,
+            atim: self.add_info[inode].access_time(),
+            mtim: self.add_info[inode].modification_time(),
+            ctim: self.add_info[inode].creation_time(),
         }
     }
 }

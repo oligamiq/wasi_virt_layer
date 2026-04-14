@@ -1,6 +1,7 @@
 use crate::__private::wasip1;
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use smallstr::SmallString;
+use crate::wasi::file::WasiAddInfo;
 
 /// Unique identifier for an inode
 pub type InodeId = usize;
@@ -21,31 +22,25 @@ pub enum InodeData {
 
 /// Metadata for an inode, mirroring typical POSIX filesystem stats
 #[derive(Debug, Clone)]
-pub struct InodeMetadata {
+pub struct InodeMetadata<AddInfo: WasiAddInfo> {
     /// File type (e.g., File, Directory, Symlink)
     pub filetype: wasip1::Filetype,
-    /// Last access timestamp
-    pub atim: wasip1::Timestamp,
-    /// Last modification timestamp
-    pub mtim: wasip1::Timestamp,
-    /// Creation timestamp (or last status change)
-    pub ctim: wasip1::Timestamp,
     /// Hard link count
     pub nlink: wasip1::Linkcount,
     /// User-defined WASI permissions (base rights that can be acquired)
     pub rights: wasip1::Rights,
+    /// Additional file info (e.g. timestamps)
+    pub add_info: AddInfo,
 }
 
-impl InodeMetadata {
+impl<AddInfo: WasiAddInfo> InodeMetadata<AddInfo> {
     /// Create new default metadata for a given file type
     pub fn new(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
         Self {
             filetype,
-            atim: 0,
-            mtim: 0,
-            ctim: 0,
             nlink: 1,
             rights,
+            add_info: AddInfo::DEFAULT,
         }
     }
 
@@ -61,9 +56,9 @@ impl InodeMetadata {
 
 /// An inode couples its metadata with its actual data payload
 #[derive(Debug, Clone)]
-pub struct Inode {
+pub struct Inode<AddInfo: WasiAddInfo> {
     /// Metadata like timestamps and type
-    pub meta: InodeMetadata,
+    pub meta: InodeMetadata<AddInfo>,
     /// Actual contents of the inode
     pub data: InodeData,
 }

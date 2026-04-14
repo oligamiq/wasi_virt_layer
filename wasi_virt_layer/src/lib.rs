@@ -69,7 +69,7 @@ pub mod thread {
 /// Virtual File System operations and definitions.
 pub mod file {
     pub use crate::wasi::file::{
-        FilestatWithoutDevice, Wasip1FileSystem, Wasip1FileTrait, Wasip1LFS,
+        FilestatWithoutDevice, Wasip1FileSystem, Wasip1FileTrait, Wasip1LFS, WasiAddInfo, DefaultAddInfo, NoAddInfo,
         constant::{
             lfs::VFSConstNormalLFS,
             lfs_raw::{VFSConstNormalFiles, WasiConstFile},

@@ -2,7 +2,7 @@ use crate::__private::wasip1;
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
-        FilestatWithoutDevice, Wasip1LFS,
+        FilestatWithoutDevice, Wasip1LFS, WasiAddInfo, DefaultAddInfo,
         changeable::inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata},
         stdio::StdIO,
     },
@@ -12,14 +12,14 @@ use smallstr::SmallString;
 
 /// A local file system that allows runtime modifications
 #[derive(Debug)]
-pub struct ChangeableLFS<StdIo: StdIO + 'static> {
-    pub inodes: BTreeMap<InodeId, Inode>,
+pub struct ChangeableLFS<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static = DefaultAddInfo> {
+    pub inodes: BTreeMap<InodeId, Inode<AddInfo>>,
     pub next_inode_id: InodeId,
     pub preopens: BTreeMap<InodeId, String>,
     __marker: core::marker::PhantomData<StdIo>,
 }
 
-impl<StdIo: StdIO + 'static> ChangeableLFS<StdIo> {
+impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo, AddInfo> {
     /// Creates a new ChangeableLFS with a root directory at Inode 0
     pub fn new() -> Self {
         let mut inodes = BTreeMap::new();
@@ -63,7 +63,7 @@ impl<StdIo: StdIO + 'static> ChangeableLFS<StdIo> {
         }
     }
 
-    fn allocate_inode(&mut self, inode: Inode) -> InodeId {
+    fn allocate_inode(&mut self, inode: Inode<AddInfo>) -> InodeId {
         let id = self.next_inode_id;
         self.next_inode_id += 1;
         self.inodes.insert(id, inode);
@@ -196,7 +196,7 @@ impl<StdIo: StdIO + 'static> ChangeableLFS<StdIo> {
     }
 }
 
-impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
+impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS for ChangeableLFS<StdIo, AddInfo> {
     type Inode = InodeId;
     const PRE_OPEN: &'static [Self::Inode] = &[];
 
@@ -211,7 +211,8 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
             let mut buf = alloc::vec![0u8; data_len];
             Wasm::memcpy_to(&mut buf, data);
             vec.extend_from_slice(&buf);
-            inode_entry.meta.mtim += 1; // Simplistic time update
+            let mtim = inode_entry.meta.add_info.modification_time();
+            inode_entry.meta.add_info.set_modification_time(mtim + 1); // Simplistic time update
             Ok(data_len)
         } else {
             Err(wasip1::ERRNO_ISDIR)
@@ -378,9 +379,9 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
             filetype: node.meta.filetype,
             nlink: node.meta.nlink,
             size: node.meta.size(&node.data),
-            atim: node.meta.atim,
-            mtim: node.meta.mtim,
-            ctim: node.meta.ctim,
+            atim: node.meta.add_info.access_time(),
+            mtim: node.meta.add_info.modification_time(),
+            ctim: node.meta.add_info.creation_time(),
         })
     }
 
@@ -399,7 +400,8 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
             let available = file_data.len() - offset;
             let read_len = core::cmp::min(buf_len, available);
             Wasm::memcpy(buf, &file_data[offset..offset + read_len]);
-            node.meta.atim += 1;
+            let atim = node.meta.add_info.access_time();
+            node.meta.add_info.set_access_time(atim + 1);
             Ok(read_len)
         } else {
             Err(wasip1::ERRNO_ISDIR)

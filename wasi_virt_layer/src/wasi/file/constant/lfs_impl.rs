@@ -4,7 +4,7 @@ use crate::__private::wasip1::Dircookie;
 use crate::{
     memory::WasmAccess,
     wasi::file::{
-        FilestatWithoutDevice, Wasip1FileTrait, Wasip1LFS,
+        FilestatWithoutDevice, Wasip1FileTrait, Wasip1LFS, WasiAddInfo,
         constant::{
             lfs::VFSConstNormalLFS,
             lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
@@ -18,7 +18,8 @@ impl<
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
-> Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo>
+    AddInfo: WasiAddInfo + 'static,
+> Wasip1LFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
 {
     type Inode = usize;
     const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
@@ -341,28 +342,5 @@ impl<
 
             Err(wasip1::ERRNO_NOENT)
         }
-    }
-}
-
-/// Additional information for a constant, normal VFS inode.
-#[derive(Copy, Clone, Debug)]
-pub struct VFSConstNormalAddInfo {
-    atime: usize,
-}
-
-impl VFSConstNormalAddInfo {
-    /// Creates a new `VFSConstNormalAddInfo`.
-    pub const fn new() -> Self {
-        Self { atime: 0 }
-    }
-
-    /// Returns the access time.
-    pub const fn access_time(&self) -> usize {
-        self.atime
-    }
-
-    /// Sets the access time.
-    pub const fn set_access_time(&mut self, atime: usize) {
-        self.atime = atime;
     }
 }

@@ -30,6 +30,59 @@ pub struct FilestatWithoutDevice {
     pub ctim: Timestamp,
 }
 
+/// Additional mutable info for an inode.
+pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
+    /// Default initialization value for the info.
+    const DEFAULT: Self;
+
+    /// Returns the access time.
+    fn access_time(&self) -> Timestamp { 0 }
+    /// Sets the access time.
+    fn set_access_time(&mut self, _atime: Timestamp) {}
+
+    /// Returns the modification time.
+    fn modification_time(&self) -> Timestamp { 0 }
+    /// Sets the modification time.
+    fn set_modification_time(&mut self, _mtime: Timestamp) {}
+
+    /// Returns the creation time.
+    fn creation_time(&self) -> Timestamp { 0 }
+    /// Sets the creation time.
+    fn set_creation_time(&mut self, _ctime: Timestamp) {}
+}
+
+/// An empty implementation of WasiAddInfo for read-only or stateless inodes.
+#[derive(Debug, Clone, Copy)]
+pub struct NoAddInfo;
+
+impl WasiAddInfo for NoAddInfo {
+    const DEFAULT: Self = Self;
+}
+
+/// A default implementation of WasiAddInfo storing all timestamps.
+#[derive(Debug, Clone, Copy)]
+pub struct DefaultAddInfo {
+    /// Access time
+    pub atim: Timestamp,
+    /// Modification time
+    pub mtim: Timestamp,
+    /// Creation time
+    pub ctim: Timestamp,
+}
+
+impl WasiAddInfo for DefaultAddInfo {
+    const DEFAULT: Self = Self { atim: 0, mtim: 0, ctim: 0 };
+
+    fn access_time(&self) -> Timestamp { self.atim }
+    fn set_access_time(&mut self, atime: Timestamp) { self.atim = atime; }
+
+    fn modification_time(&self) -> Timestamp { self.mtim }
+    fn set_modification_time(&mut self, mtime: Timestamp) { self.mtim = mtime; }
+
+    fn creation_time(&self) -> Timestamp { self.ctim }
+    fn set_creation_time(&mut self, ctime: Timestamp) { self.ctim = ctime; }
+}
+
 /// small posix like local file system
 /// Trait for a local file system implementation.
 pub trait Wasip1LFS: core::fmt::Debug {
