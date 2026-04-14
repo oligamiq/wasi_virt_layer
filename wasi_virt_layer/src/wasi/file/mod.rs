@@ -209,6 +209,10 @@ pub trait Wasip1ConstLFS: Wasip1LFS {
     const PRE_OPEN: &'static [Self::Inode];
 }
 
+pub trait Wasip1DynamicLFS: Wasip1LFS {
+    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, &'a str)>;
+}
+
 /// Trait for a virtual file implementation.
 pub trait Wasip1FileTrait: core::fmt::Debug {
     /// Returns the size of the file.

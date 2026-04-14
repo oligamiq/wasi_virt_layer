@@ -1,7 +1,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
-use crate::file::Wasip1LFS;
+use crate::wasi::file::Wasip1DynamicLFS;
 use crate::wasi::file::changeable::inode::DetailedOpenFd;
 use crate::wasi::file::constant::vfs::{OpenFdInfo, OpenFdInfoWithInode};
 use crate::{
@@ -26,7 +26,7 @@ use core::cell::UnsafeCell;
 /// A virtual file system implementation that maps file descriptors to inodes in a ChangeableLFS.
 #[derive(Debug)]
 pub struct ChangeableVFS<
-    LFS: Wasip1LFS + core::fmt::Debug,
+    LFS: Wasip1DynamicLFS + core::fmt::Debug,
     OpenFd: OpenFdInfoWithInode + 'static = DetailedOpenFd,
 > where
     LFS::Inode: core::fmt::Debug,
@@ -41,13 +41,13 @@ pub struct ChangeableVFS<
     #[cfg(not(feature = "threads"))]
     pub next_fd: UnsafeCell<Fd>,
 }
-unsafe impl<LFS: Wasip1LFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Send
+unsafe impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Send
     for ChangeableVFS<LFS, OpenFd>
 where
     LFS::Inode: core::fmt::Debug,
 {
 }
-unsafe impl<LFS: Wasip1LFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Sync
+unsafe impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Sync
     for ChangeableVFS<LFS, OpenFd>
 where
     LFS::Inode: core::fmt::Debug,
@@ -72,37 +72,14 @@ macro_rules! get_open_fd {
     };
 }
 
-impl<LFS: Wasip1LFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
+impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
     ChangeableVFS<LFS, OpenFd>
 where
     LFS::Inode: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
     OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
 {
-    /// Creates a new ChangeableVFS wrapping the provided LFS and mapping the specified pre-opened inodes.
-    pub fn new(lfs: LFS, preopens: impl IntoIterator<Item = LFS::Inode>) -> Self {
-        let mut fd_map = BTreeMap::new();
-        let mut count = 0;
-
-        // Map pre-opened inodes
-        for (i, _) in preopens.into_iter().enumerate() {
-            let fd = (i + 3) as Fd;
-            fd_map.insert(fd, OpenFd::DEFAULT);
-            count += 1;
-        }
-
-        assert!(count > 0, "At least one Preopen must be specified");
-
-        Self {
-            lfs,
-            #[cfg(feature = "threads")]
-            fd_map: DashMap::from_iter(fd_map),
-            #[cfg(feature = "threads")]
-            next_fd: AtomicU32::new((count + 3) as u32),
-            #[cfg(not(feature = "threads"))]
-            fd_map: UnsafeCell::new(fd_map),
-            #[cfg(not(feature = "threads"))]
-            next_fd: UnsafeCell::new((count + 3) as Fd),
-        }
+    pub fn new(lfs: LFS) -> Self {
+        todo!();
     }
 
     #[inline]
@@ -162,6 +139,7 @@ where
         let mut open_fd = OpenFd::DEFAULT;
         open_fd.set_base_rights(base_rights);
         open_fd.set_inheriting_rights(inheriting_rights);
+        open_fd.set_inode_id(inode.into().into());
         self.allocate_fd(open_fd)
     }
 
@@ -171,7 +149,7 @@ where
     }
 }
 
-impl<LFS: Wasip1LFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem
+impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem
     for ChangeableVFS<LFS, OpenFd>
 where
     LFS::Inode: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,

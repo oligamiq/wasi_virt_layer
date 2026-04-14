@@ -6,6 +6,9 @@ use parking_lot::RwLock;
 
 use crate::{memory::WasmAccess, wasi::file::Wasip1LFS};
 
+#[cfg(not(feature = "threads"))]
+use core::cell::UnsafeCell;
+
 pub trait OpenFdInfo: core::fmt::Debug {
     const DEFAULT: Self;
 
@@ -122,7 +125,7 @@ where
 
         #[cfg(not(feature = "threads"))]
         {
-            self.map.get(fd as usize - 3)?.map(|(inode, _)| inode)
+            unsafe { &*self.map.get(fd as usize - 3)?.get() }.map(|(inode, _)| inode)
         }
     }
 
@@ -140,8 +143,7 @@ where
 
         #[cfg(not(feature = "threads"))]
         {
-            self.map
-                .get_mut(fd as usize - 3)?
+            unsafe { &mut *self.map.get(fd as usize - 3)?.get() }
                 .take()
                 .map(|(inode, _)| inode)
         }
@@ -164,8 +166,9 @@ where
         #[cfg(not(feature = "threads"))]
         {
             for (i, slot) in self.map.iter().enumerate() {
-                if slot.is_none() {
-                    *slot = Some((inode, OpenFd::DEFAULT));
+                let slot_opt = unsafe { &mut *slot.get() };
+                if slot_opt.is_none() {
+                    *slot_opt = Some((inode, OpenFd::DEFAULT));
                     return (i + 3) as Fd;
                 }
             }
@@ -357,15 +360,15 @@ where
                 .get(fd as usize - 3)
                 .ok_or(wasip1::ERRNO_BADF)?
                 .read()
+                .as_ref()
                 .map(|(_, cursor)| cursor.cursor())
                 .ok_or(wasip1::ERRNO_BADF)
         }
 
         #[cfg(not(feature = "threads"))]
         {
-            self.map
-                .get(fd as usize - 3)
-                .ok_or(wasip1::ERRNO_BADF)?
+            unsafe { &*self.map.get(fd as usize - 3).ok_or(wasip1::ERRNO_BADF)?.get() }
+                .as_ref()
                 .map(|(_, cursor)| cursor.cursor())
                 .ok_or(wasip1::ERRNO_BADF)
         }
@@ -385,9 +388,7 @@ where
 
         #[cfg(not(feature = "threads"))]
         {
-            self.map
-                .get_mut(fd as usize - 3)
-                .ok_or(wasip1::ERRNO_BADF)?
+            unsafe { &mut *self.map.get(fd as usize - 3).ok_or(wasip1::ERRNO_BADF)?.get() }
                 .as_mut()
                 .map(|(_, cur)| cur.set_cursor(cursor))
                 .ok_or(wasip1::ERRNO_BADF)

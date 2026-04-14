@@ -67,6 +67,8 @@ pub struct Inode<AddInfo: WasiAddInfo> {
 /// Represents an active, open file descriptor referencing an Inode
 #[derive(Debug, Clone)]
 pub struct DetailedOpenFd {
+    /// The inode ID this file descriptor refers to
+    pub inode_id: InodeId,
     /// The current byte offset within the file (for reads/writes)
     pub cursor: usize,
     /// The base rights granted to this file descriptor
@@ -79,6 +81,7 @@ pub struct DetailedOpenFd {
 
 impl OpenFdInfo for DetailedOpenFd {
     const DEFAULT: Self = Self {
+        inode_id: 0,
         cursor: 0,
         base_rights: 0,
         inheriting_rights: 0,
@@ -122,11 +125,10 @@ impl OpenFdInfoWithInode for DetailedOpenFd {
     type InodeId = InodeId;
 
     fn inode_id(&self) -> Self::InodeId {
-        // This is a placeholder. The actual implementation would need to store the inode ID.
-        0
+        self.inode_id
     }
 
-    fn set_inode_id(&mut self, _inode_id: Self::InodeId) {
-        // This is a placeholder. The actual implementation would need to store the inode ID.
+    fn set_inode_id(&mut self, inode_id: Self::InodeId) {
+        self.inode_id = inode_id;
     }
 }
