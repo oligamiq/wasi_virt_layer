@@ -66,20 +66,22 @@ mod fs {
     static VIRTUAL_FILE_SYSTEM: LazyCell<ChangeableVFS<LFS>> = LazyCell::new(|| {
         let mut lfs = ChangeableLFS::new(); // Inode 0 is root "."
 
-        // Create a dynamic directory and file
-        let docs_inode = lfs.add_dir(0, "docs").unwrap();
-        lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
-            .unwrap();
-
-        let sub_inode = lfs.add_dir(docs_inode, "sub").unwrap();
-        lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
-            .unwrap();
-
         // Add a preopen entry for root "."
         lfs.add_preopen(0, ".");
 
+        let vfs = ChangeableVFS::new(lfs);
+
+        // Create a dynamic directory and file
+        let docs_inode = vfs.add_dir(0, "docs").unwrap();
+        vfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
+            .unwrap();
+
+        let sub_inode = vfs.add_dir(docs_inode, "sub").unwrap();
+        vfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
+            .unwrap();
+
         // Wrap in VFS
-        ChangeableVFS::new(lfs, [0])
+        vfs
     });
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
