@@ -30,6 +30,10 @@ pub struct ChangeableLFS<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static 
     pub preopens: DashMap<InodeId, String>,
     #[cfg(not(feature = "threads"))]
     pub preopens: UnsafeCell<BTreeMap<InodeId, String>>,
+    #[cfg(feature = "threads")]
+    pub next_inode: std::sync::atomic::AtomicU32,
+    #[cfg(not(feature = "threads"))]
+    pub next_inode: UnsafeCell<InodeId>,
     __marker: core::marker::PhantomData<StdIo>,
 }
 
