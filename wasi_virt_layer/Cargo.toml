@@ -21,6 +21,7 @@ simple-debug = []
 unstable_print_debug = ["std", "dep:backtrace"]
 
 [dependencies]
+smallstr = { version = "0.3.0", default-features = false }
 wit-bindgen = { version = "0.54.0", default-features = false }
 const_struct = "0.6.4"
 const_for = "0.1.5"

@@ -77,6 +77,13 @@ pub mod file {
         },
         stdio::DefaultStdIO,
     };
+    
+    #[cfg(feature = "alloc")]
+    pub use crate::wasi::file::changeable::{
+        inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata, OpenFd},
+        lfs::ChangeableLFS,
+        vfs::ChangeableVFS,
+    };
 }
 
 /// Process execution and lifecycle virtualization.
