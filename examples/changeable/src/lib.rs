@@ -64,7 +64,22 @@ mod fs {
     type LFS = ChangeableLFS<DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: LazyLock<Mutex<ChangeableVFS<LFS>>> = LazyLock::new(|| {
-        Mutex::new(ChangeableVFS::new(ChangeableLFS::new()))
+        let mut lfs = ChangeableLFS::new(); // Inode 0 is root "."
+
+        // Create a dynamic directory and file
+        let docs_inode = lfs.add_dir(0, "docs").unwrap();
+        lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec()).unwrap();
+        
+        let sub_inode = lfs.add_dir(docs_inode, "sub").unwrap();
+        lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec()).unwrap();
+
+        // Add a preopen entry for root "."
+        lfs.add_preopen(0, ".");
+        
+        // Wrap in VFS
+        let vfs = ChangeableVFS::new(lfs, [0]);
+
+        Mutex::new(vfs)
     });
 
     plug_fs!(@static, &mut *VIRTUAL_FILE_SYSTEM.lock(), ls);

@@ -7,7 +7,7 @@ use crate::{
         stdio::StdIO,
     },
 };
-use alloc::{collections::BTreeMap, vec::Vec};
+use alloc::{collections::BTreeMap, vec::Vec, string::String};
 use smallstr::SmallString;
 
 /// A local file system that allows runtime modifications
@@ -15,6 +15,7 @@ use smallstr::SmallString;
 pub struct ChangeableLFS<StdIo: StdIO + 'static> {
     pub inodes: BTreeMap<InodeId, Inode>,
     pub next_inode_id: InodeId,
+    pub preopens: BTreeMap<InodeId, String>,
     __marker: core::marker::PhantomData<StdIo>,
 }
 
@@ -52,9 +53,12 @@ impl<StdIo: StdIO + 'static> ChangeableLFS<StdIo> {
             },
         );
 
+        let preopens = BTreeMap::new();
+
         Self {
             inodes,
             next_inode_id: 1,
+            preopens,
             __marker: core::marker::PhantomData,
         }
     }
@@ -135,11 +139,66 @@ impl<StdIo: StdIO + 'static> ChangeableLFS<StdIo> {
             _ => Some(inode_id),
         }
     }
+
+    /// Creates a new directory at the root or under another directory.
+    pub fn add_dir(&mut self, parent_inode: InodeId, name: &str) -> Result<InodeId, ()> {
+        let new_inode = Inode {
+            meta: InodeMetadata::new(wasip1::FILETYPE_DIRECTORY, !0),
+            data: InodeData::Dir({
+                let mut m = DirMap::new();
+                m.insert(SmallString::from_str("."), 0); // Self (updated below)
+                m.insert(SmallString::from_str(".."), parent_inode);
+                m
+            }),
+        };
+        
+        let new_id = self.allocate_inode(new_inode);
+
+        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&new_id) {
+            map.insert(SmallString::from_str("."), new_id);
+        }
+        
+        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&parent_inode) {
+            map.insert(SmallString::from_str(name), new_id);
+        } else {
+            return Err(());
+        }
+        
+        Ok(new_id)
+    }
+
+    /// Adds a file with the given name and content to the given parent directory.
+    pub fn add_file(&mut self, parent_inode: InodeId, name: &str, content: Vec<u8>) -> Result<InodeId, ()> {
+        let new_inode = Inode {
+            meta: InodeMetadata::new(wasip1::FILETYPE_REGULAR_FILE, !0),
+            data: InodeData::File(content),
+        };
+        
+        let new_id = self.allocate_inode(new_inode);
+        
+        if let Some(Inode { data: InodeData::Dir(map), .. }) = self.inodes.get_mut(&parent_inode) {
+            map.insert(SmallString::from_str(name), new_id);
+        } else {
+            return Err(());
+        }
+        
+        Ok(new_id)
+    }
+
+    /// Adds a preopen entry to the LFS so it can be queried by `fd_prestat_dir_name`.
+    pub fn add_preopen(&mut self, inode: InodeId, path: &str) {
+        self.preopens.insert(inode, String::from(path));
+    }
+
+    /// Removes a preopen entry from the LFS.
+    pub fn remove_preopen(&mut self, inode: InodeId) {
+        self.preopens.remove(&inode);
+    }
 }
 
 impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
     type Inode = InodeId;
-    const PRE_OPEN: &'static [Self::Inode] = &[0];
+    const PRE_OPEN: &'static [Self::Inode] = &[];
 
     fn fd_write_raw<Wasm: WasmAccess>(
         &mut self,
@@ -286,13 +345,11 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
         &mut self,
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
-        if !Self::PRE_OPEN.contains(&inode) {
-            return Err(wasip1::ERRNO_BADF);
-        }
+        let name = self.preopens.get(&inode).ok_or(wasip1::ERRNO_BADF)?;
         Ok(wasip1::Prestat {
             tag: 0,
             u: wasip1::PrestatU {
-                dir: wasip1::PrestatDir { pr_name_len: 1 }, // "."
+                dir: wasip1::PrestatDir { pr_name_len: name.len() as usize },
             },
         })
     }
@@ -303,13 +360,10 @@ impl<StdIo: StdIO + 'static> Wasip1LFS for ChangeableLFS<StdIo> {
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
-        if !Self::PRE_OPEN.contains(&inode) {
-            return Err(wasip1::ERRNO_BADF);
-        }
-        let root_name = b".";
-        let copy_len = core::cmp::min(1, dir_path_len);
+        let name = self.preopens.get(&inode).ok_or(wasip1::ERRNO_BADF)?;
+        let copy_len = core::cmp::min(name.len(), dir_path_len);
         if copy_len > 0 {
-            Wasm::memcpy(dir_path_ptr, &root_name[..copy_len]);
+            Wasm::memcpy(dir_path_ptr, &name.as_bytes()[..copy_len]);
         }
         Ok(())
     }

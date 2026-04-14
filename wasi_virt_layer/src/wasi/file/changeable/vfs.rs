@@ -32,12 +32,13 @@ impl<LFS: Wasip1LFS + core::fmt::Debug> ChangeableVFS<LFS>
 where
     LFS::Inode: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
 {
-    /// Creates a new ChangeableVFS wrapping the provided LFS
-    pub fn new(lfs: LFS) -> Self {
+    /// Creates a new ChangeableVFS wrapping the provided LFS and mapping the specified pre-opened inodes.
+    pub fn new(lfs: LFS, preopens: impl IntoIterator<Item = LFS::Inode>) -> Self {
         let mut map = BTreeMap::new();
+        let mut count = 0;
 
         // Map pre-opened inodes
-        for (i, &inode) in LFS::PRE_OPEN.iter().enumerate() {
+        for (i, inode) in preopens.into_iter().enumerate() {
             let fd = (i + 3) as Fd;
             map.insert(
                 fd,
@@ -49,7 +50,10 @@ where
                     fd_flags: 0,
                 },
             );
+            count += 1;
         }
+
+        assert!(count > 0, "At least one Preopen must be specified");
 
         Self {
             lfs,
@@ -57,7 +61,7 @@ where
             fd_map: RwLock::new(map),
             #[cfg(not(feature = "threads"))]
             fd_map: map,
-            next_fd: LFS::PRE_OPEN.len() as Fd + 3,
+            next_fd: count as Fd + 3,
         }
     }
 
@@ -125,6 +129,22 @@ where
             self.fd_map.insert(fd, open_fd);
         }
         fd
+    }
+
+    /// Adds a dynamically created preopen to the VFS and returns its new file descriptor.
+    pub fn add_fd(&mut self, inode: LFS::Inode, base_rights: wasip1::Rights, inheriting_rights: wasip1::Rights) -> Fd {
+        self.allocate_fd(OpenFd {
+            inode_id: inode.into(),
+            cursor: 0,
+            base_rights,
+            inheriting_rights,
+            fd_flags: 0,
+        })
+    }
+
+    /// Removes a dynamically created preopen or fd from the VFS.
+    pub fn remove_fd(&mut self, fd: Fd) {
+        self.remove_open_fd(fd);
     }
 }
 
