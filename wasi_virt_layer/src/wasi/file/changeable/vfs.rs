@@ -79,7 +79,17 @@ where
     OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
 {
     pub fn new(lfs: LFS) -> Self {
-        todo!();
+        Self {
+            lfs,
+            #[cfg(feature = "threads")]
+            fd_map: DashMap::new(),
+            #[cfg(feature = "threads")]
+            next_fd: AtomicU32::new(3),
+            #[cfg(not(feature = "threads"))]
+            fd_map: UnsafeCell::new(BTreeMap::new()),
+            #[cfg(not(feature = "threads"))]
+            next_fd: UnsafeCell::new(3),
+        }
     }
 
     #[inline]
@@ -146,6 +156,20 @@ where
     /// Removes a dynamically created preopen or fd from the VFS.
     pub fn remove_fd(&self, fd: Fd) {
         self.remove_open_fd(fd);
+    }
+}
+
+impl<StdIo: crate::wasi::file::stdio::StdIO + 'static, AddInfo: crate::wasi::file::WasiAddInfo + 'static, OpenFd: OpenFdInfoWithInode + 'static>
+    ChangeableVFS<crate::wasi::file::changeable::lfs::ChangeableLFS<StdIo, AddInfo>, OpenFd>
+where
+    OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
+{
+    pub fn add_dir(&self, parent: InodeId, name: &str) -> Result<InodeId, wasip1::Errno> {
+        self.lfs.add_dir(parent, name)
+    }
+
+    pub fn add_file(&self, parent: InodeId, name: &str, content: alloc::vec::Vec<u8>) -> Result<InodeId, wasip1::Errno> {
+        self.lfs.add_file(parent, name, content)
     }
 }
 

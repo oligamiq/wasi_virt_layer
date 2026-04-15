@@ -38,19 +38,296 @@ pub struct ChangeableLFS<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static 
 }
 
 impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo, AddInfo> {
-    /// Creates a new ChangeableLFS with a root directory at Inode 0
+    /// Creates a new ChangeableLFS without any pre-existing inodes.
+    /// Root directories and preopens should be added via `add_preopen`.
     pub fn new() -> Self {
         Self {
             #[cfg(feature = "threads")]
-            inodes: DashMap::from_iter(inodes_map),
+            inodes: DashMap::new(),
             #[cfg(not(feature = "threads"))]
-            inodes: UnsafeCell::new(inodes_map),
+            inodes: UnsafeCell::new(BTreeMap::new()),
             #[cfg(feature = "threads")]
             preopens: DashMap::new(),
             #[cfg(not(feature = "threads"))]
             preopens: UnsafeCell::new(BTreeMap::new()),
+            #[cfg(feature = "threads")]
+            next_inode: std::sync::atomic::AtomicU32::new(0),
+            #[cfg(not(feature = "threads"))]
+            next_inode: UnsafeCell::new(0),
             __marker: core::marker::PhantomData,
         }
+    }
+
+    fn read_inode<F, R>(&self, id: &InodeId, f: F) -> Option<R>
+    where
+        F: FnOnce(&Inode<AddInfo>) -> R,
+    {
+        #[cfg(feature = "threads")]
+        {
+            self.inodes.get(id).map(|i| f(&i))
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &*self.inodes.get() }.get(id).map(f)
+        }
+    }
+
+    fn modify_inode<F, R>(&self, id: &InodeId, f: F) -> Option<R>
+    where
+        F: FnOnce(&mut Inode<AddInfo>) -> R,
+    {
+        #[cfg(feature = "threads")]
+        {
+            self.inodes.get_mut(id).map(|mut i| f(&mut i))
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &mut *self.inodes.get() }.get_mut(id).map(|i| f(i))
+        }
+    }
+
+    fn insert_inode(&self, id: InodeId, inode: Inode<AddInfo>) {
+        #[cfg(feature = "threads")]
+        {
+            self.inodes.insert(id, inode);
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &mut *self.inodes.get() }.insert(id, inode);
+        }
+    }
+
+    fn read_preopen<F, R>(&self, inode: &InodeId, f: F) -> Option<R>
+    where
+        F: FnOnce(&String) -> R,
+    {
+        #[cfg(feature = "threads")]
+        {
+            self.preopens.get(inode).map(|s| f(&s))
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &*self.preopens.get() }.get(inode).map(f)
+        }
+    }
+
+    pub fn allocate_inode(&self, inode: Inode<AddInfo>) -> InodeId {
+        let id;
+        #[cfg(feature = "threads")]
+        {
+            id = self.next_inode.fetch_add(1, core::sync::atomic::Ordering::SeqCst) as InodeId;
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            id = unsafe { *self.next_inode.get() };
+            unsafe { *self.next_inode.get() += 1 };
+        }
+        self.insert_inode(id, inode);
+        id
+    }
+
+    pub fn update_next_inode(&self, min_val: InodeId) {
+        #[cfg(feature = "threads")]
+        {
+            let mut current = self.next_inode.load(core::sync::atomic::Ordering::SeqCst);
+            while current < min_val as u32 {
+                match self.next_inode.compare_exchange_weak(
+                    current,
+                    min_val as u32,
+                    core::sync::atomic::Ordering::SeqCst,
+                    core::sync::atomic::Ordering::Relaxed,
+                ) {
+                    Ok(_) => break,
+                    Err(x) => current = x,
+                }
+            }
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            let current = unsafe { &mut *self.next_inode.get() };
+            if *current < min_val {
+                *current = min_val;
+            }
+        }
+    }
+
+    pub fn add_preopen(&self, name: impl Into<String>) -> InodeId {
+        let name_str = name.into();
+        
+        let new_node = Inode {
+            meta: InodeMetadata::new(
+                wasip1::FILETYPE_DIRECTORY,
+                wasip1::RIGHTS_FD_READ
+                    | wasip1::RIGHTS_FD_READDIR
+                    | wasip1::RIGHTS_FD_WRITE
+                    | wasip1::RIGHTS_PATH_CREATE_DIRECTORY
+                    | wasip1::RIGHTS_PATH_CREATE_FILE
+                    | wasip1::RIGHTS_PATH_FILESTAT_GET
+                    | wasip1::RIGHTS_PATH_FILESTAT_SET_SIZE
+                    | wasip1::RIGHTS_PATH_FILESTAT_SET_TIMES
+                    | wasip1::RIGHTS_PATH_LINK_SOURCE
+                    | wasip1::RIGHTS_PATH_LINK_TARGET
+                    | wasip1::RIGHTS_PATH_OPEN
+                    | wasip1::RIGHTS_PATH_READLINK
+                    | wasip1::RIGHTS_PATH_REMOVE_DIRECTORY
+                    | wasip1::RIGHTS_PATH_RENAME_SOURCE
+                    | wasip1::RIGHTS_PATH_RENAME_TARGET
+                    | wasip1::RIGHTS_PATH_SYMLINK
+                    | wasip1::RIGHTS_PATH_UNLINK_FILE,
+            ),
+            data: InodeData::Dir(DirMap::new()),
+        };
+        
+        let inode = self.allocate_inode(new_node);
+
+        self.modify_inode(&inode, |node| {
+            if let InodeData::Dir(map) = &mut node.data {
+                map.insert(SmallString::from_str("."), inode);
+                map.insert(SmallString::from_str(".."), inode);
+            }
+        });
+        
+        #[cfg(feature = "threads")]
+        {
+            self.preopens.insert(inode, name_str);
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &mut *self.preopens.get() }.insert(inode, name_str);
+        }
+
+        inode
+    }
+
+    pub fn add_dir(&self, parent: InodeId, name: &str) -> Result<InodeId, wasip1::Errno> {
+        let mut map = DirMap::new();
+        map.insert(SmallString::from_str("."), 0); // updated below
+        map.insert(SmallString::from_str(".."), parent);
+        let new_inode = Inode {
+            meta: InodeMetadata::new(
+                wasip1::FILETYPE_DIRECTORY,
+                wasip1::RIGHTS_FD_READ
+                    | wasip1::RIGHTS_FD_READDIR
+                    | wasip1::RIGHTS_FD_WRITE
+                    | wasip1::RIGHTS_PATH_CREATE_DIRECTORY
+                    | wasip1::RIGHTS_PATH_CREATE_FILE
+                    | wasip1::RIGHTS_PATH_FILESTAT_GET
+                    | wasip1::RIGHTS_PATH_FILESTAT_SET_SIZE
+                    | wasip1::RIGHTS_PATH_FILESTAT_SET_TIMES
+                    | wasip1::RIGHTS_PATH_LINK_SOURCE
+                    | wasip1::RIGHTS_PATH_LINK_TARGET
+                    | wasip1::RIGHTS_PATH_OPEN
+                    | wasip1::RIGHTS_PATH_READLINK
+                    | wasip1::RIGHTS_PATH_REMOVE_DIRECTORY
+                    | wasip1::RIGHTS_PATH_RENAME_SOURCE
+                    | wasip1::RIGHTS_PATH_RENAME_TARGET
+                    | wasip1::RIGHTS_PATH_SYMLINK
+                    | wasip1::RIGHTS_PATH_UNLINK_FILE,
+            ),
+            data: InodeData::Dir(map),
+        };
+        let new_id = self.allocate_inode(new_inode);
+
+        self.modify_inode(&new_id, |node| {
+            if let InodeData::Dir(map) = &mut node.data {
+                map.insert(SmallString::from_str("."), new_id);
+            }
+        });
+
+        let success = self.modify_inode(&parent, |node| {
+            if let InodeData::Dir(parent_map) = &mut node.data {
+                parent_map.insert(SmallString::from_str(name), new_id);
+                true
+            } else {
+                false
+            }
+        }).unwrap_or(false);
+
+        if !success {
+            return Err(wasip1::ERRNO_NOTDIR);
+        }
+        Ok(new_id)
+    }
+
+    pub fn add_file(&self, parent: InodeId, name: &str, content: Vec<u8>) -> Result<InodeId, wasip1::Errno> {
+        let new_inode = Inode {
+            meta: InodeMetadata::new(
+                wasip1::FILETYPE_REGULAR_FILE,
+                wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_FD_WRITE | wasip1::RIGHTS_FD_FILESTAT_GET,
+            ),
+            data: InodeData::File(content),
+        };
+        let new_id = self.allocate_inode(new_inode);
+
+        let success = self.modify_inode(&parent, |node| {
+            if let InodeData::Dir(parent_map) = &mut node.data {
+                parent_map.insert(SmallString::from_str(name), new_id);
+                true
+            } else {
+                false
+            }
+        }).unwrap_or(false);
+
+        if !success {
+            return Err(wasip1::ERRNO_NOTDIR);
+        }
+        Ok(new_id)
+    }
+
+    pub fn get_inode_for_path<Wasm: WasmAccess>(
+        &self,
+        dir_ino: InodeId,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Option<InodeId> {
+        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+        let mut current_inode = dir_ino;
+
+        for component in path.components() {
+            match component {
+                WasmPathComponent::Normal(name) => {
+                    let mut s = SmallString::<[u8; 32]>::new();
+                    for j in 0..name.len() {
+                        s.push(name.get(j) as char);
+                    }
+                    let child = self.read_inode(&current_inode, |node| {
+                        match &node.data {
+                            InodeData::Dir(map) => map.get(&s).copied(),
+                            _ => None,
+                        }
+                    }).flatten();
+                    
+                    if let Some(child_id) = child {
+                        current_inode = child_id;
+                    } else {
+                        return None;
+                    }
+                }
+                WasmPathComponent::CurDir => continue,
+                WasmPathComponent::ParentDir => {
+                    let parent = self.read_inode(&current_inode, |node| {
+                        match &node.data {
+                            InodeData::Dir(map) => map.get(&SmallString::from_str("..")).copied(),
+                            _ => None,
+                        }
+                    }).flatten();
+                    
+                    if let Some(parent_id) = parent {
+                        current_inode = parent_id;
+                    } else {
+                        return None;
+                    }
+                }
+                WasmPathComponent::RootDir => {
+                    current_inode = 0;
+                }
+            }
+        }
+        Some(current_inode)
+    }
+
+    pub fn resolve_inode(&self, inode: InodeId, _depth: usize) -> Option<InodeId> {
+        Some(inode)
     }
 }
 
@@ -65,17 +342,18 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         data: *const u8,
         data_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let inode_entry = self.inodes.get_mut(&inode).ok_or(wasip1::ERRNO_BADF)?;
-        if let InodeData::File(ref mut vec) = inode_entry.data {
-            let mut buf = alloc::vec![0u8; data_len];
-            Wasm::memcpy_to(&mut buf, data);
-            vec.extend_from_slice(&buf);
-            let mtim = inode_entry.meta.add_info.modification_time();
-            inode_entry.meta.add_info.set_modification_time(mtim + 1); // Simplistic time update
-            Ok(data_len)
-        } else {
-            Err(wasip1::ERRNO_ISDIR)
-        }
+        self.modify_inode(&inode, |inode_entry| {
+            if let InodeData::File(ref mut vec) = inode_entry.data {
+                let mut buf = alloc::vec![0u8; data_len];
+                Wasm::memcpy_to(&mut buf, data);
+                vec.extend_from_slice(&buf);
+                let mtim = inode_entry.meta.add_info.modification_time();
+                inode_entry.meta.add_info.set_modification_time(mtim + 1); // Simplistic time update
+                Ok(data_len)
+            } else {
+                Err(wasip1::ERRNO_ISDIR)
+            }
+        }).unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
@@ -113,10 +391,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
     }
 
     fn is_dir(&self, inode: Self::Inode) -> bool {
-        matches!(
-            self.inodes.get(&inode).map(|i| &i.data),
-            Some(InodeData::Dir(_))
-        )
+        self.read_inode(&inode, |i| matches!(i.data, InodeData::Dir(_))).unwrap_or(false)
     }
 
     fn fd_readdir_raw<Wasm: WasmAccess>(
@@ -126,10 +401,10 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         buf_len: usize,
         cookie: wasip1::Dircookie,
     ) -> Result<(wasip1::Size, wasip1::Dircookie), wasip1::Errno> {
-        let dir_map = match self.inodes.get(&inode).map(|i| &i.data) {
-            Some(InodeData::Dir(map)) => map,
-            _ => return Err(wasip1::ERRNO_NOTDIR),
-        };
+        let dir_map = self.read_inode(&inode, |i| match &i.data {
+            InodeData::Dir(map) => Some(map.clone()),
+            _ => None,
+        }).flatten().ok_or(wasip1::ERRNO_NOTDIR)?;
 
         let mut current_cookie = cookie as usize;
         let mut total_written = 0;
@@ -140,13 +415,13 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
             if i < current_cookie {
                 continue;
             }
-            let child = self.inodes.get(&child_inode).ok_or(wasip1::ERRNO_NOENT)?;
+            let filetype = self.read_inode(&child_inode, |c| c.meta.filetype).ok_or(wasip1::ERRNO_NOENT)?;
             let name_bytes = name.as_bytes();
             let entry = wasip1::Dirent {
                 d_next: (i + 1) as u64,
                 d_ino: child_inode as u64,
                 d_namlen: name_bytes.len() as u32,
-                d_type: child.meta.filetype,
+                d_type: filetype,
             };
 
             let entry_size = core::mem::size_of::<wasip1::Dirent>();
@@ -206,15 +481,16 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         &self,
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
-        let name = self.preopens.get(&inode).ok_or(wasip1::ERRNO_BADF)?;
-        Ok(wasip1::Prestat {
-            tag: 0,
-            u: wasip1::PrestatU {
-                dir: wasip1::PrestatDir {
-                    pr_name_len: name.len() as usize,
+        self.read_preopen(&inode, |name| {
+            Ok(wasip1::Prestat {
+                tag: 0,
+                u: wasip1::PrestatU {
+                    dir: wasip1::PrestatDir {
+                        pr_name_len: name.len() as usize,
+                    },
                 },
-            },
-        })
+            })
+        }).unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
@@ -223,28 +499,30 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
-        let name = self.preopens.get(&inode).ok_or(wasip1::ERRNO_BADF)?;
-        let copy_len = core::cmp::min(name.len(), dir_path_len);
-        if copy_len > 0 {
-            Wasm::memcpy(dir_path_ptr, &name.as_bytes()[..copy_len]);
-        }
-        Ok(())
+        self.read_preopen(&inode, |name| {
+            let copy_len = core::cmp::min(name.len(), dir_path_len);
+            if copy_len > 0 {
+                Wasm::memcpy(dir_path_ptr, &name.as_bytes()[..copy_len]);
+            }
+            Ok(())
+        }).unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &self,
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-        let node = self.inodes.get(&inode).ok_or(wasip1::ERRNO_BADF)?;
-        Ok(FilestatWithoutDevice {
-            ino: inode as u64,
-            filetype: node.meta.filetype,
-            nlink: node.meta.nlink,
-            size: node.meta.size(&node.data),
-            atim: node.meta.add_info.access_time(),
-            mtim: node.meta.add_info.modification_time(),
-            ctim: node.meta.add_info.creation_time(),
-        })
+        self.read_inode(&inode, |node| {
+            Ok(FilestatWithoutDevice {
+                ino: inode as u64,
+                filetype: node.meta.filetype,
+                nlink: node.meta.nlink,
+                size: node.meta.size(&node.data),
+                atim: node.meta.add_info.access_time(),
+                mtim: node.meta.add_info.modification_time(),
+                ctim: node.meta.add_info.creation_time(),
+            })
+        }).unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_pread_raw<Wasm: WasmAccess>(
@@ -254,20 +532,21 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         buf_len: usize,
         offset: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let mut node = self.inodes.get_mut(&inode).ok_or(wasip1::ERRNO_BADF)?;
-        if let InodeData::File(ref file_data) = node.data {
-            if offset >= file_data.len() {
-                return Ok(0);
+        self.modify_inode(&inode, |node| {
+            if let InodeData::File(ref file_data) = node.data {
+                if offset >= file_data.len() {
+                    return Ok(0);
+                }
+                let available = file_data.len() - offset;
+                let read_len = core::cmp::min(buf_len, available);
+                Wasm::memcpy(buf, &file_data[offset..offset + read_len]);
+                let atim = node.meta.add_info.access_time();
+                node.meta.add_info.set_access_time(atim + 1);
+                Ok(read_len)
+            } else {
+                Err(wasip1::ERRNO_ISDIR)
             }
-            let available = file_data.len() - offset;
-            let read_len = core::cmp::min(buf_len, available);
-            Wasm::memcpy(buf, &file_data[offset..offset + read_len]);
-            let atim = node.meta.add_info.access_time();
-            node.meta.add_info.set_access_time(atim + 1);
-            Ok(read_len)
-        } else {
-            Err(wasip1::ERRNO_ISDIR)
-        }
+        }).unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_read_stdin_raw<Wasm: WasmAccess>(
@@ -309,11 +588,11 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
                 return Err(wasip1::ERRNO_NOTDIR);
             }
             if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
-                if let Some(node) = self.inodes.get_mut(&inode) {
+                self.modify_inode(&inode, |node| {
                     if let InodeData::File(ref mut vec) = node.data {
                         vec.clear();
                     }
-                }
+                });
             }
             Ok(inode)
         } else {
@@ -360,23 +639,19 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
 
                         // Update self reference if dir
                         if is_dir {
-                            if let Some(Inode {
-                                data: InodeData::Dir(map),
-                                ..
-                            }) = self.inodes.get_mut(&new_id)
-                            {
-                                map.insert(SmallString::from_str("."), new_id);
-                            }
+                            self.modify_inode(&new_id, |node| {
+                                if let InodeData::Dir(map) = &mut node.data {
+                                    map.insert(SmallString::from_str("."), new_id);
+                                }
+                            });
                         }
 
                         // Link in parent
-                        if let Some(Inode {
-                            data: InodeData::Dir(dir_map),
-                            ..
-                        }) = self.inodes.get_mut(&dir_ino)
-                        {
-                            dir_map.insert(s, new_id);
-                        }
+                        self.modify_inode(&dir_ino, |node| {
+                            if let InodeData::Dir(dir_map) = &mut node.data {
+                                dir_map.insert(s, new_id);
+                            }
+                        });
 
                         return Ok(new_id);
                     }
@@ -400,13 +675,14 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1DynamicLFS
             self.preopens
                 .iter()
                 .map(|entry| (*entry.key(), entry.value().clone()))
+                .collect::<Vec<_>>()
         }
         #[cfg(not(feature = "threads"))]
         {
-            self.preopens
-                .get()
+            unsafe { &*self.preopens.get() }
                 .iter()
-                .map(|entry| (*entry.key(), entry.value().clone()))
+                .map(|(k, v)| (*k, v.clone()))
+                .collect::<Vec<_>>()
         }
     }
 }

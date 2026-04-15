@@ -67,12 +67,12 @@ mod fs {
         let mut lfs = ChangeableLFS::new(); // Inode 0 is root "."
 
         // Add a preopen entry for root "."
-        lfs.add_preopen(0, ".");
+        let root_inode = lfs.add_preopen(".");
 
         let vfs = ChangeableVFS::new(lfs);
 
         // Create a dynamic directory and file
-        let docs_inode = vfs.add_dir(0, "docs").unwrap();
+        let docs_inode = vfs.add_dir(root_inode, "docs").unwrap();
         vfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
             .unwrap();
 
