@@ -63,7 +63,7 @@ mod fs {
 
     type LFS = ChangeableLFS<DefaultStdIO>;
 
-    static VIRTUAL_FILE_SYSTEM: LazyCell<ChangeableVFS<LFS>> = LazyCell::new(|| {
+    static VIRTUAL_FILE_SYSTEM: LazyLock<ChangeableVFS<LFS>> = LazyLock::new(|| {
         let mut lfs = ChangeableLFS::new(); // Inode 0 is root "."
 
         // Add a preopen entry for root "."
@@ -84,5 +84,5 @@ mod fs {
         vfs
     });
 
-    plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
+    plug_fs!({ LazyLock::get(&VIRTUAL_FILE_SYSTEM).unwrap() }, ls);
 }

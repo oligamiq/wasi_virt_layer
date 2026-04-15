@@ -212,8 +212,30 @@ pub trait Wasip1ConstLFS: Wasip1LFS {
     const PRE_OPEN: &'static [Self::Inode];
 }
 
+pub trait DerefToStr
+where
+    Self: Deref<Target = <Self as DerefToStr>::Target>,
+    <Self as DerefToStr>::Target: Borrow<str>,
+{
+    type Target: Borrow<str> + ?Sized;
+
+    fn deref_to_str(&self) -> &<Self as DerefToStr>::Target;
+}
+
+impl<T, U> DerefToStr for T
+where
+    T: Deref<Target = U>,
+    U: Borrow<str> + ?Sized,
+{
+    type Target = U;
+
+    fn deref_to_str(&self) -> &<Self as DerefToStr>::Target {
+        self.deref()
+    }
+}
+
 pub trait Wasip1DynamicLFS: Wasip1LFS {
-    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl Deref<Target = impl Borrow<str>> + 'a)> + 'a;
+    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStr)>;
 }
 
 /// Trait for a virtual file implementation.
@@ -357,11 +379,9 @@ macro_rules! plug_fs {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_fs, @inner, $state);
 
         // To prevent unused errors from occurring
-        $crate::__private::paste::paste! {
-            const _: () = {
-                let _ = $state;
-            };
-        }
+        const _: () = {
+            let _ = || { $state };
+        };
     };
 
     (@inner, $state:expr, $($wasm:ident),* $(,)?) => {

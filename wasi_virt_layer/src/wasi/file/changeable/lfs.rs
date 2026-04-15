@@ -392,18 +392,21 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
 impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1DynamicLFS
     for ChangeableLFS<StdIo, AddInfo>
 {
-    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl Deref<Target = impl Borrow<str>> + 'a)> + 'a {
+    fn pre_open_inodes<'a>(
+        &'a self,
+    ) -> impl IntoIterator<Item = (Self::Inode, impl crate::wasi::file::DerefToStr)> {
         #[cfg(feature = "threads")]
         {
-            self.preopens.iter().map(|entry| {
-                (*entry.key(), entry)
-            })
+            self.preopens
+                .iter()
+                .map(|entry| (*entry.key(), entry.value().clone()))
         }
         #[cfg(not(feature = "threads"))]
         {
-            unsafe { &*self.preopens.get() }
+            self.preopens
+                .get()
                 .iter()
-                .map(|(inode, name)| (*inode, name.as_str()))
+                .map(|entry| (*entry.key(), entry.value().clone()))
         }
     }
 }

@@ -81,7 +81,7 @@ pub mod file {
 
     #[cfg(feature = "alloc")]
     pub use crate::wasi::file::changeable::{
-        inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata, OpenFd},
+        inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata},
         lfs::ChangeableLFS,
         vfs::ChangeableVFS,
     };
