@@ -6,6 +6,14 @@
     "rust-analyzer.cargo.features": [
         "threads"
     ],
+    "files.useExperimentalFileWatcher": false,
+    "files.usePolling": true,
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/.git/**": true,
+        "**/dist/**": true,
+        "**/build/**": true
+    },
     "cSpell.words": [
         "atim",
         "BADF",
