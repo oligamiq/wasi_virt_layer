@@ -74,6 +74,19 @@ pub struct Wasip1ConstVFS<
     map: [UnsafeCell<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN],
 }
 
+unsafe impl <
+    LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
+    const FLAT_LEN: usize,
+    OpenFd: OpenFdInfo + Copy + 'static,
+> Sync for Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd> where LFS::Inode: Copy + core::fmt::Debug
+{}
+
+unsafe impl <
+    LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
+    const FLAT_LEN: usize,
+    OpenFd: OpenFdInfo + Copy + 'static,
+> Send for Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd> where LFS::Inode: Copy + core::fmt::Debug {}
+
 impl<
     LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,

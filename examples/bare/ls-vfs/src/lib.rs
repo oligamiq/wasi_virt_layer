@@ -71,5 +71,5 @@ mod fs {
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
         Wasip1ConstVFS::new(VFSConstNormalLFS::new());
 
-    plug_fs!({ &VIRTUAL_FILE_SYSTEM }, anonymous);
+    plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous);
 }

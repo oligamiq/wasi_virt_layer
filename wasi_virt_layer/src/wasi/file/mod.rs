@@ -1,8 +1,8 @@
 // https://docs.rs/wasmtime-wasi/17.0.3/wasmtime_wasi/struct.WasiCtx.html
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
-use std::borrow::Borrow;
-use std::ops::Deref;
+use core::borrow::Borrow;
+use core::ops::Deref;
 
 use crate::memory::WasmAccess;
 #[cfg(feature = "alloc")]
