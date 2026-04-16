@@ -72,7 +72,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-plug_env!(@static, &mut VIRTUAL_ENV.lock(), test_wasm);
+plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), test_wasm);
 
 #[const_struct]
 const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {

@@ -11,11 +11,11 @@ use crate::memory::WasmAccess;
 /// so that you can block it
 /// @through if retrieving from JavaScript runtime.
 ///
-/// @const or @static
-/// Whether to use const or static env.
+/// @const or @dynamic
+/// Whether to use const or dynamic env.
 /// @const if using const env.
-/// @static if using static env.
-/// @const is faster and small than @static.
+/// @dynamic if using dynamic env.
+/// @const is faster and small than @dynamic.
 ///
 /// ```rust
 /// // @const
@@ -31,7 +31,7 @@ use crate::memory::WasmAccess;
 /// ```
 ///
 /// ```rust
-/// // @static
+/// // @dynamic
 /// import_wasm!(test_wasm);
 ///
 /// use std::sync::{LazyLock, Mutex};
@@ -53,7 +53,7 @@ use crate::memory::WasmAccess;
 ///   environ.push("HOME=~/".into());
 ///   Mutex::new(VirtualEnvState { environ })
 /// });
-/// plug_env!(@static, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
+/// plug_env!(@dynamic, &mut VIRTUAL_ENV.lock().unwrap(), test_wasm);
 /// ```
 /// Plugs the environment variable ecosystem.
 #[macro_export]
@@ -62,8 +62,8 @@ macro_rules! plug_env {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @const, $ty);
     };
 
-    (@static, $state:expr, $($wasm:ident),* $(,)?) => {
-        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @static, $state);
+    (@dynamic, $state:expr, $($wasm:ident),* $(,)?) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @dynamic, $state);
     };
 
     (@inner, @const, $ty:ty, $($wasm:ident),*) => {
@@ -96,7 +96,7 @@ macro_rules! plug_env {
         }
     };
 
-    (@inner, @static, $state:expr, $($wasm:ident),*) => {
+    (@inner, @dynamic, $state:expr, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
             $(
                 #[cfg(target_os = "wasi")]

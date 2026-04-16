@@ -53,7 +53,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-plug_env!(@static, &mut VIRTUAL_ENV.lock(), ls);
+plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 
 #[allow(dead_code)]
 mod fs {
