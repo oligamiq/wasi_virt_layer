@@ -254,12 +254,21 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
 }
 
 /// Provides access to an array in WASM memory.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug)]
 pub struct WasmArrayAccess<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
     ptr: *const T,
     len: usize,
-    __marker: core::marker::PhantomData<&'a Wasm>,
+    __marker: core::marker::PhantomData<&'a ()>,
+    __marker_wasm: core::marker::PhantomData<Wasm>,
 }
+
+impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> Clone for WasmArrayAccess<'a, T, Wasm> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> Copy for WasmArrayAccess<'a, T, Wasm> {}
 
 impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wasm> {
     /// Creates a new `WasmArrayAccess`.
@@ -270,6 +279,7 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wa
                 ptr,
                 len,
                 __marker: core::marker::PhantomData,
+                __marker_wasm: core::marker::PhantomData,
             }
         }
     }
@@ -403,7 +413,7 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
     }
 }
 
-pub trait WasmAccess: Copy + core::fmt::Debug {
+pub trait WasmAccess: core::fmt::Debug {
     const NAME: &'static str;
 
     /// Copies a slice of data into WASM memory starting at the given offset.
@@ -507,10 +517,18 @@ pub trait WasmAccess: Copy + core::fmt::Debug {
 }
 
 /// Provides access to a file path in WASM memory.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct WasmPathAccess<'a, Wasm: WasmAccess> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
+
+impl<'a, Wasm: WasmAccess> Clone for WasmPathAccess<'a, Wasm> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, Wasm: WasmAccess> Copy for WasmPathAccess<'a, Wasm> {}
 
 impl<'a, Wasm: WasmAccess> WasmPathAccess<'a, Wasm> {
     /// Creates a new `WasmPathAccess`.
