@@ -1,7 +1,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::Dircookie;
 
-use crate::wasi::file::Wasip1ConstLFS;
+use crate::wasi::file::{Wasip1ConstLFS, Wasip1DynamicLFS};
 use crate::{
     memory::WasmAccess,
     wasi::file::{
@@ -354,4 +354,20 @@ impl<
 > Wasip1ConstLFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
 {
     const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
+}
+
+impl<
+    ROOT: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+    AddInfo: WasiAddInfo + 'static,
+> Wasip1DynamicLFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
+{
+    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl crate::wasi::file::DerefToStr)> {
+        ROOT::PRE_OPEN.iter().map(|&inode| {
+            let (name, _) = ROOT::FILES[inode];
+            (inode, name)
+        })
+    }
 }
