@@ -8,6 +8,7 @@ use crate::memory::WasmAccess;
 #[cfg(feature = "alloc")]
 pub mod changeable;
 pub mod constant;
+pub mod multiple;
 pub mod stdio;
 use crate::__private::wasip1;
 

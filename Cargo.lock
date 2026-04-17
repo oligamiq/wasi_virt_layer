@@ -1886,6 +1886,7 @@ dependencies = [
  "parking_lot",
  "paste",
  "smallstr",
+ "smallvec",
  "wasip1",
  "wit-bindgen 0.54.0",
 ]

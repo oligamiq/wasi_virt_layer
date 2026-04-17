@@ -115,7 +115,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
         let id;
         #[cfg(feature = "threads")]
         {
-            id = self.next_inode.fetch_add(1, core::sync::atomic::Ordering::SeqCst) as InodeId;
+            id = self
+                .next_inode
+                .fetch_add(1, core::sync::atomic::Ordering::SeqCst) as InodeId;
         }
         #[cfg(not(feature = "threads"))]
         {
@@ -153,7 +155,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
 
     pub fn add_preopen(&self, name: impl Into<String>) -> InodeId {
         let name_str = name.into();
-        
+
         let new_node = Inode {
             meta: InodeMetadata::new(
                 wasip1::FILETYPE_DIRECTORY,
@@ -177,7 +179,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
             ),
             data: InodeData::Dir(DirMap::new()),
         };
-        
+
         let inode = self.allocate_inode(new_node);
 
         self.modify_inode(&inode, |node| {
@@ -186,7 +188,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
                 map.insert(SmallString::from_str(".."), inode);
             }
         });
-        
+
         #[cfg(feature = "threads")]
         {
             self.preopens.insert(inode, name_str);
@@ -234,14 +236,16 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
             }
         });
 
-        let success = self.modify_inode(&parent, |node| {
-            if let InodeData::Dir(parent_map) = &mut node.data {
-                parent_map.insert(SmallString::from_str(name), new_id);
-                true
-            } else {
-                false
-            }
-        }).unwrap_or(false);
+        let success = self
+            .modify_inode(&parent, |node| {
+                if let InodeData::Dir(parent_map) = &mut node.data {
+                    parent_map.insert(SmallString::from_str(name), new_id);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
 
         if !success {
             return Err(wasip1::ERRNO_NOTDIR);
@@ -249,7 +253,12 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
         Ok(new_id)
     }
 
-    pub fn add_file(&self, parent: InodeId, name: &str, content: Vec<u8>) -> Result<InodeId, wasip1::Errno> {
+    pub fn add_file(
+        &self,
+        parent: InodeId,
+        name: &str,
+        content: Vec<u8>,
+    ) -> Result<InodeId, wasip1::Errno> {
         let new_inode = Inode {
             meta: InodeMetadata::new(
                 wasip1::FILETYPE_REGULAR_FILE,
@@ -259,14 +268,16 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
         };
         let new_id = self.allocate_inode(new_inode);
 
-        let success = self.modify_inode(&parent, |node| {
-            if let InodeData::Dir(parent_map) = &mut node.data {
-                parent_map.insert(SmallString::from_str(name), new_id);
-                true
-            } else {
-                false
-            }
-        }).unwrap_or(false);
+        let success = self
+            .modify_inode(&parent, |node| {
+                if let InodeData::Dir(parent_map) = &mut node.data {
+                    parent_map.insert(SmallString::from_str(name), new_id);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
 
         if !success {
             return Err(wasip1::ERRNO_NOTDIR);
@@ -290,13 +301,13 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
                     for j in 0..name.len() {
                         s.push(name.get(j) as char);
                     }
-                    let child = self.read_inode(&current_inode, |node| {
-                        match &node.data {
+                    let child = self
+                        .read_inode(&current_inode, |node| match &node.data {
                             InodeData::Dir(map) => map.get(&s).copied(),
                             _ => None,
-                        }
-                    }).flatten();
-                    
+                        })
+                        .flatten();
+
                     if let Some(child_id) = child {
                         current_inode = child_id;
                     } else {
@@ -305,13 +316,13 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
                 }
                 WasmPathComponent::CurDir => continue,
                 WasmPathComponent::ParentDir => {
-                    let parent = self.read_inode(&current_inode, |node| {
-                        match &node.data {
+                    let parent = self
+                        .read_inode(&current_inode, |node| match &node.data {
                             InodeData::Dir(map) => map.get(&SmallString::from_str("..")).copied(),
                             _ => None,
-                        }
-                    }).flatten();
-                    
+                        })
+                        .flatten();
+
                     if let Some(parent_id) = parent {
                         current_inode = parent_id;
                     } else {
@@ -353,7 +364,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
             } else {
                 Err(wasip1::ERRNO_ISDIR)
             }
-        }).unwrap_or(Err(wasip1::ERRNO_BADF))
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
@@ -391,7 +403,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
     }
 
     fn is_dir(&self, inode: Self::Inode) -> bool {
-        self.read_inode(&inode, |i| matches!(i.data, InodeData::Dir(_))).unwrap_or(false)
+        self.read_inode(&inode, |i| matches!(i.data, InodeData::Dir(_)))
+            .unwrap_or(false)
     }
 
     fn fd_readdir_raw<Wasm: WasmAccess>(
@@ -401,10 +414,13 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         buf_len: usize,
         cookie: wasip1::Dircookie,
     ) -> Result<(wasip1::Size, wasip1::Dircookie), wasip1::Errno> {
-        let dir_map = self.read_inode(&inode, |i| match &i.data {
-            InodeData::Dir(map) => Some(map.clone()),
-            _ => None,
-        }).flatten().ok_or(wasip1::ERRNO_NOTDIR)?;
+        let dir_map = self
+            .read_inode(&inode, |i| match &i.data {
+                InodeData::Dir(map) => Some(map.clone()),
+                _ => None,
+            })
+            .flatten()
+            .ok_or(wasip1::ERRNO_NOTDIR)?;
 
         let mut current_cookie = cookie as usize;
         let mut total_written = 0;
@@ -415,7 +431,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
             if i < current_cookie {
                 continue;
             }
-            let filetype = self.read_inode(&child_inode, |c| c.meta.filetype).ok_or(wasip1::ERRNO_NOENT)?;
+            let filetype = self
+                .read_inode(&child_inode, |c| c.meta.filetype)
+                .ok_or(wasip1::ERRNO_NOENT)?;
             let name_bytes = name.as_bytes();
             let entry = wasip1::Dirent {
                 d_next: (i + 1) as u64,
@@ -490,7 +508,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
                     },
                 },
             })
-        }).unwrap_or(Err(wasip1::ERRNO_BADF))
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
@@ -505,7 +524,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
                 Wasm::memcpy(dir_path_ptr, &name.as_bytes()[..copy_len]);
             }
             Ok(())
-        }).unwrap_or(Err(wasip1::ERRNO_BADF))
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
@@ -522,7 +542,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
                 mtim: node.meta.add_info.modification_time(),
                 ctim: node.meta.add_info.creation_time(),
             })
-        }).unwrap_or(Err(wasip1::ERRNO_BADF))
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_pread_raw<Wasm: WasmAccess>(
@@ -546,7 +567,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
             } else {
                 Err(wasip1::ERRNO_ISDIR)
             }
-        }).unwrap_or(Err(wasip1::ERRNO_BADF))
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn fd_read_stdin_raw<Wasm: WasmAccess>(

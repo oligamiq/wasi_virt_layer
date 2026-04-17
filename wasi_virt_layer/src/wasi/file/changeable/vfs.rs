@@ -159,8 +159,11 @@ where
     }
 }
 
-impl<StdIo: crate::wasi::file::stdio::StdIO + 'static, AddInfo: crate::wasi::file::WasiAddInfo + 'static, OpenFd: OpenFdInfoWithInode + 'static>
-    ChangeableVFS<crate::wasi::file::changeable::lfs::ChangeableLFS<StdIo, AddInfo>, OpenFd>
+impl<
+    StdIo: crate::wasi::file::stdio::StdIO + 'static,
+    AddInfo: crate::wasi::file::WasiAddInfo + 'static,
+    OpenFd: OpenFdInfoWithInode + 'static,
+> ChangeableVFS<crate::wasi::file::changeable::lfs::ChangeableLFS<StdIo, AddInfo>, OpenFd>
 where
     OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
 {
@@ -168,7 +171,12 @@ where
         self.lfs.add_dir(parent, name)
     }
 
-    pub fn add_file(&self, parent: InodeId, name: &str, content: alloc::vec::Vec<u8>) -> Result<InodeId, wasip1::Errno> {
+    pub fn add_file(
+        &self,
+        parent: InodeId,
+        name: &str,
+        content: alloc::vec::Vec<u8>,
+    ) -> Result<InodeId, wasip1::Errno> {
         self.lfs.add_file(parent, name, content)
     }
 }

@@ -62,73 +62,41 @@ macro_rules! import_wasm {
 
             $crate::__memory_director_import_etc!($name);
 
-            impl $crate::memory::WasmAccess for $name {
+            impl $crate::memory::WasmAccessRaw for $name {
                 const NAME: &'static str = stringify!($name);
 
                 #[inline(always)]
-                fn memcpy<T>(offset: *mut T, data: &[T])
+                fn memcpy_raw(offset: *mut u8, data: *const u8, len: usize)
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
-                        offset as *mut u8,
-                        data.as_ptr() as *const u8,
-                        core::mem::size_of::<T>() * data.len(),
+                        offset,
+                        data,
+                        len,
                     ) };
                 }
 
                 #[inline(always)]
-                fn memcpy_to<T>(offset: &mut [T], src: *const T)
+                fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize)
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name _memory_copy_to>](
-                        offset.as_mut_ptr() as *mut u8,
-                        src as *const u8,
-                        core::mem::size_of::<T>() * offset.len(),
+                        offset,
+                        src,
+                        len,
                     ) };
-                }
-
-                #[inline(always)]
-                fn store_le<T>(offset: *mut T, value: T)
-                {
-                    #[cfg(not(target_os = "wasi"))]
-                    unimplemented!("this is not supported on this architecture");
-
-                    #[cfg(target_os = "wasi")]
-                    unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
-                        offset as *mut u8,
-                        &value as *const T as *const u8,
-                        core::mem::size_of::<T>(),
-                    ) };
-                }
-
-                #[inline(always)]
-                fn load_le<T: core::fmt::Debug + Copy>(offset: *const T) -> T
-                {
-                    #[cfg(not(target_os = "wasi"))]
-                    unimplemented!("this is not supported on this architecture");
-
-                    #[cfg(target_os = "wasi")]
-                    unsafe {
-                        let mut value = core::mem::MaybeUninit::uninit();
-                        [<__wasip1_vfs_ $name _memory_copy_to>](
-                            value.as_mut_ptr() as *mut u8,
-                            offset as *const u8,
-                            core::mem::size_of::<T>(),
-                        );
-                        core::ptr::read(value.as_ptr() as *const T)
-                    }
                 }
 
                 $crate::__memory_director_wasm_access!($name);
 
                 #[inline(always)]
-                fn _main() -> $crate::__private::wasip1::Errno
+                fn _main_raw() -> $crate::__private::wasip1::Errno
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
@@ -138,7 +106,7 @@ macro_rules! import_wasm {
                 }
 
                 #[inline(always)]
-                fn _reset()
+                fn _reset_raw()
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
@@ -148,7 +116,7 @@ macro_rules! import_wasm {
                 }
 
                 #[inline(always)]
-                fn _start()
+                fn _start_raw()
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
@@ -167,25 +135,14 @@ macro_rules! __memory_director_wasm_access {
     ($name:ident) => {
         $crate::__private::paste::paste! {
             #[inline(always)]
-            fn memory_director<T>(ptr: *const T) -> *const T {
+            fn memory_director_raw(ptr: isize) -> isize {
                 #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
                 #[cfg(target_os = "wasi")]
                 unsafe { [<__wasip1_vfs_ $name _memory_director>](
-                    ptr as isize,
-                ) as *const T }
-            }
-
-            #[inline(always)]
-            fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
-                #[cfg(not(target_os = "wasi"))]
-                unimplemented!("this is not supported on this architecture");
-
-                #[cfg(target_os = "wasi")]
-                unsafe { [<__wasip1_vfs_ $name _memory_director>](
-                    ptr as isize,
-                ) as *mut T }
+                    ptr,
+                ) }
             }
         }
     };
@@ -413,7 +370,86 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
     }
 }
 
-pub trait WasmAccess: core::fmt::Debug {
+pub trait WasmAccessRaw: core::fmt::Debug {
+    const NAME: &'static str;
+
+    /// Copies a slice of data into WASM memory starting at the given offset.
+    fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize);
+
+    /// Copies data from the source pointer into the provided mutable slice of WASM memory.
+    fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize);
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_raw(ptr: isize) -> isize;
+
+    fn _main_raw() -> wasip1::Errno;
+
+    fn _reset_raw();
+
+    fn _start_raw();
+}
+
+impl<T: WasmAccessRaw> WasmAccess for T {
+    const NAME: &'static str = Self::NAME;
+
+    fn memcpy<U>(offset: *mut U, data: &[U]) {
+        Self::memcpy_raw(
+            offset as *mut u8,
+            data.as_ptr() as *const u8,
+            core::mem::size_of::<U>() * data.len(),
+        );
+    }
+
+    fn memcpy_to<U>(offset: &mut [U], src: *const U) {
+        Self::memcpy_to_raw(
+            offset.as_mut_ptr() as *mut u8,
+            src as *const u8,
+            core::mem::size_of::<U>() * offset.len(),
+        );
+    }
+
+    fn store_le<U>(offset: *mut U, value: U) {
+        Self::memcpy_raw(
+            offset as *mut u8,
+            &value as *const U as *const u8,
+            core::mem::size_of::<U>(),
+        );
+    }
+
+    fn load_le<U: core::fmt::Debug + Copy>(offset: *const U) -> U {
+        let mut value = core::mem::MaybeUninit::<U>::uninit();
+        Self::memcpy_to_raw(
+            value.as_mut_ptr() as *mut u8,
+            offset as *const u8,
+            core::mem::size_of::<U>(),
+        );
+        unsafe { core::ptr::read(value.as_ptr() as *const U) }
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director<U>(ptr: *const U) -> *const U {
+        Self::memory_director_raw(ptr as isize) as *const U
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_mut<U>(ptr: *mut U) -> *mut U {
+        Self::memory_director_raw(ptr as isize) as *mut U
+    }
+
+    fn _main() -> wasip1::Errno {
+        Self::_main_raw()
+    }
+
+    fn _reset() {
+        Self::_reset_raw();
+    }
+
+    fn _start() {
+        Self::_start_raw();
+    }
+}
+
+pub trait WasmAccess: WasmAccessRaw {
     const NAME: &'static str;
 
     /// Copies a slice of data into WASM memory starting at the given offset.
@@ -722,47 +758,34 @@ mod tests {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct WasmAccessFaker;
 
-impl WasmAccess for WasmAccessFaker {
+impl WasmAccessRaw for WasmAccessFaker {
     const NAME: &'static str = "WasmAccessFaker";
 
-    fn memcpy<T>(offset: *mut T, data: &[T]) {
+    fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize) {
         unsafe {
-            core::ptr::copy_nonoverlapping(data.as_ptr(), offset, data.len());
+            core::ptr::copy_nonoverlapping(src, offset, len);
         }
     }
 
-    fn store_le<T>(offset: *mut T, value: T) {
-        unsafe { core::ptr::write(offset, value) };
-    }
-
-    fn load_le<T: core::fmt::Debug + Copy>(offset: *const T) -> T {
-        unsafe { core::ptr::read(offset) }
+    fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize) {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src, offset, len);
+        }
     }
 
     #[inline(always)]
-    fn _main() -> wasip1::Errno {
+    fn _main_raw() -> wasip1::Errno {
         wasip1::ERRNO_SUCCESS
     }
 
     #[inline(always)]
-    fn _reset() {}
+    fn _reset_raw() {}
 
     #[inline(always)]
-    fn _start() {}
+    fn _start_raw() {}
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director<T>(ptr: *const T) -> *const T {
+    fn memory_director_raw(ptr: isize) -> isize {
         ptr
-    }
-
-    #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut<T>(ptr: *mut T) -> *mut T {
-        ptr
-    }
-
-    fn memcpy_to<T>(offset: &mut [T], src: *const T) {
-        unsafe {
-            core::ptr::copy_nonoverlapping(src, offset.as_mut_ptr(), offset.len());
-        }
     }
 }
