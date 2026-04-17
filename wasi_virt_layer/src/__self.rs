@@ -1,5 +1,5 @@
 use crate::__private::wasip1;
-use crate::memory::{WasmAccessDefault, WasmAccessName, WasmAccessRaw};
+use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessName, WasmAccessRaw};
 
 /// Internal struct representing the host context itself for WasmAccess.
 #[allow(non_camel_case_types)]
@@ -10,11 +10,7 @@ impl WasmAccessName for __self {
     const NAME: &'static str = "__self";
 }
 
-impl WasmAccessDefault for __self {
-    const DEFAULT: Self = Self;
-}
-
-impl WasmAccessRaw for __self {
+impl WasmAccessDynCompatibleRaw for __self {
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
         unsafe {
             core::ptr::copy_nonoverlapping(src, offset, len);
@@ -39,6 +35,30 @@ impl WasmAccessRaw for __self {
     }
 
     fn _start_raw(&self) {
+        unreachable!();
+    }
+}
+
+impl WasmAccessRaw for __self {
+    fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize) {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src, offset, len);
+        }
+    }
+
+    fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize) {
+        unsafe { core::ptr::copy_nonoverlapping(src, offset, len) };
+    }
+
+    fn _main_raw() -> wasip1::Errno {
+        unreachable!();
+    }
+
+    fn _reset_raw() {
+        unreachable!();
+    }
+
+    fn _start_raw() {
         unreachable!();
     }
 }

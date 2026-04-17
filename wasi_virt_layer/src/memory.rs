@@ -66,11 +66,7 @@ macro_rules! import_wasm {
                 const NAME: &'static str = stringify!($name);
             }
 
-            impl $crate::memory::WasmAccessDefault for $name {
-                const DEFAULT: Self = Self;
-            }
-
-            impl $crate::memory::WasmAccessRaw for $name {
+            impl $crate::memory::WasmAccessDynCompatibleRaw for $name {
                 #[inline(always)]
                 fn memcpy_raw(&self, offset: *mut u8, data: *const u8, len: usize)
                 {
@@ -99,7 +95,7 @@ macro_rules! import_wasm {
                     ) };
                 }
 
-                $crate::__memory_director_wasm_access!($name);
+                $crate::__memory_director_wasm_access!(@dyn, $name);
 
                 #[inline(always)]
                 fn _main_raw(&self) -> $crate::__private::wasip1::Errno
@@ -131,6 +127,66 @@ macro_rules! import_wasm {
                     unsafe { [<__wasip1_vfs_ $name __start>]() };
                 }
             }
+
+            impl $crate::memory::WasmAccessRaw for $name {
+                #[inline(always)]
+                fn memcpy_raw(offset: *mut u8, data: *const u8, len: usize)
+                {
+                    #[cfg(not(target_os = "wasi"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe { [<__wasip1_vfs_ $name _memory_copy_from>](
+                        offset,
+                        data,
+                        len,
+                    ) };
+                }
+
+                #[inline(always)]
+                fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize)
+                {
+                    #[cfg(not(target_os = "wasi"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe { [<__wasip1_vfs_ $name _memory_copy_to>](
+                        offset,
+                        src,
+                        len,
+                    ) };
+                }
+
+                $crate::__memory_director_wasm_access!(@const, $name);
+
+                #[inline(always)]
+                fn _main_raw() -> $crate::__private::wasip1::Errno
+                {
+                    #[cfg(not(target_os = "wasi"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() }
+                }
+
+                #[inline(always)]
+                fn _reset_raw() {
+                    #[cfg(not(target_os = "wasi"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe { [<__wasip1_vfs_ $name _reset>]() };
+                }
+
+                #[inline(always)]
+                fn _start_raw() {
+                    #[cfg(not(target_os = "wasi"))]
+                    unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe { [<__wasip1_vfs_ $name __start>]() };
+                }
+            }
         }
     };
 }
@@ -138,10 +194,25 @@ macro_rules! import_wasm {
 #[cfg(not(feature = "multi_memory"))]
 #[macro_export]
 macro_rules! __memory_director_wasm_access {
-    ($name:ident) => {
+    (@dyn, $name:ident) => {
         $crate::__private::paste::paste! {
             #[inline(always)]
             fn memory_director_raw(&self, ptr: isize) -> isize {
+                #[cfg(not(target_os = "wasi"))]
+                unimplemented!("this is not supported on this architecture");
+
+                #[cfg(target_os = "wasi")]
+                unsafe { [<__wasip1_vfs_ $name _memory_director>](
+                    ptr,
+                ) }
+            }
+        }
+    };
+
+    (@const, $name:ident) => {
+        $crate::__private::paste::paste! {
+            #[inline(always)]
+            const fn memory_director_raw(ptr: isize) -> isize {
                 #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
@@ -157,7 +228,9 @@ macro_rules! __memory_director_wasm_access {
 #[cfg(feature = "multi_memory")]
 #[macro_export]
 macro_rules! __memory_director_wasm_access {
-    ($_:ident) => {};
+    (@dyn, $_:ident) => {};
+
+    (@const, $_:ident) => {};
 }
 
 #[cfg(not(feature = "multi_memory"))]
@@ -356,7 +429,7 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIteratorCom
 
     /// Sets the value at the current position.
     pub fn set(&self, value: T) {
-        unsafe { core::ptr::write(self.ptr, value) };
+        Wasm::store_le(self.ptr, value);
     }
 }
 
@@ -380,10 +453,6 @@ pub trait WasmAccessName: core::fmt::Debug {
     const NAME: &'static str;
 }
 
-pub trait WasmAccessDefault: core::fmt::Debug {
-    const DEFAULT: Self;
-}
-
 pub trait WasmAccessNameDynCompatible: core::fmt::Debug {
     fn name(&self) -> &'static str;
 }
@@ -394,7 +463,7 @@ impl<T: WasmAccessName> WasmAccessNameDynCompatible for T {
     }
 }
 
-pub trait WasmAccessRaw: core::fmt::Debug {
+pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize);
 
@@ -411,7 +480,7 @@ pub trait WasmAccessRaw: core::fmt::Debug {
     fn _start_raw(&self);
 }
 
-pub trait WasmAccessMiddle: core::fmt::Debug {
+pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
     fn memcpy_with<T>(&self, offset: *mut T, data: &[T]);
 
     fn memcpy_to_with<T>(&self, offset: &mut [T], src: *const T);
@@ -419,6 +488,27 @@ pub trait WasmAccessMiddle: core::fmt::Debug {
     fn store_le_with<T>(&self, offset: *mut T, value: T);
 
     fn load_le_with<T: core::fmt::Debug + Copy>(&self, offset: *const T) -> T;
+
+    fn as_array_with<T: core::fmt::Debug + Copy>(&self, ptr: *const T, len: usize) -> WasmArrayAccessDynCompatible<T, Self>
+    where Self: Sized
+    {
+        WasmArrayAccessDynCompatible::new(self, ptr, len)
+    }
+
+    #[cfg(feature = "alloc")]
+    fn as_vec_with<T: core::fmt::Debug + Copy>(&self, ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
+    where Self: Sized
+    {
+        use crate::utils::alloc_buff;
+
+        let (buff, _) = unsafe {
+            alloc_buff(len, |b| {
+                self.memcpy_to_with(b, ptr);
+            })
+        };
+
+        buff
+    }
 
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_with<T>(&self, ptr: *const T) -> *const T;
@@ -433,118 +523,260 @@ pub trait WasmAccessMiddle: core::fmt::Debug {
     fn _start_with(&self);
 }
 
-impl<T: WasmAccessRaw> WasmAccessMiddle for T {
-    #[inline]
+impl<T: AsRef<dyn WasmAccessDynCompatibleRaw> + core::fmt::Debug> WasmAccessDynCompatibleRaw for T {
+    fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
+        self.as_ref().memcpy_raw(offset, src, len);
+    }
+
+    fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
+        self.as_ref().memcpy_to_raw(offset, src, len);
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_raw(&self, ptr: isize) -> isize {
+        self.as_ref().memory_director_raw(ptr)
+    }
+
+    fn _main_raw(&self) -> wasip1::Errno {
+        self.as_ref()._main_raw()
+    }
+
+    fn _reset_raw(&self) {
+        self.as_ref()._reset_raw();
+    }
+
+    fn _start_raw(&self) {
+        self.as_ref()._start_raw();
+    }
+}
+
+impl<T: WasmAccessDynCompatibleRaw> WasmAccessDynCompatible for T {
     fn memcpy_with<U>(&self, offset: *mut U, data: &[U]) {
-        Self::memcpy_raw(
-            self,
+        Self::memcpy_raw.memcpy_upper_with(self, offset, data);
+    }
+
+    fn memcpy_to_with<U>(&self, offset: &mut [U], src: *const U) {
+        Self::memcpy_to_raw.memcpy_to_upper_with(self, offset, src);
+    }
+
+    fn store_le_with<U>(&self, offset: *mut U, value: U) {
+        Self::memcpy_raw.store_le_upper_with(self, offset, value);
+    }
+
+    fn load_le_with<U: core::fmt::Debug + Copy>(&self, offset: *const U) -> U {
+        Self::memcpy_to_raw.load_le_upper_with(self, offset)
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_with<U>(&self, ptr: *const U) -> *const U {
+        Self::memory_director_raw(self, ptr as isize) as *const U
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_mut_with<U>(&self, ptr: *mut U) -> *mut U {
+        Self::memory_director_raw(self, ptr as isize) as *mut U
+    }
+
+    fn _main_with(&self) -> wasip1::Errno {
+        Self::_main_raw(self)
+    }
+
+    fn _reset_with(&self) {
+        Self::_reset_raw(self);
+    }
+
+    fn _start_with(&self) {
+        Self::_start_raw(self);
+    }
+}
+
+pub trait WasmAccessRaw: core::fmt::Debug {
+    fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize);
+
+    fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize);
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_raw(ptr: isize) -> isize;
+
+    fn _main_raw() -> wasip1::Errno;
+
+    fn _reset_raw();
+
+    fn _start_raw();
+}
+
+pub trait WasmAccessMemoryUtilUpper {
+    /// Require `memcpy_raw` to be implemented.
+    fn memcpy_upper<U>(self, offset: *mut U, data: &[U])
+    where
+        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
+    {
+        (|_: (), offset, data, len| {
+            self(offset, data, len);
+        })
+        .memcpy_upper_with_inline((), offset, data);
+    }
+
+    /// Require `memcpy_raw` to be implemented.
+    fn memcpy_upper_with<U, T>(self, t: T, offset: *mut U, data: &[U])
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self.memcpy_upper_with_inline(t, offset, data);
+    }
+
+    #[inline(always)]
+    fn memcpy_upper_with_inline<U, T>(self, t: T, offset: *mut U, data: &[U])
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self(
+            t,
             offset as *mut u8,
             data.as_ptr() as *const u8,
             core::mem::size_of::<U>() * data.len(),
         );
     }
 
-    #[inline]
-    fn memcpy_to_with<U>(&self, offset: &mut [U], src: *const U) {
-        Self::memcpy_to_raw(
-            self,
+    /// Require `memcpy_to_raw` to be implemented.
+    fn memcpy_to_upper<U>(self, offset: &mut [U], src: *const U)
+    where
+        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
+    {
+        (|_: (), offset, src, len| {
+            self(offset, src, len);
+        })
+        .memcpy_to_upper_with_inline((), offset, src);
+    }
+
+    /// Require `memcpy_to_raw` to be implemented.
+    fn memcpy_to_upper_with<U, T>(self, t: T, offset: &mut [U], src: *const U)
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self.memcpy_to_upper_with_inline(t, offset, src);
+    }
+
+    #[inline(always)]
+    fn memcpy_to_upper_with_inline<U, T>(self, t: T, offset: &mut [U], src: *const U)
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self(
+            t,
             offset.as_mut_ptr() as *mut u8,
             src as *const u8,
             core::mem::size_of::<U>() * offset.len(),
         );
     }
 
-    #[inline]
-    fn store_le_with<U>(&self, offset: *mut U, value: U) {
-        Self::memcpy_raw(
-            self,
+    /// Require `memcpy_raw` to be implemented.
+    fn store_le_upper<U>(self, offset: *mut U, value: U)
+    where
+        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
+    {
+        (|_: (), offset, value, len| {
+            self(offset, value, len);
+        })
+        .store_le_upper_with_inline((), offset, value);
+    }
+
+    /// Require `memcpy_raw` to be implemented.
+    fn store_le_upper_with<U, T>(self, t: T, offset: *mut U, value: U)
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self.store_le_upper_with_inline(t, offset, value);
+    }
+
+    #[inline(always)]
+    fn store_le_upper_with_inline<U, T>(self, t: T, offset: *mut U, value: U)
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self(
+            t,
             offset as *mut u8,
             &value as *const U as *const u8,
             core::mem::size_of::<U>(),
         );
     }
 
-    #[inline]
-    fn load_le_with<U: core::fmt::Debug + Copy>(&self, offset: *const U) -> U {
+    /// Require `memcpy_to_raw` to be implemented.
+    fn load_le_upper<U: core::fmt::Debug + Copy>(self, offset: *const U) -> U
+    where
+        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
+    {
+        (|_: (), offset, src, len| self(offset, src, len)).load_le_upper_with_inline((), offset)
+    }
+
+    /// Require `memcpy_to_raw` to be implemented.
+    fn load_le_upper_with<U: core::fmt::Debug + Copy, T>(self, t: T, offset: *const U) -> U
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
+        self.load_le_upper_with_inline(t, offset)
+    }
+
+    #[inline(always)]
+    fn load_le_upper_with_inline<U: core::fmt::Debug + Copy, T>(self, t: T, offset: *const U) -> U
+    where
+        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    {
         let mut value = core::mem::MaybeUninit::<U>::uninit();
-        Self::memcpy_to_raw(
-            self,
+        self(
+            t,
             value.as_mut_ptr() as *mut u8,
             offset as *const u8,
             core::mem::size_of::<U>(),
         );
         unsafe { core::ptr::read(value.as_ptr() as *const U) }
     }
-
-    #[inline]
-    #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<U>(&self, ptr: *const U) -> *const U {
-        Self::memory_director_raw(self, ptr as isize) as *const U
-    }
-
-    #[inline]
-    #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<U>(&self, ptr: *mut U) -> *mut U {
-        Self::memory_director_raw(self, ptr as isize) as *mut U
-    }
-
-    #[inline]
-    fn _main_with(&self) -> wasip1::Errno {
-        Self::_main_raw(self)
-    }
-
-    #[inline]
-    fn _reset_with(&self) {
-        Self::_reset_raw(self);
-    }
-
-    #[inline]
-    fn _start_with(&self) {
-        Self::_start_raw(self);
-    }
 }
 
-impl<T: WasmAccessMiddle + WasmAccessDefault> WasmAccess for T {
+impl<T> WasmAccessMemoryUtilUpper for T {}
+
+impl<T: WasmAccessRaw> WasmAccess for T {
     fn memcpy<U>(offset: *mut U, data: &[U]) {
-        Self::memcpy_with(&Self::DEFAULT, offset, data);
+        Self::memcpy_raw.memcpy_upper(offset, data);
     }
 
     fn memcpy_to<U>(offset: &mut [U], src: *const U) {
-        Self::memcpy_to_with(&Self::DEFAULT, offset, src);
+        Self::memcpy_to_raw.memcpy_to_upper(offset, src);
     }
 
     fn store_le<U>(offset: *mut U, value: U) {
-        Self::store_le_with(&Self::DEFAULT, offset, value);
+        Self::memcpy_raw.store_le_upper(offset, value);
     }
 
     fn load_le<U: core::fmt::Debug + Copy>(offset: *const U) -> U {
-        Self::load_le_with(&Self::DEFAULT, offset)
+        Self::memcpy_to_raw.load_le_upper(offset)
     }
 
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director<U>(ptr: *const U) -> *const U {
-        Self::memory_director_with(&Self::DEFAULT, ptr)
+        Self::memory_director_raw(ptr as isize) as *const U
     }
 
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_mut<U>(ptr: *mut U) -> *mut U {
-        Self::memory_director_mut_with(&Self::DEFAULT, ptr)
+        Self::memory_director_raw(ptr as isize) as *mut U
     }
 
     fn _main() -> wasip1::Errno {
-        Self::_main_with(&Self::DEFAULT)
+        Self::_main_raw()
     }
 
     fn _reset() {
-        Self::_reset_with(&Self::DEFAULT);
+        Self::_reset_raw();
     }
 
     fn _start() {
-        Self::_start_with(&Self::DEFAULT);
+        Self::_start_raw();
     }
 }
 
-pub trait WasmAccess: core::fmt::Debug {
+pub trait WasmAccess: WasmAccessRaw {
     /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy<T>(offset: *mut T, data: &[T]);
 
@@ -798,6 +1030,295 @@ impl<'a, Wasm: WasmAccess> Iterator for WasmPathComponents<'a, Wasm> {
     }
 }
 
+/// Provides access to an array in WASM memory.
+#[derive(Debug)]
+pub struct WasmArrayAccessDynCompatible<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+    access: &'b Wasm,
+    ptr: *const T,
+    len: usize,
+    __marker: core::marker::PhantomData<&'a ()>,
+}
+
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Clone for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Copy for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm> {}
+
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatible<'a, 'b, T, Wasm> {
+    /// Creates a new `WasmArrayAccessDynCompatible`.
+    #[inline(always)]
+    pub fn new(access: &'b Wasm, ptr: *const T, len: usize) -> Self {
+        Self {
+            access,
+            ptr,
+            len,
+            __marker: core::marker::PhantomData,
+        }
+    }
+
+    /// Retrieves the element at the given index.
+    #[inline(always)]
+    pub fn get(&self, index: usize) -> T {
+        let offset = unsafe { self.ptr.add(index) };
+        self.access.load_le_with(offset)
+    }
+
+    /// Returns an iterator over the array elements.
+    #[inline(always)]
+    pub fn iter(&self) -> WasmArrayAccessDynCompatibleIterator<'b, T, Wasm> {
+        WasmArrayAccessDynCompatibleIterator::new(self.access, self.ptr, self.len)
+    }
+
+    /// Returns the number of elements in the array.
+    #[inline(always)]
+    pub const fn len(&self) -> usize {
+        self.len
+    }
+}
+
+impl<'a, 'b, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccessDynCompatible> PartialEq
+    for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.len == other.len && (0..self.len).all(|i| self.get(i) == other.get(i))
+    }
+}
+
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> IntoIterator
+    for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
+{
+    type Item = T;
+    type IntoIter = WasmArrayAccessDynCompatibleIterator<'b, T, Wasm>;
+
+    #[inline(always)]
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+pub struct WasmArrayAccessDynCompatibleIterator<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+    access: &'c Wasm,
+    ptr: *const T,
+    len: usize,
+}
+
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatibleIterator<'c, T, Wasm> {
+    /// Creates a new `WasmArrayAccessDynCompatibleIterator`.
+    pub fn new(wasm: &'c Wasm, ptr: *const T, len: usize) -> Self {
+        Self {
+            access: wasm,
+            ptr,
+            len,
+        }
+    }
+}
+
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator for WasmArrayAccessDynCompatibleIterator<'c, T, Wasm> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            return None;
+        }
+        let item = self.access.load_le_with(self.ptr);
+        self.ptr = unsafe { self.ptr.add(1) };
+        self.len -= 1;
+        Some(item)
+    }
+}
+
+pub struct WasmArrayAccessDynCompatibleMutIterator<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+    access: &'c Wasm,
+    ptr: *mut T,
+    len: usize,
+}
+
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatibleMutIterator<'c, T, Wasm> {
+    /// Creates a new `WasmArrayAccessDynCompatibleMutIterator`.
+    pub fn new(wasm: &'c Wasm, ptr: *mut T, len: usize) -> Self {
+        Self {
+            access: wasm,
+            ptr,
+            len,
+        }
+    }
+}
+
+pub struct WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+    access: &'c Wasm,
+    ptr: *mut T,
+}
+
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T, Wasm> {
+    /// Creates a new `WasmArrayAccessDynCompatibleMutIteratorComponent`.
+    pub fn new(wasm: &'c Wasm, ptr: *mut T) -> Self {
+        Self {
+            access: wasm,
+            ptr,
+        }
+    }
+
+    /// Sets the value at the current position.
+    pub fn set(&self, value: T) {
+        self.access.store_le_with(self.ptr, value);
+    }
+}
+
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator
+    for WasmArrayAccessDynCompatibleMutIterator<'c, T, Wasm>
+{
+    type Item = WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T, Wasm>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            return None;
+        }
+        let component = WasmArrayAccessDynCompatibleMutIteratorComponent::new(self.access, self.ptr);
+        self.ptr = unsafe { self.ptr.add(1) };
+        self.len -= 1;
+        Some(component)
+    }
+}
+
+#[derive(Debug)]
+pub struct WasmPathAccessDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
+    path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> Clone for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> Copy for WasmPathAccessDynCompatible<'a, 'b, Wasm> {}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+    /// Creates a new `WasmPathAccessDynCompatible`.
+    #[inline(always)]
+    pub fn new(access: &'b Wasm, ptr: *const u8, len: usize) -> Self {
+        Self {
+            path: WasmArrayAccessDynCompatible::new(access, ptr, len),
+        }
+    }
+}
+
+pub struct WasmPathComponentsDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
+    path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum WasmPathComponentDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
+    RootDir,
+    CurDir,
+    ParentDir,
+    Normal(WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>),
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+    pub fn eq_str(&self, other: &str) -> bool {
+        match self {
+            WasmPathComponentDynCompatible::RootDir => other == "/",
+            WasmPathComponentDynCompatible::CurDir => other == ".",
+            WasmPathComponentDynCompatible::ParentDir => other == "..",
+            WasmPathComponentDynCompatible::Normal(access) => {
+                access.len() == other.len()
+                    && (0..access.len()).all(|i| access.get(i) == other.as_bytes()[i])
+            }
+        }
+    }
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> Iterator for WasmPathComponentsDynCompatible<'a, 'b, Wasm> {
+    type Item = WasmPathComponentDynCompatible<'a, 'b, Wasm>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.path.len() == 0 {
+            return None;
+        }
+
+        if self.path.get(0) == b'/' {
+            let mut index = 1;
+            while index < self.path.len() && self.path.get(index) == b'/' {
+                index += 1;
+            }
+
+            self.path.ptr = unsafe { self.path.ptr.add(index) };
+            self.path.len -= index;
+            return Some(WasmPathComponentDynCompatible::RootDir);
+        }
+
+        if self.path.get(0) == b'.' {
+            if self.path.len() == 1 {
+                self.path.len = 0;
+                return Some(WasmPathComponentDynCompatible::CurDir);
+            }
+
+            let second = self.path.get(1);
+
+            if second == b'/' {
+                let mut index = 2;
+                while index < self.path.len() && self.path.get(index) == b'/' {
+                    index += 1;
+                }
+                self.path.ptr = unsafe { self.path.ptr.add(index) };
+                self.path.len -= index;
+                return Some(WasmPathComponentDynCompatible::CurDir);
+            } else if second == b'.' {
+                if self.path.len() == 2 {
+                    self.path.len = 0;
+                    return Some(WasmPathComponentDynCompatible::ParentDir);
+                }
+
+                let third = self.path.get(2);
+                if third == b'/' {
+                    let mut index = 3;
+                    while index < self.path.len() && self.path.get(index) == b'/' {
+                        index += 1;
+                    }
+                    self.path.ptr = unsafe { self.path.ptr.add(index) };
+                    self.path.len -= index;
+                    return Some(WasmPathComponentDynCompatible::ParentDir);
+                }
+
+                let mut end = 3;
+                while end < self.path.len() && self.path.get(end) != b'/' {
+                    end += 1;
+                }
+
+                let component =
+                    WasmArrayAccessDynCompatible::new(self.path.access, self.path.ptr, end);
+
+                while end < self.path.len() && self.path.get(end) == b'/' {
+                    end += 1;
+                }
+                self.path.ptr = unsafe { self.path.ptr.add(end) };
+                self.path.len -= end;
+                return Some(WasmPathComponentDynCompatible::Normal(component));
+            }
+        } else {
+            let mut end = 0;
+            while end < self.path.len() && self.path.get(end) != b'/' {
+                end += 1;
+            }
+
+            let component = WasmArrayAccessDynCompatible::new(self.path.access, self.path.ptr, end);
+
+            while end < self.path.len() && self.path.get(end) == b'/' {
+                end += 1;
+            }
+            self.path.ptr = unsafe { self.path.ptr.add(end) };
+            self.path.len -= end;
+            return Some(WasmPathComponentDynCompatible::Normal(component));
+        }
+
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -855,11 +1376,7 @@ impl WasmAccessName for WasmAccessFaker {
     const NAME: &'static str = "WasmAccessFaker";
 }
 
-impl WasmAccessDefault for WasmAccessFaker {
-    const DEFAULT: Self = Self;
-}
-
-impl WasmAccessRaw for WasmAccessFaker {
+impl WasmAccessDynCompatibleRaw for WasmAccessFaker {
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
         unsafe {
             core::ptr::copy_nonoverlapping(src, offset, len);
@@ -882,6 +1399,33 @@ impl WasmAccessRaw for WasmAccessFaker {
 
     #[inline(always)]
     fn _start_raw(&self) {}
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_raw(&self, ptr: isize) -> isize {
+        ptr
+    }
+}
+
+impl WasmAccessRaw for WasmAccessFaker {
+    fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize) {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src, offset, len);
+        }
+    }
+
+    fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize) {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src, offset, len);
+        }
+    }
+
+    fn _main_raw() -> wasip1::Errno {
+        wasip1::ERRNO_SUCCESS
+    }
+
+    fn _reset_raw() {}
+
+    fn _start_raw() {}
 
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(&self, ptr: isize) -> isize {

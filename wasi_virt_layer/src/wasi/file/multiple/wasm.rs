@@ -1,3 +1,5 @@
+use core::ops::Deref as _;
+
 use alloc::collections::BTreeMap;
 
 use smallvec::SmallVec;
@@ -5,47 +7,70 @@ use smallvec::SmallVec;
 use crate::{
     __private::wasip1::{self, *},
     file::FilestatWithoutDevice,
-    memory::{WasmAccess, WasmAccessMiddle, WasmAccessNameDynCompatible, WasmAccessRaw},
+    memory::{
+        WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw,
+        WasmAccessNameDynCompatible,
+    },
     wasi::file::Wasip1DynamicLFS,
 };
 
-pub trait WasmAccessDynCompatible: WasmAccessNameDynCompatible + WasmAccessRaw {}
+pub trait WasmAccessDynCompatibleTuple:
+    WasmAccessNameDynCompatible + WasmAccessDynCompatibleRaw
+{
+}
+
+impl<T: WasmAccessNameDynCompatible + WasmAccessDynCompatibleRaw> WasmAccessDynCompatibleTuple
+    for T
+{
+}
 
 #[derive(Debug)]
-pub struct WasmAccessDynCompatibleWrapper(pub alloc::boxed::Box<dyn WasmAccessDynCompatible>);
+pub struct WasmAccessDynCompatibleWrapper(pub alloc::boxed::Box<dyn WasmAccessDynCompatibleTuple>);
+
+impl AsRef<dyn WasmAccessNameDynCompatible> for WasmAccessDynCompatibleWrapper {
+    fn as_ref(&self) -> &(dyn WasmAccessNameDynCompatible + 'static) {
+        self.0.as_ref()
+    }
+}
+
+impl AsRef<dyn WasmAccessDynCompatibleRaw> for WasmAccessDynCompatibleWrapper {
+    fn as_ref(&self) -> &(dyn WasmAccessDynCompatibleRaw + 'static) {
+        self.0.as_ref()
+    }
+}
 
 impl WasmAccessDynCompatibleWrapper {
-    pub fn new<T: WasmAccessDynCompatible + 'static>(access: T) -> Self {
+    pub fn new<T: WasmAccessDynCompatibleTuple + 'static>(access: T) -> Self {
         Self(alloc::boxed::Box::new(access))
     }
 }
 
-impl WasmAccessRaw for WasmAccessDynCompatibleWrapper {
-    fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        self.0.memcpy_raw(offset, src, len);
-    }
+// impl WasmAccessDynCompatibleRaw for WasmAccessDynCompatibleWrapper {
+//     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
+//         self.0.memcpy_raw(offset, src, len);
+//     }
 
-    fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        self.0.memcpy_to_raw(offset, src, len);
-    }
+//     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
+//         self.0.memcpy_to_raw(offset, src, len);
+//     }
 
-    #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
-        self.0.memory_director_raw(ptr)
-    }
+//     #[cfg(not(feature = "multi_memory"))]
+//     fn memory_director_raw(&self, ptr: isize) -> isize {
+//         self.0.memory_director_raw(ptr)
+//     }
 
-    fn _main_raw(&self) -> wasip1::Errno {
-        self.0._main_raw()
-    }
+//     fn _main_raw(&self) -> wasip1::Errno {
+//         self.0._main_raw()
+//     }
 
-    fn _reset_raw(&self) {
-        self.0._reset_raw()
-    }
+//     fn _reset_raw(&self) {
+//         self.0._reset_raw()
+//     }
 
-    fn _start_raw(&self) {
-        self.0._start_raw()
-    }
-}
+//     fn _start_raw(&self) {
+//         self.0._start_raw()
+//     }
+// }
 
 #[derive(Debug)]
 pub struct WasmMultipleIntegrator {
@@ -64,7 +89,7 @@ impl WasmMultipleIntegrator {
         }
     }
 
-    pub fn add_wasm_access<T: WasmAccessDynCompatible + 'static>(&mut self, access: T) {
+    pub fn add_wasm_access<T: WasmAccessDynCompatibleTuple + 'static>(&mut self, access: T) {
         self.wasm_accesses.insert(
             hasher(access.name()),
             WasmAccessDynCompatibleWrapper::new(access),
@@ -84,10 +109,10 @@ impl WasmMultipleIntegrator {
 }
 
 impl WasmAccessMiddleIntegrator for WasmMultipleIntegrator {
-    type Key = usize;
+    type Key = u64;
 
     fn generate_key(&self, name: &str) -> Self::Key {
-        name as *const str as *const () as usize
+        hasher(name)
     }
 
     fn fd_write_integrate<LFS: Wasip1DynamicLFS>(
@@ -98,6 +123,8 @@ impl WasmAccessMiddleIntegrator for WasmMultipleIntegrator {
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno> {
+        let access = self.wasm_accesses.get(key).unwrap();
+
         todo!();
     }
 

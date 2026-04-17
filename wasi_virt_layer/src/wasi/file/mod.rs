@@ -2,9 +2,10 @@
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
 use core::borrow::Borrow;
+use core::fmt;
 use core::ops::Deref;
 
-use crate::memory::{WasmAccess, WasmAccessName};
+use crate::memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessName};
 #[cfg(feature = "alloc")]
 pub mod changeable;
 pub mod constant;
@@ -125,6 +126,14 @@ pub trait Wasip1LFS: core::fmt::Debug {
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    fn fd_write_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        inode: Self::Inode,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
     /// Writes raw data to stdout.
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
         &self,
@@ -132,9 +141,23 @@ pub trait Wasip1LFS: core::fmt::Debug {
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    fn fd_write_stdout_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
     /// Writes raw data to stderr.
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
         &self,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_write_stderr_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
@@ -151,9 +174,27 @@ pub trait Wasip1LFS: core::fmt::Debug {
         cookie: Dircookie,
     ) -> Result<(Size, Dircookie), wasip1::Errno>;
 
+    fn fd_readdir_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+    ) -> Result<(Size, Dircookie), wasip1::Errno>;
+
     /// Retrieves file statistics for a path.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &self,
+        inode: Self::Inode,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
+    fn path_filestat_get_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
         inode: Self::Inode,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
@@ -166,9 +207,23 @@ pub trait Wasip1LFS: core::fmt::Debug {
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
+    fn fd_prestat_get_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        inode: Self::Inode,
+    ) -> Result<wasip1::Prestat, wasip1::Errno>;
+
     /// Retrieves the name of a pre-opened directory.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
         &self,
+        inode: Self::Inode,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_prestat_dir_name_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
         inode: Self::Inode,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
@@ -180,9 +235,24 @@ pub trait Wasip1LFS: core::fmt::Debug {
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
+    fn fd_filestat_get_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        inode: Self::Inode,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
     /// Reads data from a file descriptor into a buffer at a given offset.
     fn fd_pread_raw<Wasm: WasmAccess>(
         &self,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_pread_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
         inode: Self::Inode,
         buf: *mut u8,
         buf_len: usize,
@@ -196,9 +266,29 @@ pub trait Wasip1LFS: core::fmt::Debug {
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    fn fd_read_stdin_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
     /// Opens a path.
     fn path_open_raw<Wasm: WasmAccess>(
         &self,
+        dir_ino: Self::Inode,
+        dir_flags: wasip1::Fdflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        o_flags: wasip1::Oflags,
+        fs_rights_base: wasip1::Rights,
+        fs_rights_inheriting: wasip1::Rights,
+        fd_flags: wasip1::Fdflags,
+    ) -> Result<Self::Inode, wasip1::Errno>;
+
+    fn path_open_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
         dir_ino: Self::Inode,
         dir_flags: wasip1::Fdflags,
         path_ptr: *const u8,

@@ -6,7 +6,7 @@ use smallvec::SmallVec;
 use crate::{
     __private::wasip1::{self, *},
     file::{FilestatWithoutDevice, Wasip1FileSystem},
-    memory::{WasmAccess, WasmAccessMiddle, WasmAccessName, WasmAccessRaw},
+    memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName},
     wasi::file::{Wasip1DynamicLFS, multiple::wasm::WasmAccessMiddleIntegrator},
 };
 
@@ -104,7 +104,7 @@ use crate::{
 // }
 
 // impl<'a> WasmAccessArgsWrapperInner<'a> {
-//     pub fn apply<Wasm: WasmAccessRaw>(self) {
+//     pub fn apply<Wasm: WasmAccessDynCompatibleRaw>(self) {
 //         match self {
 //             WasmAccessArgsWrapperInner::Memcpy {
 //                 t_size,
@@ -158,7 +158,7 @@ use crate::{
 //         }
 //     }
 
-//     pub fn memory_director<Wasm: WasmAccessRaw>(self) -> *const c_void {
+//     pub fn memory_director<Wasm: WasmAccessDynCompatibleRaw>(self) -> *const c_void {
 //         match self {
 //             #[cfg(not(feature = "multi_memory"))]
 //             WasmAccessArgsWrapperInner::MemoryDirector { ptr } => {

@@ -14,10 +14,10 @@ use smallstr::SmallString;
 #[cfg(feature = "threads")]
 use dashmap::DashMap;
 
+use core::borrow::Borrow;
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
-use std::borrow::Borrow;
-use std::ops::Deref;
+use core::ops::Deref;
 
 /// A local file system that allows runtime modifications
 #[derive(Debug)]

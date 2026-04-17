@@ -33,6 +33,16 @@ impl<
         Err(wasip1::ERRNO_PERM)
     }
 
+    fn fd_write_raw_dyn_compatible(
+        &self,
+        _: &impl crate::memory::WasmAccessDynCompatible,
+        _: Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
         &self,
         data: *const u8,
@@ -47,6 +57,26 @@ impl<
             let (buf, _) = unsafe {
                 use crate::utils::alloc_buff;
                 alloc_buff(data_len, |buf| Wasm::memcpy_to(buf, data))
+            };
+            StdIo::write(&buf)
+        }
+    }
+
+    fn fd_write_stdout_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::write_direct_dyn_compatible::<_, Self>(access, data, data_len)
+        }
+        #[cfg(feature = "multi_memory")]
+        {
+            let (buf, _) = unsafe {
+                use crate::utils::alloc_buff;
+                alloc_buff(data_len, |buf| access.memcpy_to_with(buf, data))
             };
             StdIo::write(&buf)
         }
@@ -71,6 +101,26 @@ impl<
         }
     }
 
+    fn fd_write_stderr_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::ewrite_direct_dyn_compatible::<_, Self>(access, data, data_len)
+        }
+        #[cfg(feature = "multi_memory")]
+        {
+            let (buf, _) = unsafe {
+                use crate::utils::alloc_buff;
+                alloc_buff(data_len, |buf| access.memcpy_to_with(buf, data))
+            };
+            StdIo::ewrite(&buf)
+        }
+    }
+
     fn is_dir(&self, inode: Self::Inode) -> bool {
         self.is_dir(inode)
     }
@@ -82,122 +132,22 @@ impl<
         buf_len: usize,
         cookie: Dircookie,
     ) -> Result<(wasip1::Size, Dircookie), wasip1::Errno> {
-        let (_, dir) = ROOT::FILES[inode];
+        self.fd_readdir_raw_inner(inode, buf, buf_len, cookie, |dst, src, len| {
+            Wasm::memcpy_raw(dst, src, len);
+        })
+    }
 
-        // . (current directory)
-        if cookie == 0 {
-            let next_cookie = if dir.parent().is_some() { 1 } else { 2 };
-            let entry = wasip1::Dirent {
-                d_next: next_cookie,
-                d_ino: inode as _,
-                d_namlen: 1,
-                d_type: dir.filetype(),
-            };
-            let entry_buf = unsafe {
-                core::slice::from_raw_parts(
-                    &entry as *const _ as *const u8,
-                    core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
-                )
-            };
-            Wasm::memcpy(buf, entry_buf);
-
-            if buf_len < core::mem::size_of::<wasip1::Dirent>() {
-                return Ok((buf_len, cookie));
-            }
-
-            Wasm::memcpy(
-                unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
-                b".",
-            );
-
-            return Ok((core::mem::size_of::<wasip1::Dirent>() + 1, next_cookie));
-        }
-
-        // .. (parent directory)
-        if cookie == 1 {
-            let parent = dir.parent().unwrap();
-            let entry = wasip1::Dirent {
-                d_next: 2,
-                d_ino: parent as _,
-                d_namlen: 2,
-                d_type: ROOT::FILES[parent].1.filetype(),
-            };
-            let entry_buf = unsafe {
-                core::slice::from_raw_parts(
-                    &entry as *const _ as *const u8,
-                    core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
-                )
-            };
-            Wasm::memcpy(buf, entry_buf);
-
-            if buf_len < core::mem::size_of::<wasip1::Dirent>() {
-                return Ok((buf_len, cookie));
-            }
-
-            Wasm::memcpy(
-                unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
-                b"..",
-            );
-
-            return Ok((core::mem::size_of::<wasip1::Dirent>() + 2, 2));
-        }
-
-        let (start, end) = match dir {
-            VFSConstNormalInode::Dir(range, ..) => range,
-            _ => unreachable!(),
-        };
-
-        let index = start + cookie as usize - 2;
-        if index >= end {
-            return Ok((0, cookie)); // No more entries
-        }
-
-        let (name, file_or_dir) = ROOT::FILES[index];
-
-        let next_cookie = cookie + 1;
-
-        let name_len = name.len();
-
-        let entry = wasip1::Dirent {
-            d_next: if (next_cookie as usize) < end {
-                next_cookie
-            } else {
-                0
-            },
-            d_ino: index as _,
-            d_namlen: name_len as _,
-            d_type: file_or_dir.filetype(),
-        };
-
-        let entry_buf = unsafe {
-            core::slice::from_raw_parts(
-                &entry as *const _ as *const u8,
-                core::cmp::min(core::mem::size_of::<wasip1::Dirent>(), buf_len),
-            )
-        };
-
-        Wasm::memcpy(buf, entry_buf);
-
-        if buf_len < core::mem::size_of::<wasip1::Dirent>() {
-            return Ok((buf_len, cookie));
-        }
-
-        let name_bytes = unsafe {
-            core::slice::from_raw_parts(
-                name.as_ptr(),
-                core::cmp::min(name_len, buf_len - core::mem::size_of::<wasip1::Dirent>()),
-            )
-        };
-
-        Wasm::memcpy(
-            unsafe { buf.add(core::mem::size_of::<wasip1::Dirent>()) },
-            name_bytes,
-        );
-
-        Ok((
-            core::mem::size_of::<wasip1::Dirent>() + name_bytes.len(),
-            next_cookie,
-        ))
+    fn fd_readdir_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+    ) -> Result<(wasip1::Size, Dircookie), wasip1::Errno> {
+        self.fd_readdir_raw_inner(inode, buf, buf_len, cookie, |dst, src, len| {
+            access.memcpy_to_raw(dst, src, len);
+        })
     }
 
     fn path_filestat_get_raw<Wasm: WasmAccess>(
@@ -209,6 +159,20 @@ impl<
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         let inode = self
             .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        Ok(self.filestat_from_inode(inode))
+    }
+
+    fn path_filestat_get_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        inode: Self::Inode,
+        _: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
+        let inode = self.get_inode_for_path_dyn_compatible(access, inode, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         Ok(self.filestat_from_inode(inode))
