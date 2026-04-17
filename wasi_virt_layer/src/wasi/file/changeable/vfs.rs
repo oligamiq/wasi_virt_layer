@@ -9,8 +9,6 @@ use crate::{
     wasi::file::{Wasip1FileSystem, changeable::inode::InodeId},
 };
 
-use alloc::collections::BTreeMap;
-
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
@@ -22,6 +20,9 @@ use std::sync::atomic::{AtomicU32, Ordering};
 
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
+
+#[cfg(not(feature = "threads"))]
+use alloc::collections::BTreeMap;
 
 /// A virtual file system implementation that maps file descriptors to inodes in a ChangeableLFS.
 #[derive(Debug)]
@@ -104,7 +105,7 @@ where
         {
             unsafe { &mut *self.fd_map.get() }
                 .get_mut(&fd)
-                .map(|entry| {
+                .map(|entry: &mut OpenFd| {
                     entry.set_cursor(cursor);
                 })
         }

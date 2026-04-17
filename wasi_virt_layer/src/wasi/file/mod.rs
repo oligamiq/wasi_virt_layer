@@ -4,10 +4,11 @@
 use core::borrow::Borrow;
 use core::ops::Deref;
 
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 #[cfg(feature = "alloc")]
 pub mod changeable;
 pub mod constant;
+#[cfg(feature = "multiple_lfs")]
 pub mod multiple;
 pub mod stdio;
 use crate::__private::wasip1;
@@ -289,7 +290,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
 /// Trait for a virtual file system implementation.
 pub trait Wasip1FileSystem: core::fmt::Debug {
     /// Writes data to a file descriptor.
-    fn fd_write_raw<Wasm: WasmAccess>(
+    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -298,7 +299,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Reads directory entries from a file descriptor.
-    fn fd_readdir_raw<Wasm: WasmAccess>(
+    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         buf: *mut u8,
@@ -308,7 +309,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Retrieves file statistics for a path relative to a file descriptor.
-    fn path_filestat_get_raw<Wasm: WasmAccess>(
+    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         flags: wasip1::Lookupflags,
@@ -318,14 +319,14 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Retrieves pre-open statistics for a file descriptor.
-    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         prestat: *mut wasip1::Prestat,
     ) -> wasip1::Errno;
 
     /// Retrieves the name of a pre-opened directory for a file descriptor.
-    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         dir_path_ptr: *mut u8,
@@ -333,24 +334,24 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Closes a file descriptor.
-    fn fd_close_raw<Wasm: WasmAccess>(&self, fd: Fd) -> wasip1::Errno;
+    fn fd_close_raw<Wasm: WasmAccess + WasmAccessName>(&self, fd: Fd) -> wasip1::Errno;
 
     /// Retrieves file statistics for a file descriptor.
-    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
     /// Retrieves file descriptor statistics.
-    fn fd_fdstat_get_raw<Wasm: WasmAccess>(
+    fn fd_fdstat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         fdstat: *mut wasip1::Fdstat,
     ) -> wasip1::Errno;
 
     /// Reads data from a file descriptor into buffers.
-    fn fd_read_raw<Wasm: WasmAccess>(
+    fn fd_read_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -359,7 +360,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Opens a path relative to a file descriptor.
-    fn path_open_raw<Wasm: WasmAccess>(
+    fn path_open_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         dir_fd: Fd,
         dir_flags: wasip1::Fdflags,

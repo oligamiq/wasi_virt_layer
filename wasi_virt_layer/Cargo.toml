@@ -16,6 +16,7 @@ std = ["alloc", "wasip1/std"]
 threads = ["std", "dep:parking_lot", "dep:dashmap"]
 trace = ["trace-fs"]
 trace-fs = ["simple-debug"]
+multiple_lfs = ["alloc"]
 simple-debug = []
 # this is unstable
 unstable_print_debug = ["std", "dep:backtrace"]
@@ -30,6 +31,7 @@ wit-bindgen = { version = "0.54.0", default-features = false }
 const_struct = "0.6.4"
 const_for = "0.1.5"
 paste = "1.0.15"
+fxhash = "0.2.1"
 dashmap = { version = "7.0.0-rc2", optional = true }
 # heapless = "0.8.0"
 # zerocopy = "0.8.26"

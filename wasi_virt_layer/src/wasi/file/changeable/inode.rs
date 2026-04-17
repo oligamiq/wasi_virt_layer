@@ -132,3 +132,5 @@ impl OpenFdInfoWithInode for DetailedOpenFd {
         self.inode_id = inode_id;
     }
 }
+
+pub trait InodeConstraint: core::fmt::Debug + Into<InodeId> + From<InodeId> {}

@@ -564,7 +564,7 @@ macro_rules! plug_thread {
                         $(
                             Self::$wasm => {
                                 $crate::__as_t!(@as_t, $wasm);
-                                <T as $crate::memory::WasmAccess>::NAME
+                                <T as $crate::memory::WasmAccessName>::NAME
                             }
                         )*
                     }
