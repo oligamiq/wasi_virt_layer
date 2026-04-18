@@ -53,7 +53,7 @@ impl<
     AddInfo: WasiAddInfo + Default + 'static,
 > VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo, AddInfo>
 {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             add_info: [AddInfo::default(); FLAT_LEN],
             __marker: core::marker::PhantomData,
