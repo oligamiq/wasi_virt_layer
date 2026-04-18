@@ -2,7 +2,6 @@
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
 use core::borrow::Borrow;
-use core::fmt;
 use core::ops::Deref;
 
 use crate::memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessName};
@@ -362,6 +361,36 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
                 alloc_buff(buf_len, |b| {
                     let nread = self.pread(b, offset)?;
                     Wasm::memcpy(buf_ptr, &b[..nread]);
+                    Ok(nread)
+                })
+            };
+
+            nread
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
+        }
+    }
+
+    fn pread_raw_dyn_compatible(
+        &self,
+        access: &impl WasmAccessDynCompatible,
+        buf_ptr: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<usize, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            use crate::utils::alloc_buff;
+
+            let (_, nread) = unsafe {
+                alloc_buff(buf_len, |b| {
+                    let nread = self.pread(b, offset)?;
+                    access
+                        .memcpy_with(buf_ptr, &b[..nread]);
                     Ok(nread)
                 })
             };

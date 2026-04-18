@@ -1,7 +1,7 @@
 use crate::__private::wasip1::{self, Dircookie};
-use crate::memory::WasmAccessMemoryUtilUpper as _;
+use crate::memory::{WasmAccessDynCompatible, WasmAccessMemoryUtilUpper as _, WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon};
 use crate::{
-    memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
+    memory::{WasmAccess, WasmPathAccess},
     wasi::file::{
         DefaultAddInfo, FilestatWithoutDevice, WasiAddInfo, Wasip1FileTrait,
         constant::lfs_raw::{VFSConstNormalFilesTy, VFSConstNormalInode},
@@ -74,55 +74,62 @@ impl<
         path_ptr: *const u8,
         path_len: usize,
     ) -> Option<usize> {
-        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
-
-        let path_parts = path.components();
-
-        let mut current_inode = inode;
-
-        for part in path_parts {
-            // Resolve each part of the path
-            match part {
-                WasmPathComponent::RootDir => unreachable!(),
-                WasmPathComponent::CurDir => {
-                    // Stay in the current directory
-                }
-                WasmPathComponent::ParentDir => {
-                    current_inode = self.parent_inode(current_inode)?;
-                }
-                WasmPathComponent::Normal(wasm_array_access) => {
-                    let (start, end) = match ConstRoot::FILES[current_inode] {
-                        (_, VFSConstNormalInode::Dir(range, ..)) => range,
-                        _ => return None, // Not a directory
-                    };
-
-                    if let Some(i) = ConstRoot::FILES[start..end].iter().position(|(name, _)| {
-                        name.len() == wasm_array_access.len()
-                            && name
-                                .as_bytes()
-                                .iter()
-                                .zip(wasm_array_access.iter())
-                                .all(|(a, b)| *a == b)
-                    }) {
-                        current_inode = start + i;
-                    } else {
-                        return None; // Not found
-                    }
-                }
-            }
-        }
-
-        Some(current_inode)
+        let path_access = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+        self.get_inode_for_path_inner(inode, path_access)
     }
 
     pub fn get_inode_for_path_dyn_compatible(
         &self,
-        access: &impl WasmAccess,
+        access: &impl WasmAccessDynCompatible,
         inode: usize,
         path_ptr: *const u8,
         path_len: usize,
     ) -> Option<usize> {
-        self.get_inode_for_path::<impl WasmAccess>(inode, path_ptr, path_len)
+        let path_access = WasmPathAccessDynCompatible::new(access, path_ptr, path_len);
+        self.get_inode_for_path_inner(inode, path_access)
+    }
+
+    /// Resolves a path starting from a given inode to find its inode.
+    fn get_inode_for_path_inner(
+        &self,
+        inode: usize,
+        path: impl WasmPathAccessCommon,
+    ) -> Option<usize> {
+        let mut current_inode = inode;
+
+        for part in path.components_common() {
+            // Resolve each part of the path
+            if part.as_root_dir() {
+                unreachable!(); // Root dir should only be at the start
+            } else if part.as_cur_dir() {
+                // Stay in the current directory
+            } else if part.as_parent_dir() {
+                current_inode = self.parent_inode(current_inode)?;
+            } else if let Some(wasm_array_access) = part.as_normal() {
+                let (start, end) = match ConstRoot::FILES[current_inode] {
+                    (_, VFSConstNormalInode::Dir(range, ..)) => range,
+                    _ => return None, // Not a directory
+                };
+
+                let len = wasm_array_access.clone().into_iter().count();
+                if let Some(i) = ConstRoot::FILES[start..end].iter().position(|(name, _)| {
+                    name.len() == len
+                        && name
+                            .as_bytes()
+                            .iter()
+                            .zip(wasm_array_access.clone())
+                            .all(|(a, b)| *a == b)
+                }) {
+                    current_inode = start + i;
+                } else {
+                    return None; // Not found
+                }
+            } else {
+                return None; // Invalid path component
+            }
+        }
+
+        Some(current_inode)
     }
 
     /// Returns the access time for a given inode.

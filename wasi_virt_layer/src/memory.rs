@@ -878,9 +878,15 @@ pub trait WasmAccess: WasmAccessRaw {
 }
 
 /// Provides access to a file path in WASM memory.
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 pub struct WasmPathAccess<'a, Wasm: WasmAccess> {
     path: WasmArrayAccess<'a, u8, Wasm>,
+}
+
+impl<'a, Wasm: WasmAccess> PartialEq for WasmPathAccess<'a, Wasm> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
 }
 
 impl<'a, Wasm: WasmAccess> Clone for WasmPathAccess<'a, Wasm> {
@@ -913,8 +919,49 @@ pub struct WasmPathComponents<'a, Wasm: WasmAccess> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
 
+pub trait WasmPathComponentCommon: core::fmt::Debug + Copy + PartialEq {
+    fn as_root_dir(&self) -> bool;
+
+    fn as_cur_dir(&self) -> bool;
+
+    fn as_parent_dir(&self) -> bool;
+
+    fn as_normal(&self) -> Option<impl IntoIterator<Item = u8> + Clone + '_>;
+}
+
+pub trait WasmPathAccessCommon: core::fmt::Debug {
+    fn components_common<'a>(&'a self) -> impl Iterator<Item = impl WasmPathComponentCommon + 'a> + 'a;
+}
+
+impl<'a, Wasm: WasmAccess> WasmPathComponentCommon for WasmPathComponent<'a, Wasm> {
+    fn as_root_dir(&self) -> bool {
+        matches!(self, WasmPathComponent::RootDir)
+    }
+
+    fn as_cur_dir(&self) -> bool {
+        matches!(self, WasmPathComponent::CurDir)
+    }
+
+    fn as_parent_dir(&self) -> bool {
+        matches!(self, WasmPathComponent::ParentDir)
+    }
+
+    fn as_normal(&self) -> Option<impl IntoIterator<Item = u8> + Clone + '_> {
+        match self {
+            WasmPathComponent::Normal(access) => Some(*access),
+            _ => None,
+        }
+    }
+}
+
+impl<'a, Wasm: WasmAccess> WasmPathAccessCommon for WasmPathAccess<'a, Wasm> {
+    fn components_common<'b>(&'b self) -> impl Iterator<Item = impl WasmPathComponentCommon + 'b> + 'b {
+        self.components()
+    }
+}
+
 /// A component of a WASM path.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug)]
 pub enum WasmPathComponent<'a, Wasm: WasmAccess> {
     /// The root directory, `/`.
     RootDir,
@@ -927,6 +974,31 @@ pub enum WasmPathComponent<'a, Wasm: WasmAccess> {
 
     /// A normal file or directory name.
     Normal(WasmArrayAccess<'a, u8, Wasm>),
+}
+
+impl<'a, Wasm: WasmAccess> Clone for WasmPathComponent<'a, Wasm> {
+    fn clone(&self) -> Self {
+        match self {
+            WasmPathComponent::RootDir => WasmPathComponent::RootDir,
+            WasmPathComponent::CurDir => WasmPathComponent::CurDir,
+            WasmPathComponent::ParentDir => WasmPathComponent::ParentDir,
+            WasmPathComponent::Normal(access) => WasmPathComponent::Normal(*access),
+        }
+    }
+}
+
+impl<'a, Wasm: WasmAccess> Copy for WasmPathComponent<'a, Wasm> {}
+
+impl<'a, Wasm: WasmAccess> PartialEq for WasmPathComponent<'a, Wasm> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (WasmPathComponent::RootDir, WasmPathComponent::RootDir) => true,
+            (WasmPathComponent::CurDir, WasmPathComponent::CurDir) => true,
+            (WasmPathComponent::ParentDir, WasmPathComponent::ParentDir) => true,
+            (WasmPathComponent::Normal(a), WasmPathComponent::Normal(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl<'a, Wasm: WasmAccess> WasmPathComponent<'a, Wasm> {
@@ -1188,6 +1260,12 @@ pub struct WasmPathAccessDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
     path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
 }
 
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> PartialEq for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+    fn eq(&self, other: &Self) -> bool {
+        self.path == other.path
+    }
+}
+
 impl<'a, 'b, Wasm: WasmAccessDynCompatible> Clone for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
     fn clone(&self) -> Self {
         *self
@@ -1204,18 +1282,58 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathAccessDynCompatible<'a, 'b, 
             path: WasmArrayAccessDynCompatible::new(access, ptr, len),
         }
     }
+
+    /// Returns an iterator over the components of the path.
+    #[inline(always)]
+    pub fn components(&self) -> WasmPathComponentsDynCompatible<'a, 'b, Wasm> {
+        let path = self.path;
+        WasmPathComponentsDynCompatible { path }
+    }
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathAccessCommon for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+    fn components_common<'c>(&'c self) -> impl Iterator<Item = impl WasmPathComponentCommon + 'c> + 'c {
+        self.components()
+    }
 }
 
 pub struct WasmPathComponentsDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
     path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug)]
 pub enum WasmPathComponentDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
     RootDir,
     CurDir,
     ParentDir,
     Normal(WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>),
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> Clone for WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+    fn clone(&self) -> Self {
+        match self {
+            WasmPathComponentDynCompatible::RootDir => WasmPathComponentDynCompatible::RootDir,
+            WasmPathComponentDynCompatible::CurDir => WasmPathComponentDynCompatible::CurDir,
+            WasmPathComponentDynCompatible::ParentDir => WasmPathComponentDynCompatible::ParentDir,
+            WasmPathComponentDynCompatible::Normal(access) => {
+                WasmPathComponentDynCompatible::Normal(*access)
+            }
+        }
+    }
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> Copy for WasmPathComponentDynCompatible<'a, 'b, Wasm> {}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> PartialEq for WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (WasmPathComponentDynCompatible::RootDir, WasmPathComponentDynCompatible::RootDir) => true,
+            (WasmPathComponentDynCompatible::CurDir, WasmPathComponentDynCompatible::CurDir) => true,
+            (WasmPathComponentDynCompatible::ParentDir, WasmPathComponentDynCompatible::ParentDir) => true,
+            (WasmPathComponentDynCompatible::Normal(a), WasmPathComponentDynCompatible::Normal(b)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathComponentDynCompatible<'a, 'b, Wasm> {
@@ -1316,6 +1434,27 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible> Iterator for WasmPathComponentsDynCo
         }
 
         None
+    }
+}
+
+impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathComponentCommon for WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+    fn as_root_dir(&self) -> bool {
+        matches!(self, WasmPathComponentDynCompatible::RootDir)
+    }
+
+    fn as_cur_dir(&self) -> bool {
+        matches!(self, WasmPathComponentDynCompatible::CurDir)
+    }
+
+    fn as_parent_dir(&self) -> bool {
+        matches!(self, WasmPathComponentDynCompatible::ParentDir)
+    }
+
+    fn as_normal(&self) -> Option<impl IntoIterator<Item = u8> + Clone + '_> {
+        match self {
+            WasmPathComponentDynCompatible::Normal(access) => Some(*access),
+            _ => None,
+        }
     }
 }
 
