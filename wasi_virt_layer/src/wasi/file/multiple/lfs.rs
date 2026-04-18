@@ -56,7 +56,10 @@ use alloc::collections::BTreeMap;
 #[derive(Debug)]
 pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
     pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
+    #[cfg(feature = "threads")]
     pub wasms: DashMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
+    #[cfg(not(feature = "threads"))]
+    pub wasms: UnsafeCell<BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>>,
     #[cfg(feature = "threads")]
     pub fd_map: DashMap<Fd, (usize, OpenFd)>,
     #[cfg(feature = "threads")]
@@ -71,7 +74,10 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
     pub fn new() -> Self {
         Self {
             lfss: SmallVec::new(),
+            #[cfg(feature = "threads")]
             wasms: DashMap::new(),
+            #[cfg(not(feature = "threads"))]
+            wasms: UnsafeCell::new(BTreeMap::new()),
             #[cfg(feature = "threads")]
             fd_map: DashMap::new(),
             #[cfg(feature = "threads")]
@@ -95,6 +101,7 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
         self.wasms.insert(name, access);
     }
 
+    #[cfg(feature = "threads")]
     pub fn get_wasm_access(&self, name: &str) -> Option<impl core::ops::Deref<Target = WasmAccessDynCompatibleWrapper>> {
         self.wasms.get(name)
     }
@@ -126,12 +133,20 @@ macro_rules! get_open_fd {
 
 macro_rules! get_access {
     ($name:ident = $self:ident, $wasm:ty) => {
+        #[cfg(feature = "threads")]
         let $name = match $self.get_wasm_access(<$wasm as WasmAccessName>::NAME) {
             Some(a) => a,
             None => return wasip1::ERRNO_BADF,
         };
 
+        #[cfg(feature = "threads")]
         let $name = $name.deref();
+
+        #[cfg(not(feature = "threads"))]
+        let $name = match unsafe { &*$self.wasms }.get(<$wasm as WasmAccessName>::NAME) {
+            Some(a) => a,
+            None => return wasip1::ERRNO_BADF,
+        };
     };
 }
 
