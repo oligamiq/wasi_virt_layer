@@ -341,7 +341,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .fd_write_integrate(key, &self.lfs, inode, data, data_len)
@@ -372,7 +372,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
         inode: &dyn Any,
     ) -> bool {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .fd_filestat_get_integrate(key, &self.lfs, inode)
@@ -388,7 +388,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         buf_len: usize,
         cookie: Dircookie,
     ) -> Result<(Size, Dircookie), wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .fd_readdir_integrate(key, &self.lfs, inode, buf, buf_len, cookie)
@@ -402,7 +402,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         path_ptr: *const u8,
         path_len: usize,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .path_filestat_get_integrate(key, &self.lfs, inode, flags, path_ptr, path_len)
@@ -413,7 +413,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
         inode: &dyn Any,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .fd_prestat_get_integrate(key, &self.lfs, inode)
@@ -426,7 +426,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator.fd_prestat_dir_name_integrate(
             key,
@@ -442,7 +442,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
         inode: &dyn Any,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .fd_filestat_get_integrate(key, &self.lfs, inode)
@@ -456,7 +456,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         buf_len: usize,
         offset: usize,
     ) -> Result<Size, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap();
+        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
         self.wasm_integrator
             .fd_pread_integrate(key, &self.lfs, inode, buf, buf_len, offset)
@@ -483,10 +483,10 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
         fs_rights_base: wasip1::Rights,
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
-    ) -> Result<(alloc::boxed::Box<dyn Any>, wasip1::Fd), wasip1::Errno> {
-        let dir_inode = dir_inode.downcast_ref::<LFS::Inode>().unwrap();
+    ) -> Result<alloc::boxed::Box<dyn Any>, wasip1::Errno> {
+        let dir_inode = dir_inode.downcast_ref::<LFS::Inode>().unwrap().clone();
 
-        let (inode, fd) = self.wasm_integrator.path_open_integrate(
+        let inode = self.wasm_integrator.path_open_integrate(
             key,
             &self.lfs,
             dir_inode,
@@ -498,7 +498,7 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1Dy
             fs_rights_inheriting,
             fd_flags,
         )?;
-        Ok((alloc::boxed::Box::new(inode), fd))
+        Ok(alloc::boxed::Box::new(inode))
     }
 }
 
@@ -604,5 +604,5 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
         fs_rights_base: wasip1::Rights,
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
-    ) -> Result<(alloc::boxed::Box<dyn Any>, wasip1::Fd), wasip1::Errno>;
+    ) -> Result<alloc::boxed::Box<dyn Any>, wasip1::Errno>;
 }

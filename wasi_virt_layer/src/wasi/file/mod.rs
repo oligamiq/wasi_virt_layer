@@ -115,7 +115,7 @@ impl WasiAddInfo for DefaultAddInfo {
 pub trait Wasip1LFS: core::fmt::Debug {
     /// The type used for inodes.
     /// Pre-opened inodes.
-    type Inode: 'static + core::fmt::Debug;
+    type Inode: 'static + core::fmt::Debug + Clone;
 
     /// Writes raw data to a file.
     fn fd_write_raw<Wasm: WasmAccess>(
