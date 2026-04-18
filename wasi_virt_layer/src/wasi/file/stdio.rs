@@ -5,6 +5,9 @@ use crate::__private::wasip1::Size;
 use crate::memory::WasmAccess;
 use crate::transporter::Wasip1Transporter;
 
+#[cfg(not(feature = "multi_memory"))]
+use crate::memory::WasmAccessDynCompatible;
+
 /// Default implementation of `StdIO` using the system's standard I/O.
 #[derive(Debug)]
 pub struct DefaultStdIO;
@@ -21,6 +24,17 @@ impl StdIO for DefaultStdIO {
         Wasip1Transporter::read_from_stdin_direct::<Wasm>(buf, len)
     }
 
+    #[cfg(not(feature = "multi_memory"))]
+    fn read_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *mut u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        use crate::transporter::Wasip1Transporter;
+
+        Wasip1Transporter::read_from_stdin_direct_dyn_compatible(access, buf, len)
+    }
+
     fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stdout(buf)
     }
@@ -30,6 +44,15 @@ impl StdIO for DefaultStdIO {
         Wasip1Transporter::write_to_stdout_direct::<Wasm>(buf, len)
     }
 
+    #[cfg(not(feature = "multi_memory"))]
+    fn write_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::write_to_stdout_direct_dyn_compatible(access, buf, len)
+    }
+
     fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stderr(buf)
     }
@@ -37,6 +60,15 @@ impl StdIO for DefaultStdIO {
     #[cfg(not(feature = "multi_memory"))]
     fn ewrite_direct<Wasm: WasmAccess>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stderr_direct::<Wasm>(buf, len)
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn ewrite_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        Wasip1Transporter::write_to_stderr_direct_dyn_compatible(access, buf, len)
     }
 }
 
@@ -60,6 +92,34 @@ pub trait StdIO: core::fmt::Debug {
                 alloc_buff(len, |b| {
                     let size = Self::read(b)?;
                     Wasm::memcpy(buf, &b[..size]);
+                    Ok(size)
+                })
+            };
+            size
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
+        }
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
+    fn read_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *mut u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            use crate::utils::alloc_buff;
+
+            let (_, size) = unsafe {
+                alloc_buff(len, |b| {
+                    let size = Self::read(b)?;
+                    access.memcpy_with(buf, &b[..size]);
                     Ok(size)
                 })
             };
@@ -99,6 +159,25 @@ pub trait StdIO: core::fmt::Debug {
         }
     }
 
+    #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
+    fn write_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            Self::write(&access.get_array_with(buf, len))
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
+        }
+    }
+
     /// This function is called when the alloc feature is ON
     /// and ewrite_direct is not implemented.
     /// If you are not familiar with Wasm memory, etc.,
@@ -116,6 +195,25 @@ pub trait StdIO: core::fmt::Debug {
         #[cfg(feature = "alloc")]
         {
             Self::ewrite(&Wasm::get_array(buf, len))
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            // Stub implementation for non-std environments
+            Err(wasip1::ERRNO_NOSYS)
+        }
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    #[allow(unused_variables)]
+    fn ewrite_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        #[cfg(feature = "alloc")]
+        {
+            Self::ewrite(&access.get_array_with(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]

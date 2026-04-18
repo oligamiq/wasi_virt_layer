@@ -70,7 +70,7 @@ impl<
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(not(feature = "multi_memory"))]
         {
-            StdIo::write_direct_dyn_compatible::<_, Self>(access, data, data_len)
+            StdIo::write_direct_dyn_compatible(access, data, data_len)
         }
         #[cfg(feature = "multi_memory")]
         {
@@ -109,7 +109,7 @@ impl<
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(not(feature = "multi_memory"))]
         {
-            StdIo::ewrite_direct_dyn_compatible::<_, Self>(access, data, data_len)
+            StdIo::ewrite_direct_dyn_compatible(access, data, data_len)
         }
         #[cfg(feature = "multi_memory")]
         {
@@ -352,7 +352,7 @@ impl<
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(not(feature = "multi_memory"))]
         {
-            StdIo::read_direct_dyn_compatible::<_, Self>(access, buf, buf_len)
+            StdIo::read_direct_dyn_compatible(access, buf, buf_len)
         }
 
         #[cfg(feature = "multi_memory")]

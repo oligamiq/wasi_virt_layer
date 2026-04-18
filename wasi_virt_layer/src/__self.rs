@@ -61,4 +61,9 @@ impl WasmAccessRaw for __self {
     fn _start_raw() {
         unreachable!();
     }
+
+    #[cfg(not(feature = "multi_memory"))]
+    fn memory_director_raw(ptr: isize) -> isize {
+        ptr
+    }
 }

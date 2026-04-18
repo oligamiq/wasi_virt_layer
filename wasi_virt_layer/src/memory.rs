@@ -496,7 +496,7 @@ pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
     }
 
     #[cfg(feature = "alloc")]
-    fn as_vec_with<T: core::fmt::Debug + Copy>(&self, ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
+    fn get_array_with<T: core::fmt::Debug + Copy>(&self, ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
     where Self: Sized
     {
         use crate::utils::alloc_buff;
@@ -1567,7 +1567,7 @@ impl WasmAccessRaw for WasmAccessFaker {
     fn _start_raw() {}
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
+    fn memory_director_raw(ptr: isize) -> isize {
         ptr
     }
 }

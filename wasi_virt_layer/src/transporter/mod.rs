@@ -8,6 +8,9 @@ pub struct Wasip1Transporter;
 #[cfg(not(feature = "multi_memory"))]
 use crate::prelude::WasmAccess;
 
+#[cfg(not(feature = "multi_memory"))]
+use crate::memory::WasmAccessDynCompatible;
+
 unsafe fn non_recursive_fd_read(
     fd: wasip1::Fd,
     iovs: wasip1::IovecArray<'_>,
@@ -113,6 +116,28 @@ impl Wasip1Transporter {
         }
     }
 
+    #[cfg(not(feature = "multi_memory"))]
+    pub fn read_from_stdin_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *mut u8,
+        len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(target_os = "wasi")]
+        {
+            let iovec_arr = [wasip1::Iovec {
+                buf: access.memory_director_with_mut(buf),
+                buf_len: len,
+            }];
+
+            unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
+    }
+
     /// Writes data to stdout from the provided buffer.
     #[allow(unused_variables)]
     pub fn write_to_stdout(data: &[u8]) -> Result<wasip1::Size, wasip1::Errno> {
@@ -141,6 +166,28 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         let ciovec_arr = [wasip1::Ciovec {
             buf: Wasm::memory_director(buf),
+            buf_len: len,
+        }];
+
+        #[cfg(target_os = "wasi")]
+        unsafe {
+            non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr)
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    pub fn write_to_stdout_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *const u8,
+        len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        let ciovec_arr = [wasip1::Ciovec {
+            buf: access.memory_director_with(buf),
             buf_len: len,
         }];
 
@@ -185,6 +232,28 @@ impl Wasip1Transporter {
         {
             let ciovec_arr = [wasip1::Ciovec {
                 buf: Wasm::memory_director(buf),
+                buf_len: len,
+            }];
+
+            unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+        }
+
+        #[cfg(not(target_os = "wasi"))]
+        {
+            unimplemented!("this is not supported on this architecture");
+        }
+    }
+
+    #[cfg(not(feature = "multi_memory"))]
+    pub fn write_to_stderr_direct_dyn_compatible(
+        access: &impl WasmAccessDynCompatible,
+        buf: *const u8,
+        len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(target_os = "wasi")]
+        {
+            let ciovec_arr = [wasip1::Ciovec {
+                buf: access.memory_director_with(buf),
                 buf_len: len,
             }];
 
