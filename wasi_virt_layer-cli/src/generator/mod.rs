@@ -21,7 +21,7 @@ pub mod start_section;
 /// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
 
-use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
+use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
 use camino::Utf8PathBuf;
 use compact_str::{CompactString, ToCompactString as _};
@@ -307,7 +307,7 @@ impl ComponentCtx {
 }
 
 /// Defines the core trait for WASM transformations, hooks, and component optimizations over the build lifecycle.
-pub trait Generator: std::fmt::Debug + std::any::Any {
+pub trait Generator: std::fmt::Debug + Any {
     /// Operations performed on the built VFS module.
     #[allow(unused_variables)]
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
@@ -369,7 +369,7 @@ pub trait Generator: std::fmt::Debug + std::any::Any {
         Ok(false)
     }
 }
-impl<T: std::fmt::Debug + std::any::Any + Generator> Generator for [T] {
+impl<T: std::fmt::Debug + Any + Generator> Generator for [T] {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         for generator in self {
             generator.pre_vfs(module, ctx).wrap_err_with(|| {
@@ -801,7 +801,7 @@ impl GeneratorRunner {
 
     /// Resolves and retrieves a shared reference to a specific structured generator dynamically at runtime.
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
-        fn downcast_ref<T: 'static>(b: &dyn std::any::Any) -> Option<&'_ T> {
+        fn downcast_ref<T: 'static>(b: &dyn Any) -> Option<&'_ T> {
             if b.is::<T>() {
                 Some(b.downcast_ref::<T>().unwrap())
             } else {
@@ -1121,7 +1121,7 @@ impl ComponentRunner {
 
     /// Allows querying the internal generator stack dynamically retrieving explicitly modeled type structures.
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
-        fn downcast_ref<T: 'static>(b: &dyn std::any::Any) -> Option<&'_ T> {
+        fn downcast_ref<T: 'static>(b: &dyn Any) -> Option<&'_ T> {
             if b.is::<T>() {
                 Some(b.downcast_ref::<T>().unwrap())
             } else {

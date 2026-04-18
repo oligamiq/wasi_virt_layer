@@ -1,10 +1,17 @@
 // https://docs.rs/wasmtime-wasi/17.0.3/wasmtime_wasi/struct.WasiCtx.html
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
+use core::any::Any;
 use core::borrow::Borrow;
 use core::ops::Deref;
 
-use crate::memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessName};
+use alloc::boxed::Box;
+
+use smallstr::SmallString;
+
+use crate::memory::{
+    WasmAccess, WasmAccessDynCompatible as _, WasmAccessDynCompatibleRaw, WasmAccessName,
+};
 #[cfg(feature = "alloc")]
 pub mod changeable;
 pub mod constant;
@@ -110,9 +117,22 @@ impl WasiAddInfo for DefaultAddInfo {
     }
 }
 
+pub(crate) trait Wasip1LFSBaseWrapper: Wasip1LFSBase {
+    fn downcast_inode(inode: &dyn Any) -> <Self as Wasip1LFSBase>::Inode;
+}
+
+impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T {
+    fn downcast_inode(inode: &dyn Any) -> <Self as Wasip1LFSBase>::Inode {
+        inode
+            .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
+            .unwrap()
+            .clone()
+    }
+}
+
 /// small posix like local file system
 /// Trait for a local file system implementation.
-pub trait Wasip1LFS: core::fmt::Debug {
+pub trait Wasip1LFSBase: core::fmt::Debug {
     /// The type used for inodes.
     /// Pre-opened inodes.
     type Inode: 'static + core::fmt::Debug + Clone;
@@ -125,14 +145,6 @@ pub trait Wasip1LFS: core::fmt::Debug {
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
-    fn fd_write_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
-        inode: Self::Inode,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
     /// Writes raw data to stdout.
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
         &self,
@@ -140,23 +152,9 @@ pub trait Wasip1LFS: core::fmt::Debug {
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
-    fn fd_write_stdout_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
     /// Writes raw data to stderr.
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
         &self,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
-    fn fd_write_stderr_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
@@ -173,27 +171,9 @@ pub trait Wasip1LFS: core::fmt::Debug {
         cookie: Dircookie,
     ) -> Result<(Size, Dircookie), wasip1::Errno>;
 
-    fn fd_readdir_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
-        inode: Self::Inode,
-        buf: *mut u8,
-        buf_len: usize,
-        cookie: Dircookie,
-    ) -> Result<(Size, Dircookie), wasip1::Errno>;
-
     /// Retrieves file statistics for a path.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
-        flags: wasip1::Lookupflags,
-        path_ptr: *const u8,
-        path_len: usize,
-    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
-
-    fn path_filestat_get_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
         inode: Self::Inode,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
@@ -206,12 +186,6 @@ pub trait Wasip1LFS: core::fmt::Debug {
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
-    fn fd_prestat_get_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
-        inode: Self::Inode,
-    ) -> Result<wasip1::Prestat, wasip1::Errno>;
-
     /// Retrieves the name of a pre-opened directory.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
         &self,
@@ -220,23 +194,9 @@ pub trait Wasip1LFS: core::fmt::Debug {
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno>;
 
-    fn fd_prestat_dir_name_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
-        inode: Self::Inode,
-        dir_path_ptr: *mut u8,
-        dir_path_len: usize,
-    ) -> Result<(), wasip1::Errno>;
-
     /// Retrieves file statistics for a file descriptor.
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
-    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
-
-    fn fd_filestat_get_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
@@ -249,25 +209,9 @@ pub trait Wasip1LFS: core::fmt::Debug {
         offset: usize,
     ) -> Result<Size, wasip1::Errno>;
 
-    fn fd_pread_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
-        inode: Self::Inode,
-        buf: *mut u8,
-        buf_len: usize,
-        offset: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
     /// Reads data from stdin.
     fn fd_read_stdin_raw<Wasm: WasmAccess>(
         &self,
-        buf: *mut u8,
-        buf_len: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
-    fn fd_read_stdin_raw_dyn_compatible(
-        &self,
-        access: &impl WasmAccessDynCompatible,
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
@@ -284,11 +228,184 @@ pub trait Wasip1LFS: core::fmt::Debug {
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
     ) -> Result<Self::Inode, wasip1::Errno>;
+}
+
+pub trait Wasip1ConstLFS: Wasip1LFSBase {
+    const PRE_OPEN: &'static [Self::Inode];
+}
+
+pub trait Wasip1DynamicLFS: Wasip1LFSBase {
+    fn pre_open_inodes(&self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStrCustom)>;
+}
+
+pub trait DerefToStrCustom {
+    fn deref_to_str<'a>(&'a self) -> &'a str;
+}
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+impl DerefToStrCustom for alloc::string::String {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.as_str()
+    }
+}
+
+#[cfg(all(feature = "alloc", not(feature = "std")))]
+impl DerefToStrCustom for &alloc::string::String {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.as_str()
+    }
+}
+
+#[cfg(feature = "std")]
+impl DerefToStrCustom for std::string::String {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.as_str()
+    }
+}
+
+#[cfg(feature = "std")]
+impl DerefToStrCustom for &std::string::String {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.as_str()
+    }
+}
+
+impl DerefToStrCustom for str {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self
+    }
+}
+
+impl DerefToStrCustom for &str {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self
+    }
+}
+
+impl<const N: usize> DerefToStrCustom for SmallString<[u8; N]> {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.as_str()
+    }
+}
+
+impl<const N: usize> DerefToStrCustom for &SmallString<[u8; N]> {
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.as_str()
+    }
+}
+
+impl<T> DerefToStrCustom for (T,)
+where
+    T: Deref,
+    T::Target: Borrow<str>,
+{
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.0.deref().borrow()
+    }
+}
+
+impl<T, U> DerefToStrCustom for (T, U)
+where
+    T: Deref,
+    T::Target: Borrow<str>,
+{
+    fn deref_to_str<'a>(&'a self) -> &'a str {
+        self.0.deref().borrow()
+    }
+}
+
+pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
+    /// return inode, and the name of the pre-opened directory
+    fn index(
+        &self,
+        index: usize,
+        f: &mut dyn for<'a, 'b> FnMut(Option<(&'a dyn Any, &'b dyn DerefToStrCustom)>),
+    );
+}
+
+pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
+    fn pre_open_inodes(&self, f: &mut dyn for<'a> FnMut(&'a dyn Wasip1DynCompatibleLFSSlice));
+
+    fn fd_write_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_write_stdout_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_write_stderr_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_readdir_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: Dircookie,
+    ) -> Result<(Size, Dircookie), wasip1::Errno>;
+
+    fn path_filestat_get_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
+    fn fd_prestat_get_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+    ) -> Result<wasip1::Prestat, wasip1::Errno>;
+
+    fn fd_prestat_dir_name_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_filestat_get_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
+
+    fn fd_pread_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn Any,
+        buf: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_read_stdin_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
 
     fn path_open_raw_dyn_compatible(
         &self,
-        access: &impl WasmAccessDynCompatible,
-        dir_ino: Self::Inode,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_ino: &dyn Any,
         dir_flags: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -296,37 +413,7 @@ pub trait Wasip1LFS: core::fmt::Debug {
         fs_rights_base: wasip1::Rights,
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
-    ) -> Result<Self::Inode, wasip1::Errno>;
-}
-
-pub trait Wasip1ConstLFS: Wasip1LFS {
-    const PRE_OPEN: &'static [Self::Inode];
-}
-
-pub trait DerefToStr
-where
-    Self: Deref<Target = <Self as DerefToStr>::Target>,
-    <Self as DerefToStr>::Target: Borrow<str>,
-{
-    type Target: Borrow<str> + ?Sized;
-
-    fn deref_to_str(&self) -> &<Self as DerefToStr>::Target;
-}
-
-impl<T, U> DerefToStr for T
-where
-    T: Deref<Target = U>,
-    U: Borrow<str> + ?Sized,
-{
-    type Target = U;
-
-    fn deref_to_str(&self) -> &<Self as DerefToStr>::Target {
-        self.deref()
-    }
-}
-
-pub trait Wasip1DynamicLFS: Wasip1LFS {
-    fn pre_open_inodes<'a>(&'a self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStr)>;
+    ) -> Result<Box<dyn Any>, wasip1::Errno>;
 }
 
 /// Trait for a virtual file implementation.
@@ -377,7 +464,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
 
     fn pread_raw_dyn_compatible(
         &self,
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf_ptr: *mut u8,
         buf_len: usize,
         offset: usize,
@@ -389,8 +476,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
             let (_, nread) = unsafe {
                 alloc_buff(buf_len, |b| {
                     let nread = self.pread(b, offset)?;
-                    access
-                        .memcpy_with(buf_ptr, &b[..nread]);
+                    access.memcpy_with(buf_ptr, &b[..nread]);
                     Ok(nread)
                 })
             };

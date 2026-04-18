@@ -1,5 +1,9 @@
 use crate::__private::wasip1::{self, Dircookie};
-use crate::memory::{WasmAccessDynCompatible, WasmAccessMemoryUtilUpper as _, WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon};
+use crate::memory::{
+    WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _,
+    WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon,
+};
+use crate::wasi::file::Wasip1LFSBaseWrapper;
 use crate::{
     memory::{WasmAccess, WasmPathAccess},
     wasi::file::{
@@ -80,7 +84,7 @@ impl<
 
     pub fn get_inode_for_path_dyn_compatible(
         &self,
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         inode: usize,
         path_ptr: *const u8,
         path_len: usize,

@@ -6,7 +6,7 @@ use crate::memory::WasmAccess;
 use crate::transporter::Wasip1Transporter;
 
 #[cfg(not(feature = "multi_memory"))]
-use crate::memory::WasmAccessDynCompatible;
+use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 
 /// Default implementation of `StdIO` using the system's standard I/O.
 #[derive(Debug)]
@@ -26,7 +26,7 @@ impl StdIO for DefaultStdIO {
 
     #[cfg(not(feature = "multi_memory"))]
     fn read_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *mut u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno> {
@@ -46,7 +46,7 @@ impl StdIO for DefaultStdIO {
 
     #[cfg(not(feature = "multi_memory"))]
     fn write_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno> {
@@ -64,7 +64,7 @@ impl StdIO for DefaultStdIO {
 
     #[cfg(not(feature = "multi_memory"))]
     fn ewrite_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno> {
@@ -108,7 +108,7 @@ pub trait StdIO: core::fmt::Debug {
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
     fn read_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *mut u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno> {
@@ -162,7 +162,7 @@ pub trait StdIO: core::fmt::Debug {
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
     fn write_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno> {
@@ -207,7 +207,7 @@ pub trait StdIO: core::fmt::Debug {
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
     fn ewrite_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<Size, wasip1::Errno> {

@@ -9,7 +9,7 @@ pub struct Wasip1Transporter;
 use crate::prelude::WasmAccess;
 
 #[cfg(not(feature = "multi_memory"))]
-use crate::memory::WasmAccessDynCompatible;
+use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 
 unsafe fn non_recursive_fd_read(
     fd: wasip1::Fd,
@@ -118,7 +118,7 @@ impl Wasip1Transporter {
 
     #[cfg(not(feature = "multi_memory"))]
     pub fn read_from_stdin_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *mut u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -182,7 +182,7 @@ impl Wasip1Transporter {
 
     #[cfg(not(feature = "multi_memory"))]
     pub fn write_to_stdout_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -246,7 +246,7 @@ impl Wasip1Transporter {
 
     #[cfg(not(feature = "multi_memory"))]
     pub fn write_to_stderr_direct_dyn_compatible(
-        access: &impl WasmAccessDynCompatible,
+        access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {

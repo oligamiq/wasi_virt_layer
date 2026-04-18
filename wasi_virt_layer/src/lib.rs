@@ -70,7 +70,7 @@ pub mod thread {
 pub mod file {
     pub use crate::wasi::file::{
         DefaultAddInfo, FilestatWithoutDevice, NoAddInfo, WasiAddInfo, Wasip1FileSystem,
-        Wasip1FileTrait, Wasip1LFS,
+        Wasip1FileTrait,
         constant::{
             lfs::VFSConstNormalLFS,
             lfs_raw::{VFSConstNormalFiles, WasiConstFile},

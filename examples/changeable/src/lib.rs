@@ -26,6 +26,11 @@ impl Guest for Hello {
     fn main() {
         ls::_reset();
         ls::_start();
+
+        // print filesystem entries
+        println!("Listing root directory:");
+        println!("{:?}", &*fs::VIRTUAL_FILE_SYSTEM);
+
         ls::_main();
     }
 }
@@ -63,8 +68,8 @@ mod fs {
 
     type LFS = ChangeableLFS<DefaultStdIO>;
 
-    static VIRTUAL_FILE_SYSTEM: LazyLock<ChangeableVFS<LFS>> = LazyLock::new(|| {
-        let mut lfs = ChangeableLFS::new(); // Inode 0 is root "."
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<ChangeableVFS<LFS>> = LazyLock::new(|| {
+        let lfs = ChangeableLFS::new(); // Inode 0 is root "."
 
         // Add a preopen entry for root "."
         let root_inode = lfs.add_preopen(".");
@@ -84,5 +89,5 @@ mod fs {
         vfs
     });
 
-    plug_fs!({ LazyLock::get(&VIRTUAL_FILE_SYSTEM).unwrap() }, ls);
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }

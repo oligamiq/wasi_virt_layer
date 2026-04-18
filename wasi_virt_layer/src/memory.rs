@@ -291,22 +291,27 @@ unsafe extern "C" fn __wasip1_vfs_flag_vfs_memory(ptr: *mut u8, src: *mut u8) {
 
 /// Provides access to an array in WASM memory.
 #[derive(Debug)]
-pub struct WasmArrayAccess<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
+pub struct WasmArrayAccess<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> {
     ptr: *const T,
     len: usize,
     __marker: core::marker::PhantomData<&'a ()>,
     __marker_wasm: core::marker::PhantomData<Wasm>,
 }
 
-impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> Clone for WasmArrayAccess<'a, T, Wasm> {
+impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> Clone
+    for WasmArrayAccess<'a, T, Wasm>
+{
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> Copy for WasmArrayAccess<'a, T, Wasm> {}
+impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> Copy
+    for WasmArrayAccess<'a, T, Wasm>
+{
+}
 
-impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wasm> {
+impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> WasmArrayAccess<'a, T, Wasm> {
     /// Creates a new `WasmArrayAccess`.
     #[inline(always)]
     pub fn new(ptr: *const T, len: usize) -> Self {
@@ -342,7 +347,7 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccess<'a, T, Wa
     }
 }
 
-impl<'a, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccess> PartialEq
+impl<'a, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccess + ?Sized> PartialEq
     for WasmArrayAccess<'a, T, Wasm>
 {
     fn eq(&self, other: &Self) -> bool {
@@ -350,7 +355,7 @@ impl<'a, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccess> PartialEq
     }
 }
 
-impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> IntoIterator
+impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> IntoIterator
     for WasmArrayAccess<'a, T, Wasm>
 {
     type Item = T;
@@ -363,13 +368,13 @@ impl<'a, T: core::fmt::Debug + Copy, Wasm: WasmAccess> IntoIterator
 }
 
 /// An iterator over elements in WASM memory.
-pub struct WasmArrayAccessIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
+pub struct WasmArrayAccessIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> {
     ptr: *const T,
     len: usize,
     __marker: core::marker::PhantomData<Wasm>,
 }
 
-impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessIterator<T, Wasm> {
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> WasmArrayAccessIterator<T, Wasm> {
     /// Creates a new `WasmArrayAccessIterator`.
     pub fn new(ptr: *const T, len: usize) -> Self {
         Self {
@@ -380,7 +385,9 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessIterator<T, Wa
     }
 }
 
-impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator for WasmArrayAccessIterator<T, Wasm> {
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> Iterator
+    for WasmArrayAccessIterator<T, Wasm>
+{
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -395,13 +402,13 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator for WasmArrayAccessI
 }
 
 /// A mutable iterator over elements in WASM memory.
-pub struct WasmArrayAccessMutIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
+pub struct WasmArrayAccessMutIterator<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> {
     ptr: *mut T,
     len: usize,
     __marker: core::marker::PhantomData<Wasm>,
 }
 
-impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIterator<T, Wasm> {
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> WasmArrayAccessMutIterator<T, Wasm> {
     /// Creates a new `WasmArrayAccessMutIterator`.
     pub fn new(ptr: *mut T, len: usize) -> Self {
         Self {
@@ -413,12 +420,17 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIterator<T,
 }
 
 /// A component representing a single mutable element in WASM memory.
-pub struct WasmArrayAccessMutIteratorComponent<T: core::fmt::Debug + Copy, Wasm: WasmAccess> {
+pub struct WasmArrayAccessMutIteratorComponent<
+    T: core::fmt::Debug + Copy,
+    Wasm: WasmAccess + ?Sized,
+> {
     ptr: *mut T,
     __marker: core::marker::PhantomData<Wasm>,
 }
 
-impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIteratorComponent<T, Wasm> {
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized>
+    WasmArrayAccessMutIteratorComponent<T, Wasm>
+{
     /// Creates a new `WasmArrayAccessMutIteratorComponent`.
     pub fn new(ptr: *mut T) -> Self {
         Self {
@@ -433,7 +445,7 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> WasmArrayAccessMutIteratorCom
     }
 }
 
-impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess> Iterator
+impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> Iterator
     for WasmArrayAccessMutIterator<T, Wasm>
 {
     type Item = WasmArrayAccessMutIteratorComponent<T, Wasm>;
@@ -489,16 +501,20 @@ pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
 
     fn load_le_with<T: core::fmt::Debug + Copy>(&self, offset: *const T) -> T;
 
-    fn as_array_with<T: core::fmt::Debug + Copy>(&self, ptr: *const T, len: usize) -> WasmArrayAccessDynCompatible<T, Self>
-    where Self: Sized
-    {
+    fn as_array_with<T: core::fmt::Debug + Copy>(
+        &self,
+        ptr: *const T,
+        len: usize,
+    ) -> WasmArrayAccessDynCompatible<T, Self> {
         WasmArrayAccessDynCompatible::new(self, ptr, len)
     }
 
     #[cfg(feature = "alloc")]
-    fn get_array_with<T: core::fmt::Debug + Copy>(&self, ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
-    where Self: Sized
-    {
+    fn get_array_with<T: core::fmt::Debug + Copy>(
+        &self,
+        ptr: *const T,
+        len: usize,
+    ) -> alloc::boxed::Box<[T]> {
         use crate::utils::alloc_buff;
 
         let (buff, _) = unsafe {
@@ -550,7 +566,7 @@ impl<T: AsRef<dyn WasmAccessDynCompatibleRaw> + core::fmt::Debug> WasmAccessDynC
     }
 }
 
-impl<T: WasmAccessDynCompatibleRaw> WasmAccessDynCompatible for T {
+impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatible for T {
     fn memcpy_with<U>(&self, offset: *mut U, data: &[U]) {
         Self::memcpy_raw.memcpy_upper_with(self, offset, data);
     }
@@ -791,19 +807,13 @@ pub trait WasmAccess: WasmAccessRaw {
     fn as_array<'a, T: core::fmt::Debug + Copy>(
         ptr: *const T,
         len: usize,
-    ) -> WasmArrayAccess<'a, T, Self>
-    where
-        Self: Sized,
-    {
+    ) -> WasmArrayAccess<'a, T, Self> {
         WasmArrayAccess::new(ptr, len)
     }
 
     /// Returns a box containing the data from the WASM array.
     #[cfg(feature = "alloc")]
-    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> alloc::boxed::Box<[T]>
-    where
-        Self: Sized,
-    {
+    fn get_array<T: core::fmt::Debug>(ptr: *const T, len: usize) -> alloc::boxed::Box<[T]> {
         use crate::utils::alloc_buff;
 
         let (buff, _) = unsafe {
@@ -879,25 +889,25 @@ pub trait WasmAccess: WasmAccessRaw {
 
 /// Provides access to a file path in WASM memory.
 #[derive(Debug)]
-pub struct WasmPathAccess<'a, Wasm: WasmAccess> {
+pub struct WasmPathAccess<'a, Wasm: WasmAccess + ?Sized> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
 
-impl<'a, Wasm: WasmAccess> PartialEq for WasmPathAccess<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> PartialEq for WasmPathAccess<'a, Wasm> {
     fn eq(&self, other: &Self) -> bool {
         self.path == other.path
     }
 }
 
-impl<'a, Wasm: WasmAccess> Clone for WasmPathAccess<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> Clone for WasmPathAccess<'a, Wasm> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, Wasm: WasmAccess> Copy for WasmPathAccess<'a, Wasm> {}
+impl<'a, Wasm: WasmAccess + ?Sized> Copy for WasmPathAccess<'a, Wasm> {}
 
-impl<'a, Wasm: WasmAccess> WasmPathAccess<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> WasmPathAccess<'a, Wasm> {
     /// Creates a new `WasmPathAccess`.
     #[inline(always)]
     pub fn new(ptr: *const u8, len: usize) -> Self {
@@ -915,7 +925,7 @@ impl<'a, Wasm: WasmAccess> WasmPathAccess<'a, Wasm> {
 }
 
 /// An iterator over the components of a WASM path.
-pub struct WasmPathComponents<'a, Wasm: WasmAccess> {
+pub struct WasmPathComponents<'a, Wasm: WasmAccess + ?Sized> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
 
@@ -930,10 +940,12 @@ pub trait WasmPathComponentCommon: core::fmt::Debug + Copy + PartialEq {
 }
 
 pub trait WasmPathAccessCommon: core::fmt::Debug {
-    fn components_common<'a>(&'a self) -> impl Iterator<Item = impl WasmPathComponentCommon + 'a> + 'a;
+    fn components_common<'a>(
+        &'a self,
+    ) -> impl Iterator<Item = impl WasmPathComponentCommon + 'a> + 'a;
 }
 
-impl<'a, Wasm: WasmAccess> WasmPathComponentCommon for WasmPathComponent<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> WasmPathComponentCommon for WasmPathComponent<'a, Wasm> {
     fn as_root_dir(&self) -> bool {
         matches!(self, WasmPathComponent::RootDir)
     }
@@ -954,15 +966,17 @@ impl<'a, Wasm: WasmAccess> WasmPathComponentCommon for WasmPathComponent<'a, Was
     }
 }
 
-impl<'a, Wasm: WasmAccess> WasmPathAccessCommon for WasmPathAccess<'a, Wasm> {
-    fn components_common<'b>(&'b self) -> impl Iterator<Item = impl WasmPathComponentCommon + 'b> + 'b {
+impl<'a, Wasm: WasmAccess + ?Sized> WasmPathAccessCommon for WasmPathAccess<'a, Wasm> {
+    fn components_common<'b>(
+        &'b self,
+    ) -> impl Iterator<Item = impl WasmPathComponentCommon + 'b> + 'b {
         self.components()
     }
 }
 
 /// A component of a WASM path.
 #[derive(Debug)]
-pub enum WasmPathComponent<'a, Wasm: WasmAccess> {
+pub enum WasmPathComponent<'a, Wasm: WasmAccess + ?Sized> {
     /// The root directory, `/`.
     RootDir,
 
@@ -976,7 +990,7 @@ pub enum WasmPathComponent<'a, Wasm: WasmAccess> {
     Normal(WasmArrayAccess<'a, u8, Wasm>),
 }
 
-impl<'a, Wasm: WasmAccess> Clone for WasmPathComponent<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> Clone for WasmPathComponent<'a, Wasm> {
     fn clone(&self) -> Self {
         match self {
             WasmPathComponent::RootDir => WasmPathComponent::RootDir,
@@ -987,9 +1001,9 @@ impl<'a, Wasm: WasmAccess> Clone for WasmPathComponent<'a, Wasm> {
     }
 }
 
-impl<'a, Wasm: WasmAccess> Copy for WasmPathComponent<'a, Wasm> {}
+impl<'a, Wasm: WasmAccess + ?Sized> Copy for WasmPathComponent<'a, Wasm> {}
 
-impl<'a, Wasm: WasmAccess> PartialEq for WasmPathComponent<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> PartialEq for WasmPathComponent<'a, Wasm> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (WasmPathComponent::RootDir, WasmPathComponent::RootDir) => true,
@@ -1001,7 +1015,7 @@ impl<'a, Wasm: WasmAccess> PartialEq for WasmPathComponent<'a, Wasm> {
     }
 }
 
-impl<'a, Wasm: WasmAccess> WasmPathComponent<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> WasmPathComponent<'a, Wasm> {
     /// Compares the component with a string.
     pub fn eq_str(&self, other: &str) -> bool {
         match self {
@@ -1016,7 +1030,7 @@ impl<'a, Wasm: WasmAccess> WasmPathComponent<'a, Wasm> {
     }
 }
 
-impl<'a, Wasm: WasmAccess> Iterator for WasmPathComponents<'a, Wasm> {
+impl<'a, Wasm: WasmAccess + ?Sized> Iterator for WasmPathComponents<'a, Wasm> {
     type Item = WasmPathComponent<'a, Wasm>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1104,22 +1118,34 @@ impl<'a, Wasm: WasmAccess> Iterator for WasmPathComponents<'a, Wasm> {
 
 /// Provides access to an array in WASM memory.
 #[derive(Debug)]
-pub struct WasmArrayAccessDynCompatible<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+pub struct WasmArrayAccessDynCompatible<
+    'a,
+    'b,
+    T: core::fmt::Debug + Copy,
+    Wasm: WasmAccessDynCompatible + ?Sized,
+> {
     access: &'b Wasm,
     ptr: *const T,
     len: usize,
     __marker: core::marker::PhantomData<&'a ()>,
 }
 
-impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Clone for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm> {
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> Clone
+    for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
+{
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Copy for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm> {}
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> Copy
+    for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
+{
+}
 
-impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatible<'a, 'b, T, Wasm> {
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized>
+    WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
+{
     /// Creates a new `WasmArrayAccessDynCompatible`.
     #[inline(always)]
     pub fn new(access: &'b Wasm, ptr: *const T, len: usize) -> Self {
@@ -1151,15 +1177,15 @@ impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArra
     }
 }
 
-impl<'a, 'b, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccessDynCompatible> PartialEq
-    for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
+impl<'a, 'b, T: core::fmt::Debug + Copy + PartialEq, Wasm: WasmAccessDynCompatible + ?Sized>
+    PartialEq for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
 {
     fn eq(&self, other: &Self) -> bool {
         self.len == other.len && (0..self.len).all(|i| self.get(i) == other.get(i))
     }
 }
 
-impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> IntoIterator
+impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> IntoIterator
     for WasmArrayAccessDynCompatible<'a, 'b, T, Wasm>
 {
     type Item = T;
@@ -1171,13 +1197,19 @@ impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> IntoIter
     }
 }
 
-pub struct WasmArrayAccessDynCompatibleIterator<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+pub struct WasmArrayAccessDynCompatibleIterator<
+    'c,
+    T: core::fmt::Debug + Copy,
+    Wasm: WasmAccessDynCompatible + ?Sized,
+> {
     access: &'c Wasm,
     ptr: *const T,
     len: usize,
 }
 
-impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatibleIterator<'c, T, Wasm> {
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized>
+    WasmArrayAccessDynCompatibleIterator<'c, T, Wasm>
+{
     /// Creates a new `WasmArrayAccessDynCompatibleIterator`.
     pub fn new(wasm: &'c Wasm, ptr: *const T, len: usize) -> Self {
         Self {
@@ -1188,7 +1220,9 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAcc
     }
 }
 
-impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator for WasmArrayAccessDynCompatibleIterator<'c, T, Wasm> {
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
+    for WasmArrayAccessDynCompatibleIterator<'c, T, Wasm>
+{
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1202,13 +1236,19 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator for
     }
 }
 
-pub struct WasmArrayAccessDynCompatibleMutIterator<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+pub struct WasmArrayAccessDynCompatibleMutIterator<
+    'c,
+    T: core::fmt::Debug + Copy,
+    Wasm: WasmAccessDynCompatible + ?Sized,
+> {
     access: &'c Wasm,
     ptr: *mut T,
     len: usize,
 }
 
-impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatibleMutIterator<'c, T, Wasm> {
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible>
+    WasmArrayAccessDynCompatibleMutIterator<'c, T, Wasm>
+{
     /// Creates a new `WasmArrayAccessDynCompatibleMutIterator`.
     pub fn new(wasm: &'c Wasm, ptr: *mut T, len: usize) -> Self {
         Self {
@@ -1219,18 +1259,21 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAcc
     }
 }
 
-pub struct WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> {
+pub struct WasmArrayAccessDynCompatibleMutIteratorComponent<
+    'c,
+    T: core::fmt::Debug + Copy,
+    Wasm: WasmAccessDynCompatible + ?Sized,
+> {
     access: &'c Wasm,
     ptr: *mut T,
 }
 
-impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T, Wasm> {
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized>
+    WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T, Wasm>
+{
     /// Creates a new `WasmArrayAccessDynCompatibleMutIteratorComponent`.
     pub fn new(wasm: &'c Wasm, ptr: *mut T) -> Self {
-        Self {
-            access: wasm,
-            ptr,
-        }
+        Self { access: wasm, ptr }
     }
 
     /// Sets the value at the current position.
@@ -1239,7 +1282,7 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> WasmArrayAcc
     }
 }
 
-impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator
+impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
     for WasmArrayAccessDynCompatibleMutIterator<'c, T, Wasm>
 {
     type Item = WasmArrayAccessDynCompatibleMutIteratorComponent<'c, T, Wasm>;
@@ -1248,7 +1291,8 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator
         if self.len == 0 {
             return None;
         }
-        let component = WasmArrayAccessDynCompatibleMutIteratorComponent::new(self.access, self.ptr);
+        let component =
+            WasmArrayAccessDynCompatibleMutIteratorComponent::new(self.access, self.ptr);
         self.ptr = unsafe { self.ptr.add(1) };
         self.len -= 1;
         Some(component)
@@ -1256,25 +1300,32 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible> Iterator
 }
 
 #[derive(Debug)]
-pub struct WasmPathAccessDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
+pub struct WasmPathAccessDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> {
     path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> PartialEq for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> PartialEq
+    for WasmPathAccessDynCompatible<'a, 'b, Wasm>
+{
     fn eq(&self, other: &Self) -> bool {
         self.path == other.path
     }
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> Clone for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Clone
+    for WasmPathAccessDynCompatible<'a, 'b, Wasm>
+{
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> Copy for WasmPathAccessDynCompatible<'a, 'b, Wasm> {}
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Copy
+    for WasmPathAccessDynCompatible<'a, 'b, Wasm>
+{
+}
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathAccessDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> WasmPathAccessDynCompatible<'a, 'b, Wasm> {
     /// Creates a new `WasmPathAccessDynCompatible`.
     #[inline(always)]
     pub fn new(access: &'b Wasm, ptr: *const u8, len: usize) -> Self {
@@ -1291,25 +1342,31 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathAccessDynCompatible<'a, 'b, 
     }
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathAccessCommon for WasmPathAccessDynCompatible<'a, 'b, Wasm> {
-    fn components_common<'c>(&'c self) -> impl Iterator<Item = impl WasmPathComponentCommon + 'c> + 'c {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> WasmPathAccessCommon
+    for WasmPathAccessDynCompatible<'a, 'b, Wasm>
+{
+    fn components_common<'c>(
+        &'c self,
+    ) -> impl Iterator<Item = impl WasmPathComponentCommon + 'c> + 'c {
         self.components()
     }
 }
 
-pub struct WasmPathComponentsDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
+pub struct WasmPathComponentsDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> {
     path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
 }
 
 #[derive(Debug)]
-pub enum WasmPathComponentDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible> {
+pub enum WasmPathComponentDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> {
     RootDir,
     CurDir,
     ParentDir,
     Normal(WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>),
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> Clone for WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Clone
+    for WasmPathComponentDynCompatible<'a, 'b, Wasm>
+{
     fn clone(&self) -> Self {
         match self {
             WasmPathComponentDynCompatible::RootDir => WasmPathComponentDynCompatible::RootDir,
@@ -1322,15 +1379,30 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible> Clone for WasmPathComponentDynCompat
     }
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> Copy for WasmPathComponentDynCompatible<'a, 'b, Wasm> {}
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Copy
+    for WasmPathComponentDynCompatible<'a, 'b, Wasm>
+{
+}
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> PartialEq for WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> PartialEq
+    for WasmPathComponentDynCompatible<'a, 'b, Wasm>
+{
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
-            (WasmPathComponentDynCompatible::RootDir, WasmPathComponentDynCompatible::RootDir) => true,
-            (WasmPathComponentDynCompatible::CurDir, WasmPathComponentDynCompatible::CurDir) => true,
-            (WasmPathComponentDynCompatible::ParentDir, WasmPathComponentDynCompatible::ParentDir) => true,
-            (WasmPathComponentDynCompatible::Normal(a), WasmPathComponentDynCompatible::Normal(b)) => a == b,
+            (WasmPathComponentDynCompatible::RootDir, WasmPathComponentDynCompatible::RootDir) => {
+                true
+            }
+            (WasmPathComponentDynCompatible::CurDir, WasmPathComponentDynCompatible::CurDir) => {
+                true
+            }
+            (
+                WasmPathComponentDynCompatible::ParentDir,
+                WasmPathComponentDynCompatible::ParentDir,
+            ) => true,
+            (
+                WasmPathComponentDynCompatible::Normal(a),
+                WasmPathComponentDynCompatible::Normal(b),
+            ) => a == b,
             _ => false,
         }
     }
@@ -1350,7 +1422,9 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathComponentDynCompatible<'a, '
     }
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> Iterator for WasmPathComponentsDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
+    for WasmPathComponentsDynCompatible<'a, 'b, Wasm>
+{
     type Item = WasmPathComponentDynCompatible<'a, 'b, Wasm>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1437,7 +1511,9 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible> Iterator for WasmPathComponentsDynCo
     }
 }
 
-impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathComponentCommon for WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> WasmPathComponentCommon
+    for WasmPathComponentDynCompatible<'a, 'b, Wasm>
+{
     fn as_root_dir(&self) -> bool {
         matches!(self, WasmPathComponentDynCompatible::RootDir)
     }

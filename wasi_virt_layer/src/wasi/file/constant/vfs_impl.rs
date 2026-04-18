@@ -4,7 +4,7 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 use crate::wasi::file::Wasip1ConstLFS;
 use crate::{
     memory::WasmAccess,
-    wasi::file::{Wasip1FileSystem, Wasip1LFS, constant::vfs::Wasip1ConstVFS},
+    wasi::file::{Wasip1FileSystem, constant::vfs::Wasip1ConstVFS},
 };
 
 macro_rules! trace_fs {
@@ -32,6 +32,8 @@ macro_rules! trace_fs {
         }
     };
 }
+
+pub(crate) use trace_fs;
 
 impl<LFS: Wasip1ConstLFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
     for Wasip1ConstVFS<LFS, FLAT_LEN>

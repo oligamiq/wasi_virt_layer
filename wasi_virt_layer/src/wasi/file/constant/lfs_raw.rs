@@ -84,8 +84,6 @@ macro_rules! ConstFiles {
                 count
             };
 
-            let mut static_array = $crate::__private::utils::StaticArrayBuilder::new();
-
             struct CheckEqNumberOfFilesAndDirs<const L: usize, const R: usize>;
 
             #[allow(dead_code)]
@@ -248,17 +246,38 @@ macro_rules! ConstFiles {
                 custom_sort(empty_arr)
             };
 
-            $(
-                $crate::ConstFiles!(
-                    @next,
-                    0,
-                    static_array,
-                    [EMPTY_ARR],
-                    [$dir_name],
-                    [$dir_name],
-                    $file_or_dir
-                );
-            )*
+            let flatten = {
+                let mut static_array = $crate::__private::utils::StaticArrayBuilder::new();
+
+                $(
+                    $crate::ConstFiles!(
+                        @next,
+                        0,
+                        static_array,
+                        [EMPTY_ARR],
+                        [$dir_name],
+                        [$dir_name],
+                        $file_or_dir
+                    );
+                )*
+
+                let static_array = custom_sort(static_array);
+
+                let mut file_array = $crate::__private::utils::StaticArrayBuilder::new();
+                const_for!(i in 0..static_array.len() => {
+                    let (_, name, file_or_dir) = static_array[i];
+                    file_array.push((
+                        name,
+                        file_or_dir
+                    ));
+                });
+
+                let static_array = file_array.build_with_is_check(file_array.check_len());
+
+                let _ = asserter(&static_array);
+
+                static_array
+            };
 
             const PRE_OPEN_COUNT: usize = {
                 let mut count = 0;
@@ -279,22 +298,7 @@ macro_rules! ConstFiles {
                 static_array.build()
             };
 
-            let static_array = custom_sort(static_array);
-
-            let mut file_array = $crate::__private::utils::StaticArrayBuilder::new();
-            const_for!(i in 0..static_array.len() => {
-                let (_, name, file_or_dir) = static_array[i];
-                file_array.push((
-                    name,
-                    file_or_dir
-                ));
-            });
-
-            let static_array = file_array.build_with_is_check(file_array.check_len());
-
-            let _ = asserter(&static_array);
-
-            (static_array, &PRE_OPEN)
+            (flatten, &PRE_OPEN)
         })
     };
 

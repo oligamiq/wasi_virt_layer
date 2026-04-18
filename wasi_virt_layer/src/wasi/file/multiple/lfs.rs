@@ -1,3 +1,4 @@
+use alloc::collections::BTreeMap;
 use core::any::Any;
 use core::ffi::c_void;
 
@@ -7,7 +8,9 @@ use crate::{
     __private::wasip1::{self, *},
     file::{FilestatWithoutDevice, Wasip1FileSystem},
     memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName},
-    wasi::file::{Wasip1DynamicLFS, multiple::wasm::WasmAccessMiddleIntegrator},
+    wasi::file::{
+        Wasip1DynCompatibleLFS, Wasip1DynamicLFS, multiple::wasm::WasmAccessDynCompatibleWrapper,
+    },
 };
 
 // pub(crate) struct WasmAccessWrapperBase<'a, WasmWrapper: WasmAccessWrapper> {
@@ -184,47 +187,30 @@ use crate::{
 //     fn memory_director_mut(&self, arg: WasmAccessArgsWrapperInner) -> *mut c_void;
 // }
 
-pub struct Wasip1DynCompatibleLFSWrapper<WasmIntegrator: WasmAccessMiddleIntegrator> {
-    pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<WasmIntegrator = WasmIntegrator>>,
+#[derive(Debug)]
+pub struct Wasip1DynCompatibleLFSWrapper {
+    pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>,
 }
 
-impl<WasmIntegrator: WasmAccessMiddleIntegrator> Wasip1DynCompatibleLFSWrapper<WasmIntegrator> {
-    pub fn new(
-        lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<WasmIntegrator = WasmIntegrator>>,
-    ) -> Self {
+impl Wasip1DynCompatibleLFSWrapper {
+    pub fn new(lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>) -> Self {
         Self { lfs }
     }
+}
 
-    pub fn fd_write_raw(
-        &self,
-        key: &<WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.lfs.fd_write_raw(key, inode, data, data_len)
-    }
-
-    pub fn is_dir(
-        &self,
-        key: &<WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> bool {
-        self.lfs.is_dir(key, inode)
+impl AsRef<dyn Wasip1DynCompatibleLFS> for Wasip1DynCompatibleLFSWrapper {
+    fn as_ref(&self) -> &(dyn Wasip1DynCompatibleLFS + 'static) {
+        self.lfs.as_ref()
     }
 }
 
 #[derive(Debug)]
-pub struct Wasip1MultipleVFS<WasmIntegrator: WasmAccessMiddleIntegrator> {
-    pub lfss: SmallVec<
-        [alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<WasmIntegrator = WasmIntegrator>>; 4],
-    >,
-    pub integrator: WasmIntegrator,
+pub struct Wasip1MultipleVFS {
+    pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
+    pub wasms: BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
 }
 
-impl<WasmIntegrator: WasmAccessMiddleIntegrator> Wasip1FileSystem
-    for Wasip1MultipleVFS<WasmIntegrator>
-{
+impl Wasip1FileSystem for Wasip1MultipleVFS {
     fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
@@ -232,9 +218,13 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator> Wasip1FileSystem
         iovs_len: usize,
         nwritten: *mut Size,
     ) -> wasip1::Errno {
-        let key = WasmIntegrator::generate_key(&self.integrator, Wasm::NAME);
+        for lfs in &self.lfss {
+            // if let Ok(n) = lfs.::<Wasm>(fd, iovs_ptr, iovs_len, nwritten) {
+            //     return n;
+            // }
+        }
 
-        todo!();
+        wasip1::ERRNO_BADF
     }
 
     fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName>(
@@ -320,289 +310,4 @@ impl<WasmIntegrator: WasmAccessMiddleIntegrator> Wasip1FileSystem
     ) -> wasip1::Errno {
         todo!()
     }
-}
-
-#[derive(Debug)]
-pub struct DynamicLFSWrapper<Wasm: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> {
-    pub lfs: LFS,
-    pub wasm_integrator: Wasm,
-    __phantom: core::marker::PhantomData<Wasm>,
-}
-
-impl<WasmIntegrator: WasmAccessMiddleIntegrator, LFS: Wasip1DynamicLFS> Wasip1DynCompatibleLFS
-    for DynamicLFSWrapper<WasmIntegrator, LFS>
-{
-    type WasmIntegrator = WasmIntegrator;
-
-    fn fd_write_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .fd_write_integrate(key, &self.lfs, inode, data, data_len)
-    }
-
-    fn fd_write_stdout_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.wasm_integrator
-            .fd_write_stdout_integrate(key, &self.lfs, data, data_len)
-    }
-
-    fn fd_write_stderr_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.wasm_integrator
-            .fd_write_stderr_integrate(key, &self.lfs, data, data_len)
-    }
-
-    fn is_dir(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> bool {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .fd_filestat_get_integrate(key, &self.lfs, inode)
-            .map(|filestat| filestat.filetype == wasip1::FILETYPE_DIRECTORY)
-            .unwrap_or(false)
-    }
-
-    fn fd_readdir_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        buf: *mut u8,
-        buf_len: usize,
-        cookie: Dircookie,
-    ) -> Result<(Size, Dircookie), wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .fd_readdir_integrate(key, &self.lfs, inode, buf, buf_len, cookie)
-    }
-
-    fn path_filestat_get_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        flags: wasip1::Lookupflags,
-        path_ptr: *const u8,
-        path_len: usize,
-    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .path_filestat_get_integrate(key, &self.lfs, inode, flags, path_ptr, path_len)
-    }
-
-    fn fd_prestat_get_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> Result<wasip1::Prestat, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .fd_prestat_get_integrate(key, &self.lfs, inode)
-    }
-
-    fn fd_prestat_dir_name_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        dir_path_ptr: *mut u8,
-        dir_path_len: usize,
-    ) -> Result<(), wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator.fd_prestat_dir_name_integrate(
-            key,
-            &self.lfs,
-            inode,
-            dir_path_ptr,
-            dir_path_len,
-        )
-    }
-
-    fn fd_filestat_get_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .fd_filestat_get_integrate(key, &self.lfs, inode)
-    }
-
-    fn fd_pread_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        buf: *mut u8,
-        buf_len: usize,
-        offset: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        let inode = inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        self.wasm_integrator
-            .fd_pread_integrate(key, &self.lfs, inode, buf, buf_len, offset)
-    }
-
-    fn fd_read_stdin_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        buf: *mut u8,
-        buf_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.wasm_integrator
-            .fd_read_stdin_integrate(key, &self.lfs, buf, buf_len)
-    }
-
-    fn path_open_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        dir_inode: &dyn Any,
-        dir_flags: wasip1::Fdflags,
-        path_ptr: *const u8,
-        path_len: usize,
-        o_flags: wasip1::Oflags,
-        fs_rights_base: wasip1::Rights,
-        fs_rights_inheriting: wasip1::Rights,
-        fd_flags: wasip1::Fdflags,
-    ) -> Result<alloc::boxed::Box<dyn Any>, wasip1::Errno> {
-        let dir_inode = dir_inode.downcast_ref::<LFS::Inode>().unwrap().clone();
-
-        let inode = self.wasm_integrator.path_open_integrate(
-            key,
-            &self.lfs,
-            dir_inode,
-            dir_flags,
-            path_ptr,
-            path_len,
-            o_flags,
-            fs_rights_base,
-            fs_rights_inheriting,
-            fd_flags,
-        )?;
-        Ok(alloc::boxed::Box::new(inode))
-    }
-}
-
-pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
-    type WasmIntegrator: WasmAccessMiddleIntegrator;
-
-    fn fd_write_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
-    fn fd_write_stdout_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.fd_write_raw(key, &(), data, data_len)
-    }
-
-    fn fd_write_stderr_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        data: *const u8,
-        data_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.fd_write_raw(key, &(), data, data_len)
-    }
-
-    fn is_dir(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> bool;
-
-    fn fd_readdir_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        buf: *mut u8,
-        buf_len: usize,
-        cookie: Dircookie,
-    ) -> Result<(Size, Dircookie), wasip1::Errno>;
-
-    fn path_filestat_get_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        flags: wasip1::Lookupflags,
-        path_ptr: *const u8,
-        path_len: usize,
-    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
-
-    fn fd_prestat_get_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> Result<wasip1::Prestat, wasip1::Errno>;
-
-    fn fd_prestat_dir_name_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        dir_path_ptr: *mut u8,
-        dir_path_len: usize,
-    ) -> Result<(), wasip1::Errno>;
-
-    fn fd_filestat_get_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-    ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
-
-    fn fd_pread_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        inode: &dyn Any,
-        buf: *mut u8,
-        buf_len: usize,
-        offset: usize,
-    ) -> Result<Size, wasip1::Errno>;
-
-    fn fd_read_stdin_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        buf: *mut u8,
-        buf_len: usize,
-    ) -> Result<Size, wasip1::Errno> {
-        self.fd_pread_raw(key, &(), buf, buf_len, 0)
-    }
-
-    fn path_open_raw(
-        &self,
-        key: &<Self::WasmIntegrator as WasmAccessMiddleIntegrator>::Key,
-        dir_inode: &dyn Any,
-        dir_flags: wasip1::Fdflags,
-        path_ptr: *const u8,
-        path_len: usize,
-        o_flags: wasip1::Oflags,
-        fs_rights_base: wasip1::Rights,
-        fs_rights_inheriting: wasip1::Rights,
-        fd_flags: wasip1::Fdflags,
-    ) -> Result<alloc::boxed::Box<dyn Any>, wasip1::Errno>;
 }

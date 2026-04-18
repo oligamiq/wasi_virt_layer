@@ -4,7 +4,7 @@ use crate::wasi::file::Wasip1ConstLFS;
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
-use crate::{memory::WasmAccess, wasi::file::Wasip1LFS};
+use crate::memory::WasmAccess;
 
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
@@ -32,7 +32,7 @@ pub trait OpenFdInfo: core::fmt::Debug {
 }
 
 pub trait OpenFdInfoWithInode: OpenFdInfo {
-    type InodeId;
+    type InodeId: Clone + core::fmt::Debug;
 
     fn inode_id(&self) -> Self::InodeId;
     fn set_inode_id(&mut self, inode_id: Self::InodeId);

@@ -4,6 +4,7 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 use crate::wasi::file::Wasip1DynamicLFS;
 use crate::wasi::file::changeable::inode::DetailedOpenFd;
 use crate::wasi::file::constant::vfs::{OpenFdInfo, OpenFdInfoWithInode};
+use crate::wasi::file::constant::vfs_impl::trace_fs;
 use crate::{
     memory::WasmAccess,
     wasi::file::{Wasip1FileSystem, changeable::inode::InodeId},
@@ -25,7 +26,6 @@ use core::cell::UnsafeCell;
 use alloc::collections::BTreeMap;
 
 /// A virtual file system implementation that maps file descriptors to inodes in a ChangeableLFS.
-#[derive(Debug)]
 pub struct ChangeableVFS<
     LFS: Wasip1DynamicLFS + core::fmt::Debug,
     OpenFd: OpenFdInfoWithInode + 'static = DetailedOpenFd,
@@ -42,6 +42,50 @@ pub struct ChangeableVFS<
     #[cfg(not(feature = "threads"))]
     pub next_fd: UnsafeCell<Fd>,
 }
+
+impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug
+    for ChangeableVFS<LFS, OpenFd>
+where
+    LFS::Inode: core::fmt::Debug,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("ChangeableVFS")
+            .field("lfs", &self.lfs)
+            .field(
+                "fd_map",
+                &{
+                    use alloc::collections::BTreeMap;
+
+                    #[cfg(feature = "threads")]
+                    {
+                        self.fd_map
+                            .iter()
+                            .map(|entry| (*entry.key(), entry.value().inode_id()))
+                            .collect::<BTreeMap<_, _>>()
+                    }
+                    #[cfg(not(feature = "threads"))]
+                    {
+                        unsafe { &*self.fd_map.get() }
+                            .iter()
+                            .map(|(fd, open_fd)| (*fd, open_fd.inode_id()))
+                            .collect::<BTreeMap<_, _>>()
+                    }
+                },
+            )
+            .field("next_fd", &{
+                #[cfg(feature = "threads")]
+                {
+                    self.next_fd.load(Ordering::SeqCst)
+                }
+                #[cfg(not(feature = "threads"))]
+                {
+                    unsafe { *self.next_fd.get() }
+                }
+            })
+            .finish()
+    }
+}
+
 unsafe impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Send
     for ChangeableVFS<LFS, OpenFd>
 where
@@ -57,6 +101,8 @@ where
 
 macro_rules! get_open_fd {
     ($name:ident = $self:ident, $fd:ident) => {
+        trace_fs!($self, Wasm; "get_open_fd: fd={}", $fd);
+
         #[cfg(feature = "threads")]
         let __bind = $self.fd_map.get(&$fd);
         #[cfg(feature = "threads")]
@@ -198,6 +244,8 @@ where
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, fd);
 
+        trace_fs!(self, Wasm; "fd_readdir: fd={fd}, buf_len={buf_len}, cookie={cookie}");
+
         if !self.lfs.is_dir(open_fd.inode_id().into().into()) {
             return wasip1::ERRNO_NOTDIR;
         }
@@ -232,9 +280,13 @@ where
         iovs_len: usize,
         nwritten_ret: *mut Size,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_write: fd={fd}, iovs_len={iovs_len}");
+
         match fd {
             0 => wasip1::ERRNO_BADF,
             1 | 2 => {
+                trace_fs!(self, Wasm; "fd_write to stdio: fd={fd}, iovs_len={iovs_len}");
+
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
                 let mut written = 0;
                 for iovs in iovs_vec {
@@ -290,6 +342,8 @@ where
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, fd);
 
+        trace_fs!(self, Wasm; "path_filestat_get: fd={fd}, flags={flags}, path_len={path_len}");
+
         match self.lfs.path_filestat_get_raw::<Wasm>(
             open_fd.inode_id().into().into(),
             flags,
@@ -321,6 +375,8 @@ where
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, fd);
 
+        trace_fs!(self, Wasm; "fd_prestat_get: fd={fd}");
+
         match self
             .lfs
             .fd_prestat_get_raw::<Wasm>(open_fd.inode_id().into().into())
@@ -341,6 +397,8 @@ where
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, fd);
 
+        trace_fs!(self, Wasm; "fd_prestat_dir_name: fd={fd}, dir_path_len={dir_path_len}");
+
         match self.lfs.fd_prestat_dir_name_raw::<Wasm>(
             open_fd.inode_id().into().into(),
             dir_path_ptr,
@@ -352,6 +410,8 @@ where
     }
 
     fn fd_close_raw<Wasm: WasmAccess>(&self, fd: Fd) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_close: fd={fd}");
+
         match self.remove_open_fd(fd) {
             Some(_) => wasip1::ERRNO_SUCCESS,
             None => wasip1::ERRNO_BADF,
@@ -364,6 +424,8 @@ where
         filestat_ret: *mut wasip1::Filestat,
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, fd);
+
+        trace_fs!(self, Wasm; "fd_filestat_get: fd={fd}");
 
         match self
             .lfs
@@ -394,6 +456,8 @@ where
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, fd);
 
+        trace_fs!(self, Wasm; "fd_fdstat_get: fd={fd}");
+
         match self
             .lfs
             .fd_filestat_get_raw::<Wasm>(open_fd.inode_id().into().into())
@@ -419,8 +483,12 @@ where
         iovs_len: usize,
         nread_ret: *mut Size,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_read: fd={fd}, iovs_len={iovs_len}");
+
         match fd {
             0 => {
+                trace_fs!(self, Wasm; "fd_read from stdin: fd={fd}, iovs_len={iovs_len}");
+
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
                 let mut total_read = 0;
                 for iovs in iovs_vec {
@@ -438,6 +506,8 @@ where
             1 | 2 => wasip1::ERRNO_BADF,
             fd => {
                 get_open_fd!(open_fd = self, fd);
+
+                trace_fs!(self, Wasm; "fd_read from file: fd={fd}, iovs_len={iovs_len}");
 
                 let mut cursor = open_fd.cursor();
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
@@ -478,6 +548,8 @@ where
         fd_ret: *mut Fd,
     ) -> wasip1::Errno {
         get_open_fd!(open_fd = self, dir_fd);
+
+        trace_fs!(self, Wasm; "path_open: dir_fd={dir_fd}, dir_flags={dir_flags}, path_len={path_len}, o_flags={o_flags}, fs_rights_base={fs_rights_base}, fs_rights_inheriting={fs_rights_inheriting}, fd_flags={fd_flags}");
 
         match self.lfs.path_open_raw::<Wasm>(
             open_fd.inode_id().into().into(),
