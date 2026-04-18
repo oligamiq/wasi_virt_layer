@@ -125,7 +125,7 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             let iovec_arr = [wasip1::Iovec {
-                buf: access.memory_director_with_mut(buf),
+                buf: access.memory_director_mut_with(buf),
                 buf_len: len,
             }];
 

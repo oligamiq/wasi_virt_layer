@@ -212,7 +212,7 @@ macro_rules! __memory_director_wasm_access {
     (@const, $name:ident) => {
         $crate::__private::paste::paste! {
             #[inline(always)]
-            const fn memory_director_raw(ptr: isize) -> isize {
+            fn memory_director_raw(ptr: isize) -> isize {
                 #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
