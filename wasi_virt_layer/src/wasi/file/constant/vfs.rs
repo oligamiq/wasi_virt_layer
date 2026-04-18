@@ -350,20 +350,20 @@ where
                 Ok(written)
             }
             fd => {
-                let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+                self.with_inode_and_lfs(fd, |inode, lfs| {
+                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                    let mut written = 0;
 
-                let mut written = 0;
+                    for iovs in iovs_vec {
+                        let buf_len = iovs.buf_len;
+                        let buf_ptr = iovs.buf;
 
-                for iovs in iovs_vec {
-                    let buf_len = iovs.buf_len;
-                    let buf_ptr = iovs.buf;
+                        written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
+                    }
 
-                    written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
-                }
-
-                Ok(written)
+                    Ok(written)
+                })?
             }
         }
     }
@@ -375,31 +375,31 @@ where
         path_ptr: *const u8,
         path_len: usize,
     ) -> Result<wasip1::Filestat, wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            let status = lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)?;
 
-        let status = lfs.path_filestat_get_raw::<Wasm>(inode, flags, path_ptr, path_len)?;
-
-        Ok(wasip1::Filestat {
-            dev: 0, // no device
-            ino: status.ino,
-            filetype: status.filetype,
-            nlink: status.nlink,
-            size: status.size,
-            atim: status.atim,
-            mtim: status.mtim,
-            ctim: status.ctim,
-        })
+            Ok(wasip1::Filestat {
+                dev: 0, // no device
+                ino: status.ino,
+                filetype: status.filetype,
+                nlink: status.nlink,
+                size: status.size,
+                atim: status.atim,
+                mtim: status.mtim,
+                ctim: status.ctim,
+            })
+        })?
     }
 
     pub(crate) fn fd_prestat_get_raw_inner<Wasm: WasmAccess>(
         &self,
         fd: Fd,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            let prestat = lfs.fd_prestat_get_raw::<Wasm>(inode)?;
 
-        let prestat = lfs.fd_prestat_get_raw::<Wasm>(inode)?;
-
-        Ok(prestat)
+            Ok(prestat)
+        })?
     }
 
     pub(crate) fn fd_prestat_dir_name_raw_inner<Wasm: WasmAccess>(
@@ -408,45 +408,45 @@ where
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
-
-        lfs.fd_prestat_dir_name_raw::<Wasm>(inode, dir_path_ptr, dir_path_len)
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.fd_prestat_dir_name_raw::<Wasm>(inode, dir_path_ptr, dir_path_len)
+        })?
     }
 
     pub(crate) fn fd_filestat_get_raw_inner<Wasm: WasmAccess>(
         &self,
         fd: Fd,
     ) -> Result<wasip1::Filestat, wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            let filestat = lfs.fd_filestat_get_raw::<Wasm>(inode)?;
 
-        let filestat = lfs.fd_filestat_get_raw::<Wasm>(inode)?;
-
-        Ok(wasip1::Filestat {
-            dev: 0, // no device
-            ino: filestat.ino,
-            filetype: filestat.filetype,
-            nlink: filestat.nlink,
-            size: filestat.size,
-            atim: filestat.atim,
-            mtim: filestat.mtim,
-            ctim: filestat.ctim,
-        })
+            Ok(wasip1::Filestat {
+                dev: 0, // no device
+                ino: filestat.ino,
+                filetype: filestat.filetype,
+                nlink: filestat.nlink,
+                size: filestat.size,
+                atim: filestat.atim,
+                mtim: filestat.mtim,
+                ctim: filestat.ctim,
+            })
+        })?
     }
 
     pub(crate) fn fd_fdstat_get_raw_inner<Wasm: WasmAccess>(
         &self,
         fd: Fd,
     ) -> Result<wasip1::Fdstat, wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            let filestat = lfs.fd_filestat_get_raw::<Wasm>(inode)?;
 
-        let filestat = lfs.fd_filestat_get_raw::<Wasm>(inode)?;
-
-        Ok(wasip1::Fdstat {
-            fs_filetype: filestat.filetype,
-            fs_flags: 0,
-            fs_rights_base: !0,
-            fs_rights_inheriting: !0,
-        })
+            Ok(wasip1::Fdstat {
+                fs_filetype: filestat.filetype,
+                fs_flags: 0,
+                fs_rights_base: !0,
+                fs_rights_inheriting: !0,
+            })
+        })?
     }
 
     pub(crate) fn fd_close_raw_inner<Wasm: WasmAccess>(&self, fd: Fd) -> Result<(), wasip1::Errno> {
@@ -532,26 +532,29 @@ where
             }
             1 | 2 => return Err(wasip1::ERRNO_BADF),
             fd => {
-                let mut cursor = self.get_cursor(fd)?;
+                let cursor = self.get_cursor(fd)?;
 
-                let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
+                let (read, new_cursor) = self.with_inode_and_lfs(fd, |inode, lfs| {
+                    if lfs.is_dir(inode) {
+                        return Err(wasip1::ERRNO_ISDIR);
+                    }
 
-                if lfs.is_dir(inode) {
-                    return Err(wasip1::ERRNO_ISDIR);
-                }
+                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                    let mut read = 0;
+                    let mut inner_cursor = cursor;
 
-                let mut read = 0;
+                    for iovs in iovs_vec {
+                        let nread =
+                            lfs.fd_pread_raw::<Wasm>(inode, iovs.buf as *mut _, iovs.buf_len, inner_cursor)?;
+                        read += nread;
+                        inner_cursor += nread;
+                    }
 
-                for iovs in iovs_vec {
-                    let nread =
-                        lfs.fd_pread_raw::<Wasm>(inode, iovs.buf as *mut _, iovs.buf_len, cursor)?;
-                    read += nread;
-                    cursor += nread;
-                }
+                    Ok((read, inner_cursor))
+                })??;
 
-                self.set_cursor(fd, cursor)?;
+                self.set_cursor(fd, new_cursor)?;
 
                 Ok(read)
             }
@@ -569,18 +572,18 @@ where
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
     ) -> Result<Fd, wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(dir_fd).ok_or(wasip1::ERRNO_BADF)?;
-
-        let new_inode = lfs.path_open_raw::<Wasm>(
-            inode,
-            dir_flags,
-            path_ptr,
-            path_len,
-            o_flags,
-            fs_rights_base,
-            fs_rights_inheriting,
-            fd_flags,
-        )?;
+        let new_inode = self.with_inode_and_lfs(dir_fd, |inode, lfs| {
+            lfs.path_open_raw::<Wasm>(
+                inode,
+                dir_flags,
+                path_ptr,
+                path_len,
+                o_flags,
+                fs_rights_base,
+                fs_rights_inheriting,
+                fd_flags,
+            )
+        })??;
 
         Ok(self.push_inode(new_inode))
     }

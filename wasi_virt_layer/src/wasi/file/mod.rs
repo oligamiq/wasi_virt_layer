@@ -72,11 +72,17 @@ pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
 }
 
 /// An empty implementation of WasiAddInfo for read-only or stateless inodes.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct NoAddInfo;
 
+impl WasiAddInfo for NoAddInfo {}
+
+impl ConstDefault for NoAddInfo {
+    const DEFAULT: Self = Self;
+}
+
 /// A default implementation of WasiAddInfo storing all timestamps.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct DefaultAddInfo {
     /// Access time
     pub atim: Timestamp,
@@ -84,6 +90,14 @@ pub struct DefaultAddInfo {
     pub mtim: Timestamp,
     /// Creation time
     pub ctim: Timestamp,
+}
+
+impl ConstDefault for DefaultAddInfo {
+    const DEFAULT: Self = Self {
+        atim: 0,
+        mtim: 0,
+        ctim: 0,
+    };
 }
 
 impl WasiAddInfo for DefaultAddInfo {
