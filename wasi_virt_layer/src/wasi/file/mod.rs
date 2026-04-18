@@ -5,8 +5,6 @@ use core::any::Any;
 use core::borrow::Borrow;
 use core::ops::Deref;
 
-use alloc::boxed::Box;
-
 use smallstr::SmallString;
 
 use crate::memory::{
@@ -24,6 +22,7 @@ use crate::__private::wasip1;
 
 use crate::__private::wasip1::*;
 use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::multiple::inode::BoxedInodeCommon;
 
 /// File statistics excluding the device ID.
 pub struct FilestatWithoutDevice {
@@ -124,14 +123,16 @@ impl WasiAddInfo for DefaultAddInfo {
 }
 
 pub(crate) trait Wasip1LFSBaseWrapper: Wasip1LFSBase {
-    fn downcast_inode(inode: &dyn Any) -> &<Self as Wasip1LFSBase>::Inode;
+    fn downcast_inode(inode: &dyn InodeIdCommon) -> &<Self as Wasip1LFSBase>::Inode;
 }
 
 impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T
 where
     <Self as Wasip1LFSBase>::Inode: 'static,
 {
-    fn downcast_inode(inode: &dyn Any) -> &<Self as Wasip1LFSBase>::Inode {
+    fn downcast_inode(inode: &dyn InodeIdCommon) -> &<Self as Wasip1LFSBase>::Inode {
+        let inode = inode as &dyn Any;
+
         inode
             .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
             .unwrap()
@@ -330,7 +331,7 @@ pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
     fn index(
         &self,
         index: usize,
-        f: &mut dyn for<'a, 'b> FnMut(Option<(&'a dyn Any, &'b dyn DerefToStrCustom)>),
+        f: &mut dyn for<'a, 'b> FnMut(Option<(&'a dyn InodeIdCommon, &'b dyn DerefToStrCustom)>),
     );
 }
 
@@ -340,7 +341,7 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
     fn fd_write_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
@@ -362,7 +363,7 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
     fn fd_readdir_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         buf: *mut u8,
         buf_len: usize,
         cookie: Dircookie,
@@ -371,7 +372,7 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
     fn path_filestat_get_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -380,13 +381,13 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
     fn fd_prestat_get_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
     fn fd_prestat_dir_name_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno>;
@@ -394,13 +395,13 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
     fn fd_filestat_get_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
     fn fd_pread_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         buf: *mut u8,
         buf_len: usize,
         offset: usize,
@@ -416,7 +417,7 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
     fn path_open_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        dir_ino: &dyn Any,
+        dir_ino: &dyn InodeIdCommon,
         dir_flags: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -424,7 +425,7 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
         fs_rights_base: wasip1::Rights,
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
-    ) -> Result<Box<dyn Any>, wasip1::Errno>;
+    ) -> Result<BoxedInodeCommon, wasip1::Errno>;
 }
 
 /// Trait for a virtual file implementation.

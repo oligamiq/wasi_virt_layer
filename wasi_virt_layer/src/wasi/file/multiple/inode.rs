@@ -9,13 +9,27 @@ use crate::{
     },
 };
 
-type InodeId = SmallBox<dyn InodeIdCommon, [usize; 4]>;
+#[derive(Debug)]
+pub struct BoxedInodeCommon(SmallBox<dyn InodeIdCommon, [usize; 4]>);
+
+impl BoxedInodeCommon {
+    pub fn __new<T: InodeIdCommon + 'static>(inode: T) -> Self {
+        let boxed: SmallBox<dyn InodeIdCommon, [usize; 4]> = smallbox::smallbox!(inode);
+        Self(boxed)
+    }
+}
+
+macro_rules! boxedInode {
+    ($t:ty; $inode:expr) => {{ BoxedInodeCommon::__new::<<$t as Wasip1LFSBase>::Inode>($inode) }};
+}
+
+pub(crate) use boxedInode;
 
 /// Represents an active, open file descriptor referencing an Inode
 #[derive(Debug)]
 pub struct DetailedDynamicOpenFd {
     /// The inode ID this file descriptor refers to
-    pub inode_id: InodeId,
+    pub inode_id: BoxedInodeCommon,
     /// The current byte offset within the file (for reads/writes)
     pub cursor: usize,
     /// The base rights granted to this file descriptor
@@ -61,7 +75,7 @@ impl OpenFdInfo for DetailedDynamicOpenFd {
 }
 
 impl OpenFdInfoWithInode for DetailedDynamicOpenFd {
-    type InodeId = InodeId;
+    type InodeId = BoxedInodeCommon;
 
     fn from_inode_id(inode_id: Self::InodeId) -> Self {
         Self {

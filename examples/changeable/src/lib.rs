@@ -80,8 +80,7 @@ mod fs {
         lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
             .unwrap();
 
-        lfs
-            .add_file(root_inode, "hello.txt", b"Hello, root!".to_vec())
+        lfs.add_file(root_inode, "hello.txt", b"Hello, root!".to_vec())
             .unwrap();
 
         lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())

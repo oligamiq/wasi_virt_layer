@@ -1,5 +1,7 @@
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
+use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::multiple::inode::{BoxedInodeCommon, boxedInode};
 use crate::wasi::file::{ConstDefault, DerefToStrCustom, Wasip1LFSBaseWrapper};
 use crate::wasi::file::{Wasip1ConstLFS, Wasip1DynCompatibleLFS, Wasip1DynamicLFS, Wasip1LFSBase};
 use crate::{
@@ -743,7 +745,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn fd_write_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         data: *const u8,
         data_len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -802,7 +804,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn fd_readdir_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         buf: *mut u8,
         buf_len: usize,
         cookie: wasip1::Dircookie,
@@ -873,7 +875,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn path_filestat_get_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -896,7 +898,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn fd_prestat_get_raw_dyn_compatible(
         &self,
         _: &dyn crate::memory::WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
         let inode = Self::downcast_inode(inode);
 
@@ -915,7 +917,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn fd_prestat_dir_name_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
@@ -934,7 +936,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn fd_filestat_get_raw_dyn_compatible(
         &self,
         _: &dyn crate::memory::WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         let inode = Self::downcast_inode(inode);
 
@@ -955,7 +957,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn fd_pread_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         buf: *mut u8,
         buf_len: usize,
         offset: usize,
@@ -1003,7 +1005,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
     fn path_open_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        dir_ino: &dyn Any,
+        dir_ino: &dyn InodeIdCommon,
         _: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -1011,8 +1013,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
         fs_rights_base: wasip1::Rights,
         _: wasip1::Rights,
         _: wasip1::Fdflags,
-    ) -> Result<Box<dyn Any>, wasip1::Errno> {
-        let dir_ino = *dir_ino.downcast_ref::<InodeId>().unwrap();
+    ) -> Result<BoxedInodeCommon, wasip1::Errno> {
+        let dir_ino = Self::downcast_inode(dir_ino);
 
         if let Some(inode) =
             self.get_inode_for_path_dyn_compatible(access, &dir_ino, path_ptr, path_len)
@@ -1032,7 +1034,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
                     }
                 });
             }
-            Ok(Box::new(inode))
+            Ok(boxedInode!(Self; inode))
         } else {
             if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
                 let path =
@@ -1062,7 +1064,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
                         let data = if is_dir {
                             let mut map = DirMap::new();
                             map.insert(SmallString::from_str("."), 0); // Self (will update)
-                            map.insert(SmallString::from_str(".."), dir_ino);
+                            map.insert(SmallString::from_str(".."), *dir_ino);
                             InodeData::Dir(map)
                         } else {
                             InodeData::File(Vec::new())
@@ -1091,7 +1093,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
                             }
                         });
 
-                        return Ok(Box::new(new_id));
+                        return Ok(boxedInode!(Self; new_id));
                     }
                 }
                 Err(wasip1::ERRNO_NOENT)

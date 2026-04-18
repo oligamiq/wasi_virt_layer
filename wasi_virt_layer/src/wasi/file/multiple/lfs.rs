@@ -59,7 +59,8 @@ pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDyn
     #[cfg(feature = "threads")]
     pub wasms: DashMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
     #[cfg(not(feature = "threads"))]
-    pub wasms: UnsafeCell<BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>>,
+    pub wasms:
+        UnsafeCell<BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>>,
     #[cfg(feature = "threads")]
     pub fd_map: DashMap<Fd, (usize, OpenFd)>,
     #[cfg(feature = "threads")]
@@ -102,7 +103,10 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
     }
 
     #[cfg(feature = "threads")]
-    pub fn get_wasm_access(&self, name: &str) -> Option<impl core::ops::Deref<Target = WasmAccessDynCompatibleWrapper>> {
+    pub fn get_wasm_access(
+        &self,
+        name: &str,
+    ) -> Option<impl core::ops::Deref<Target = WasmAccessDynCompatibleWrapper>> {
         self.wasms.get(name)
     }
 }

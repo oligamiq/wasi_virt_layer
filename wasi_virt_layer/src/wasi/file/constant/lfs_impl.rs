@@ -6,6 +6,8 @@ use crate::__private::wasip1::Dircookie;
 
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::Wasip1LFSBaseWrapper as _;
+use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::multiple::inode::{BoxedInodeCommon, boxedInode};
 use crate::wasi::file::{
     DerefToStrCustom, Wasip1ConstLFS, Wasip1DynCompatibleLFS, Wasip1DynCompatibleLFSSlice,
     Wasip1DynamicLFS, Wasip1LFSBase,
@@ -294,7 +296,9 @@ impl<
             fn index(
                 &self,
                 idx: usize,
-                f: &mut dyn for<'b, 'c> FnMut(Option<(&'b dyn Any, &'c dyn DerefToStrCustom)>),
+                f: &mut dyn for<'b, 'c> FnMut(
+                    Option<(&'b dyn InodeIdCommon, &'c dyn DerefToStrCustom)>,
+                ),
             ) {
                 if idx >= ConstRoot::PRE_OPEN.len() {
                     f(None);
@@ -302,7 +306,7 @@ impl<
                     let inode = ConstRoot::PRE_OPEN[idx];
                     let name_and_inode = ConstRoot::FILES[inode];
                     f(Some((
-                        &inode as &dyn Any,
+                        &inode as &dyn InodeIdCommon,
                         &name_and_inode as &dyn DerefToStrCustom,
                     )));
                 }
@@ -317,7 +321,7 @@ impl<
     fn fd_write_raw_dyn_compatible(
         &self,
         _: &dyn WasmAccessDynCompatibleRaw,
-        _: &dyn Any,
+        _: &dyn InodeIdCommon,
         _: *const u8,
         _: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -367,7 +371,7 @@ impl<
     fn fd_readdir_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         buf: *mut u8,
         buf_len: usize,
         cookie: Dircookie,
@@ -382,7 +386,7 @@ impl<
     fn path_filestat_get_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         _: wasip1::Lookupflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -399,7 +403,7 @@ impl<
     fn fd_prestat_get_raw_dyn_compatible(
         &self,
         _: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
         let inode = Self::downcast_inode(inode);
 
@@ -423,7 +427,7 @@ impl<
     fn fd_prestat_dir_name_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
@@ -446,7 +450,7 @@ impl<
     fn fd_filestat_get_raw_dyn_compatible(
         &self,
         _: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         let inode = Self::downcast_inode(inode);
 
@@ -456,7 +460,7 @@ impl<
     fn fd_pread_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        inode: &dyn Any,
+        inode: &dyn InodeIdCommon,
         buf: *mut u8,
         buf_len: usize,
         offset: usize,
@@ -486,7 +490,7 @@ impl<
     fn path_open_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
-        dir_inode: &dyn Any,
+        dir_inode: &dyn InodeIdCommon,
         _: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -494,13 +498,11 @@ impl<
         fs_rights_base: wasip1::Rights,
         _: wasip1::Rights,
         _: wasip1::Fdflags,
-    ) -> Result<Box<dyn Any>, wasip1::Errno> {
-        let dir_ino = *dir_inode
-            .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
-            .unwrap();
+    ) -> Result<BoxedInodeCommon, wasip1::Errno> {
+        let dir_ino = Self::downcast_inode(dir_inode);
 
         if let Some(inode) =
-            self.get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
+            self.get_inode_for_path_dyn_compatible(access, *dir_ino, path_ptr, path_len)
         {
             if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
                 return Err(wasip1::ERRNO_EXIST);
@@ -519,7 +521,7 @@ impl<
                 return Err(wasip1::ERRNO_PERM);
             }
 
-            Ok(Box::new(inode))
+            Ok(boxedInode!(Self; inode))
         } else {
             if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
                 return Err(wasip1::ERRNO_PERM);

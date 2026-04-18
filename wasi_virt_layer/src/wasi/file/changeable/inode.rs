@@ -10,7 +10,7 @@ pub type InodeId = usize;
 /// Directory entries map a file name to its underlying inode ID
 pub type DirMap = BTreeMap<SmallString<[u8; 32]>, InodeId>;
 
-pub trait InodeIdCommon: core::fmt::Debug + 'static {}
+pub trait InodeIdCommon: core::fmt::Debug + core::any::Any + 'static {}
 
 impl<T: core::fmt::Debug + 'static> InodeIdCommon for T {}
 

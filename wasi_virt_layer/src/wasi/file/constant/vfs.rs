@@ -349,22 +349,20 @@ where
 
                 Ok(written)
             }
-            fd => {
-                self.with_inode_and_lfs(fd, |inode, lfs| {
-                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+            fd => self.with_inode_and_lfs(fd, |inode, lfs| {
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
-                    let mut written = 0;
+                let mut written = 0;
 
-                    for iovs in iovs_vec {
-                        let buf_len = iovs.buf_len;
-                        let buf_ptr = iovs.buf;
+                for iovs in iovs_vec {
+                    let buf_len = iovs.buf_len;
+                    let buf_ptr = iovs.buf;
 
-                        written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
-                    }
+                    written += lfs.fd_write_raw::<Wasm>(inode, buf_ptr, buf_len)?;
+                }
 
-                    Ok(written)
-                })?
-            }
+                Ok(written)
+            })?,
         }
     }
 
@@ -545,8 +543,12 @@ where
                     let mut inner_cursor = cursor;
 
                     for iovs in iovs_vec {
-                        let nread =
-                            lfs.fd_pread_raw::<Wasm>(inode, iovs.buf as *mut _, iovs.buf_len, inner_cursor)?;
+                        let nread = lfs.fd_pread_raw::<Wasm>(
+                            inode,
+                            iovs.buf as *mut _,
+                            iovs.buf_len,
+                            inner_cursor,
+                        )?;
                         read += nread;
                         inner_cursor += nread;
                     }
