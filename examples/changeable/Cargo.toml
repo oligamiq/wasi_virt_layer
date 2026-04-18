@@ -11,7 +11,7 @@ parking_lot = "0.12.3"
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["std", "alloc", "trace-fs"]
+features = ["std", "alloc"]
 
 [lib]
 crate-type = ["cdylib"]

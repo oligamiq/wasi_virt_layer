@@ -76,6 +76,9 @@ mod fs {
 
         let vfs = ChangeableVFS::new(lfs);
 
+        // Add preopen fd for root
+        vfs.add_fd(root_inode, !0, !0);
+
         // Create a dynamic directory and file
         let docs_inode = vfs.add_dir(root_inode, "docs").unwrap();
         vfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
@@ -84,6 +87,9 @@ mod fs {
         let sub_inode = vfs.add_dir(docs_inode, "sub").unwrap();
         vfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
             .unwrap();
+
+        let txt_inode = vfs.add_file(root_inode, "hello.txt", b"Hello, root!".to_vec()).unwrap();
+        vfs.add_fd(txt_inode, !0, !0);
 
         // Wrap in VFS
         vfs
