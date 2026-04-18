@@ -2,6 +2,8 @@ use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::wasi::file::Wasip1ConstLFS;
+use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::constant::vfs::OpenFdInfo;
 use crate::{
     memory::WasmAccess,
     wasi::file::{Wasip1FileSystem, constant::vfs::Wasip1ConstVFS},
@@ -35,10 +37,10 @@ macro_rules! trace_fs {
 
 pub(crate) use trace_fs;
 
-impl<LFS: Wasip1ConstLFS + Sync, const FLAT_LEN: usize> Wasip1FileSystem
-    for Wasip1ConstVFS<LFS, FLAT_LEN>
+impl<LFS: Wasip1ConstLFS + Sync, const FLAT_LEN: usize, OpenFd: OpenFdInfo + Default>
+    Wasip1FileSystem for Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>
 where
-    LFS::Inode: Copy + core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
     fn fd_write_raw<Wasm: WasmAccess>(
         &self,

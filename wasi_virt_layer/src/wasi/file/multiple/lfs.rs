@@ -1,4 +1,3 @@
-use alloc::collections::BTreeMap;
 use core::any::Any;
 use core::ffi::c_void;
 
@@ -9,183 +8,12 @@ use crate::{
     file::{FilestatWithoutDevice, Wasip1FileSystem},
     memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName},
     wasi::file::{
-        Wasip1DynCompatibleLFS, Wasip1DynamicLFS, multiple::wasm::WasmAccessDynCompatibleWrapper,
+        ConstDefault, Wasip1DynCompatibleLFS, Wasip1DynamicLFS,
+        changeable::inode::{self, DetailedOpenFd},
+        constant::vfs::OpenFdInfoWithInode,
+        multiple::{inode::DetailedDynamicOpenFd, wasm::WasmAccessDynCompatibleWrapper},
     },
 };
-
-// pub(crate) struct WasmAccessWrapperBase<'a, WasmWrapper: WasmAccessWrapper> {
-//     pub inner: &'a WasmWrapper,
-// }
-
-// pub(crate) enum WasmAccessArgsWrapperInner<'a> {
-//     Memcpy {
-//         t_size: u8,
-//         offset: *mut c_void,
-//         data: &'a c_void,
-//         data_len: usize,
-//     },
-//     MemcpyTo {
-//         t_size: u8,
-//         offset: &'a mut c_void,
-//         src: *const c_void,
-//         data_len: usize,
-//     },
-//     StoreLe {
-//         t_size: u8,
-//         offset: *mut c_void,
-//         value: &'a c_void,
-//     },
-//     LoadLe {
-//         t_size: u8,
-//         offset: *const c_void,
-//         ret: &'a mut c_void,
-//     },
-//     #[cfg(not(feature = "multi_memory"))]
-//     MemoryDirector { ptr: *const c_void },
-//     #[cfg(not(feature = "multi_memory"))]
-//     MemoryDirectorMut { ptr: *mut c_void },
-// }
-
-// impl<'a, WasmWrapper: WasmAccessWrapper> WasmAccessWrapperBase<'a, WasmWrapper> {
-//     pub fn memcpy<T: 'static>(&self, offset: *mut T, data: &'a [T]) {
-//         let cmd = WasmAccessArgsWrapperInner::Memcpy {
-//             t_size: core::mem::size_of::<T>() as u8,
-//             offset: offset as *mut c_void,
-//             data: unsafe { &*(data.as_ptr() as *const c_void) } as &c_void,
-//             data_len: data.len(),
-//         };
-//         self.inner.apply(cmd);
-//     }
-
-//     pub fn memcpy_to<T: 'static>(&self, offset: &mut [T], src: *const T) {
-//         let cmd = WasmAccessArgsWrapperInner::MemcpyTo {
-//             t_size: core::mem::size_of::<T>() as u8,
-//             offset: unsafe { &mut *(offset.as_mut_ptr() as *mut c_void) } as &mut c_void,
-//             src: src as *const c_void,
-//             data_len: offset.len(),
-//         };
-//         self.inner.apply(cmd);
-//     }
-
-//     pub fn store_le<T: 'static>(&self, offset: *mut T, value: &'a impl core::borrow::Borrow<T>) {
-//         let cmd = WasmAccessArgsWrapperInner::StoreLe {
-//             t_size: core::mem::size_of::<T>() as u8,
-//             offset: offset as *mut c_void,
-//             value: unsafe { &*(value.borrow() as *const T as *const c_void) } as &c_void,
-//         };
-//         self.inner.apply(cmd);
-//     }
-
-//     pub fn load_le<T: 'static + core::fmt::Debug + Copy>(&self, offset: *const T) -> T {
-//         let holder = core::mem::MaybeUninit::<T>::uninit();
-//         let cmd = WasmAccessArgsWrapperInner::LoadLe {
-//             t_size: core::mem::size_of::<T>() as u8,
-//             offset: offset as *const c_void,
-//             ret: unsafe { &mut *(holder.as_ptr() as *mut c_void) } as &mut c_void,
-//         };
-//         self.inner.apply(cmd);
-//         unsafe { core::ptr::read(holder.as_ptr() as *const T) }
-//     }
-
-//     #[cfg(not(feature = "multi_memory"))]
-//     pub fn memory_director<T>(&self, ptr: *const T) -> *const T {
-//         let cmd = WasmAccessArgsWrapperInner::MemoryDirector {
-//             ptr: ptr as *const c_void,
-//         };
-//         let res = self.inner.memory_director(cmd);
-//         res as *const T
-//     }
-
-//     #[cfg(not(feature = "multi_memory"))]
-//     pub fn memory_director_mut<T>(&self, ptr: *mut T) -> *mut T {
-//         let cmd = WasmAccessArgsWrapperInner::MemoryDirectorMut {
-//             ptr: ptr as *mut c_void,
-//         };
-//         let res = self.inner.memory_director_mut(cmd);
-//         res as *mut T
-//     }
-// }
-
-// impl<'a> WasmAccessArgsWrapperInner<'a> {
-//     pub fn apply<Wasm: WasmAccessDynCompatibleRaw>(self) {
-//         match self {
-//             WasmAccessArgsWrapperInner::Memcpy {
-//                 t_size,
-//                 offset,
-//                 data,
-//                 data_len,
-//             } => {
-//                 // second, we need to call the memcpy function with the correct type
-//                 Wasm::memcpy_raw(
-//                     offset as *mut u8,
-//                     data as *const c_void as *const u8,
-//                     data_len * t_size as usize,
-//                 );
-//             }
-//             WasmAccessArgsWrapperInner::MemcpyTo {
-//                 t_size,
-//                 offset,
-//                 src,
-//                 data_len,
-//             } => {
-//                 Wasm::memcpy_to_raw(
-//                     offset as *mut c_void as *mut u8,
-//                     src as *const c_void as *const u8,
-//                     data_len * t_size as usize,
-//                 );
-//             }
-//             WasmAccessArgsWrapperInner::StoreLe {
-//                 t_size,
-//                 offset,
-//                 value,
-//             } => {
-//                 Wasm::memcpy_raw(
-//                     offset as *mut u8,
-//                     value as *const c_void as *const u8,
-//                     t_size as usize,
-//                 );
-//             }
-//             WasmAccessArgsWrapperInner::LoadLe {
-//                 t_size,
-//                 offset,
-//                 ret,
-//             } => {
-//                 Wasm::memcpy_to_raw(
-//                     ret as *mut c_void as *mut u8,
-//                     offset as *const c_void as *const u8,
-//                     t_size as usize,
-//                 );
-//             }
-//             #[cfg(not(feature = "multi_memory"))]
-//             _ => unreachable!(),
-//         }
-//     }
-
-//     pub fn memory_director<Wasm: WasmAccessDynCompatibleRaw>(self) -> *const c_void {
-//         match self {
-//             #[cfg(not(feature = "multi_memory"))]
-//             WasmAccessArgsWrapperInner::MemoryDirector { ptr } => {
-//                 Wasm::memory_director_raw(ptr as isize) as *const c_void
-//             }
-//             #[cfg(not(feature = "multi_memory"))]
-//             WasmAccessArgsWrapperInner::MemoryDirectorMut { ptr } => {
-//                 Wasm::memory_director_raw(ptr as isize) as *mut c_void
-//             }
-//             _ => unreachable!(),
-//         }
-//     }
-// }
-
-// pub trait WasmAccessWrapper: core::fmt::Debug {
-//     /// Copies a slice of data into WASM memory starting at the given offset.
-//     fn apply(&self, arg: WasmAccessArgsWrapperInner);
-
-//     #[cfg(not(feature = "multi_memory"))]
-//     fn memory_director(&self, arg: WasmAccessArgsWrapperInner) -> *const c_void;
-
-//     #[cfg(not(feature = "multi_memory"))]
-//     fn memory_director_mut(&self, arg: WasmAccessArgsWrapperInner) -> *mut c_void;
-// }
 
 #[derive(Debug)]
 pub struct Wasip1DynCompatibleLFSWrapper {
@@ -204,27 +32,171 @@ impl AsRef<dyn Wasip1DynCompatibleLFS> for Wasip1DynCompatibleLFSWrapper {
     }
 }
 
-#[derive(Debug)]
-pub struct Wasip1MultipleVFS {
-    pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
-    pub wasms: BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
+impl core::ops::Deref for Wasip1DynCompatibleLFSWrapper {
+    type Target = dyn Wasip1DynCompatibleLFS;
+
+    fn deref(&self) -> &Self::Target {
+        self.lfs.as_ref()
+    }
 }
 
-impl Wasip1FileSystem for Wasip1MultipleVFS {
+#[cfg(feature = "threads")]
+use dashmap::DashMap;
+
+#[cfg(feature = "threads")]
+use std::sync::atomic::{AtomicU32, Ordering};
+
+#[cfg(not(feature = "threads"))]
+use core::cell::UnsafeCell;
+
+#[cfg(not(feature = "threads"))]
+use alloc::collections::BTreeMap;
+
+#[derive(Debug)]
+pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
+    pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
+    pub wasms: BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
+    #[cfg(feature = "threads")]
+    pub fd_map: DashMap<Fd, (usize, OpenFd)>,
+    #[cfg(feature = "threads")]
+    pub next_fd: AtomicU32,
+    #[cfg(not(feature = "threads"))]
+    pub fd_map: UnsafeCell<BTreeMap<Fd, (usize, OpenFd)>>,
+    #[cfg(not(feature = "threads"))]
+    pub next_fd: UnsafeCell<Fd>,
+}
+
+impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
+    pub fn new() -> Self {
+        Self {
+            lfss: SmallVec::new(),
+            wasms: BTreeMap::new(),
+            #[cfg(feature = "threads")]
+            fd_map: DashMap::new(),
+            #[cfg(feature = "threads")]
+            next_fd: AtomicU32::new(3), // Start from 3, as 0, 1, 2 are reserved for stdio
+            #[cfg(not(feature = "threads"))]
+            fd_map: UnsafeCell::new(BTreeMap::new()),
+            #[cfg(not(feature = "threads"))]
+            next_fd: UnsafeCell::new(3), // Start from 3, as 0, 1, 2 are reserved for stdio
+        }
+    }
+
+    pub fn add_lfs(&mut self, lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>) {
+        self.lfss.push(Wasip1DynCompatibleLFSWrapper::new(lfs));
+    }
+
+    pub fn add_wasm_access(
+        &mut self,
+        name: smallstr::SmallString<[u8; 32]>,
+        access: WasmAccessDynCompatibleWrapper,
+    ) {
+        self.wasms.insert(name, access);
+    }
+
+    pub fn get_wasm_access(&self, name: &str) -> Option<&WasmAccessDynCompatibleWrapper> {
+        self.wasms.get(name)
+    }
+}
+
+use crate::wasi::file::constant::vfs_impl::trace_fs;
+
+macro_rules! get_open_fd {
+    (($name:ident, $lfs:ident) = $self:ident, $fd:ident) => {
+        trace_fs!($self, Wasm; "get_open_fd: fd={}", $fd);
+
+        #[cfg(feature = "threads")]
+        let __bind = $self.fd_map.get(&$fd);
+        #[cfg(feature = "threads")]
+        let ($lfs, $name) = match __bind.as_ref() {
+            Some(entry) => entry.value(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let ($lfs, $name) = match unsafe { &*$self.fd_map.get() }.get(&$fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        let $lfs = &$self.lfss[*$lfs];
+    };
+}
+
+impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleVFS<OpenFd> {
     fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
         iovs_len: usize,
-        nwritten: *mut Size,
+        nwritten_ret: *mut Size,
     ) -> wasip1::Errno {
-        for lfs in &self.lfss {
-            // if let Ok(n) = lfs.::<Wasm>(fd, iovs_ptr, iovs_len, nwritten) {
-            //     return n;
-            // }
-        }
+        let access = match self.get_wasm_access(Wasm::NAME) {
+            Some(a) => a,
+            None => return wasip1::ERRNO_BADF,
+        };
 
-        wasip1::ERRNO_BADF
+        match fd {
+            0 => wasip1::ERRNO_BADF, // stdin is not writable
+            1 | 2 => {
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                let mut written = 0;
+                for iovs in iovs_vec {
+                    match fd {
+                        1 => match self
+                            .lfss
+                            .first()
+                            .unwrap()
+                            .fd_write_stdout_raw_dyn_compatible(
+                                access,
+                                iovs.buf as *const u8,
+                                iovs.buf_len,
+                            ) {
+                            Ok(w) => written += w,
+                            Err(e) => return e,
+                        },
+                        2 => match self
+                            .lfss
+                            .first()
+                            .unwrap()
+                            .fd_write_stderr_raw_dyn_compatible(
+                                access,
+                                iovs.buf as *const u8,
+                                iovs.buf_len,
+                            ) {
+                            Ok(w) => written += w,
+                            Err(e) => return e,
+                        },
+                        _ => unreachable!(),
+                    }
+                }
+                Wasm::store_le(nwritten_ret, written as Size);
+                wasip1::ERRNO_SUCCESS
+            }
+            fd => {
+                get_open_fd!((open_fd, lfs) = self, fd);
+
+                let inode = open_fd.inode_id();
+
+                let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+
+                let mut written = 0;
+                for iovs in iovs_vec {
+                    match lfs.fd_write_raw_dyn_compatible(
+                        access,
+                        inode,
+                        iovs.buf as *const u8,
+                        iovs.buf_len,
+                    ) {
+                        Ok(w) => written += w,
+                        Err(e) => return e,
+                    }
+                }
+
+                Wasm::store_le(nwritten_ret, written as Size);
+                wasip1::ERRNO_SUCCESS
+            }
+        }
     }
 
     fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName>(

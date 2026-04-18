@@ -23,6 +23,7 @@ use crate::__private::wasip1;
 // no implementing dcache
 
 use crate::__private::wasip1::*;
+use crate::wasi::file::changeable::inode::InodeIdCommon;
 
 /// File statistics excluding the device ID.
 pub struct FilestatWithoutDevice {
@@ -42,11 +43,12 @@ pub struct FilestatWithoutDevice {
     pub ctim: Timestamp,
 }
 
+pub(crate) trait ConstDefault: core::fmt::Debug {
+    const DEFAULT: Self;
+}
+
 /// Additional mutable info for an inode.
 pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
-    /// Default initialization value for the info.
-    const DEFAULT: Self;
-
     /// Returns the access time.
     fn access_time(&self) -> Timestamp {
         0
@@ -73,10 +75,6 @@ pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
 #[derive(Debug, Clone, Copy)]
 pub struct NoAddInfo;
 
-impl WasiAddInfo for NoAddInfo {
-    const DEFAULT: Self = Self;
-}
-
 /// A default implementation of WasiAddInfo storing all timestamps.
 #[derive(Debug, Clone, Copy)]
 pub struct DefaultAddInfo {
@@ -89,12 +87,6 @@ pub struct DefaultAddInfo {
 }
 
 impl WasiAddInfo for DefaultAddInfo {
-    const DEFAULT: Self = Self {
-        atim: 0,
-        mtim: 0,
-        ctim: 0,
-    };
-
     fn access_time(&self) -> Timestamp {
         self.atim
     }
@@ -118,15 +110,17 @@ impl WasiAddInfo for DefaultAddInfo {
 }
 
 pub(crate) trait Wasip1LFSBaseWrapper: Wasip1LFSBase {
-    fn downcast_inode(inode: &dyn Any) -> <Self as Wasip1LFSBase>::Inode;
+    fn downcast_inode(inode: &dyn Any) -> &<Self as Wasip1LFSBase>::Inode;
 }
 
-impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T {
-    fn downcast_inode(inode: &dyn Any) -> <Self as Wasip1LFSBase>::Inode {
+impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T
+where
+    <Self as Wasip1LFSBase>::Inode: 'static,
+{
+    fn downcast_inode(inode: &dyn Any) -> &<Self as Wasip1LFSBase>::Inode {
         inode
             .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
             .unwrap()
-            .clone()
     }
 }
 
@@ -135,12 +129,12 @@ impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T {
 pub trait Wasip1LFSBase: core::fmt::Debug {
     /// The type used for inodes.
     /// Pre-opened inodes.
-    type Inode: 'static + core::fmt::Debug + Clone;
+    type Inode: InodeIdCommon;
 
     /// Writes raw data to a file.
     fn fd_write_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
@@ -160,12 +154,12 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno>;
 
     /// Returns whether the inode is a directory.
-    fn is_dir(&self, inode: Self::Inode) -> bool;
+    fn is_dir(&self, inode: &Self::Inode) -> bool;
 
     /// Reads directory entries.
     fn fd_readdir_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         buf: *mut u8,
         buf_len: usize,
         cookie: Dircookie,
@@ -174,7 +168,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     /// Retrieves file statistics for a path.
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -183,13 +177,13 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     /// Retrieves pre-open statistics.
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
     /// Retrieves the name of a pre-opened directory.
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno>;
@@ -197,13 +191,13 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     /// Retrieves file statistics for a file descriptor.
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
     /// Reads data from a file descriptor into a buffer at a given offset.
     fn fd_pread_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         buf: *mut u8,
         buf_len: usize,
         offset: usize,
@@ -219,7 +213,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     /// Opens a path.
     fn path_open_raw<Wasm: WasmAccess>(
         &self,
-        dir_ino: Self::Inode,
+        dir_ino: &Self::Inode,
         dir_flags: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -230,7 +224,10 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<Self::Inode, wasip1::Errno>;
 }
 
-pub trait Wasip1ConstLFS: Wasip1LFSBase {
+pub trait Wasip1ConstLFS: Wasip1LFSBase
+where
+    Self::Inode: 'static,
+{
     const PRE_OPEN: &'static [Self::Inode];
 }
 

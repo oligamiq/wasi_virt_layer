@@ -1,5 +1,5 @@
-use crate::wasi::file::WasiAddInfo;
 use crate::wasi::file::constant::vfs::OpenFdInfoWithInode;
+use crate::wasi::file::{ConstDefault, WasiAddInfo};
 use crate::{__private::wasip1, wasi::file::constant::vfs::OpenFdInfo};
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use smallstr::SmallString;
@@ -9,6 +9,10 @@ pub type InodeId = usize;
 
 /// Directory entries map a file name to its underlying inode ID
 pub type DirMap = BTreeMap<SmallString<[u8; 32]>, InodeId>;
+
+pub trait InodeIdCommon: core::fmt::Debug + 'static {}
+
+impl<T: core::fmt::Debug + 'static> InodeIdCommon for T {}
 
 /// Represents the data contained within an Inode
 #[derive(Debug, Clone)]
@@ -34,14 +38,25 @@ pub struct InodeMetadata<AddInfo: WasiAddInfo> {
     pub add_info: AddInfo,
 }
 
-impl<AddInfo: WasiAddInfo> InodeMetadata<AddInfo> {
+impl<AddInfo: WasiAddInfo + ConstDefault> InodeMetadata<AddInfo> {
     /// Create new default metadata for a given file type
-    pub fn new(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
+    pub const fn const_new(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
         Self {
             filetype,
             nlink: 1,
             rights,
             add_info: AddInfo::DEFAULT,
+        }
+    }
+}
+
+impl<AddInfo: WasiAddInfo> InodeMetadata<AddInfo> {
+    pub fn new(filetype: wasip1::Filetype, rights: wasip1::Rights, add_info: AddInfo) -> Self {
+        Self {
+            filetype,
+            nlink: 1,
+            rights,
+            add_info,
         }
     }
 
@@ -66,7 +81,7 @@ pub struct Inode<AddInfo: WasiAddInfo> {
 
 /// Represents an active, open file descriptor referencing an Inode
 #[derive(Debug, Clone)]
-pub struct DetailedOpenFd {
+pub struct DetailedOpenFd<InodeId: InodeIdCommon> {
     /// The inode ID this file descriptor refers to
     pub inode_id: InodeId,
     /// The current byte offset within the file (for reads/writes)
@@ -79,15 +94,7 @@ pub struct DetailedOpenFd {
     pub fd_flags: wasip1::Fdflags,
 }
 
-impl OpenFdInfo for DetailedOpenFd {
-    const DEFAULT: Self = Self {
-        inode_id: 0,
-        cursor: 0,
-        base_rights: 0,
-        inheriting_rights: 0,
-        fd_flags: 0,
-    };
-
+impl<InodeId: InodeIdCommon> OpenFdInfo for DetailedOpenFd<InodeId> {
     fn cursor(&self) -> usize {
         self.cursor
     }
@@ -121,11 +128,21 @@ impl OpenFdInfo for DetailedOpenFd {
     }
 }
 
-impl OpenFdInfoWithInode for DetailedOpenFd {
+impl<InodeId: InodeIdCommon> OpenFdInfoWithInode for DetailedOpenFd<InodeId> {
     type InodeId = InodeId;
 
-    fn inode_id(&self) -> Self::InodeId {
-        self.inode_id
+    fn from_inode_id(inode_id: Self::InodeId) -> Self {
+        Self {
+            inode_id,
+            cursor: 0,
+            base_rights: 0,
+            inheriting_rights: 0,
+            fd_flags: 0,
+        }
+    }
+
+    fn inode_id(&self) -> &Self::InodeId {
+        &self.inode_id
     }
 
     fn set_inode_id(&mut self, inode_id: Self::InodeId) {

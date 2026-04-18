@@ -1,10 +1,10 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
-use crate::wasi::file::Wasip1DynamicLFS;
-use crate::wasi::file::changeable::inode::DetailedOpenFd;
+use crate::wasi::file::changeable::inode::{DetailedOpenFd, InodeIdCommon};
 use crate::wasi::file::constant::vfs::{OpenFdInfo, OpenFdInfoWithInode};
 use crate::wasi::file::constant::vfs_impl::trace_fs;
+use crate::wasi::file::{ConstDefault, Wasip1DynamicLFS, Wasip1LFSBase};
 use crate::{
     memory::WasmAccess,
     wasi::file::{Wasip1FileSystem, changeable::inode::InodeId},
@@ -28,9 +28,9 @@ use alloc::collections::BTreeMap;
 /// A virtual file system implementation that maps file descriptors to inodes in a ChangeableLFS.
 pub struct ChangeableVFS<
     LFS: Wasip1DynamicLFS + core::fmt::Debug,
-    OpenFd: OpenFdInfoWithInode + 'static = DetailedOpenFd,
+    OpenFd: OpenFdInfoWithInode + 'static = DetailedOpenFd<<LFS as Wasip1LFSBase>::Inode>,
 > where
-    LFS::Inode: core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
     pub lfs: LFS,
     #[cfg(feature = "threads")]
@@ -43,35 +43,28 @@ pub struct ChangeableVFS<
     pub next_fd: UnsafeCell<Fd>,
 }
 
-impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug
-    for ChangeableVFS<LFS, OpenFd>
+impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
+    core::fmt::Debug for ChangeableVFS<LFS, OpenFd>
 where
-    LFS::Inode: core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ChangeableVFS")
             .field("lfs", &self.lfs)
-            .field(
-                "fd_map",
-                &{
+            .field("fd_map", &{
+                #[cfg(feature = "threads")]
+                {
+                    &self.fd_map
+                }
+                #[cfg(not(feature = "threads"))]
+                {
                     use alloc::collections::BTreeMap;
-
-                    #[cfg(feature = "threads")]
-                    {
-                        self.fd_map
-                            .iter()
-                            .map(|entry| (*entry.key(), entry.value().inode_id()))
-                            .collect::<BTreeMap<_, _>>()
-                    }
-                    #[cfg(not(feature = "threads"))]
-                    {
-                        unsafe { &*self.fd_map.get() }
-                            .iter()
-                            .map(|(fd, open_fd)| (*fd, open_fd.inode_id()))
-                            .collect::<BTreeMap<_, _>>()
-                    }
-                },
-            )
+                    unsafe { &*self.fd_map.get() }
+                        .iter()
+                        .map(|(fd, open_fd)| (*fd, open_fd.inode_id()))
+                        .collect::<BTreeMap<_, _>>()
+                }
+            })
             .field("next_fd", &{
                 #[cfg(feature = "threads")]
                 {
@@ -89,13 +82,13 @@ where
 unsafe impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Send
     for ChangeableVFS<LFS, OpenFd>
 where
-    LFS::Inode: core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
 }
 unsafe impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Sync
     for ChangeableVFS<LFS, OpenFd>
 where
-    LFS::Inode: core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
 }
 
@@ -119,11 +112,12 @@ macro_rules! get_open_fd {
     };
 }
 
-impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
-    ChangeableVFS<LFS, OpenFd>
+impl<
+    LFS: Wasip1DynamicLFS + core::fmt::Debug,
+    OpenFd: OpenFdInfoWithInode<InodeId = LFS::Inode> + 'static,
+> ChangeableVFS<LFS, OpenFd>
 where
-    LFS::Inode: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
-    OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
+    LFS::Inode: InodeIdCommon,
 {
     pub fn new(lfs: LFS) -> Self {
         Self {
@@ -186,6 +180,24 @@ where
         }
     }
 
+    fn allocate_fd_integrated(&self, f: impl FnOnce(Fd) -> OpenFd) -> Fd {
+        #[cfg(feature = "threads")]
+        {
+            let fd = self.next_fd.fetch_add(1, Ordering::SeqCst);
+            let open_fd = f(fd);
+            self.fd_map.insert(fd, open_fd);
+            fd
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            let fd = unsafe { *self.next_fd.get() };
+            unsafe { *self.next_fd.get() += 1 };
+            let open_fd = f(fd);
+            unsafe { &mut *self.fd_map.get() }.insert(fd, open_fd);
+            fd
+        }
+    }
+
     /// Adds a dynamically created preopen to the VFS and returns its new file descriptor.
     pub fn add_fd(
         &self,
@@ -193,11 +205,12 @@ where
         base_rights: wasip1::Rights,
         inheriting_rights: wasip1::Rights,
     ) -> Fd {
-        let mut open_fd = OpenFd::DEFAULT;
-        open_fd.set_base_rights(base_rights);
-        open_fd.set_inheriting_rights(inheriting_rights);
-        open_fd.set_inode_id(inode.into().into());
-        self.allocate_fd(open_fd)
+        self.allocate_fd_integrated(|_fd| {
+            let mut open_fd = OpenFd::from_inode_id(inode);
+            open_fd.set_base_rights(base_rights);
+            open_fd.set_inheriting_rights(inheriting_rights);
+            open_fd
+        })
     }
 
     /// Removes a dynamically created preopen or fd from the VFS.
@@ -207,32 +220,11 @@ where
 }
 
 impl<
-    StdIo: crate::wasi::file::stdio::StdIO + 'static,
-    AddInfo: crate::wasi::file::WasiAddInfo + 'static,
-    OpenFd: OpenFdInfoWithInode + 'static,
-> ChangeableVFS<crate::wasi::file::changeable::lfs::ChangeableLFS<StdIo, AddInfo>, OpenFd>
+    LFS: Wasip1DynamicLFS + core::fmt::Debug,
+    OpenFd: OpenFdInfoWithInode<InodeId = LFS::Inode> + 'static,
+> Wasip1FileSystem for ChangeableVFS<LFS, OpenFd>
 where
-    OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
-{
-    pub fn add_dir(&self, parent: InodeId, name: &str) -> Result<InodeId, wasip1::Errno> {
-        self.lfs.add_dir(parent, name)
-    }
-
-    pub fn add_file(
-        &self,
-        parent: InodeId,
-        name: &str,
-        content: alloc::vec::Vec<u8>,
-    ) -> Result<InodeId, wasip1::Errno> {
-        self.lfs.add_file(parent, name, content)
-    }
-}
-
-impl<LFS: Wasip1DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
-    Wasip1FileSystem for ChangeableVFS<LFS, OpenFd>
-where
-    LFS::Inode: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
-    OpenFd::InodeId: core::fmt::Debug + Into<InodeId> + From<InodeId> + Copy,
+    LFS::Inode: InodeIdCommon,
 {
     fn fd_readdir_raw<Wasm: WasmAccess>(
         &self,
@@ -246,18 +238,16 @@ where
 
         trace_fs!(self, Wasm; "fd_readdir: fd={fd}, buf_len={buf_len}, cookie={cookie}");
 
-        if !self.lfs.is_dir(open_fd.inode_id().into().into()) {
+        if !self.lfs.is_dir(open_fd.inode_id()) {
             return wasip1::ERRNO_NOTDIR;
         }
 
         let mut total_read = 0;
         loop {
-            match self.lfs.fd_readdir_raw::<Wasm>(
-                open_fd.inode_id().into().into(),
-                buf,
-                buf_len,
-                cookie,
-            ) {
+            match self
+                .lfs
+                .fd_readdir_raw::<Wasm>(open_fd.inode_id(), buf, buf_len, cookie)
+            {
                 Ok((0, _)) => {
                     Wasm::store_le(nread_ret, total_read as Size);
                     return wasip1::ERRNO_SUCCESS;
@@ -318,7 +308,7 @@ where
                 let mut written = 0;
                 for iovs in iovs_vec {
                     match self.lfs.fd_write_raw::<Wasm>(
-                        open_fd.inode_id().into().into(),
+                        open_fd.inode_id(),
                         iovs.buf as *const u8,
                         iovs.buf_len,
                     ) {
@@ -344,12 +334,10 @@ where
 
         trace_fs!(self, Wasm; "path_filestat_get: fd={fd}, flags={flags}, path_len={path_len}");
 
-        match self.lfs.path_filestat_get_raw::<Wasm>(
-            open_fd.inode_id().into().into(),
-            flags,
-            path_ptr,
-            path_len,
-        ) {
+        match self
+            .lfs
+            .path_filestat_get_raw::<Wasm>(open_fd.inode_id(), flags, path_ptr, path_len)
+        {
             Ok(stat) => {
                 let s = wasip1::Filestat {
                     dev: 0,
@@ -377,10 +365,7 @@ where
 
         trace_fs!(self, Wasm; "fd_prestat_get: fd={fd}");
 
-        match self
-            .lfs
-            .fd_prestat_get_raw::<Wasm>(open_fd.inode_id().into().into())
-        {
+        match self.lfs.fd_prestat_get_raw::<Wasm>(open_fd.inode_id()) {
             Ok(prestat) => {
                 Wasm::store_le(prestat_ret, prestat);
                 wasip1::ERRNO_SUCCESS
@@ -400,7 +385,7 @@ where
         trace_fs!(self, Wasm; "fd_prestat_dir_name: fd={fd}, dir_path_len={dir_path_len}");
 
         match self.lfs.fd_prestat_dir_name_raw::<Wasm>(
-            open_fd.inode_id().into().into(),
+            open_fd.inode_id(),
             dir_path_ptr,
             dir_path_len,
         ) {
@@ -427,10 +412,7 @@ where
 
         trace_fs!(self, Wasm; "fd_filestat_get: fd={fd}");
 
-        match self
-            .lfs
-            .fd_filestat_get_raw::<Wasm>(open_fd.inode_id().into().into())
-        {
+        match self.lfs.fd_filestat_get_raw::<Wasm>(open_fd.inode_id()) {
             Ok(stat) => {
                 let s = wasip1::Filestat {
                     dev: 0,
@@ -458,10 +440,7 @@ where
 
         trace_fs!(self, Wasm; "fd_fdstat_get: fd={fd}");
 
-        match self
-            .lfs
-            .fd_filestat_get_raw::<Wasm>(open_fd.inode_id().into().into())
-        {
+        match self.lfs.fd_filestat_get_raw::<Wasm>(open_fd.inode_id()) {
             Ok(stat) => {
                 let s = wasip1::Fdstat {
                     fs_filetype: stat.filetype,
@@ -515,7 +494,7 @@ where
 
                 for iovs in iovs_vec {
                     match self.lfs.fd_pread_raw::<Wasm>(
-                        open_fd.inode_id().into().into(),
+                        open_fd.inode_id(),
                         iovs.buf as *mut u8,
                         iovs.buf_len,
                         cursor,
@@ -552,7 +531,7 @@ where
         trace_fs!(self, Wasm; "path_open: dir_fd={dir_fd}, dir_flags={dir_flags}, path_len={path_len}, o_flags={o_flags}, fs_rights_base={fs_rights_base}, fs_rights_inheriting={fs_rights_inheriting}, fd_flags={fd_flags}");
 
         match self.lfs.path_open_raw::<Wasm>(
-            open_fd.inode_id().into().into(),
+            open_fd.inode_id(),
             dir_flags,
             path_ptr,
             path_len,
@@ -562,10 +541,9 @@ where
             fd_flags,
         ) {
             Ok(new_inode) => {
-                let mut new_open_fd = OpenFd::DEFAULT;
+                let mut new_open_fd = OpenFd::from_inode_id(new_inode);
                 new_open_fd.set_base_rights(fs_rights_base);
                 new_open_fd.set_inheriting_rights(fs_rights_inheriting);
-                new_open_fd.set_inode_id(new_inode.into().into());
                 let new_fd = self.allocate_fd(new_open_fd);
                 Wasm::store_le(fd_ret, new_fd);
                 wasip1::ERRNO_SUCCESS

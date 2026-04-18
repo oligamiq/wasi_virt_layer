@@ -64,7 +64,7 @@ struct ThreadAlt<ThreadAccessor: ThreadAccess> {
     _marker: core::marker::PhantomData<ThreadAccessor>,
 }
 impl<ThreadAccessor: ThreadAccess> ThreadAlt<ThreadAccessor> {
-    pub const fn new() -> Self {
+    pub const fn const_new() -> Self {
         ThreadAlt {
             _marker: core::marker::PhantomData,
         }

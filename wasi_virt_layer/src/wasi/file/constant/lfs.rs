@@ -3,7 +3,7 @@ use crate::memory::{
     WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _,
     WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon,
 };
-use crate::wasi::file::Wasip1LFSBaseWrapper;
+use crate::wasi::file::{ConstDefault, Wasip1LFSBaseWrapper};
 use crate::{
     memory::{WasmAccess, WasmPathAccess},
     wasi::file::{
@@ -33,17 +33,42 @@ impl<
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
-    AddInfo: WasiAddInfo + 'static,
+    AddInfo: WasiAddInfo + ConstDefault + 'static,
 > VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo, AddInfo>
 {
     /// Creates a new `VFSConstNormalLFS`.
-    pub const fn new() -> Self {
+    pub const fn const_new() -> Self {
         Self {
             add_info: [AddInfo::DEFAULT; FLAT_LEN],
             __marker: core::marker::PhantomData,
         }
     }
+}
 
+impl<
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+    AddInfo: WasiAddInfo + Default + 'static,
+> VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo, AddInfo>
+{
+    fn new() -> Self {
+        Self {
+            add_info: [AddInfo::default(); FLAT_LEN],
+            __marker: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<
+    ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug,
+    File: Wasip1FileTrait + 'static + Copy,
+    const FLAT_LEN: usize,
+    StdIo: StdIO + 'static,
+    AddInfo: WasiAddInfo + 'static,
+> VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo, AddInfo>
+{
     /// Updates the access time for a given inode.
     #[inline]
     pub fn update_access_time(&mut self, inode: usize, atime: wasip1::Timestamp) {

@@ -34,7 +34,7 @@ impl<
 
     fn fd_write_raw<Wasm: WasmAccess>(
         &self,
-        _: Self::Inode,
+        _: &Self::Inode,
         _: *const u8,
         _: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -78,31 +78,31 @@ impl<
             StdIo::ewrite(&buf)
         }
     }
-    fn is_dir(&self, inode: Self::Inode) -> bool {
-        self.is_dir(inode)
+    fn is_dir(&self, inode: &Self::Inode) -> bool {
+        self.is_dir(*inode)
     }
 
     fn fd_readdir_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         buf: *mut u8,
         buf_len: usize,
         cookie: Dircookie,
     ) -> Result<(wasip1::Size, Dircookie), wasip1::Errno> {
-        self.fd_readdir_raw_inner(inode, buf, buf_len, cookie, |dst, src, len| {
+        self.fd_readdir_raw_inner(*inode, buf, buf_len, cookie, |dst, src, len| {
             Wasm::memcpy_raw(dst, src, len);
         })
     }
 
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         _: wasip1::Lookupflags,
         path_ptr: *const u8,
         path_len: usize,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         let inode = self
-            .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
+            .get_inode_for_path::<Wasm>(*inode, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         Ok(self.filestat_from_inode(inode))
@@ -110,13 +110,13 @@ impl<
 
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
-        if !Self::PRE_OPEN.contains(&inode) {
+        if !Self::PRE_OPEN.contains(inode) {
             return Err(wasip1::ERRNO_BADF);
         }
 
-        let (name, _) = ROOT::FILES[inode];
+        let (name, _) = ROOT::FILES[*inode];
 
         Ok(wasip1::Prestat {
             tag: 0, // prestat is enum but variant is only 0
@@ -131,15 +131,15 @@ impl<
 
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
-        if !Self::PRE_OPEN.contains(&inode) {
+        if !Self::PRE_OPEN.contains(inode) {
             return Err(wasip1::ERRNO_BADF);
         }
 
-        let (name, _) = ROOT::FILES[inode];
+        let (name, _) = ROOT::FILES[*inode];
 
         Wasm::memcpy(
             dir_path_ptr,
@@ -151,19 +151,19 @@ impl<
 
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
-        Ok(self.filestat_from_inode(inode))
+        Ok(self.filestat_from_inode(*inode))
     }
 
     fn fd_pread_raw<Wasm: WasmAccess>(
         &self,
-        inode: Self::Inode,
+        inode: &Self::Inode,
         buf: *mut u8,
         buf_len: usize,
         offset: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let (_, file_or_dir) = ROOT::FILES[inode];
+        let (_, file_or_dir) = ROOT::FILES[*inode];
 
         if let VFSConstNormalInode::File(file, _) = file_or_dir {
             if offset >= file.size() {
@@ -201,7 +201,7 @@ impl<
 
     fn path_open_raw<Wasm: WasmAccess>(
         &self,
-        dir_inode: Self::Inode,
+        dir_inode: &Self::Inode,
         _: wasip1::Fdflags,
         path_ptr: *const u8,
         path_len: usize,
@@ -210,7 +210,7 @@ impl<
         _: wasip1::Rights,
         _: wasip1::Fdflags,
     ) -> Result<Self::Inode, wasip1::Errno> {
-        if let Some(inode) = self.get_inode_for_path::<Wasm>(dir_inode, path_ptr, path_len) {
+        if let Some(inode) = self.get_inode_for_path::<Wasm>(*dir_inode, path_ptr, path_len) {
             if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
                 return Err(wasip1::ERRNO_EXIST);
             }
@@ -283,16 +283,13 @@ impl<
             ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug + 'static,
             File: Wasip1FileTrait + 'static + Copy,
             const FLAT_LEN: usize,
-        >(
-            core::marker::PhantomData<(ConstRoot, File, usize)>,
-        );
+        >(core::marker::PhantomData<(ConstRoot, File, usize)>);
 
         impl<
             ConstRoot: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug + 'static,
             File: Wasip1FileTrait + 'static + Copy,
             const FLAT_LEN: usize,
-        > Wasip1DynCompatibleLFSSlice
-            for PreOpenInodesIndex<ConstRoot, File, FLAT_LEN>
+        > Wasip1DynCompatibleLFSSlice for PreOpenInodesIndex<ConstRoot, File, FLAT_LEN>
         {
             fn index(
                 &self,
@@ -377,7 +374,7 @@ impl<
     ) -> Result<(wasip1::Size, Dircookie), wasip1::Errno> {
         let inode = Self::downcast_inode(inode);
 
-        self.fd_readdir_raw_inner(inode, buf, buf_len, cookie, |dst, src, len| {
+        self.fd_readdir_raw_inner(*inode, buf, buf_len, cookie, |dst, src, len| {
             access.memcpy_to_raw(dst, src, len);
         })
     }
@@ -393,7 +390,7 @@ impl<
         let inode = Self::downcast_inode(inode);
 
         let inode = self
-            .get_inode_for_path_dyn_compatible(access, inode, path_ptr, path_len)
+            .get_inode_for_path_dyn_compatible(access, *inode, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         Ok(self.filestat_from_inode(inode))
@@ -410,7 +407,7 @@ impl<
             return Err(wasip1::ERRNO_BADF);
         }
 
-        let (name, _) = ROOT::FILES[inode];
+        let (name, _) = ROOT::FILES[*inode];
 
         Ok(wasip1::Prestat {
             tag: 0, // prestat is enum but variant is only 0
@@ -436,7 +433,7 @@ impl<
             return Err(wasip1::ERRNO_BADF);
         }
 
-        let (name, _) = ROOT::FILES[inode];
+        let (name, _) = ROOT::FILES[*inode];
 
         access.memcpy_with(
             dir_path_ptr,
@@ -453,7 +450,7 @@ impl<
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         let inode = Self::downcast_inode(inode);
 
-        Ok(self.filestat_from_inode(inode))
+        Ok(self.filestat_from_inode(*inode))
     }
 
     fn fd_pread_raw_dyn_compatible(

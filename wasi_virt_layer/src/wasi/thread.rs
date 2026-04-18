@@ -428,7 +428,7 @@ pub struct DirectThreadPool<ThreadAccessor: ThreadAccess>(
 
 impl<ThreadAccessor: ThreadAccess> DirectThreadPool<ThreadAccessor> {
     /// Creates a new `DirectThreadPool`.
-    pub const fn new() -> Self {
+    pub const fn const_new() -> Self {
         DirectThreadPool(core::marker::PhantomData)
     }
 }

@@ -69,12 +69,12 @@ mod fs {
     type LFS = ChangeableLFS<DefaultStdIO>;
 
     pub static VIRTUAL_FILE_SYSTEM: LazyLock<ChangeableVFS<LFS>> = LazyLock::new(|| {
-        let lfs = ChangeableLFS::new(); // Inode 0 is root "."
+        let lfs = ChangeableLFS::const_new(); // Inode 0 is root "."
 
         // Add a preopen entry for root "."
         let root_inode = lfs.add_preopen(".");
 
-        let vfs = ChangeableVFS::new(lfs);
+        let vfs = ChangeableVFS::const_new(lfs);
 
         // Add preopen fd for root
         vfs.add_fd(root_inode, !0, !0);
@@ -88,7 +88,9 @@ mod fs {
         vfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
             .unwrap();
 
-        let txt_inode = vfs.add_file(root_inode, "hello.txt", b"Hello, root!".to_vec()).unwrap();
+        let txt_inode = vfs
+            .add_file(root_inode, "hello.txt", b"Hello, root!".to_vec())
+            .unwrap();
         vfs.add_fd(txt_inode, !0, !0);
 
         // Wrap in VFS

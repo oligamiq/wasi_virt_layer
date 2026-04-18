@@ -17,7 +17,7 @@ impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
     VFSConstNormalFiles<File, FLAT_LEN>
 {
     /// Creates a new `VFSConstNormalFiles`.
-    pub const fn new(
+    pub const fn const_new(
         files: (
             [(&'static str, VFSConstNormalInode<File>); FLAT_LEN],
             &'static [usize],
@@ -73,7 +73,7 @@ macro_rules! ConstFiles {
             $(($dir_name:expr, $file_or_dir:tt $(,)?)),* $(,)?
         ] $(,)?
     ) => {
-        $crate::__private::inner::fs::VFSConstNormalFiles::new({
+        $crate::__private::inner::fs::VFSConstNormalFiles::const_new({
             const COUNT: usize = {
                 let mut count = 0;
 
@@ -207,7 +207,7 @@ macro_rules! ConstFiles {
             const fn custom_sort<T: Copy, const N: usize>(
                 mut files: $crate::__private::utils::StaticArrayBuilder<(usize, T), N>,
             ) -> [T; N] {
-                let mut sorted = $crate::__private::utils::StaticArrayBuilder::<_, N>::new();
+                let mut sorted = $crate::__private::utils::StaticArrayBuilder::<_, N>::const_new();
 
                 while (files.len() > 0) {
                     let mut depth = None;
@@ -235,7 +235,7 @@ macro_rules! ConstFiles {
             }
 
             const EMPTY_ARR: [&'static str; COUNT] = {
-                let mut empty_arr = $crate::__private::utils::StaticArrayBuilder::new();
+                let mut empty_arr = $crate::__private::utils::StaticArrayBuilder::const_new();
 
                 $(
                     $crate::ConstFiles!(@empty, 0, empty_arr, [$dir_name], $file_or_dir);
@@ -247,7 +247,7 @@ macro_rules! ConstFiles {
             };
 
             let flatten = {
-                let mut static_array = $crate::__private::utils::StaticArrayBuilder::new();
+                let mut static_array = $crate::__private::utils::StaticArrayBuilder::const_new();
 
                 $(
                     $crate::ConstFiles!(
@@ -263,7 +263,7 @@ macro_rules! ConstFiles {
 
                 let static_array = custom_sort(static_array);
 
-                let mut file_array = $crate::__private::utils::StaticArrayBuilder::new();
+                let mut file_array = $crate::__private::utils::StaticArrayBuilder::const_new();
                 const_for!(i in 0..static_array.len() => {
                     let (_, name, file_or_dir) = static_array[i];
                     file_array.push((
@@ -289,7 +289,7 @@ macro_rules! ConstFiles {
             };
 
             const PRE_OPEN: [usize; PRE_OPEN_COUNT] = {
-                let mut static_array = $crate::__private::utils::StaticArrayBuilder::new();
+                let mut static_array = $crate::__private::utils::StaticArrayBuilder::const_new();
 
                 $(
                     static_array.push(get_self(EMPTY_ARR, $dir_name));
@@ -460,6 +460,10 @@ pub struct WasiConstFile<File: WasiConstPrimitiveFile> {
 
 impl<File: WasiConstPrimitiveFile> WasiConstFile<File> {
     /// Creates a new `WasiConstFile`.
+    pub const fn const_new(file: File) -> Self {
+        Self { file }
+    }
+
     pub const fn new(file: File) -> Self {
         Self { file }
     }
@@ -525,16 +529,19 @@ mod tests {
     fn test_file_flat_iterate() {
         #[allow(dead_code)]
         const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, 10> = ConstFiles!([
-            ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
+            (
+                "/root",
+                [("root.txt", WasiConstFile::const_new("This is root"))]
+            ),
             (
                 ".",
                 [
-                    ("hey", WasiConstFile::new("Hey!")),
+                    ("hey", WasiConstFile::const_new("Hey!")),
                     (
                         "hello",
                         [
-                            ("world", WasiConstFile::new("Hello, world!")),
-                            ("everyone", WasiConstFile::new("Hello, everyone!")),
+                            ("world", WasiConstFile::const_new("Hello, world!")),
+                            ("everyone", WasiConstFile::const_new("Hello, everyone!")),
                         ]
                     )
                 ]
@@ -542,8 +549,8 @@ mod tests {
             (
                 "~",
                 [
-                    ("home", WasiConstFile::new("This is home")),
-                    ("user", WasiConstFile::new("This is user")),
+                    ("home", WasiConstFile::const_new("This is home")),
+                    ("user", WasiConstFile::const_new("This is user")),
                 ]
             )
         ]);

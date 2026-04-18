@@ -1,6 +1,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
-use crate::wasi::file::Wasip1ConstLFS;
+use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::{ConstDefault, Wasip1ConstLFS};
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
@@ -9,9 +10,7 @@ use crate::memory::WasmAccess;
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
 
-pub trait OpenFdInfo: core::fmt::Debug {
-    const DEFAULT: Self;
-
+pub trait OpenFdInfo: core::fmt::Debug + Sized {
     fn cursor(&self) -> usize;
     fn set_cursor(&mut self, cursor: usize);
 
@@ -32,9 +31,10 @@ pub trait OpenFdInfo: core::fmt::Debug {
 }
 
 pub trait OpenFdInfoWithInode: OpenFdInfo {
-    type InodeId: Clone + core::fmt::Debug;
+    type InodeId: InodeIdCommon;
 
-    fn inode_id(&self) -> Self::InodeId;
+    fn from_inode_id(inode_id: Self::InodeId) -> Self;
+    fn inode_id(&self) -> &Self::InodeId;
     fn set_inode_id(&mut self, inode_id: Self::InodeId);
 }
 
@@ -43,9 +43,13 @@ pub struct SimpleOpenFd {
     pub cursor: usize,
 }
 
-impl OpenFdInfo for SimpleOpenFd {
-    const DEFAULT: Self = Self { cursor: 0 };
+impl Default for SimpleOpenFd {
+    fn default() -> Self {
+        Self { cursor: 0 }
+    }
+}
 
+impl OpenFdInfo for SimpleOpenFd {
     #[inline]
     fn cursor(&self) -> usize {
         self.cursor
@@ -57,14 +61,18 @@ impl OpenFdInfo for SimpleOpenFd {
     }
 }
 
+impl ConstDefault for SimpleOpenFd {
+    const DEFAULT: Self = Self { cursor: 0 };
+}
+
 /// A constant virtual file system implementation.
 #[derive(Debug)]
 pub struct Wasip1ConstVFS<
     LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
-    OpenFd: OpenFdInfo + Copy + 'static = SimpleOpenFd,
+    OpenFd: OpenFdInfo + 'static = SimpleOpenFd,
 > where
-    LFS::Inode: Copy + core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
     lfs: LFS,
     // (inode, cursor)
@@ -77,34 +85,34 @@ pub struct Wasip1ConstVFS<
 unsafe impl<
     LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
-    OpenFd: OpenFdInfo + Copy + 'static,
+    OpenFd: OpenFdInfo,
 > Sync for Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>
 where
-    LFS::Inode: Copy + core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
 }
 
 unsafe impl<
     LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
-    OpenFd: OpenFdInfo + Copy + 'static,
+    OpenFd: OpenFdInfo,
 > Send for Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>
 where
-    LFS::Inode: Copy + core::fmt::Debug,
+    LFS::Inode: InodeIdCommon,
 {
 }
 
 impl<
     LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
-    OpenFd: OpenFdInfo + Copy + 'static,
+    OpenFd: OpenFdInfo + Copy + ConstDefault + 'static,
 > Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>
 where
-    LFS::Inode: Copy + core::fmt::Debug,
+    LFS::Inode: InodeIdCommon + Copy,
 {
     /// Creates a new `Wasip1ConstVFS` with thread support.
     #[cfg(feature = "threads")]
-    pub const fn new(lfs: LFS) -> Self {
+    pub const fn const_new(lfs: LFS) -> Self {
         let mut map: [RwLock<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN] =
             [const { RwLock::new(None) }; FLAT_LEN];
 
@@ -119,7 +127,7 @@ where
 
     /// Creates a new `Wasip1ConstVFS` without thread support.
     #[cfg(not(feature = "threads"))]
-    pub const fn new(lfs: LFS) -> Self {
+    pub const fn const_new(lfs: LFS) -> Self {
         let mut map: [UnsafeCell<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN] =
             [const { UnsafeCell::new(None) }; FLAT_LEN];
 
@@ -131,21 +139,69 @@ where
 
         Self { lfs, map }
     }
+}
 
-    /// Returns the inode associated with the given file descriptor.
-    #[inline]
-    pub fn get_inode(&self, fd: Fd) -> Option<LFS::Inode> {
+impl<
+    LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
+    const FLAT_LEN: usize,
+    OpenFd: OpenFdInfo + Default + 'static,
+> Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>
+where
+    LFS::Inode: InodeIdCommon + Clone,
+{
+    pub fn new(lfs: LFS) -> Self {
+        let mut map: [Option<(LFS::Inode, OpenFd)>; FLAT_LEN] = [const { None }; FLAT_LEN];
+
+        for (i, inode) in LFS::PRE_OPEN.iter().enumerate() {
+            map[i] = Some((inode.clone(), OpenFd::default()));
+        }
+
+        Self {
+            lfs,
+            #[cfg(feature = "threads")]
+            map: map.map(RwLock::new),
+            #[cfg(not(feature = "threads"))]
+            map: map.map(UnsafeCell::new),
+        }
+    }
+}
+
+impl<
+    LFS: Wasip1ConstLFS + Sync + core::fmt::Debug,
+    const FLAT_LEN: usize,
+    OpenFd: OpenFdInfo + Default + 'static,
+> Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>
+where
+    LFS::Inode: InodeIdCommon,
+{
+    pub fn with_inode<R, F: FnOnce(&LFS::Inode) -> R>(
+        &self,
+        fd: Fd,
+        f: F,
+    ) -> Result<R, wasip1::Errno> {
         #[cfg(feature = "threads")]
         {
             self.map
-                .get(fd as usize - 3)?
+                .get(fd as usize - 3)
+                .ok_or(wasip1::ERRNO_BADF)?
                 .read()
-                .map(|(inode, _)| inode)
+                .as_ref()
+                .map(|(inode, _)| f(inode))
+                .ok_or(wasip1::ERRNO_BADF)
         }
 
         #[cfg(not(feature = "threads"))]
         {
-            unsafe { &*self.map.get(fd as usize - 3)?.get() }.map(|(inode, _)| inode)
+            unsafe {
+                &*self
+                    .map
+                    .get(fd as usize - 3)
+                    .ok_or(wasip1::ERRNO_BADF)?
+                    .get()
+            }
+            .as_ref()
+            .map(|(inode, _)| f(inode))
+            .ok_or(wasip1::ERRNO_BADF)
         }
     }
 
@@ -177,7 +233,7 @@ where
             for (i, slot) in self.map.iter().enumerate() {
                 let mut slot = slot.write();
                 if slot.is_none() {
-                    *slot = Some((inode, OpenFd::DEFAULT));
+                    *slot = Some((inode, OpenFd::default()));
                     return (i + 3) as Fd;
                 }
             }
@@ -188,7 +244,7 @@ where
             for (i, slot) in self.map.iter().enumerate() {
                 let slot_opt = unsafe { &mut *slot.get() };
                 if slot_opt.is_none() {
-                    *slot_opt = Some((inode, OpenFd::DEFAULT));
+                    *slot_opt = Some((inode, OpenFd::default()));
                     return (i + 3) as Fd;
                 }
             }
@@ -205,8 +261,35 @@ where
 
     /// Returns both the inode and a mutable reference to the local file system.
     #[inline]
-    pub fn get_inode_and_lfs(&self, fd: Fd) -> Option<(LFS::Inode, &LFS)> {
-        self.get_inode(fd).map(|inode| (inode, &self.lfs))
+    pub fn with_inode_and_lfs<R, F: FnOnce(&LFS::Inode, &LFS) -> R>(
+        &self,
+        fd: Fd,
+        f: F,
+    ) -> Result<R, wasip1::Errno> {
+        #[cfg(feature = "threads")]
+        {
+            self.map
+                .get(fd as usize - 3)
+                .ok_or(wasip1::ERRNO_BADF)?
+                .read()
+                .as_ref()
+                .map(|(inode, _)| f(inode, &self.lfs))
+                .ok_or(wasip1::ERRNO_BADF)
+        }
+
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe {
+                &mut *self
+                    .map
+                    .get(fd as usize - 3)
+                    .ok_or(wasip1::ERRNO_BADF)?
+                    .get()
+            }
+            .as_ref()
+            .map(|(inode, _)| f(inode, &self.lfs))
+            .ok_or(wasip1::ERRNO_BADF)
+        }
     }
 
     pub(crate) fn fd_readdir_raw_inner<Wasm: WasmAccess>(
@@ -216,25 +299,25 @@ where
         mut buf_len: usize,
         mut cookie: Dircookie,
     ) -> Result<Size, wasip1::Errno> {
-        let (inode, lfs) = self.get_inode_and_lfs(fd).ok_or(wasip1::ERRNO_BADF)?;
-
-        // check is this a directory
-        if !lfs.is_dir(inode) {
-            return Err(wasip1::ERRNO_NOTDIR);
-        }
-
-        let mut read = 0;
-
-        loop {
-            let (n, next_cookie) = lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)?;
-            if n == 0 {
-                return Ok(read);
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            // check is this a directory
+            if !lfs.is_dir(inode) {
+                return Err(wasip1::ERRNO_NOTDIR);
             }
-            read += n;
-            buf = unsafe { buf.add(n) };
-            buf_len -= n;
-            cookie = next_cookie;
-        }
+
+            let mut read = 0;
+
+            loop {
+                let (n, next_cookie) = lfs.fd_readdir_raw::<Wasm>(inode, buf, buf_len, cookie)?;
+                if n == 0 {
+                    return Ok(read);
+                }
+                read += n;
+                buf = unsafe { buf.add(n) };
+                buf_len -= n;
+                cookie = next_cookie;
+            }
+        })?
     }
 
     pub(crate) fn fd_write_raw_inner<Wasm: WasmAccess>(
