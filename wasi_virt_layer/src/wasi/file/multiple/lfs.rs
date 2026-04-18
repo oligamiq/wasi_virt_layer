@@ -1,5 +1,6 @@
 use core::any::Any;
 use core::ffi::c_void;
+use core::ops::Deref as _;
 
 use smallvec::SmallVec;
 
@@ -55,7 +56,7 @@ use alloc::collections::BTreeMap;
 #[derive(Debug)]
 pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
     pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
-    pub wasms: BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
+    pub wasms: DashMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
     #[cfg(feature = "threads")]
     pub fd_map: DashMap<Fd, (usize, OpenFd)>,
     #[cfg(feature = "threads")]
@@ -70,7 +71,7 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
     pub fn new() -> Self {
         Self {
             lfss: SmallVec::new(),
-            wasms: BTreeMap::new(),
+            wasms: DashMap::new(),
             #[cfg(feature = "threads")]
             fd_map: DashMap::new(),
             #[cfg(feature = "threads")]
@@ -94,7 +95,7 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
         self.wasms.insert(name, access);
     }
 
-    pub fn get_wasm_access(&self, name: &str) -> Option<&WasmAccessDynCompatibleWrapper> {
+    pub fn get_wasm_access(&self, name: &str) -> Option<impl core::ops::Deref<Target = WasmAccessDynCompatibleWrapper>> {
         self.wasms.get(name)
     }
 }
@@ -123,6 +124,17 @@ macro_rules! get_open_fd {
     };
 }
 
+macro_rules! get_access {
+    ($name:ident = $self:ident, $wasm:ty) => {
+        let $name = match $self.get_wasm_access(<$wasm as WasmAccessName>::NAME) {
+            Some(a) => a,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        let $name = $name.deref();
+    };
+}
+
 impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleVFS<OpenFd> {
     fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
@@ -131,10 +143,7 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleV
         iovs_len: usize,
         nwritten_ret: *mut Size,
     ) -> wasip1::Errno {
-        let access = match self.get_wasm_access(Wasm::NAME) {
-            Some(a) => a,
-            None => return wasip1::ERRNO_BADF,
-        };
+        get_access!(access = self, Wasm);
 
         match fd {
             0 => wasip1::ERRNO_BADF, // stdin is not writable
