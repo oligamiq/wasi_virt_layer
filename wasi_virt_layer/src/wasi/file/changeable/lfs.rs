@@ -285,6 +285,54 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
         Ok(new_id)
     }
 
+    fn get_inode_for_path_inner(
+        &self,
+        dir_ino: InodeId,
+        path: impl crate::memory::WasmPathAccessCommon,
+    ) -> Option<InodeId> {
+        use crate::memory::WasmPathComponentCommon;
+        let mut current_inode = dir_ino;
+
+        for component in path.components_common() {
+            if component.as_cur_dir() {
+                continue;
+            } else if component.as_parent_dir() {
+                let parent = self
+                    .read_inode(&current_inode, |node| match &node.data {
+                        InodeData::Dir(map) => map.get(&SmallString::from_str("..")).copied(),
+                        _ => None,
+                    })
+                    .flatten();
+
+                if let Some(parent_id) = parent {
+                    current_inode = parent_id;
+                } else {
+                    return None;
+                }
+            } else if component.as_root_dir() {
+                current_inode = 0;
+            } else if let Some(name_iter) = component.as_normal() {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for b in name_iter {
+                    s.push(b as char);
+                }
+                let child = self
+                    .read_inode(&current_inode, |node| match &node.data {
+                        InodeData::Dir(map) => map.get(&s).copied(),
+                        _ => None,
+                    })
+                    .flatten();
+
+                if let Some(child_id) = child {
+                    current_inode = child_id;
+                } else {
+                    return None;
+                }
+            }
+        }
+        Some(current_inode)
+    }
+
     pub fn get_inode_for_path<Wasm: WasmAccess>(
         &self,
         dir_ino: InodeId,
@@ -292,49 +340,18 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> ChangeableLFS<StdIo
         path_len: usize,
     ) -> Option<InodeId> {
         let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
-        let mut current_inode = dir_ino;
+        self.get_inode_for_path_inner(dir_ino, path)
+    }
 
-        for component in path.components() {
-            match component {
-                WasmPathComponent::Normal(name) => {
-                    let mut s = SmallString::<[u8; 32]>::new();
-                    for j in 0..name.len() {
-                        s.push(name.get(j) as char);
-                    }
-                    let child = self
-                        .read_inode(&current_inode, |node| match &node.data {
-                            InodeData::Dir(map) => map.get(&s).copied(),
-                            _ => None,
-                        })
-                        .flatten();
-
-                    if let Some(child_id) = child {
-                        current_inode = child_id;
-                    } else {
-                        return None;
-                    }
-                }
-                WasmPathComponent::CurDir => continue,
-                WasmPathComponent::ParentDir => {
-                    let parent = self
-                        .read_inode(&current_inode, |node| match &node.data {
-                            InodeData::Dir(map) => map.get(&SmallString::from_str("..")).copied(),
-                            _ => None,
-                        })
-                        .flatten();
-
-                    if let Some(parent_id) = parent {
-                        current_inode = parent_id;
-                    } else {
-                        return None;
-                    }
-                }
-                WasmPathComponent::RootDir => {
-                    current_inode = 0;
-                }
-            }
-        }
-        Some(current_inode)
+    pub fn get_inode_for_path_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        dir_ino: InodeId,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Option<InodeId> {
+        let path = crate::memory::WasmPathAccessDynCompatible::new(access, path_ptr, path_len);
+        self.get_inode_for_path_inner(dir_ino, path)
     }
 
     pub fn resolve_inode(&self, inode: InodeId, _depth: usize) -> Option<InodeId> {
@@ -368,6 +385,28 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
+    fn fd_write_raw_dyn_compatible(
+            &self,
+            access: &impl crate::memory::WasmAccessDynCompatible,
+            inode: Self::Inode,
+            data: *const u8,
+            data_len: usize,
+        ) -> Result<wasip1::Size, wasip1::Errno> {
+        self.modify_inode(&inode, |inode_entry| {
+            if let InodeData::File(ref mut vec) = inode_entry.data {
+                let mut buf = alloc::vec![0u8; data_len];
+                access.memcpy_to_with(&mut buf, data);
+                vec.extend_from_slice(&buf);
+                let mtim = inode_entry.meta.add_info.modification_time();
+                inode_entry.meta.add_info.set_modification_time(mtim + 1); // Simplistic time update
+                Ok(data_len)
+            } else {
+                Err(wasip1::ERRNO_ISDIR)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
     fn fd_write_stdout_raw<Wasm: WasmAccess>(
         &self,
         data: *const u8,
@@ -385,6 +424,24 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         }
     }
 
+    fn fd_write_stdout_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::write_direct_dyn_compatible(access, data, data_len)
+        }
+        #[cfg(feature = "multi_memory")]
+        {
+            let mut buf = alloc::vec![0u8; data_len];
+            access.memcpy_to_with(&mut buf, data);
+            StdIo::write(&buf)
+        }
+    }
+
     fn fd_write_stderr_raw<Wasm: WasmAccess>(
         &self,
         data: *const u8,
@@ -398,6 +455,24 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         {
             let mut buf = alloc::vec![0u8; data_len];
             Wasm::memcpy_to(&mut buf, data);
+            StdIo::ewrite(&buf)
+        }
+    }
+
+    fn fd_write_stderr_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        data: *const u8,
+        data_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::ewrite_direct_dyn_compatible(access, data, data_len)
+        }
+        #[cfg(feature = "multi_memory")]
+        {
+            let mut buf = alloc::vec![0u8; data_len];
+            access.memcpy_to_with(&mut buf, data);
             StdIo::ewrite(&buf)
         }
     }
@@ -475,6 +550,75 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         Ok((total_written, current_cookie as u64))
     }
 
+    fn fd_readdir_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        cookie: wasip1::Dircookie,
+    ) -> Result<(wasip1::Size, wasip1::Dircookie), wasip1::Errno> {
+        let dir_map = self
+            .read_inode(&inode, |i| match &i.data {
+                InodeData::Dir(map) => Some(map.clone()),
+                _ => None,
+            })
+            .flatten()
+            .ok_or(wasip1::ERRNO_NOTDIR)?;
+
+        let mut current_cookie = cookie as usize;
+        let mut total_written = 0;
+        let mut out_ptr = buf;
+        let mut rem_len = buf_len;
+
+        for (i, (name, &child_inode)) in dir_map.iter().enumerate() {
+            if i < current_cookie {
+                continue;
+            }
+            let filetype = self
+                .read_inode(&child_inode, |c| c.meta.filetype)
+                .ok_or(wasip1::ERRNO_NOENT)?;
+            let name_bytes = name.as_bytes();
+            let entry = wasip1::Dirent {
+                d_next: (i + 1) as u64,
+                d_ino: child_inode as u64,
+                d_namlen: name_bytes.len() as u32,
+                d_type: filetype,
+            };
+
+            let entry_size = core::mem::size_of::<wasip1::Dirent>();
+
+            if rem_len < entry_size {
+                break;
+            }
+
+            // Write dirent
+            let entry_slice =
+                unsafe { core::slice::from_raw_parts(&entry as *const _ as *const u8, entry_size) };
+            access.memcpy_with(out_ptr, entry_slice);
+
+            out_ptr = unsafe { out_ptr.add(entry_size) };
+            rem_len -= entry_size;
+            total_written += entry_size;
+
+            // Write name
+            let write_name_len = core::cmp::min(name_bytes.len(), rem_len);
+            if write_name_len > 0 {
+                access.memcpy_with(out_ptr, &name_bytes[..write_name_len]);
+                out_ptr = unsafe { out_ptr.add(write_name_len) };
+                rem_len -= write_name_len;
+                total_written += write_name_len;
+            }
+
+            current_cookie = i + 1;
+            if rem_len == 0 {
+                break;
+            }
+        }
+
+        Ok((total_written, current_cookie as u64))
+    }
+
     fn path_filestat_get_raw<Wasm: WasmAccess>(
         &self,
         inode: Self::Inode,
@@ -495,8 +639,47 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         self.fd_filestat_get_raw::<Wasm>(target_inode)
     }
 
+    fn path_filestat_get_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        inode: Self::Inode,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
+        let mut target_inode = self
+            .get_inode_for_path_dyn_compatible(access, inode, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        if flags & wasip1::LOOKUPFLAGS_SYMLINK_FOLLOW == wasip1::LOOKUPFLAGS_SYMLINK_FOLLOW {
+            target_inode = self
+                .resolve_inode(target_inode, 0)
+                .ok_or(wasip1::ERRNO_LOOP)?;
+        }
+
+        self.fd_filestat_get_raw_dyn_compatible(access, target_inode)
+    }
+
     fn fd_prestat_get_raw<Wasm: WasmAccess>(
         &self,
+        inode: Self::Inode,
+    ) -> Result<wasip1::Prestat, wasip1::Errno> {
+        self.read_preopen(&inode, |name| {
+            Ok(wasip1::Prestat {
+                tag: 0,
+                u: wasip1::PrestatU {
+                    dir: wasip1::PrestatDir {
+                        pr_name_len: name.len() as usize,
+                    },
+                },
+            })
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    fn fd_prestat_get_raw_dyn_compatible(
+        &self,
+        _access: &impl crate::memory::WasmAccessDynCompatible,
         inode: Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
         self.read_preopen(&inode, |name| {
@@ -528,8 +711,44 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
+    fn fd_prestat_dir_name_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        inode: Self::Inode,
+        dir_path_ptr: *mut u8,
+        dir_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        self.read_preopen(&inode, |name| {
+            let copy_len = core::cmp::min(name.len(), dir_path_len);
+            if copy_len > 0 {
+                access.memcpy_with(dir_path_ptr, &name.as_bytes()[..copy_len]);
+            }
+            Ok(())
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
     fn fd_filestat_get_raw<Wasm: WasmAccess>(
         &self,
+        inode: Self::Inode,
+    ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
+        self.read_inode(&inode, |node| {
+            Ok(FilestatWithoutDevice {
+                ino: inode as u64,
+                filetype: node.meta.filetype,
+                nlink: node.meta.nlink,
+                size: node.meta.size(&node.data),
+                atim: node.meta.add_info.access_time(),
+                mtim: node.meta.add_info.modification_time(),
+                ctim: node.meta.add_info.creation_time(),
+            })
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    fn fd_filestat_get_raw_dyn_compatible(
+        &self,
+        _access: &impl crate::memory::WasmAccessDynCompatible,
         inode: Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         self.read_inode(&inode, |node| {
@@ -571,6 +790,32 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
+    fn fd_pread_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        inode: Self::Inode,
+        buf: *mut u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        self.modify_inode(&inode, |node| {
+            if let InodeData::File(ref file_data) = node.data {
+                if offset >= file_data.len() {
+                    return Ok(0);
+                }
+                let available = file_data.len() - offset;
+                let read_len = core::cmp::min(buf_len, available);
+                access.memcpy_with(buf, &file_data[offset..offset + read_len]);
+                let atim = node.meta.add_info.access_time();
+                node.meta.add_info.set_access_time(atim + 1);
+                Ok(read_len)
+            } else {
+                Err(wasip1::ERRNO_ISDIR)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
     fn fd_read_stdin_raw<Wasm: WasmAccess>(
         &self,
         buf: *mut u8,
@@ -586,6 +831,26 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
             let mut internal_buf = alloc::vec![0u8; buf_len];
             let read = StdIo::read(&mut internal_buf).map_err(|_| wasip1::ERRNO_IO)?;
             Wasm::memcpy(buf, &internal_buf[..read]);
+            Ok(read)
+        }
+    }
+
+    fn fd_read_stdin_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        #[cfg(not(feature = "multi_memory"))]
+        {
+            StdIo::read_direct_dyn_compatible(access, buf, buf_len)
+        }
+
+        #[cfg(feature = "multi_memory")]
+        {
+            let mut internal_buf = alloc::vec![0u8; buf_len];
+            let read = StdIo::read(&mut internal_buf).map_err(|_| wasip1::ERRNO_IO)?;
+            access.memcpy_with(buf, &internal_buf[..read]);
             Ok(read)
         }
     }
@@ -631,6 +896,99 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> Wasip1LFS
                 // Full path traversal for creation is complex and not fully implemented here.
                 if components.len() == 1 {
                     if let WasmPathComponent::Normal(name) = &components[0] {
+                        let mut s = SmallString::<[u8; 32]>::new();
+                        for j in 0..name.len() {
+                            s.push(name.get(j) as char);
+                        }
+
+                        let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
+                        let filetype = if is_dir {
+                            wasip1::FILETYPE_DIRECTORY
+                        } else {
+                            wasip1::FILETYPE_REGULAR_FILE
+                        };
+
+                        let data = if is_dir {
+                            let mut map = DirMap::new();
+                            map.insert(SmallString::from_str("."), 0); // Self (will update)
+                            map.insert(SmallString::from_str(".."), dir_ino);
+                            InodeData::Dir(map)
+                        } else {
+                            InodeData::File(Vec::new())
+                        };
+
+                        let new_inode = Inode {
+                            meta: InodeMetadata::new(filetype, fs_rights_base),
+                            data,
+                        };
+
+                        let new_id = self.allocate_inode(new_inode);
+
+                        // Update self reference if dir
+                        if is_dir {
+                            self.modify_inode(&new_id, |node| {
+                                if let InodeData::Dir(map) = &mut node.data {
+                                    map.insert(SmallString::from_str("."), new_id);
+                                }
+                            });
+                        }
+
+                        // Link in parent
+                        self.modify_inode(&dir_ino, |node| {
+                            if let InodeData::Dir(dir_map) = &mut node.data {
+                                dir_map.insert(s, new_id);
+                            }
+                        });
+
+                        return Ok(new_id);
+                    }
+                }
+                Err(wasip1::ERRNO_NOENT)
+            } else {
+                Err(wasip1::ERRNO_NOENT)
+            }
+        }
+    }
+
+    fn path_open_raw_dyn_compatible(
+        &self,
+        access: &impl crate::memory::WasmAccessDynCompatible,
+        dir_ino: Self::Inode,
+        _: wasip1::Fdflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        o_flags: wasip1::Oflags,
+        fs_rights_base: wasip1::Rights,
+        _: wasip1::Rights,
+        _: wasip1::Fdflags,
+    ) -> Result<Self::Inode, wasip1::Errno> {
+        if let Some(inode) = self.get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len) {
+            if o_flags & wasip1::OFLAGS_EXCL == wasip1::OFLAGS_EXCL {
+                return Err(wasip1::ERRNO_EXIST);
+            }
+            if o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY && !self.is_dir(inode)
+            {
+                return Err(wasip1::ERRNO_NOTDIR);
+            }
+            if o_flags & wasip1::OFLAGS_TRUNC == wasip1::OFLAGS_TRUNC {
+                self.modify_inode(&inode, |node| {
+                    if let InodeData::File(ref mut vec) = node.data {
+                        vec.clear();
+                    }
+                });
+            }
+            Ok(inode)
+        } else {
+            if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
+                let path = crate::memory::WasmPathAccessDynCompatible::new(access, path_ptr, path_len);
+                let components: Vec<_> = path.components().collect();
+
+                if components.is_empty() {
+                    return Err(wasip1::ERRNO_NOENT);
+                }
+
+                if components.len() == 1 {
+                    if let crate::memory::WasmPathComponentDynCompatible::Normal(name) = &components[0] {
                         let mut s = SmallString::<[u8; 32]>::new();
                         for j in 0..name.len() {
                             s.push(name.get(j) as char);
