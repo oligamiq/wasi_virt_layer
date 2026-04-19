@@ -1,0 +1,25 @@
+[package]
+name = "tree"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+const_struct = "0.6.4"
+wit-bindgen = { version = "0.57.1", default-features = false, features = [
+    "macros",
+    "std",
+] }
+
+[dependencies.wasi_virt_layer]
+workspace = true
+
+[lib]
+crate-type = ["cdylib"]

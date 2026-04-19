@@ -1812,6 +1812,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
+name = "tree"
+version = "0.1.5"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer 0.1.5",
+ "wit-bindgen 0.57.1",
+]
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
