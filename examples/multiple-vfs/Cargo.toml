@@ -11,7 +11,7 @@ smallstr = "0.3.0"
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["std", "alloc", "multiple_lfs"]
+features = ["std", "alloc", "multiple_lfs", "trace-fs"]
 
 [lib]
 crate-type = ["cdylib"]

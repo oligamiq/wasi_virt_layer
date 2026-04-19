@@ -60,7 +60,7 @@ pub struct FilestatWithoutDevice {
     pub ctim: Timestamp,
 }
 
-pub(crate) trait ConstDefault: core::fmt::Debug {
+pub trait ConstDefault: core::fmt::Debug {
     const DEFAULT: Self;
 }
 

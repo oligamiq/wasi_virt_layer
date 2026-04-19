@@ -110,6 +110,7 @@ pub mod __private {
     pub use paste;
     #[cfg(target_os = "wasi")]
     pub use wasip1;
+    pub use crate::wasi::file::ConstDefault;
 
     pub mod inner {
         pub mod env {

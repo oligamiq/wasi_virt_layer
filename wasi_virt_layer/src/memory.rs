@@ -62,6 +62,10 @@ macro_rules! import_wasm {
 
             $crate::__memory_director_import_etc!($name);
 
+            impl $crate::__private::ConstDefault for $name {
+                const DEFAULT: Self = Self;
+            }
+
             impl $crate::memory::WasmAccessName for $name {
                 const NAME: &'static str = stringify!($name);
             }

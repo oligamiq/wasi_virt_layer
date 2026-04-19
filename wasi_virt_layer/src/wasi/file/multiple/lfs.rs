@@ -6,14 +6,14 @@ use smallvec::SmallVec;
 
 use crate::{
     __private::wasip1::{self, *},
-    file::{FilestatWithoutDevice, Wasip1FileSystem},
+    file::{FilestatWithoutDevice, Wasip1FileSystem, multiple::wasm::WasmAccessDynCompatibleTuple},
     memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName},
     wasi::file::{
         ConstDefault, Wasip1DynCompatibleLFS, Wasip1DynamicLFS,
         changeable::inode::{self, DetailedOpenFd},
         constant::vfs::OpenFdInfoWithInode,
         multiple::{
-            inode::{boxedInode, BoxedInodeCommon, DetailedDynamicOpenFd},
+            inode::{BoxedInodeCommon, DetailedDynamicOpenFd, boxedInode},
             wasm::WasmAccessDynCompatibleWrapper,
         },
     },
@@ -135,6 +135,10 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
         unsafe { &mut *self.wasms.get() }.insert(name, access);
     }
 
+    pub fn add_wasm<Wasm: WasmAccessDynCompatibleTuple + WasmAccessName + ConstDefault + 'static>(&mut self) {
+        self.add_wasm_access(<Wasm as WasmAccessName>::NAME.into(), WasmAccessDynCompatibleWrapper::new(Wasm::DEFAULT));
+    }
+
     #[cfg(feature = "threads")]
     pub fn get_wasm_access(
         &self,
@@ -189,6 +193,19 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
             fd
         }
     }
+
+    pub fn add_fd(
+        &self,
+        lfs_idx: usize,
+        inode: OpenFd::InodeId,
+        base_rights: wasip1::Rights,
+        inheriting_rights: wasip1::Rights,
+    ) -> Fd {
+        let mut open_fd = OpenFd::from_inode_id(inode);
+        open_fd.set_base_rights(base_rights);
+        open_fd.set_inheriting_rights(inheriting_rights);
+        self.allocate_fd(lfs_idx, open_fd)
+    }
 }
 
 use crate::wasi::file::constant::vfs_impl::trace_fs;
@@ -217,10 +234,12 @@ macro_rules! get_open_fd {
 
 macro_rules! get_access {
     ($name:ident = $self:ident, $wasm:ty) => {
+        trace_fs!($self, $wasm; "get_access: wasm={}", <$wasm as WasmAccessName>::NAME);
+
         #[cfg(feature = "threads")]
         let $name = match $self.get_wasm_access(<$wasm as WasmAccessName>::NAME) {
             Some(a) => a,
-            None => return wasip1::ERRNO_BADF,
+            None => panic!("get_access: wasm={} not found", <$wasm as WasmAccessName>::NAME),
         };
 
         #[cfg(feature = "threads")]
@@ -229,7 +248,7 @@ macro_rules! get_access {
         #[cfg(not(feature = "threads"))]
         let $name = match unsafe { &*$self.wasms.get() }.get(<$wasm as WasmAccessName>::NAME) {
             Some(a) => a,
-            None => return wasip1::ERRNO_BADF,
+            None => panic!("get_access: wasm={} not found", <$wasm as WasmAccessName>::NAME),
         };
     };
 }
@@ -244,11 +263,17 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         iovs_len: usize,
         nwritten_ret: *mut Size,
     ) -> wasip1::Errno {
+        if fd != 2 {
+            trace_fs!(self, Wasm; "fd_write: fd={fd}, iovs_len={iovs_len}");
+        }
         get_access!(access = self, Wasm);
 
         match fd {
             0 => wasip1::ERRNO_BADF, // stdin is not writable
             1 | 2 => {
+                if fd != 2 {
+                    trace_fs!(self, Wasm; "fd_write to stdio: fd={fd}, iovs_len={iovs_len}");
+                }
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
                 let mut written = 0;
                 for iovs in iovs_vec {
@@ -317,6 +342,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         cookie: Dircookie,
         nread_ret: *mut Size,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_readdir: fd={fd}, buf_len={buf_len}, cookie={cookie}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
@@ -343,6 +369,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         path_len: usize,
         filestat_ret: *mut wasip1::Filestat,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_filestat_get: fd={fd}, flags={flags}, path_len={path_len}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
@@ -376,11 +403,13 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         fd: Fd,
         prestat_ret: *mut wasip1::Prestat,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_prestat_get: fd={fd}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
         match lfs.fd_prestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
             Ok(prestat) => {
+                trace_fs!(self, Wasm; "fd_prestat_get: storing prestat");
                 Wasm::store_le(prestat_ret, prestat);
                 wasip1::ERRNO_SUCCESS
             }
@@ -394,6 +423,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_prestat_dir_name: fd={fd}, dir_path_len={dir_path_len}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
@@ -409,6 +439,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
     }
 
     fn fd_close_raw<Wasm: WasmAccess + WasmAccessName>(&self, fd: Fd) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_close: fd={fd}");
         if fd < 3 {
             return wasip1::ERRNO_SUCCESS; // Ignore closing stdio
         }
@@ -421,6 +452,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         fd: Fd,
         filestat_ret: *mut wasip1::Filestat,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_filestat_get: fd={fd}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
@@ -448,6 +480,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         fd: Fd,
         fdstat_ret: *mut wasip1::Fdstat,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_fdstat_get: fd={fd}");
         get_access!(access = self, Wasm);
         match fd {
             0 | 1 | 2 => {
@@ -488,6 +521,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         iovs_len: usize,
         nread_ret: *mut Size,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_read: fd={fd}, iovs_len={iovs_len}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
@@ -528,6 +562,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         fd_flags: wasip1::Fdflags,
         fd_ret: *mut wasip1::Fd,
     ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_open: dir_fd={dir_fd}, dir_flags={dir_flags}, path_len={path_len}, o_flags={o_flags}, fs_rights_base={fs_rights_base}, fs_rights_inheriting={fs_rights_inheriting}, fd_flags={fd_flags}");
         get_access!(access = self, Wasm);
 
         #[cfg(feature = "threads")]

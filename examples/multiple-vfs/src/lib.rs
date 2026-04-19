@@ -63,16 +63,16 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 #[allow(dead_code)]
 mod fs {
     use super::*;
-    use wasi_virt_layer::file::multiple::wasm::WasmAccessDynCompatibleWrapper;
-
     pub static VIRTUAL_FILE_SYSTEM: LazyLock<Wasip1MultipleVFS> = LazyLock::new(|| {
         let mut vfs = Wasip1MultipleVFS::new();
+
+        vfs.add_wasm::<ls>();
 
         // Create first LFS
         let lfs1 = ChangeableLFS::<DefaultStdIO>::new();
         let root_inode1 = lfs1.add_preopen(".");
         lfs1.add_file(root_inode1, "lfs1.txt", b"Content from LFS 1".to_vec()).unwrap();
-        
+
         vfs.add_lfs(Box::new(lfs1));
 
         // Create second LFS
