@@ -24,6 +24,7 @@ workspace = true
 features = [
     # "trace-fs"
     # "std",
+    "const-fs",
     "multiple-fs",
 ]
 

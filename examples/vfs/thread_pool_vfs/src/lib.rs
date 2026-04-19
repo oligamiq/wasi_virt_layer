@@ -84,7 +84,7 @@ static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
 
 plug_thread!(
     { unsafe { &mut *(&raw mut THREAD_POOL) } },
-    // { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new() },
+    // { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::const_new() },
     self,
     test_pool_thread
 );
@@ -198,7 +198,7 @@ mod fs {
     type LFS = VFSConstNormalLFS<FilesTy, F, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new(VFSConstNormalLFS::new());
+        Wasip1ConstVFS::const_new(VFSConstNormalLFS::const_new());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_pool_thread, self);
 }

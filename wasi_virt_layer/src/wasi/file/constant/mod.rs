@@ -1,3 +1,5 @@
+#![cfg(feature = "const-fs")]
+
 pub mod lfs;
 pub mod lfs_impl;
 pub mod lfs_raw;

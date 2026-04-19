@@ -1,3 +1,5 @@
+#![cfg(feature = "multiple-fs")]
+
 pub mod inode;
 pub mod lfs;
 pub mod wasm;

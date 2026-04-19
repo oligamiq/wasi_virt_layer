@@ -66,7 +66,9 @@ pub fn new(args: NewArgs) -> eyre::Result<()> {
         let mut cmd = std::process::Command::new("cargo");
         cmd.arg("add").arg(dependency);
         if threads && dependency == "wasi-virt-layer" {
-            cmd.args(["--features", "threads"]);
+            cmd.args(["--features", "threads,const-fs"]);
+        } else if dependency == "wasi-virt-layer" {
+            cmd.args(["--features", "const-fs"]);
         }
         cmd.current_dir(&path)
             .status()

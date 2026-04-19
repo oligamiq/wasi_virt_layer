@@ -1,9 +1,11 @@
+#![cfg(feature = "const-fs")]
+
 use crate::__private::wasip1::{self, Dircookie};
 use crate::memory::{
-    WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _,
+    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _,
     WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon,
 };
-use crate::wasi::file::{ConstDefault, Wasip1LFSBaseWrapper};
+use crate::wasi::file::ConstDefault;
 use crate::{
     memory::{WasmAccess, WasmPathAccess},
     wasi::file::{

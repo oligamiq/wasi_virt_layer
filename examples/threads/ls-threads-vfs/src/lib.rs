@@ -29,7 +29,7 @@ impl Guest for ComponentABI {
 export!(ComponentABI);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::const_new() },
     anonymous,
     self
 );

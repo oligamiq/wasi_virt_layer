@@ -1,9 +1,11 @@
+#![cfg(feature = "multiple-fs")]
+
 use smallbox::SmallBox;
 
 use crate::{
     __private::wasip1,
     wasi::file::{
-        ConstDefault, Wasip1LFSBase, changeable::inode::{BoxedInode, InodeIdCommon}, constant::vfs::{OpenFdInfo, OpenFdInfoWithInode}
+        BoxedInode, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode, Wasip1LFSBase,
     },
 };
 

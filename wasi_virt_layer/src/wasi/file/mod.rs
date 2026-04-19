@@ -10,22 +10,22 @@ use smallstr::SmallString;
 use crate::memory::{
     WasmAccess, WasmAccessDynCompatible as _, WasmAccessDynCompatibleRaw, WasmAccessName,
 };
-#[cfg(feature = "alloc")]
+pub(crate) mod types;
+#[cfg(feature = "changeable-fs")]
 pub mod changeable;
+#[cfg(feature = "const-fs")]
 pub mod constant;
 #[cfg(feature = "multiple-fs")]
 pub mod multiple;
 pub mod stdio;
+pub(crate) mod trace;
 use crate::__private::wasip1;
+
+pub use self::types::{BoxedInode, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode};
 
 // no implementing dcache
 
 use crate::__private::wasip1::*;
-use crate::wasi::file::changeable::inode::BoxedInode;
-#[cfg(feature = "alloc")]
-use crate::wasi::file::changeable::inode::InodeIdCommon;
-#[cfg(feature = "multiple-fs")]
-pub use crate::wasi::file::multiple::inode::BoxedInodeNormal;
 
 /// File statistics excluding the device ID.
 pub struct FilestatWithoutDevice {

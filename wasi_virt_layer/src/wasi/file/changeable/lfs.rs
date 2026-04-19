@@ -1,10 +1,11 @@
+#![cfg(feature = "changeable-fs")]
+
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
-use crate::wasi::file::changeable::inode::{BoxedInode, InodeIdCommon};
 use crate::wasi::file::{
-    ConstDefault, DerefToStrCustom, Wasip1LFSBaseWrapper,
+    BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1LFSBaseWrapper,
 };
-use crate::wasi::file::{Wasip1ConstLFS, Wasip1DynCompatibleLFS, Wasip1DynamicLFS, Wasip1LFSBase};
+use crate::wasi::file::{Wasip1DynCompatibleLFS, Wasip1DynamicLFS, Wasip1LFSBase};
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
@@ -13,20 +14,17 @@ use crate::{
         stdio::StdIO,
     },
 };
-use alloc::{collections::BTreeMap, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 use smallstr::SmallString;
 
 #[cfg(feature = "threads")]
 use dashmap::DashMap;
 
-use core::borrow::Borrow;
+#[cfg(not(feature = "threads"))]
+use alloc::collections::BTreeMap;
+
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
-use core::ops::Deref;
-
-use core::any::Any;
-
-use alloc::boxed::Box;
 
 /// A local file system that allows runtime modifications
 pub struct ChangeableLFS<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static = DefaultAddInfo> {

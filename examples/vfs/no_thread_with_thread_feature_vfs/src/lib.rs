@@ -111,7 +111,7 @@ impl ThreadAccess for ThreadAccessorAlt {
     }
 }
 
-plug_thread!(@sched_yield, { ThreadAlt::<ThreadAccessorAlt>::new() }, test_wasm);
+plug_thread!(@sched_yield, { ThreadAlt::<ThreadAccessorAlt>::const_new() }, test_wasm);
 
 mod fs {
     use wasi_virt_layer::file::{DefaultStdIO, VFSConstNormalLFS, Wasip1ConstVFS};
@@ -121,7 +121,7 @@ mod fs {
     type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new(VFSConstNormalLFS::new());
+        Wasip1ConstVFS::const_new(VFSConstNormalLFS::const_new());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_wasm);
 }

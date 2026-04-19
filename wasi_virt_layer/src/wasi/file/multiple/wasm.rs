@@ -1,16 +1,7 @@
-use core::ops::Deref as _;
-
-use alloc::collections::BTreeMap;
-
-use smallvec::SmallVec;
+#![cfg(feature = "multiple-fs")]
 
 use crate::{
-    __private::wasip1::{self, *},
-    file::FilestatWithoutDevice,
-    memory::{
-        WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw,
-        WasmAccessNameDynCompatible,
-    },
+    memory::{WasmAccessDynCompatibleRaw, WasmAccessNameDynCompatible},
 };
 
 pub trait WasmAccessDynCompatibleTuple:

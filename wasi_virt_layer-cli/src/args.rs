@@ -389,6 +389,7 @@ impl TranspileOpts {
                 multi_memory: true,
                 guest: self.guest,
                 async_mode: None,
+                strict: false,
             },
         )
         .to_eyre()

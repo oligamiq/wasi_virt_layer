@@ -17,6 +17,8 @@ and add the following to your Cargo.toml:
 crate-type = ["cdylib"]
 ```
 3. Add wasi_virt_layer and wit-bindgen as dependencies, and create a wit directory.
+
+   Note: if your module uses the const virtual file system template, enable the `const-fs` feature for `wasi_virt_layer`.
 4. Use the import_wasm! macro to prepare for using the wasm module.
 5. Use the plug! macro series (plug_process!, plug_env!, etc.) to connect to the wasip1 ABI, and link virtual filesystems or virtual environment variables.
 6. Run the command

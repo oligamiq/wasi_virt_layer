@@ -17,7 +17,7 @@ threads = ["std", "dep:parking_lot", "dep:dashmap"]
 trace = ["trace-fs"]
 trace-fs = ["simple-debug"]
 const-fs = []
-multiple-fs = ["alloc"]
+multiple-fs = ["changeable-fs"]
 changeable-fs = ["alloc"]
 simple-debug = []
 # this is unstable

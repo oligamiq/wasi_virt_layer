@@ -661,7 +661,7 @@ macro_rules! plug_thread {
 mod reset_on_thread {
     use crate::utils::InitOnce;
 
-    static INIT: InitOnce = InitOnce::new();
+    static INIT: InitOnce = InitOnce::const_new();
 
     #[link(wasm_import_module = "wasip1-vfs")]
     unsafe extern "C" {

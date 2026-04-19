@@ -154,6 +154,7 @@ pub fn run_wasi_virt_layer(
     other_args: &[&str],
 ) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
+    cmd.arg("build");
 
     if let Some(p_vfs) = p_vfs {
         cmd.args(["-p", p_vfs]);

@@ -1,3 +1,5 @@
+#![cfg(feature = "const-fs")]
+
 use crate::__private::wasip1;
 use const_struct::ConstStruct;
 
@@ -397,7 +399,7 @@ macro_rules! ConstFiles {
         $static_array.push(($depth, (
             $parent_path,
             $name,
-            $crate::wasi::file::constant::lfs_raw::VFSConstNormalInode::Dir(
+            $crate::__private::inner::fs::VFSConstNormalInode::Dir(
                 get_child_range(
                     $empty,
                     $parent_path,

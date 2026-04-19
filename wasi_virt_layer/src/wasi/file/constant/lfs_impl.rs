@@ -1,14 +1,12 @@
-use alloc::boxed::Box;
-use core::any::Any;
+#![cfg(feature = "const-fs")]
 
 use crate::__private::wasip1;
 use crate::__private::wasip1::Dircookie;
 
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::Wasip1LFSBaseWrapper as _;
-use crate::wasi::file::changeable::inode::{BoxedInode, InodeIdCommon};
 use crate::wasi::file::{
-    DerefToStrCustom, Wasip1ConstLFS, Wasip1DynCompatibleLFS,
+    BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1ConstLFS, Wasip1DynCompatibleLFS,
     Wasip1DynCompatibleLFSSlice, Wasip1DynamicLFS, Wasip1LFSBase,
 };
 use crate::{

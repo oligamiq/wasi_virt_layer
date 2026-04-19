@@ -1,17 +1,17 @@
+#![cfg(feature = "changeable-fs")]
+
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
-use crate::wasi::file::changeable::inode::{DetailedOpenFd, InodeIdCommon};
-use crate::wasi::file::constant::vfs::{OpenFdInfo, OpenFdInfoWithInode};
-use crate::wasi::file::constant::vfs_impl::trace_fs;
-use crate::wasi::file::{ConstDefault, Wasip1DynamicLFS, Wasip1LFSBase};
+use crate::wasi::file::changeable::inode::DetailedOpenFd;
+use crate::wasi::file::trace::trace_fs;
+use crate::wasi::file::{
+    InodeIdCommon, OpenFdInfoWithInode, Wasip1DynamicLFS, Wasip1LFSBase,
+};
 use crate::{
     memory::WasmAccess,
-    wasi::file::{Wasip1FileSystem, changeable::inode::InodeId},
+    wasi::file::Wasip1FileSystem,
 };
-
-#[cfg(feature = "threads")]
-use parking_lot::RwLock;
 
 #[cfg(feature = "threads")]
 use dashmap::DashMap;

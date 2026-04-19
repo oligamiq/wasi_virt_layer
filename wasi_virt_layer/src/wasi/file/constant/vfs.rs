@@ -1,7 +1,9 @@
+#![cfg(feature = "const-fs")]
+
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
-use crate::wasi::file::changeable::inode::InodeIdCommon;
-use crate::wasi::file::{ConstDefault, Wasip1ConstLFS};
+use crate::wasi::file::{ConstDefault, InodeIdCommon, Wasip1ConstLFS};
+pub use crate::wasi::file::OpenFdInfo;
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
@@ -9,34 +11,6 @@ use crate::memory::WasmAccess;
 
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
-
-pub trait OpenFdInfo: core::fmt::Debug + Sized {
-    fn cursor(&self) -> usize;
-    fn set_cursor(&mut self, cursor: usize);
-
-    fn base_rights(&self) -> wasip1::Rights {
-        !0
-    }
-    fn set_base_rights(&mut self, _base_rights: wasip1::Rights) {}
-
-    fn inheriting_rights(&self) -> wasip1::Rights {
-        !0
-    }
-    fn set_inheriting_rights(&mut self, _inheriting_rights: wasip1::Rights) {}
-
-    fn fd_flags(&self) -> wasip1::Fdflags {
-        0
-    }
-    fn set_fd_flags(&mut self, _fd_flags: wasip1::Fdflags) {}
-}
-
-pub trait OpenFdInfoWithInode: OpenFdInfo {
-    type InodeId: InodeIdCommon;
-
-    fn from_inode_id(inode_id: Self::InodeId) -> Self;
-    fn inode_id(&self) -> &Self::InodeId;
-    fn set_inode_id(&mut self, inode_id: Self::InodeId);
-}
 
 #[derive(Debug, Clone, Copy)]
 pub struct SimpleOpenFd {

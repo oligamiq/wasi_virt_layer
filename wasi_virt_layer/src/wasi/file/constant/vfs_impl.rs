@@ -1,41 +1,13 @@
+#![cfg(feature = "const-fs")]
+
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
-use crate::wasi::file::Wasip1ConstLFS;
-use crate::wasi::file::changeable::inode::InodeIdCommon;
-use crate::wasi::file::constant::vfs::OpenFdInfo;
+use crate::wasi::file::trace::trace_fs;
 use crate::{
     memory::WasmAccess,
-    wasi::file::{Wasip1FileSystem, constant::vfs::Wasip1ConstVFS},
+    wasi::file::{InodeIdCommon, OpenFdInfo, Wasip1ConstLFS, Wasip1FileSystem, constant::vfs::Wasip1ConstVFS},
 };
-
-macro_rules! trace_fs {
-    (
-        $vfs:expr,
-        $wasm:ty;
-        $($arg:tt)*
-    ) => {
-        #[cfg(feature = "trace-fs")]
-        {
-            // let lfs = $vfs.get_lfs();
-            #[cfg(feature = "std")]
-            let msg = {
-                format!($($arg)*)
-            };
-
-            #[cfg(not(feature = "std"))]
-            let msg = {
-                stringify!($($arg)*)
-            };
-
-            let b = msg.as_bytes();
-
-            $crate::simple_debug::simple_debug_print(b);
-        }
-    };
-}
-
-pub(crate) use trace_fs;
 
 impl<LFS: Wasip1ConstLFS + Sync, const FLAT_LEN: usize, OpenFd: OpenFdInfo + Default>
     Wasip1FileSystem for Wasip1ConstVFS<LFS, FLAT_LEN, OpenFd>

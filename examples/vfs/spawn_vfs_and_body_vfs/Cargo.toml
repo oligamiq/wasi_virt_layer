@@ -19,7 +19,7 @@ const_struct = "0.6.4"
 [dependencies.wasi_virt_layer]
 workspace = true
 default-features = false
-features = ["threads", "unstable_print_debug"]
+features = ["threads", "unstable_print_debug", "const-fs"]
 
 [lib]
 crate-type = ["cdylib"]

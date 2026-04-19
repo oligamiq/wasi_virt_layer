@@ -14,7 +14,7 @@ readme.workspace = true
 publish = false
 
 [dependencies]
-wasi_virt_layer = { workspace = true, features = ["threads"] }
+wasi_virt_layer = { workspace = true, features = ["threads", "const-fs", "multi_memory"] }
 const_struct = "0.6.4"
 wit-bindgen = "0.54.0"
 

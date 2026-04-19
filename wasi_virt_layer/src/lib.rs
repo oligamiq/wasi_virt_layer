@@ -53,8 +53,14 @@ pub mod prelude {
     #[cfg(feature = "threads")]
     pub use crate::plug_thread;
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
+
+    #[cfg(feature = "const-fs")]
     pub use crate::wasi::file::constant::vfs::Wasip1ConstVFS;
-    pub use crate::{ConstFiles, import_wasm, plug_env, plug_fs, plug_poll, plug_process};
+
+    #[cfg(feature = "const-fs")]
+    pub use crate::ConstFiles;
+
+    pub use crate::{import_wasm, plug_env, plug_fs, plug_poll, plug_process};
 }
 
 #[cfg(feature = "threads")]
@@ -69,18 +75,18 @@ pub mod thread {
 /// Virtual File System operations and definitions.
 pub mod file {
     pub use crate::wasi::file::{
-        DefaultAddInfo, FilestatWithoutDevice, NoAddInfo, WasiAddInfo, Wasip1FileSystem,
-        Wasip1FileTrait,
-        constant::{
-            lfs::VFSConstNormalLFS,
-            lfs_raw::{VFSConstNormalFiles, WasiConstFile},
-            vfs::Wasip1ConstVFS,
-        },
-        stdio::DefaultStdIO,
-        changeable::inode::BoxedInode,
+        BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon, NoAddInfo, OpenFdInfo,
+        OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait, stdio::DefaultStdIO,
     };
 
-    #[cfg(feature = "alloc")]
+    #[cfg(feature = "const-fs")]
+    pub use crate::wasi::file::constant::{
+        lfs::VFSConstNormalLFS,
+        lfs_raw::{VFSConstNormalFiles, WasiConstFile},
+        vfs::Wasip1ConstVFS,
+    };
+
+    #[cfg(feature = "changeable-fs")]
     pub use crate::wasi::file::changeable::{
         inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata},
         lfs::ChangeableLFS,
@@ -123,6 +129,7 @@ pub mod __private {
         }
 
         pub mod fs {
+            #[cfg(feature = "const-fs")]
             pub use crate::wasi::file::constant::lfs_raw::{
                 VFSConstNormalFiles, VFSConstNormalInode, WasiConstPrimitiveFile,
             };

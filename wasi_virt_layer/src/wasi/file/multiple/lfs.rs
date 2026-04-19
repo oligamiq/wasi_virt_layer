@@ -1,17 +1,16 @@
-use core::any::Any;
-use core::ffi::c_void;
+#![cfg(feature = "multiple-fs")]
+
+#[cfg(feature = "threads")]
 use core::ops::Deref as _;
 
 use smallvec::SmallVec;
 
 use crate::{
     __private::wasip1::{self, *},
-    file::{FilestatWithoutDevice, Wasip1FileSystem, multiple::wasm::WasmAccessDynCompatibleTuple},
-    memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName},
+    file::{Wasip1FileSystem, multiple::wasm::WasmAccessDynCompatibleTuple},
+    memory::{WasmAccess, WasmAccessName},
     wasi::file::{
-        ConstDefault, Wasip1DynCompatibleLFS, Wasip1DynamicLFS,
-        changeable::inode::{self, BoxedInode, DetailedOpenFd},
-        constant::vfs::OpenFdInfoWithInode,
+        BoxedInode, ConstDefault, InodeIdCommon, OpenFdInfoWithInode, Wasip1DynCompatibleLFS,
         multiple::{
             inode::{BoxedInodeNormal, DetailedDynamicOpenFd},
             wasm::WasmAccessDynCompatibleWrapper,
@@ -253,7 +252,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
     }
 }
 
-use crate::wasi::file::constant::vfs_impl::trace_fs;
+use crate::wasi::file::trace::trace_fs;
 
 macro_rules! get_open_fd {
     (($name:ident, $lfs:ident) = $self:ident, $fd:ident) => {
@@ -297,8 +296,6 @@ macro_rules! get_access {
         };
     };
 }
-
-use crate::wasi::file::InodeIdCommon;
 
 macro_rules! get_inode {
     ($inode:ident = $open_fd:ident) => {
