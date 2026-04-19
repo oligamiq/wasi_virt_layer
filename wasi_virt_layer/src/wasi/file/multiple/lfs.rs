@@ -364,7 +364,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
             fd => {
                 get_open_fd!((open_fd, lfs) = self, fd);
 
-                let inode = &**open_fd.inode_id();
+                get_inode!(inode = open_fd);
 
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
@@ -399,9 +399,11 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
+        get_inode!(inode = open_fd);
+
         match lfs.fd_readdir_raw_dyn_compatible(
             access,
-            &**open_fd.inode_id(),
+            inode,
             buf,
             buf_len,
             cookie,
@@ -426,9 +428,11 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
+        get_inode!(inode = open_fd);
+
         match lfs.path_filestat_get_raw_dyn_compatible(
             access,
-            &**open_fd.inode_id(),
+            inode,
             flags,
             path_ptr,
             path_len,
@@ -481,9 +485,11 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
+        get_inode!(inode = open_fd);
+
         match lfs.fd_prestat_dir_name_raw_dyn_compatible(
             access,
-            &**open_fd.inode_id(),
+            inode,
             dir_path_ptr,
             dir_path_len,
         ) {
@@ -510,7 +516,9 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
-        match lfs.fd_filestat_get_raw_dyn_compatible(access, &**open_fd.inode_id()) {
+        get_inode!(inode = open_fd);
+
+        match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
             Ok(filestat) => {
                 let filestat = wasip1::Filestat {
                     dev: 0,
@@ -550,7 +558,9 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
             fd => {
                 get_open_fd!((open_fd, lfs) = self, fd);
 
-                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, &**open_fd.inode_id()) {
+                get_inode!(inode = open_fd);
+
+                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
                     Ok(f) => f.filetype,
                     Err(e) => return e,
                 };
@@ -583,8 +593,9 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         let mut cursor = open_fd.cursor();
         let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
+        get_inode!(inode = open_fd);
         for iovs in iovs_vec {
-            match lfs.fd_pread_raw_dyn_compatible(access, &**open_fd.inode_id(), iovs.buf as *mut u8, iovs.buf_len, cursor)
+            match lfs.fd_pread_raw_dyn_compatible(access, inode, iovs.buf as *mut u8, iovs.buf_len, cursor)
             {
                 Ok(r) => {
                     read += r;
@@ -636,9 +647,11 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         let lfs_idx = *lfs_idx;
         let lfs = &self.lfss[lfs_idx];
 
+        get_inode!(inode = open_fd);
+
         match lfs.path_open_raw_dyn_compatible(
             access,
-            &**open_fd.inode_id(),
+            inode,
             dir_flags,
             path_ptr,
             path_len,
