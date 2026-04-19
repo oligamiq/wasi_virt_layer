@@ -206,6 +206,51 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
         open_fd.set_inheriting_rights(inheriting_rights);
         self.allocate_fd(lfs_idx, open_fd)
     }
+
+    pub fn add_preopen_fd(
+        &self,
+        lfs_idx: usize,
+        inode: OpenFd::InodeId,
+    ) -> Fd {
+        self.add_fd(
+            lfs_idx,
+            inode,
+            wasip1::RIGHTS_FD_READ
+                | wasip1::RIGHTS_FD_READDIR
+                | wasip1::RIGHTS_FD_WRITE
+                | wasip1::RIGHTS_PATH_CREATE_DIRECTORY
+                | wasip1::RIGHTS_PATH_CREATE_FILE
+                | wasip1::RIGHTS_PATH_FILESTAT_GET
+                | wasip1::RIGHTS_PATH_FILESTAT_SET_SIZE
+                | wasip1::RIGHTS_PATH_FILESTAT_SET_TIMES
+                | wasip1::RIGHTS_PATH_LINK_SOURCE
+                | wasip1::RIGHTS_PATH_LINK_TARGET
+                | wasip1::RIGHTS_PATH_OPEN
+                | wasip1::RIGHTS_PATH_READLINK
+                | wasip1::RIGHTS_PATH_REMOVE_DIRECTORY
+                | wasip1::RIGHTS_PATH_RENAME_SOURCE
+                | wasip1::RIGHTS_PATH_RENAME_TARGET
+                | wasip1::RIGHTS_PATH_SYMLINK
+                | wasip1::RIGHTS_PATH_UNLINK_FILE,
+            wasip1::RIGHTS_FD_READ
+                | wasip1::RIGHTS_FD_READDIR
+                | wasip1::RIGHTS_FD_WRITE
+                | wasip1::RIGHTS_PATH_CREATE_DIRECTORY
+                | wasip1::RIGHTS_PATH_CREATE_FILE
+                | wasip1::RIGHTS_PATH_FILESTAT_GET
+                | wasip1::RIGHTS_PATH_FILESTAT_SET_SIZE
+                | wasip1::RIGHTS_PATH_FILESTAT_SET_TIMES
+                | wasip1::RIGHTS_PATH_LINK_SOURCE
+                | wasip1::RIGHTS_PATH_LINK_TARGET
+                | wasip1::RIGHTS_PATH_OPEN
+                | wasip1::RIGHTS_PATH_READLINK
+                | wasip1::RIGHTS_PATH_REMOVE_DIRECTORY
+                | wasip1::RIGHTS_PATH_RENAME_SOURCE
+                | wasip1::RIGHTS_PATH_RENAME_TARGET
+                | wasip1::RIGHTS_PATH_SYMLINK
+                | wasip1::RIGHTS_PATH_UNLINK_FILE,
+        )
+    }
 }
 
 use crate::wasi::file::constant::vfs_impl::trace_fs;
@@ -219,28 +264,13 @@ macro_rules! get_open_fd {
         #[cfg(feature = "threads")]
         let ($lfs, $name) = match __bind.as_ref() {
             Some(entry) => entry.value(),
-            None => {
-                #[cfg(feature = "trace")]
-                panic!("get_open_fd: fd={} not found", $fd);
-
-                #[cfg(not(feature = "trace"))]
-                return wasip1::ERRNO_BADF;
-            },
+            None => return wasip1::ERRNO_BADF,
         };
-
-        #[cfg(feature = "trace")]
-        panic!("get_open_fd: fd={} not found", $fd);
 
         #[cfg(not(feature = "threads"))]
         let ($lfs, $name) = match unsafe { &*$self.fd_map.get() }.get(&$fd) {
             Some(entry) => entry,
-            None => {
-                #[cfg(feature = "trace")]
-                panic!("get_open_fd: fd={} not found", $fd);
-
-                #[cfg(not(feature = "trace"))]
-                return wasip1::ERRNO_BADF;
-            },
+            None => return wasip1::ERRNO_BADF,
         };
 
         let $lfs = &$self.lfss[*$lfs];
@@ -272,7 +302,7 @@ use crate::wasi::file::InodeIdCommon;
 
 macro_rules! get_inode {
     ($inode:ident = $open_fd:ident) => {
-        let $inode: &dyn InodeIdCommon = $open_fd.inode_id();
+        let $inode: &dyn InodeIdCommon = &**$open_fd.inode_id();
     };
 }
 
@@ -334,7 +364,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
             fd => {
                 get_open_fd!((open_fd, lfs) = self, fd);
 
-                let inode = open_fd.inode_id();
+                let inode = &**open_fd.inode_id();
 
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
@@ -371,7 +401,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
 
         match lfs.fd_readdir_raw_dyn_compatible(
             access,
-            open_fd.inode_id(),
+            &**open_fd.inode_id(),
             buf,
             buf_len,
             cookie,
@@ -398,7 +428,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
 
         match lfs.path_filestat_get_raw_dyn_compatible(
             access,
-            open_fd.inode_id(),
+            &**open_fd.inode_id(),
             flags,
             path_ptr,
             path_len,
@@ -453,7 +483,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
 
         match lfs.fd_prestat_dir_name_raw_dyn_compatible(
             access,
-            open_fd.inode_id(),
+            &**open_fd.inode_id(),
             dir_path_ptr,
             dir_path_len,
         ) {
@@ -480,7 +510,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
 
-        match lfs.fd_filestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
+        match lfs.fd_filestat_get_raw_dyn_compatible(access, &**open_fd.inode_id()) {
             Ok(filestat) => {
                 let filestat = wasip1::Filestat {
                     dev: 0,
@@ -520,7 +550,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
             fd => {
                 get_open_fd!((open_fd, lfs) = self, fd);
 
-                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
+                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, &**open_fd.inode_id()) {
                     Ok(f) => f.filetype,
                     Err(e) => return e,
                 };
@@ -554,7 +584,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
 
         for iovs in iovs_vec {
-            match lfs.fd_pread_raw_dyn_compatible(access, open_fd.inode_id(), iovs.buf as *mut u8, iovs.buf_len, cursor)
+            match lfs.fd_pread_raw_dyn_compatible(access, &**open_fd.inode_id(), iovs.buf as *mut u8, iovs.buf_len, cursor)
             {
                 Ok(r) => {
                     read += r;
@@ -608,7 +638,7 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
 
         match lfs.path_open_raw_dyn_compatible(
             access,
-            open_fd.inode_id(),
+            &**open_fd.inode_id(),
             dir_flags,
             path_ptr,
             path_len,
