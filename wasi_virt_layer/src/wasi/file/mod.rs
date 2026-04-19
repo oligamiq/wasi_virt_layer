@@ -13,7 +13,7 @@ use crate::memory::{
 #[cfg(feature = "alloc")]
 pub mod changeable;
 pub mod constant;
-#[cfg(feature = "multiple_lfs")]
+#[cfg(feature = "multiple-fs")]
 pub mod multiple;
 pub mod stdio;
 use crate::__private::wasip1;
@@ -24,7 +24,7 @@ use crate::__private::wasip1::*;
 use crate::wasi::file::changeable::inode::BoxedInode;
 #[cfg(feature = "alloc")]
 use crate::wasi::file::changeable::inode::InodeIdCommon;
-#[cfg(feature = "multiple_lfs")]
+#[cfg(feature = "multiple-fs")]
 pub use crate::wasi::file::multiple::inode::BoxedInodeNormal;
 
 /// File statistics excluding the device ID.

@@ -24,7 +24,7 @@ workspace = true
 features = [
     # "trace-fs"
     # "std",
-    "multiple_lfs",
+    "multiple-fs",
 ]
 
 [lib]

@@ -87,7 +87,7 @@ pub mod file {
         vfs::ChangeableVFS,
     };
 
-    #[cfg(feature = "multiple_lfs")]
+    #[cfg(feature = "multiple-fs")]
     pub use crate::wasi::file::multiple;
 }
 
