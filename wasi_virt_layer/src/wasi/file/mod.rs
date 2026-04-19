@@ -148,8 +148,8 @@ impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T
 where
     <Self as Wasip1LFSBase>::Inode: 'static,
 {
-    fn downcast_inode(inode: &dyn InodeIdCommon) -> &<Self as Wasip1LFSBase>::Inode {
-        let inode = inode as &dyn Any;
+    fn downcast_inode(base_inode: &dyn InodeIdCommon) -> &<Self as Wasip1LFSBase>::Inode {
+        let inode = base_inode as &dyn Any;
 
         #[cfg(feature = "trace")]
         {
@@ -159,7 +159,7 @@ where
                     panic!(
                         "Failed to downcast inode. Expected type: {}, but got a different type. {:?}",
                         core::any::type_name::<<Self as Wasip1LFSBase>::Inode>(),
-                        inode
+                        base_inode
                     )
                 })
         }

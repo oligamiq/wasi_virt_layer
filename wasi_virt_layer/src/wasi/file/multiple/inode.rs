@@ -22,6 +22,20 @@ impl BoxedInodeCommon {
     }
 }
 
+impl core::ops::Deref for BoxedInodeCommon {
+    type Target = dyn InodeIdCommon;
+
+    fn deref(&self) -> &Self::Target {
+        &*self.0
+    }
+}
+
+impl AsRef<dyn InodeIdCommon> for BoxedInodeCommon {
+    fn as_ref(&self) -> &(dyn InodeIdCommon + 'static) {
+        &*self.0
+    }
+}
+
 macro_rules! boxedInode {
     ($t:ty; $inode:expr) => {{ BoxedInodeCommon::__new::<<$t as Wasip1LFSBase>::Inode>($inode) }};
 }

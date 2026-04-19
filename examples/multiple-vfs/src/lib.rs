@@ -2,6 +2,7 @@ use parking_lot::Mutex;
 use std::sync::LazyLock;
 use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
 use wasi_virt_layer::file::multiple::*;
+use wasi_virt_layer::file::multiple::inode::BoxedInodeCommon;
 
 wit_bindgen::generate!({
     world: "hello",
@@ -74,6 +75,7 @@ mod fs {
         lfs1.add_file(root_inode1, "lfs1.txt", b"Content from LFS 1".to_vec()).unwrap();
 
         vfs.add_lfs(Box::new(lfs1));
+        vfs.add_preopen_fd(0, BoxedInodeCommon::__new(root_inode1));
 
         // Create second LFS
         let lfs2 = ChangeableLFS::<DefaultStdIO>::new();
@@ -81,6 +83,7 @@ mod fs {
         lfs2.add_file(root_inode2, "lfs2.txt", b"Content from LFS 2".to_vec()).unwrap();
 
         vfs.add_lfs(Box::new(lfs2));
+        vfs.add_preopen_fd(1, BoxedInodeCommon::__new(root_inode2));
 
         vfs
     });
