@@ -12,7 +12,10 @@ use crate::{
         ConstDefault, Wasip1DynCompatibleLFS, Wasip1DynamicLFS,
         changeable::inode::{self, DetailedOpenFd},
         constant::vfs::OpenFdInfoWithInode,
-        multiple::{inode::DetailedDynamicOpenFd, wasm::WasmAccessDynCompatibleWrapper},
+        multiple::{
+            inode::{boxedInode, BoxedInodeCommon, DetailedDynamicOpenFd},
+            wasm::WasmAccessDynCompatibleWrapper,
+        },
     },
 };
 
@@ -139,6 +142,53 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
     ) -> Option<impl core::ops::Deref<Target = WasmAccessDynCompatibleWrapper>> {
         self.wasms.get(name)
     }
+
+    #[inline]
+    fn set_cursor(&self, fd: Fd, cursor: usize) -> Option<()> {
+        #[cfg(feature = "threads")]
+        {
+            self.fd_map.get_mut(&fd).map(|mut entry| {
+                entry.value_mut().1.set_cursor(cursor);
+            })
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &mut *self.fd_map.get() }
+                .get_mut(&fd)
+                .map(|entry: &mut (usize, OpenFd)| {
+                    entry.1.set_cursor(cursor);
+                })
+        }
+    }
+
+    #[inline]
+    fn remove_open_fd(&self, fd: Fd) -> Option<(usize, OpenFd)> {
+        #[cfg(feature = "threads")]
+        {
+            self.fd_map.remove(&fd).map(|(_, v)| v)
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &mut *self.fd_map.get() }.remove(&fd)
+        }
+    }
+
+    #[inline]
+    fn allocate_fd(&self, lfs_idx: usize, open_fd: OpenFd) -> Fd {
+        #[cfg(feature = "threads")]
+        {
+            let fd = self.next_fd.fetch_add(1, Ordering::SeqCst);
+            self.fd_map.insert(fd, (lfs_idx, open_fd));
+            fd
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            let fd = unsafe { *self.next_fd.get() };
+            unsafe { *self.next_fd.get() += 1 };
+            unsafe { &mut *self.fd_map.get() }.insert(fd, (lfs_idx, open_fd));
+            fd
+        }
+    }
 }
 
 use crate::wasi::file::constant::vfs_impl::trace_fs;
@@ -184,7 +234,9 @@ macro_rules! get_access {
     };
 }
 
-impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleVFS<OpenFd> {
+impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1FileSystem
+    for Wasip1MultipleVFS<OpenFd>
+{
     fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
@@ -263,9 +315,24 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleV
         buf: *mut u8,
         buf_len: usize,
         cookie: Dircookie,
-        nread: *mut Size,
+        nread_ret: *mut Size,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        match lfs.fd_readdir_raw_dyn_compatible(
+            access,
+            open_fd.inode_id(),
+            buf,
+            buf_len,
+            cookie,
+        ) {
+            Ok((read, _)) => {
+                Wasm::store_le(nread_ret, read as Size);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
     }
 
     fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
@@ -274,17 +341,51 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleV
         flags: wasip1::Lookupflags,
         path_ptr: *const u8,
         path_len: usize,
-        filestat: *mut wasip1::Filestat,
+        filestat_ret: *mut wasip1::Filestat,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        match lfs.path_filestat_get_raw_dyn_compatible(
+            access,
+            open_fd.inode_id(),
+            flags,
+            path_ptr,
+            path_len,
+        ) {
+            Ok(filestat) => {
+                let filestat = wasip1::Filestat {
+                    dev: 0,
+                    ino: filestat.ino,
+                    filetype: filestat.filetype,
+                    nlink: filestat.nlink,
+                    size: filestat.size,
+                    atim: filestat.atim,
+                    mtim: filestat.mtim,
+                    ctim: filestat.ctim,
+                };
+                Wasm::store_le(filestat_ret, filestat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
     }
 
     fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
-        prestat: *mut wasip1::Prestat,
+        prestat_ret: *mut wasip1::Prestat,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        match lfs.fd_prestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
+            Ok(prestat) => {
+                Wasm::store_le(prestat_ret, prestat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
     }
 
     fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName>(
@@ -293,27 +394,91 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleV
         dir_path_ptr: *mut u8,
         dir_path_len: usize,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        match lfs.fd_prestat_dir_name_raw_dyn_compatible(
+            access,
+            open_fd.inode_id(),
+            dir_path_ptr,
+            dir_path_len,
+        ) {
+            Ok(_) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
     }
 
     fn fd_close_raw<Wasm: WasmAccess + WasmAccessName>(&self, fd: Fd) -> wasip1::Errno {
-        todo!()
+        if fd < 3 {
+            return wasip1::ERRNO_SUCCESS; // Ignore closing stdio
+        }
+        self.remove_open_fd(fd);
+        wasip1::ERRNO_SUCCESS
     }
 
     fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
-        filestat: *mut wasip1::Filestat,
+        filestat_ret: *mut wasip1::Filestat,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        match lfs.fd_filestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
+            Ok(filestat) => {
+                let filestat = wasip1::Filestat {
+                    dev: 0,
+                    ino: filestat.ino,
+                    filetype: filestat.filetype,
+                    nlink: filestat.nlink,
+                    size: filestat.size,
+                    atim: filestat.atim,
+                    mtim: filestat.mtim,
+                    ctim: filestat.ctim,
+                };
+                Wasm::store_le(filestat_ret, filestat);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
     }
 
     fn fd_fdstat_get_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,
-        fdstat: *mut wasip1::Fdstat,
+        fdstat_ret: *mut wasip1::Fdstat,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        match fd {
+            0 | 1 | 2 => {
+                let fdstat = wasip1::Fdstat {
+                    fs_filetype: wasip1::FILETYPE_CHARACTER_DEVICE,
+                    fs_flags: 0,
+                    fs_rights_base: !0,
+                    fs_rights_inheriting: !0,
+                };
+                Wasm::store_le(fdstat_ret, fdstat);
+                wasip1::ERRNO_SUCCESS
+            }
+            fd => {
+                get_open_fd!((open_fd, lfs) = self, fd);
+
+                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
+                    Ok(f) => f.filetype,
+                    Err(e) => return e,
+                };
+
+                let fdstat = wasip1::Fdstat {
+                    fs_filetype: filetype,
+                    fs_flags: open_fd.fd_flags(),
+                    fs_rights_base: open_fd.base_rights(),
+                    fs_rights_inheriting: open_fd.inheriting_rights(),
+                };
+
+                Wasm::store_le(fdstat_ret, fdstat);
+                wasip1::ERRNO_SUCCESS
+            }
+        }
     }
 
     fn fd_read_raw<Wasm: WasmAccess + WasmAccessName>(
@@ -321,9 +486,34 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleV
         fd: Fd,
         iovs_ptr: *const Ciovec,
         iovs_len: usize,
-        nread: *mut Size,
+        nread_ret: *mut Size,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        let mut read = 0;
+        let mut cursor = open_fd.cursor();
+        let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+
+        for iovs in iovs_vec {
+            match lfs.fd_pread_raw_dyn_compatible(access, open_fd.inode_id(), iovs.buf as *mut u8, iovs.buf_len, cursor)
+            {
+                Ok(r) => {
+                    read += r;
+                    cursor += r;
+                }
+                Err(e) => {
+                    if read > 0 {
+                        break;
+                    }
+                    return e;
+                }
+            }
+        }
+
+        self.set_cursor(fd, cursor);
+        Wasm::store_le(nread_ret, read as Size);
+        wasip1::ERRNO_SUCCESS
     }
 
     fn path_open_raw<Wasm: WasmAccess + WasmAccessName>(
@@ -338,6 +528,47 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1FileSystem for Wasip1MultipleV
         fd_flags: wasip1::Fdflags,
         fd_ret: *mut wasip1::Fd,
     ) -> wasip1::Errno {
-        todo!()
+        get_access!(access = self, Wasm);
+
+        #[cfg(feature = "threads")]
+        let __bind = self.fd_map.get(&dir_fd);
+        #[cfg(feature = "threads")]
+        let (lfs_idx, open_fd) = match __bind.as_ref() {
+            Some(entry) => entry.value(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let (lfs_idx, open_fd) = match unsafe { &*self.fd_map.get() }.get(&dir_fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        let lfs_idx = *lfs_idx;
+        let lfs = &self.lfss[lfs_idx];
+
+        match lfs.path_open_raw_dyn_compatible(
+            access,
+            open_fd.inode_id(),
+            dir_flags,
+            path_ptr,
+            path_len,
+            o_flags,
+            fs_rights_base,
+            fs_rights_inheriting,
+            fd_flags,
+        ) {
+            Ok(new_inode) => {
+                let mut new_open_fd = OpenFd::from_inode_id(new_inode);
+                new_open_fd.set_cursor(0);
+                new_open_fd.set_base_rights(fs_rights_base);
+                new_open_fd.set_inheriting_rights(fs_rights_inheriting);
+                new_open_fd.set_fd_flags(fd_flags);
+                let new_fd = self.allocate_fd(lfs_idx, new_open_fd);
+                Wasm::store_le(fd_ret, new_fd);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
     }
 }
