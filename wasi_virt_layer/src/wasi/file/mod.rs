@@ -151,9 +151,25 @@ where
     fn downcast_inode(inode: &dyn InodeIdCommon) -> &<Self as Wasip1LFSBase>::Inode {
         let inode = inode as &dyn Any;
 
-        inode
-            .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
-            .unwrap()
+        #[cfg(feature = "trace")]
+        {
+            inode
+                .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Failed to downcast inode. Expected type: {}, but got a different type. {:?}",
+                        core::any::type_name::<<Self as Wasip1LFSBase>::Inode>(),
+                        inode
+                    )
+                })
+        }
+
+        #[cfg(not(feature = "trace"))]
+        {
+            inode
+                .downcast_ref::<<Self as Wasip1LFSBase>::Inode>()
+                .unwrap()
+        }
     }
 }
 

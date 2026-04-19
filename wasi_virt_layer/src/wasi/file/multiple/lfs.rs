@@ -219,13 +219,28 @@ macro_rules! get_open_fd {
         #[cfg(feature = "threads")]
         let ($lfs, $name) = match __bind.as_ref() {
             Some(entry) => entry.value(),
-            None => return wasip1::ERRNO_BADF,
+            None => {
+                #[cfg(feature = "trace")]
+                panic!("get_open_fd: fd={} not found", $fd);
+
+                #[cfg(not(feature = "trace"))]
+                return wasip1::ERRNO_BADF;
+            },
         };
+
+        #[cfg(feature = "trace")]
+        panic!("get_open_fd: fd={} not found", $fd);
 
         #[cfg(not(feature = "threads"))]
         let ($lfs, $name) = match unsafe { &*$self.fd_map.get() }.get(&$fd) {
             Some(entry) => entry,
-            None => return wasip1::ERRNO_BADF,
+            None => {
+                #[cfg(feature = "trace")]
+                panic!("get_open_fd: fd={} not found", $fd);
+
+                #[cfg(not(feature = "trace"))]
+                return wasip1::ERRNO_BADF;
+            },
         };
 
         let $lfs = &$self.lfss[*$lfs];
@@ -250,6 +265,14 @@ macro_rules! get_access {
             Some(a) => a,
             None => panic!("get_access: wasm={} not found", <$wasm as WasmAccessName>::NAME),
         };
+    };
+}
+
+use crate::wasi::file::InodeIdCommon;
+
+macro_rules! get_inode {
+    ($inode:ident = $open_fd:ident) => {
+        let $inode: &dyn InodeIdCommon = $open_fd.inode_id();
     };
 }
 
@@ -406,8 +429,9 @@ impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1Fi
         trace_fs!(self, Wasm; "fd_prestat_get: fd={fd}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
+        get_inode!(inode = open_fd);
 
-        match lfs.fd_prestat_get_raw_dyn_compatible(access, open_fd.inode_id()) {
+        match lfs.fd_prestat_get_raw_dyn_compatible(access, inode) {
             Ok(prestat) => {
                 trace_fs!(self, Wasm; "fd_prestat_get: storing prestat");
                 Wasm::store_le(prestat_ret, prestat);
