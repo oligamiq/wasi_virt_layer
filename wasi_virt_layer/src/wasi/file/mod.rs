@@ -21,26 +21,11 @@ use crate::__private::wasip1;
 // no implementing dcache
 
 use crate::__private::wasip1::*;
+use crate::wasi::file::changeable::inode::BoxedInode;
 #[cfg(feature = "alloc")]
 use crate::wasi::file::changeable::inode::InodeIdCommon;
 #[cfg(feature = "multiple_lfs")]
-pub use crate::wasi::file::multiple::inode::BoxedInodeCommon;
-#[cfg(feature = "multiple_lfs")]
-pub(crate) use crate::wasi::file::multiple::inode::boxedInode;
-
-#[cfg(not(feature = "multiple_lfs"))]
-pub struct BoxedInodeCommon;
-
-#[cfg(not(feature = "multiple_lfs"))]
-#[macro_export]
-macro_rules! boxedInode {
-    ($t:ty; $inode:expr) => {
-        $crate::wasi::file::BoxedInodeCommon
-    };
-}
-
-#[cfg(not(feature = "multiple_lfs"))]
-pub(crate) use boxedInode;
+pub use crate::wasi::file::multiple::inode::BoxedInodeNormal;
 
 /// File statistics excluding the device ID.
 pub struct FilestatWithoutDevice {
@@ -369,7 +354,7 @@ pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
     );
 }
 
-pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
+pub trait Wasip1DynCompatibleLFS<B: BoxedInode>: core::fmt::Debug {
     fn pre_open_inodes(&self, f: &mut dyn for<'a> FnMut(&'a dyn Wasip1DynCompatibleLFSSlice));
 
     fn fd_write_raw_dyn_compatible(
@@ -459,7 +444,7 @@ pub trait Wasip1DynCompatibleLFS: core::fmt::Debug {
         fs_rights_base: wasip1::Rights,
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
-    ) -> Result<BoxedInodeCommon, wasip1::Errno>;
+    ) -> Result<B, wasip1::Errno>;
 }
 
 /// Trait for a virtual file implementation.

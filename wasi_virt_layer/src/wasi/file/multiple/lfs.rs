@@ -10,37 +10,37 @@ use crate::{
     memory::{WasmAccess, WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName},
     wasi::file::{
         ConstDefault, Wasip1DynCompatibleLFS, Wasip1DynamicLFS,
-        changeable::inode::{self, DetailedOpenFd},
+        changeable::inode::{self, BoxedInode, DetailedOpenFd},
         constant::vfs::OpenFdInfoWithInode,
         multiple::{
-            inode::{BoxedInodeCommon, DetailedDynamicOpenFd, boxedInode},
+            inode::{BoxedInodeNormal, DetailedDynamicOpenFd},
             wasm::WasmAccessDynCompatibleWrapper,
         },
     },
 };
 
 #[derive(Debug)]
-pub struct Wasip1DynCompatibleLFSWrapper {
-    pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>,
+pub struct Wasip1DynCompatibleLFSWrapper<B: BoxedInode> {
+    pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>,
 }
 
-unsafe impl Send for Wasip1DynCompatibleLFSWrapper {}
-unsafe impl Sync for Wasip1DynCompatibleLFSWrapper {}
+unsafe impl<B: BoxedInode> Send for Wasip1DynCompatibleLFSWrapper<B> {}
+unsafe impl<B: BoxedInode> Sync for Wasip1DynCompatibleLFSWrapper<B> {}
 
-impl Wasip1DynCompatibleLFSWrapper {
-    pub fn new(lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>) -> Self {
+impl<B: BoxedInode> Wasip1DynCompatibleLFSWrapper<B> {
+    pub fn new(lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>) -> Self {
         Self { lfs }
     }
 }
 
-impl AsRef<dyn Wasip1DynCompatibleLFS> for Wasip1DynCompatibleLFSWrapper {
-    fn as_ref(&self) -> &(dyn Wasip1DynCompatibleLFS + 'static) {
+impl<B: BoxedInode> AsRef<dyn Wasip1DynCompatibleLFS<B>> for Wasip1DynCompatibleLFSWrapper<B> {
+    fn as_ref(&self) -> &(dyn Wasip1DynCompatibleLFS<B> + 'static) {
         self.lfs.as_ref()
     }
 }
 
-impl core::ops::Deref for Wasip1DynCompatibleLFSWrapper {
-    type Target = dyn Wasip1DynCompatibleLFS;
+impl<B: BoxedInode> core::ops::Deref for Wasip1DynCompatibleLFSWrapper<B> {
+    type Target = dyn Wasip1DynCompatibleLFS<B>;
 
     fn deref(&self) -> &Self::Target {
         self.lfs.as_ref()
@@ -59,8 +59,8 @@ use core::cell::UnsafeCell;
 #[cfg(not(feature = "threads"))]
 use alloc::collections::BTreeMap;
 
-pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
-    pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
+pub struct Wasip1MultipleVFS<B: BoxedInode = BoxedInodeNormal, OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
+    pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper<B>; 4]>,
     #[cfg(feature = "threads")]
     pub wasms: DashMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
     #[cfg(not(feature = "threads"))]
@@ -76,10 +76,10 @@ pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDyn
     pub next_fd: UnsafeCell<Fd>,
 }
 
-unsafe impl<OpenFd: OpenFdInfoWithInode + 'static> Send for Wasip1MultipleVFS<OpenFd> {}
-unsafe impl<OpenFd: OpenFdInfoWithInode + 'static> Sync for Wasip1MultipleVFS<OpenFd> {}
+unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Send for Wasip1MultipleVFS<B, OpenFd> {}
+unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Sync for Wasip1MultipleVFS<B, OpenFd> {}
 
-impl<OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for Wasip1MultipleVFS<OpenFd> {
+impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for Wasip1MultipleVFS<B, OpenFd> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut debug_struct = f.debug_struct("Wasip1MultipleVFS");
         debug_struct.field("lfss", &self.lfss);
@@ -101,7 +101,7 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for Wasip1MultipleV
 }
 
 
-impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
+impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, OpenFd> {
     pub fn new() -> Self {
         Self {
             lfss: SmallVec::new(),
@@ -120,7 +120,7 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
         }
     }
 
-    pub fn add_lfs(&mut self, lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>) {
+    pub fn add_lfs(&mut self, lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>) {
         self.lfss.push(Wasip1DynCompatibleLFSWrapper::new(lfs));
     }
 
@@ -302,12 +302,12 @@ use crate::wasi::file::InodeIdCommon;
 
 macro_rules! get_inode {
     ($inode:ident = $open_fd:ident) => {
-        let $inode: &dyn InodeIdCommon = &**$open_fd.inode_id();
+        let $inode: &dyn InodeIdCommon = $open_fd.inode_id().as_inode();
     };
 }
 
-impl<OpenFd: OpenFdInfoWithInode<InodeId = BoxedInodeCommon> + 'static> Wasip1FileSystem
-    for Wasip1MultipleVFS<OpenFd>
+impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1FileSystem
+    for Wasip1MultipleVFS<B, OpenFd>
 {
     fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,

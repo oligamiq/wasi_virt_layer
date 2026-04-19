@@ -1,8 +1,8 @@
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
-use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::changeable::inode::{BoxedInode, InodeIdCommon};
 use crate::wasi::file::{
-    boxedInode, BoxedInodeCommon, ConstDefault, DerefToStrCustom, Wasip1LFSBaseWrapper,
+    ConstDefault, DerefToStrCustom, Wasip1LFSBaseWrapper,
 };
 use crate::wasi::file::{Wasip1ConstLFS, Wasip1DynCompatibleLFS, Wasip1DynamicLFS, Wasip1LFSBase};
 use crate::{
@@ -740,7 +740,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
     }
 }
 
-impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1DynCompatibleLFS
+impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1DynCompatibleLFS<B>
     for ChangeableLFS<StdIo, AddInfo>
 {
     fn fd_write_raw_dyn_compatible(
@@ -893,7 +893,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
                 .ok_or(wasip1::ERRNO_LOOP)?;
         }
 
-        self.fd_filestat_get_raw_dyn_compatible(access, &target_inode)
+        Wasip1DynCompatibleLFS::<B>::fd_filestat_get_raw_dyn_compatible(self, access, &target_inode)
     }
 
     fn fd_prestat_get_raw_dyn_compatible(
@@ -1014,7 +1014,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
         fs_rights_base: wasip1::Rights,
         _: wasip1::Rights,
         _: wasip1::Fdflags,
-    ) -> Result<BoxedInodeCommon, wasip1::Errno> {
+    ) -> Result<B, wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_ino);
 
         if let Some(inode) =
@@ -1035,7 +1035,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
                     }
                 });
             }
-            Ok(boxedInode!(Self; inode))
+            Ok(B::from_inode_with_ty::<Self>(inode))
         } else {
             if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
                 let path =
@@ -1094,7 +1094,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1Dyn
                             }
                         });
 
-                        return Ok(boxedInode!(Self; new_id));
+                        return Ok(B::from_inode_with_ty::<Self>(new_id));
                     }
                 }
                 Err(wasip1::ERRNO_NOENT)

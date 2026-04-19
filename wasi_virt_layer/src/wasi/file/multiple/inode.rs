@@ -3,26 +3,33 @@ use smallbox::SmallBox;
 use crate::{
     __private::wasip1,
     wasi::file::{
-        ConstDefault,
-        changeable::inode::InodeIdCommon,
-        constant::vfs::{OpenFdInfo, OpenFdInfoWithInode},
+        ConstDefault, Wasip1LFSBase, changeable::inode::{BoxedInode, InodeIdCommon}, constant::vfs::{OpenFdInfo, OpenFdInfoWithInode}
     },
 };
 
 #[derive(Debug)]
-pub struct BoxedInodeCommon(SmallBox<dyn InodeIdCommon, [usize; 4]>);
+pub struct BoxedInodeNormal(SmallBox<dyn InodeIdCommon, [usize; 4]>);
 
-unsafe impl Send for BoxedInodeCommon {}
-unsafe impl Sync for BoxedInodeCommon {}
-
-impl BoxedInodeCommon {
-    pub fn __new<T: InodeIdCommon + 'static>(inode: T) -> Self {
+impl BoxedInode for BoxedInodeNormal {
+    fn from_inode(inode: impl InodeIdCommon + 'static) -> Self {
         let boxed: SmallBox<dyn InodeIdCommon, [usize; 4]> = smallbox::smallbox!(inode);
         Self(boxed)
     }
+
+    fn from_inode_with_ty<T: Wasip1LFSBase + 'static>(inode: <T as Wasip1LFSBase>::Inode) -> Self {
+        let boxed: SmallBox<dyn InodeIdCommon, [usize; 4]> = smallbox::smallbox!(inode);
+        Self(boxed)
+    }
+
+    fn as_inode(&self) -> &dyn InodeIdCommon {
+        &*self.0
+    }
 }
 
-impl core::ops::Deref for BoxedInodeCommon {
+unsafe impl Send for BoxedInodeNormal {}
+unsafe impl Sync for BoxedInodeNormal {}
+
+impl core::ops::Deref for BoxedInodeNormal {
     type Target = dyn InodeIdCommon;
 
     fn deref(&self) -> &Self::Target {
@@ -30,23 +37,17 @@ impl core::ops::Deref for BoxedInodeCommon {
     }
 }
 
-impl AsRef<dyn InodeIdCommon> for BoxedInodeCommon {
+impl AsRef<dyn InodeIdCommon> for BoxedInodeNormal {
     fn as_ref(&self) -> &(dyn InodeIdCommon + 'static) {
         &*self.0
     }
 }
 
-macro_rules! boxedInode {
-    ($t:ty; $inode:expr) => {{ BoxedInodeCommon::__new::<<$t as Wasip1LFSBase>::Inode>($inode) }};
-}
-
-pub(crate) use boxedInode;
-
 /// Represents an active, open file descriptor referencing an Inode
 #[derive(Debug)]
 pub struct DetailedDynamicOpenFd {
     /// The inode ID this file descriptor refers to
-    pub inode_id: BoxedInodeCommon,
+    pub inode_id: BoxedInodeNormal,
     /// The current byte offset within the file (for reads/writes)
     pub cursor: usize,
     /// The base rights granted to this file descriptor
@@ -95,7 +96,7 @@ impl OpenFdInfo for DetailedDynamicOpenFd {
 }
 
 impl OpenFdInfoWithInode for DetailedDynamicOpenFd {
-    type InodeId = BoxedInodeCommon;
+    type InodeId = BoxedInodeNormal;
 
     fn from_inode_id(inode_id: Self::InodeId) -> Self {
         Self {

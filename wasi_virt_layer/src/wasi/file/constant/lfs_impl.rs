@@ -6,9 +6,9 @@ use crate::__private::wasip1::Dircookie;
 
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::Wasip1LFSBaseWrapper as _;
-use crate::wasi::file::changeable::inode::InodeIdCommon;
+use crate::wasi::file::changeable::inode::{BoxedInode, InodeIdCommon};
 use crate::wasi::file::{
-    boxedInode, BoxedInodeCommon, DerefToStrCustom, Wasip1ConstLFS, Wasip1DynCompatibleLFS,
+    DerefToStrCustom, Wasip1ConstLFS, Wasip1DynCompatibleLFS,
     Wasip1DynCompatibleLFSSlice, Wasip1DynamicLFS, Wasip1LFSBase,
 };
 use crate::{
@@ -268,12 +268,13 @@ impl<
 }
 
 impl<
+    B: BoxedInode,
     ROOT: VFSConstNormalFilesTy<File, FLAT_LEN> + core::fmt::Debug + 'static,
     File: Wasip1FileTrait + 'static + Copy,
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
     AddInfo: WasiAddInfo + 'static,
-> Wasip1DynCompatibleLFS for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
+> Wasip1DynCompatibleLFS<B> for VFSConstNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
 {
     fn pre_open_inodes<'a>(
         &'a self,
@@ -486,6 +487,7 @@ impl<
             Ok(read?)
         }
     }
+
     fn path_open_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,
@@ -497,7 +499,7 @@ impl<
         fs_rights_base: wasip1::Rights,
         _: wasip1::Rights,
         _: wasip1::Fdflags,
-    ) -> Result<BoxedInodeCommon, wasip1::Errno> {
+    ) -> Result<B, wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
 
         if let Some(inode) =
@@ -520,7 +522,7 @@ impl<
                 return Err(wasip1::ERRNO_PERM);
             }
 
-            Ok(boxedInode!(Self; inode))
+            Ok(B::from_inode_with_ty::<Self>(inode))
         } else {
             if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
                 return Err(wasip1::ERRNO_PERM);

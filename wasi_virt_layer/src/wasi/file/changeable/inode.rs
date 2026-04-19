@@ -1,5 +1,5 @@
 use crate::wasi::file::constant::vfs::OpenFdInfoWithInode;
-use crate::wasi::file::{ConstDefault, WasiAddInfo};
+use crate::wasi::file::{ConstDefault, WasiAddInfo, Wasip1LFSBase};
 use crate::{__private::wasip1, wasi::file::constant::vfs::OpenFdInfo};
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use smallstr::SmallString;
@@ -13,6 +13,13 @@ pub type DirMap = BTreeMap<SmallString<[u8; 32]>, InodeId>;
 pub trait InodeIdCommon: core::fmt::Debug + core::any::Any + 'static {}
 
 impl<T: core::fmt::Debug + 'static> InodeIdCommon for T {}
+
+/// from_inode and as_inode are used to convert between the BoxedInode and the underlying InodeId type
+pub trait BoxedInode: core::fmt::Debug + Send + Sync {
+    fn from_inode(inode: impl InodeIdCommon + 'static) -> Self;
+    fn from_inode_with_ty<T: Wasip1LFSBase + 'static>(inode: <T as Wasip1LFSBase>::Inode) -> Self;
+    fn as_inode(&self) -> &dyn InodeIdCommon;
+}
 
 /// Represents the data contained within an Inode
 #[derive(Debug, Clone)]

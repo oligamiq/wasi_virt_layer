@@ -77,6 +77,7 @@ pub mod file {
             vfs::Wasip1ConstVFS,
         },
         stdio::DefaultStdIO,
+        changeable::inode::BoxedInode,
     };
 
     #[cfg(feature = "alloc")]
