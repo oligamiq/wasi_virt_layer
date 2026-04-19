@@ -1,0 +1,20 @@
+[package]
+name = "test_new_bare"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+const_struct = "0.6.4"
+wasi_virt_layer = "0.1.5"
+wit-bindgen = { version = "0.57.1", default-features = false, features = ["macros", "std"] }
+
+[lib]
+crate-type = ["cdylib"]

@@ -207,11 +207,10 @@ mod fs {
     type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new(VFSConstNormalLFS::new());
+        Wasip1ConstVFS::const_new(VFSConstNormalLFS::const_new());
 
-    plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous);
+    plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous, self);
 }
-
 "#
 .trim_ascii();
 
@@ -247,7 +246,7 @@ impl Guest for ComponentABI {
 export!(ComponentABI);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::const_new() },
     anonymous,
     self
 );
@@ -301,7 +300,7 @@ mod fs {
     type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new(VFSConstNormalLFS::new());
+        Wasip1ConstVFS::const_new(VFSConstNormalLFS::const_new());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous, self);
 }
