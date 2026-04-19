@@ -85,6 +85,9 @@ pub mod file {
         lfs::ChangeableLFS,
         vfs::ChangeableVFS,
     };
+
+    #[cfg(feature = "multiple_lfs")]
+    pub use crate::wasi::file::multiple;
 }
 
 /// Process execution and lifecycle virtualization.

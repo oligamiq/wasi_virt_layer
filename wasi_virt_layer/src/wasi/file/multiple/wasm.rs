@@ -26,6 +26,9 @@ impl<T: WasmAccessNameDynCompatible + WasmAccessDynCompatibleRaw> WasmAccessDynC
 #[derive(Debug)]
 pub struct WasmAccessDynCompatibleWrapper(pub alloc::boxed::Box<dyn WasmAccessDynCompatibleTuple>);
 
+unsafe impl Send for WasmAccessDynCompatibleWrapper {}
+unsafe impl Sync for WasmAccessDynCompatibleWrapper {}
+
 impl AsRef<dyn WasmAccessNameDynCompatible> for WasmAccessDynCompatibleWrapper {
     fn as_ref(&self) -> &(dyn WasmAccessNameDynCompatible + 'static) {
         self.0.as_ref()

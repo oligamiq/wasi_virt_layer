@@ -12,6 +12,9 @@ use crate::{
 #[derive(Debug)]
 pub struct BoxedInodeCommon(SmallBox<dyn InodeIdCommon, [usize; 4]>);
 
+unsafe impl Send for BoxedInodeCommon {}
+unsafe impl Sync for BoxedInodeCommon {}
+
 impl BoxedInodeCommon {
     pub fn __new<T: InodeIdCommon + 'static>(inode: T) -> Self {
         let boxed: SmallBox<dyn InodeIdCommon, [usize; 4]> = smallbox::smallbox!(inode);
@@ -39,6 +42,9 @@ pub struct DetailedDynamicOpenFd {
     /// The flags used to open this file
     pub fd_flags: wasip1::Fdflags,
 }
+
+unsafe impl Send for DetailedDynamicOpenFd {}
+unsafe impl Sync for DetailedDynamicOpenFd {}
 
 impl OpenFdInfo for DetailedDynamicOpenFd {
     fn cursor(&self) -> usize {

@@ -21,8 +21,26 @@ use crate::__private::wasip1;
 // no implementing dcache
 
 use crate::__private::wasip1::*;
+#[cfg(feature = "alloc")]
 use crate::wasi::file::changeable::inode::InodeIdCommon;
-use crate::wasi::file::multiple::inode::BoxedInodeCommon;
+#[cfg(feature = "multiple_lfs")]
+pub use crate::wasi::file::multiple::inode::BoxedInodeCommon;
+#[cfg(feature = "multiple_lfs")]
+pub(crate) use crate::wasi::file::multiple::inode::boxedInode;
+
+#[cfg(not(feature = "multiple_lfs"))]
+pub struct BoxedInodeCommon;
+
+#[cfg(not(feature = "multiple_lfs"))]
+#[macro_export]
+macro_rules! boxedInode {
+    ($t:ty; $inode:expr) => {
+        $crate::wasi::file::BoxedInodeCommon
+    };
+}
+
+#[cfg(not(feature = "multiple_lfs"))]
+pub(crate) use boxedInode;
 
 /// File statistics excluding the device ID.
 pub struct FilestatWithoutDevice {

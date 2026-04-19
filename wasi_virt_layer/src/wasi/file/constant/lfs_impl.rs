@@ -7,10 +7,9 @@ use crate::__private::wasip1::Dircookie;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::Wasip1LFSBaseWrapper as _;
 use crate::wasi::file::changeable::inode::InodeIdCommon;
-use crate::wasi::file::multiple::inode::{BoxedInodeCommon, boxedInode};
 use crate::wasi::file::{
-    DerefToStrCustom, Wasip1ConstLFS, Wasip1DynCompatibleLFS, Wasip1DynCompatibleLFSSlice,
-    Wasip1DynamicLFS, Wasip1LFSBase,
+    boxedInode, BoxedInodeCommon, DerefToStrCustom, Wasip1ConstLFS, Wasip1DynCompatibleLFS,
+    Wasip1DynCompatibleLFSSlice, Wasip1DynamicLFS, Wasip1LFSBase,
 };
 use crate::{
     memory::WasmAccess,

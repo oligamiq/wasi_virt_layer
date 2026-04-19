@@ -21,6 +21,9 @@ pub struct Wasip1DynCompatibleLFSWrapper {
     pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>,
 }
 
+unsafe impl Send for Wasip1DynCompatibleLFSWrapper {}
+unsafe impl Sync for Wasip1DynCompatibleLFSWrapper {}
+
 impl Wasip1DynCompatibleLFSWrapper {
     pub fn new(lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS>) -> Self {
         Self { lfs }
@@ -53,7 +56,6 @@ use core::cell::UnsafeCell;
 #[cfg(not(feature = "threads"))]
 use alloc::collections::BTreeMap;
 
-#[derive(Debug)]
 pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
     pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper; 4]>,
     #[cfg(feature = "threads")]
@@ -64,12 +66,37 @@ pub struct Wasip1MultipleVFS<OpenFd: OpenFdInfoWithInode + 'static = DetailedDyn
     #[cfg(feature = "threads")]
     pub fd_map: DashMap<Fd, (usize, OpenFd)>,
     #[cfg(feature = "threads")]
-    pub next_fd: AtomicU32,
+    pub next_fd: std::sync::atomic::AtomicU32,
     #[cfg(not(feature = "threads"))]
     pub fd_map: UnsafeCell<BTreeMap<Fd, (usize, OpenFd)>>,
     #[cfg(not(feature = "threads"))]
     pub next_fd: UnsafeCell<Fd>,
 }
+
+unsafe impl<OpenFd: OpenFdInfoWithInode + 'static> Send for Wasip1MultipleVFS<OpenFd> {}
+unsafe impl<OpenFd: OpenFdInfoWithInode + 'static> Sync for Wasip1MultipleVFS<OpenFd> {}
+
+impl<OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for Wasip1MultipleVFS<OpenFd> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut debug_struct = f.debug_struct("Wasip1MultipleVFS");
+        debug_struct.field("lfss", &self.lfss);
+
+        #[cfg(feature = "threads")]
+        {
+            debug_struct.field("wasms", &self.wasms);
+            debug_struct.field("fd_map", &self.fd_map);
+            debug_struct.field("next_fd", &self.next_fd);
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            debug_struct.field("wasms", unsafe { &*self.wasms.get() });
+            debug_struct.field("fd_map", unsafe { &*self.fd_map.get() });
+            debug_struct.field("next_fd", unsafe { &*self.next_fd.get() });
+        }
+        debug_struct.finish()
+    }
+}
+
 
 impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
     pub fn new() -> Self {
@@ -99,7 +126,10 @@ impl<OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<OpenFd> {
         name: smallstr::SmallString<[u8; 32]>,
         access: WasmAccessDynCompatibleWrapper,
     ) {
+        #[cfg(feature = "threads")]
         self.wasms.insert(name, access);
+        #[cfg(not(feature = "threads"))]
+        unsafe { &mut *self.wasms.get() }.insert(name, access);
     }
 
     #[cfg(feature = "threads")]
@@ -147,7 +177,7 @@ macro_rules! get_access {
         let $name = $name.deref();
 
         #[cfg(not(feature = "threads"))]
-        let $name = match unsafe { &*$self.wasms }.get(<$wasm as WasmAccessName>::NAME) {
+        let $name = match unsafe { &*$self.wasms.get() }.get(<$wasm as WasmAccessName>::NAME) {
             Some(a) => a,
             None => return wasip1::ERRNO_BADF,
         };

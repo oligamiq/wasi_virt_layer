@@ -1,8 +1,9 @@
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::changeable::inode::InodeIdCommon;
-use crate::wasi::file::multiple::inode::{BoxedInodeCommon, boxedInode};
-use crate::wasi::file::{ConstDefault, DerefToStrCustom, Wasip1LFSBaseWrapper};
+use crate::wasi::file::{
+    boxedInode, BoxedInodeCommon, ConstDefault, DerefToStrCustom, Wasip1LFSBaseWrapper,
+};
 use crate::wasi::file::{Wasip1ConstLFS, Wasip1DynCompatibleLFS, Wasip1DynamicLFS, Wasip1LFSBase};
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
