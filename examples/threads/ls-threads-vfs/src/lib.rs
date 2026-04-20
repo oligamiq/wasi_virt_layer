@@ -26,6 +26,7 @@ impl Guest for ComponentABI {
     }
 }
 
+#[cfg(not(test))]
 export!(ComponentABI);
 
 plug_thread!(

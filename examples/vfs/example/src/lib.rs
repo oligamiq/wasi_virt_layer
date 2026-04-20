@@ -48,6 +48,7 @@ impl Guest for Hello {
     }
 }
 
+#[cfg(not(test))]
 export!(Hello);
 
 plug_process!(DefaultProcess, test_wasm, self);

@@ -18,6 +18,7 @@ impl Guest for ComponentABI {
     }
 }
 
+#[cfg(not(test))]
 export!(ComponentABI);
 
 mod process {

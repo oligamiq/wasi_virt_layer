@@ -16,6 +16,7 @@ impl Guest for Main {
     }
 }
 
+#[cfg(not(test))]
 export!(Main);
 
 import_wasm!(rustc_opt);

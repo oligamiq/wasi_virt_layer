@@ -46,6 +46,7 @@ impl Guest for Starter {
     }
 }
 
+#[cfg(not(test))]
 export!(Starter);
 
 import_wasm!(spawn_vfs_and_body_example);

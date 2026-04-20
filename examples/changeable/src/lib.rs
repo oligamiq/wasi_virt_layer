@@ -35,6 +35,7 @@ impl Guest for Hello {
     }
 }
 
+#[cfg(not(test))]
 export!(Hello);
 
 plug_process!(DefaultProcess, ls, self);
@@ -62,8 +63,6 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 
 #[allow(dead_code)]
 mod fs {
-    use std::cell::{LazyCell, OnceCell};
-
     use super::*;
 
     type LFS = ChangeableLFS<DefaultStdIO>;

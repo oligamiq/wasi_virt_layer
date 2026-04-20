@@ -36,6 +36,7 @@ impl Guest for Hello {
     }
 }
 
+#[cfg(not(test))]
 export!(Hello);
 
 plug_process!(DefaultProcess, ls, self);

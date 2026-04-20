@@ -40,6 +40,7 @@ impl Guest for Starter {
     }
 }
 
+#[cfg(not(test))]
 export!(Starter);
 
 import_wasm!(test_threads);
