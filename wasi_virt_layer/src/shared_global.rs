@@ -38,7 +38,7 @@ pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_set(v: i32) {
 /// Initializes the alternative global variable once.
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_init_once(v: i32) {
-    static INIT: InitOnce = InitOnce::const_new();
+    static INIT: InitOnce = InitOnce::new_const();
 
     INIT.call_once(|| {
         // use crate::debug::*;

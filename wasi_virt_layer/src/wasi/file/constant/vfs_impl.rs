@@ -6,7 +6,9 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 use crate::wasi::file::trace::trace_fs;
 use crate::{
     memory::WasmAccess,
-    wasi::file::{InodeIdCommon, OpenFdInfo, Wasip1ConstLFS, Wasip1FileSystem, constant::vfs::Wasip1ConstVFS},
+    wasi::file::{
+        InodeIdCommon, OpenFdInfo, Wasip1ConstLFS, Wasip1FileSystem, constant::vfs::Wasip1ConstVFS,
+    },
 };
 
 impl<LFS: Wasip1ConstLFS + Sync, const FLAT_LEN: usize, OpenFd: OpenFdInfo + Default>

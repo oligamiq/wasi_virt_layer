@@ -5,13 +5,8 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::wasi::file::changeable::inode::DetailedOpenFd;
 use crate::wasi::file::trace::trace_fs;
-use crate::wasi::file::{
-    InodeIdCommon, OpenFdInfoWithInode, Wasip1DynamicLFS, Wasip1LFSBase,
-};
-use crate::{
-    memory::WasmAccess,
-    wasi::file::Wasip1FileSystem,
-};
+use crate::wasi::file::{InodeIdCommon, OpenFdInfoWithInode, Wasip1DynamicLFS, Wasip1LFSBase};
+use crate::{memory::WasmAccess, wasi::file::Wasip1FileSystem};
 
 #[cfg(feature = "threads")]
 use dashmap::DashMap;

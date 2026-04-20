@@ -56,7 +56,7 @@ const FILES: NormalFILES = ConstFiles!([
 ]);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::const_new() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
     test_pool_thread
 );
@@ -170,7 +170,7 @@ mod fs {
     type LFS = VFSConstNormalLFS<FilesTy, F, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::const_new(VFSConstNormalLFS::const_new());
+        Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_pool_thread, self);
 }

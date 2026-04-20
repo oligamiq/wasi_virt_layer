@@ -2,9 +2,7 @@
 
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
-use crate::wasi::file::{
-    BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1LFSBaseWrapper,
-};
+use crate::wasi::file::{BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1LFSBaseWrapper};
 use crate::wasi::file::{Wasip1DynCompatibleLFS, Wasip1DynamicLFS, Wasip1LFSBase};
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
@@ -738,8 +736,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
     }
 }
 
-impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1DynCompatibleLFS<B>
-    for ChangeableLFS<StdIo, AddInfo>
+impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static>
+    Wasip1DynCompatibleLFS<B> for ChangeableLFS<StdIo, AddInfo>
 {
     fn fd_write_raw_dyn_compatible(
         &self,

@@ -1,8 +1,6 @@
 #![cfg(feature = "multiple-fs")]
 
-use crate::{
-    memory::{WasmAccessDynCompatibleRaw, WasmAccessNameDynCompatible},
-};
+use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessNameDynCompatible};
 
 /// A trait tuple combining `WasmAccessNameDynCompatible` and `WasmAccessDynCompatibleRaw`.
 pub trait WasmAccessDynCompatibleTuple:

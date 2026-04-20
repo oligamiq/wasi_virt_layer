@@ -1,8 +1,8 @@
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
-use wasi_virt_layer::file::multiple::*;
 use wasi_virt_layer::file::multiple::inode::BoxedInodeNormal;
+use wasi_virt_layer::file::multiple::*;
+use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
 
 wit_bindgen::generate!({
     world: "hello",
@@ -73,7 +73,8 @@ mod fs {
         // Create first LFS
         let lfs1 = ChangeableLFS::<DefaultStdIO>::new();
         let root_inode1 = lfs1.add_preopen(".");
-        lfs1.add_file(root_inode1, "lfs1.txt", b"Content from LFS 1".to_vec()).unwrap();
+        lfs1.add_file(root_inode1, "lfs1.txt", b"Content from LFS 1".to_vec())
+            .unwrap();
 
         vfs.add_lfs(Box::new(lfs1));
         vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
@@ -81,7 +82,8 @@ mod fs {
         // Create second LFS
         let lfs2 = ChangeableLFS::<DefaultStdIO>::new();
         let root_inode2 = lfs2.add_preopen("/data");
-        lfs2.add_file(root_inode2, "lfs2.txt", b"Content from LFS 2".to_vec()).unwrap();
+        lfs2.add_file(root_inode2, "lfs2.txt", b"Content from LFS 2".to_vec())
+            .unwrap();
 
         vfs.add_lfs(Box::new(lfs2));
         vfs.add_preopen_fd(1, BoxedInodeNormal::from_inode(root_inode2));

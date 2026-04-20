@@ -4,9 +4,7 @@ use smallbox::SmallBox;
 
 use crate::{
     __private::wasip1,
-    wasi::file::{
-        BoxedInode, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode, Wasip1LFSBase,
-    },
+    wasi::file::{BoxedInode, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode, Wasip1LFSBase},
 };
 
 /// A normal boxed inode used for multiple file systems.

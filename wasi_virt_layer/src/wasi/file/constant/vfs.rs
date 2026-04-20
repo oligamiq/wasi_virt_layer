@@ -2,8 +2,8 @@
 
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
-use crate::wasi::file::{ConstDefault, InodeIdCommon, Wasip1ConstLFS};
 pub use crate::wasi::file::OpenFdInfo;
+use crate::wasi::file::{ConstDefault, InodeIdCommon, Wasip1ConstLFS};
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
@@ -86,7 +86,7 @@ where
 {
     /// Creates a new `Wasip1ConstVFS` with thread support.
     #[cfg(feature = "threads")]
-    pub const fn const_new(lfs: LFS) -> Self {
+    pub const fn new_const(lfs: LFS) -> Self {
         let mut map: [RwLock<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN] =
             [const { RwLock::new(None) }; FLAT_LEN];
 
@@ -101,7 +101,7 @@ where
 
     /// Creates a new `Wasip1ConstVFS` without thread support.
     #[cfg(not(feature = "threads"))]
-    pub const fn const_new(lfs: LFS) -> Self {
+    pub const fn new_const(lfs: LFS) -> Self {
         let mut map: [UnsafeCell<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN] =
             [const { UnsafeCell::new(None) }; FLAT_LEN];
 

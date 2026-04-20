@@ -1,7 +1,9 @@
 #![cfg(feature = "changeable-fs")]
 
-use crate::wasi::file::{ConstDefault, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode, WasiAddInfo};
 use crate::__private::wasip1;
+use crate::wasi::file::{
+    ConstDefault, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode, WasiAddInfo,
+};
 use alloc::{collections::BTreeMap, string::String, vec::Vec};
 use smallstr::SmallString;
 
@@ -37,7 +39,7 @@ pub struct InodeMetadata<AddInfo: WasiAddInfo> {
 
 impl<AddInfo: WasiAddInfo + ConstDefault> InodeMetadata<AddInfo> {
     /// Create new default metadata for a given file type
-    pub const fn const_new(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
+    pub const fn new_const(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
         Self {
             filetype,
             nlink: 1,

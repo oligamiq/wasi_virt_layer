@@ -2,8 +2,8 @@
 
 use crate::__private::wasip1::{self, Dircookie};
 use crate::memory::{
-    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _,
-    WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon,
+    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _, WasmPathAccessCommon,
+    WasmPathAccessDynCompatible, WasmPathComponentCommon,
 };
 use crate::wasi::file::ConstDefault;
 use crate::{
@@ -39,7 +39,7 @@ impl<
 > VFSConstNormalLFS<ConstRoot, File, FLAT_LEN, StdIo, AddInfo>
 {
     /// Creates a new `VFSConstNormalLFS`.
-    pub const fn const_new() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             add_info: [AddInfo::DEFAULT; FLAT_LEN],
             __marker: core::marker::PhantomData,

@@ -65,7 +65,7 @@ mod fs {
     type LFS = VFSConstNormalLFS<FilesTy, F, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::const_new(VFSConstNormalLFS::const_new());
+        Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, spawn_vfs_and_body_example, self);
 }
@@ -78,7 +78,7 @@ const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
 plug_env!(@const, VirtualEnvTy, spawn_vfs_and_body_example, self);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::const_new() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
     spawn_vfs_and_body_example
 );

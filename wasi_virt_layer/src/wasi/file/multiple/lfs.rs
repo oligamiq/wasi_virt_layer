@@ -7,13 +7,13 @@ use smallvec::SmallVec;
 
 use crate::{
     __private::wasip1::{self, *},
-    file::{Wasip1FileSystem, multiple::wasm::WasmAccessDynCompatibleTuple},
+    file::Wasip1FileSystem,
     memory::{WasmAccess, WasmAccessName},
     wasi::file::{
         BoxedInode, ConstDefault, InodeIdCommon, OpenFdInfoWithInode, Wasip1DynCompatibleLFS,
         multiple::{
             inode::{BoxedInodeNormal, DetailedDynamicOpenFd},
-            wasm::WasmAccessDynCompatibleWrapper,
+            wasm::{WasmAccessDynCompatibleTuple, WasmAccessDynCompatibleWrapper},
         },
     },
 };
@@ -62,7 +62,10 @@ use core::cell::UnsafeCell;
 use alloc::collections::BTreeMap;
 
 /// A virtual file system that supports multiple underlying file systems and multiple WASM instances.
-pub struct Wasip1MultipleVFS<B: BoxedInode = BoxedInodeNormal, OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
+pub struct Wasip1MultipleVFS<
+    B: BoxedInode = BoxedInodeNormal,
+    OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd,
+> {
     /// The list of file systems added to this multiple VFS.
     pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper<B>; 4]>,
     /// Mapping of WASM instance names to their memory access objects.
@@ -86,10 +89,18 @@ pub struct Wasip1MultipleVFS<B: BoxedInode = BoxedInodeNormal, OpenFd: OpenFdInf
     pub next_fd: UnsafeCell<Fd>,
 }
 
-unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Send for Wasip1MultipleVFS<B, OpenFd> {}
-unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Sync for Wasip1MultipleVFS<B, OpenFd> {}
+unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Send
+    for Wasip1MultipleVFS<B, OpenFd>
+{
+}
+unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Sync
+    for Wasip1MultipleVFS<B, OpenFd>
+{
+}
 
-impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for Wasip1MultipleVFS<B, OpenFd> {
+impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug
+    for Wasip1MultipleVFS<B, OpenFd>
+{
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut debug_struct = f.debug_struct("Wasip1MultipleVFS");
         debug_struct.field("lfss", &self.lfss);
@@ -109,7 +120,6 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for 
         debug_struct.finish()
     }
 }
-
 
 impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, OpenFd> {
     /// Creates a new `Wasip1MultipleVFS` instance.
@@ -149,8 +159,15 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
     }
 
     /// Adds a statically typed WASM instance to the multiple VFS.
-    pub fn add_wasm<Wasm: WasmAccessDynCompatibleTuple + WasmAccessName + ConstDefault + 'static>(&mut self) {
-        self.add_wasm_access(<Wasm as WasmAccessName>::NAME.into(), WasmAccessDynCompatibleWrapper::new(Wasm::DEFAULT));
+    pub fn add_wasm<
+        Wasm: WasmAccessDynCompatibleTuple + WasmAccessName + ConstDefault + 'static,
+    >(
+        &mut self,
+    ) {
+        self.add_wasm_access(
+            <Wasm as WasmAccessName>::NAME.into(),
+            WasmAccessDynCompatibleWrapper::new(Wasm::DEFAULT),
+        );
     }
 
     #[cfg(feature = "threads")]
@@ -223,11 +240,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
     }
 
     /// Adds a preopened file descriptor (like a root directory) to the VFS.
-    pub fn add_preopen_fd(
-        &self,
-        lfs_idx: usize,
-        inode: OpenFd::InodeId,
-    ) -> Fd {
+    pub fn add_preopen_fd(&self, lfs_idx: usize, inode: OpenFd::InodeId) -> Fd {
         self.add_fd(
             lfs_idx,
             inode,
@@ -350,7 +363,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                             .first()
                             .unwrap()
                             .fd_write_stdout_raw_dyn_compatible(
-                                access,
+                                access.as_ref(),
                                 iovs.buf as *const u8,
                                 iovs.buf_len,
                             ) {
@@ -362,7 +375,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                             .first()
                             .unwrap()
                             .fd_write_stderr_raw_dyn_compatible(
-                                access,
+                                access.as_ref(),
                                 iovs.buf as *const u8,
                                 iovs.buf_len,
                             ) {
@@ -385,7 +398,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                 let mut written = 0;
                 for iovs in iovs_vec {
                     match lfs.fd_write_raw_dyn_compatible(
-                        access,
+                        access.as_ref(),
                         inode,
                         iovs.buf as *const u8,
                         iovs.buf_len,
@@ -415,13 +428,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.fd_readdir_raw_dyn_compatible(
-            access,
-            inode,
-            buf,
-            buf_len,
-            cookie,
-        ) {
+        match lfs.fd_readdir_raw_dyn_compatible(access.as_ref(), inode, buf, buf_len, cookie) {
             Ok((read, _)) => {
                 Wasm::store_le(nread_ret, read as Size);
                 wasip1::ERRNO_SUCCESS
@@ -445,7 +452,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.path_filestat_get_raw_dyn_compatible(
-            access,
+            access.as_ref(),
             inode,
             flags,
             path_ptr,
@@ -479,7 +486,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_open_fd!((open_fd, lfs) = self, fd);
         get_inode!(inode = open_fd);
 
-        match lfs.fd_prestat_get_raw_dyn_compatible(access, inode) {
+        match lfs.fd_prestat_get_raw_dyn_compatible(access.as_ref(), inode) {
             Ok(prestat) => {
                 trace_fs!(self, Wasm; "fd_prestat_get: storing prestat");
                 Wasm::store_le(prestat_ret, prestat);
@@ -502,7 +509,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.fd_prestat_dir_name_raw_dyn_compatible(
-            access,
+            access.as_ref(),
             inode,
             dir_path_ptr,
             dir_path_len,
@@ -532,7 +539,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
+        match lfs.fd_filestat_get_raw_dyn_compatible(access.as_ref(), inode) {
             Ok(filestat) => {
                 let filestat = wasip1::Filestat {
                     dev: 0,
@@ -574,7 +581,8 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
                 get_inode!(inode = open_fd);
 
-                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
+                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access.as_ref(), inode)
+                {
                     Ok(f) => f.filetype,
                     Err(e) => return e,
                 };
@@ -609,8 +617,13 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
         for iovs in iovs_vec {
-            match lfs.fd_pread_raw_dyn_compatible(access, inode, iovs.buf as *mut u8, iovs.buf_len, cursor)
-            {
+            match lfs.fd_pread_raw_dyn_compatible(
+                access.as_ref(),
+                inode,
+                iovs.buf as *mut u8,
+                iovs.buf_len,
+                cursor,
+            ) {
                 Ok(r) => {
                     read += r;
                     cursor += r;
@@ -664,7 +677,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.path_open_raw_dyn_compatible(
-            access,
+            access.as_ref(),
             inode,
             dir_flags,
             path_ptr,

@@ -196,7 +196,7 @@ pub struct StaticArrayBuilder<T: Copy, const N: usize> {
 
 impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
     /// Creates a new `StaticArrayBuilder`.
-    pub const fn const_new() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             data: [None; N],
             len: 0,
@@ -205,7 +205,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
 
     /// Creates a new `StaticArrayBuilder`.
     pub const fn new() -> Self {
-        Self::const_new()
+        Self::new_const()
     }
 
     /// Pushes a value into the builder. Returns `Some(value)` if the builder is full.
@@ -335,7 +335,7 @@ pub struct InitOnce {
 
 impl InitOnce {
     /// Creates a new `InitOnce` instance.
-    pub const fn const_new() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             is_init: core::sync::atomic::AtomicBool::new(false),
         }

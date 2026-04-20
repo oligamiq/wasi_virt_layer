@@ -14,7 +14,6 @@ use smallstr::SmallString;
 #[cfg(feature = "alloc")]
 use crate::memory::WasmAccessDynCompatible as _;
 use crate::memory::{WasmAccess, WasmAccessDynCompatibleRaw, WasmAccessName};
-pub(crate) mod types;
 #[cfg(feature = "changeable-fs")]
 pub mod changeable;
 #[cfg(feature = "const-fs")]
@@ -23,8 +22,13 @@ pub mod constant;
 pub mod multiple;
 #[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
 pub mod stdio;
-#[cfg(any(feature = "const-fs", feature = "changeable-fs", feature = "multiple-fs"))]
+#[cfg(any(
+    feature = "const-fs",
+    feature = "changeable-fs",
+    feature = "multiple-fs"
+))]
 pub(crate) mod trace;
+pub(crate) mod types;
 use crate::__private::wasip1;
 
 pub use self::types::{BoxedInode, InodeIdCommon, OpenFdInfo, OpenFdInfoWithInode};

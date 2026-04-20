@@ -101,7 +101,11 @@ pub mod file {
     };
 
     #[cfg(feature = "multiple-fs")]
-    pub use crate::wasi::file::multiple;
+    pub use crate::wasi::file::multiple::{
+        self, Wasip1MultipleVFS,
+        dynamic_wasm::{PseudoWasmSimple, PseudoWasmTrait, StandardPseudoWasmHolder},
+        inode::BoxedInodeNormal,
+    };
 }
 
 /// Process execution and lifecycle virtualization.
@@ -120,11 +124,11 @@ pub mod __private {
     #[cfg(not(target_os = "wasi"))]
     pub use super::wasip1;
     pub use crate::__self::__self;
+    pub use crate::wasi::file::ConstDefault;
     pub use const_for::const_for;
     pub use paste;
     #[cfg(target_os = "wasi")]
     pub use wasip1;
-    pub use crate::wasi::file::ConstDefault;
 
     pub mod inner {
         pub mod env {
