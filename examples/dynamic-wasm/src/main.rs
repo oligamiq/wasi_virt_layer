@@ -1,7 +1,7 @@
 use wasi_virt_layer::file::*;
 use wasi_virt_layer::*;
 
-static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new();
+static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_const();
 
 export_pseudo_wasm!(wasm_holder);
 import_pseudo_wasm!(wasm_holder);

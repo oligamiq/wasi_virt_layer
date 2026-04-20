@@ -1,0 +1,9 @@
+[package]
+name = "dynamic-wasm-multiple"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies.wasi_virt_layer]
+workspace = true
+features = ["std", "alloc", "changeable-fs", "multiple-fs"]

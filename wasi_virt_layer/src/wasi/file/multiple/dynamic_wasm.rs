@@ -34,9 +34,7 @@ pub trait PseudoWasmTrait {
 pub struct StandardPseudoWasmHolder {
     #[cfg(feature = "threads")]
     pub once: core::sync::atomic::AtomicBool,
-    #[cfg(not(feature = "threads"))]
-    pub once: bool,
-    pub simple: core::cell::UnsafeCell<PseudoWasmSimple>,
+    pub simple: core::cell::UnsafeCell<Option<PseudoWasmSimple>>,
 }
 
 impl AsRef<StandardPseudoWasmHolder> for StandardPseudoWasmHolder {
@@ -46,8 +44,20 @@ impl AsRef<StandardPseudoWasmHolder> for StandardPseudoWasmHolder {
 }
 
 impl StandardPseudoWasmHolder {
+    pub const fn new_const() -> Self {
+        Self {
+            #[cfg(feature = "threads")]
+            once: core::sync::atomic::AtomicBool::new(false),
+            simple: core::cell::UnsafeCell::new(None),
+        }
+    }
+
     pub fn get(&self) -> &PseudoWasmSimple {
-        unsafe { self.simple.get().as_ref().unwrap() }
+        #[cfg(feature = "trace")]
+        unsafe { (*self.simple.get()).as_ref().expect("PseudoWasmSimple is not initialized yet") }
+
+        #[cfg(not(feature = "trace"))]
+        unsafe { (*self.simple.get()).as_ref().unwrap() }
     }
 }
 
@@ -72,15 +82,18 @@ impl PseudoWasmTrait for StandardPseudoWasmHolder {
             {
                 return ();
             }
-            unsafe { *self.simple.get() = ptrs };
+            unsafe { *self.simple.get() = Some(ptrs) };
         }
         #[cfg(not(feature = "threads"))]
         {
-            if self.once {
-                return ();
+            if let Some(ptr) = unsafe { &mut *self.simple.get() }.as_mut() {
+                #[cfg(feature = "trace")]
+                {
+                    panic!("PseudoWasmSimple is already initialized with: {:?}", ptr);
+                }
+            } else {
+                unsafe { *self.simple.get() = Some(ptrs) };
             }
-            unsafe { *self.simple.get() = ptrs };
-            self.once = true;
         }
     }
 }
@@ -164,14 +177,17 @@ macro_rules! import_pseudo_wasm {
     };
 }
 
-#[derive(Deb)]
+#[derive(Debug)]
 pub struct StandardPseudoWasmMultipleHolder {
     #[cfg(feature = "threads")]
     pub holders: parking_lot::RwLock<smallvec::SmallVec<[PseudoWasmSimple; 4]>>,
 
     #[cfg(not(feature = "threads"))]
-    pub holders: UnsafeCell<smallvec::SmallVec<[PseudoWasmSimple; 4]>>,
+    pub holders: core::cell::UnsafeCell<smallvec::SmallVec<[PseudoWasmSimple; 4]>>,
 }
+
+unsafe impl Send for StandardPseudoWasmMultipleHolder {}
+unsafe impl Sync for StandardPseudoWasmMultipleHolder {}
 
 #[derive(Debug, Clone)]
 pub struct StandardPseudoWasmMultipleHolderInstant<'a> {
@@ -185,11 +201,11 @@ impl StandardPseudoWasmMultipleHolder {
             #[cfg(feature = "threads")]
             holders: parking_lot::RwLock::new(smallvec::SmallVec::new_const()),
             #[cfg(not(feature = "threads"))]
-            holders: UnsafeCell::new(smallvec::SmallVec::new_const()),
+            holders: core::cell::UnsafeCell::new(smallvec::SmallVec::new_const()),
         }
     }
 
-    pub fn add_holder(&mut self, holder: PseudoWasmSimple) {
+    pub fn add_holder(&self, holder: PseudoWasmSimple) {
         #[cfg(feature = "threads")]
         {
             self.holders.write().push(holder);
@@ -200,14 +216,14 @@ impl StandardPseudoWasmMultipleHolder {
         }
     }
 
-    pub fn get_holder(&self, index: usize) -> &PseudoWasmSimple {
+    pub fn get_holder(&self, index: usize) -> PseudoWasmSimple {
         #[cfg(feature = "threads")]
         {
-            &self.holders.read()[index]
+            self.holders.read()[index].clone()
         }
         #[cfg(not(feature = "threads"))]
         {
-            unsafe { &(*self.holders.get())[index] }
+            unsafe { (&(*self.holders.get()))[index].clone() }
         }
     }
 }
@@ -223,31 +239,32 @@ impl PseudoWasmTrait for StandardPseudoWasmMultipleHolder {
     }
 
     fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimple) -> Self::Generated {
-        // This is a placeholder implementation. You would need to implement logic to manage multiple holders.
-        // For example, you could store the received `ptrs` in a vector or handle them based on some identifier.
-        // Here we simply add the new holder to the list.
-        let mut new_holder = self.clone();
-        new_holder.add_holder(ptrs);
-        *self = new_holder;
-        self.holders.len() - 1
+        self.add_holder(ptrs);
+
+        #[cfg(feature = "threads")]
+        let len = self.holders.read().len();
+        #[cfg(not(feature = "threads"))]
+        let len = unsafe { (*self.holders.get()).len() };
+
+        len - 1
     }
 }
 
 impl WasmAccessDynCompatibleRaw for StandardPseudoWasmMultipleHolderInstant<'_> {
     #[inline(always)]
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        (self.get_holder(self.refers_to).memcpy_raw_ptr)(offset, src, len)
+        (self.refer.get_holder(self.refers_to).memcpy_raw_ptr)(offset, src, len)
     }
 
     #[inline(always)]
     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        (self.get_holder(self.refers_to).memcpy_to_raw_ptr)(offset, src, len)
+        (self.refer.get_holder(self.refers_to).memcpy_to_raw_ptr)(offset, src, len)
     }
 
     #[cfg(not(feature = "multi_memory"))]
     #[inline(always)]
     fn memory_director_raw(&self, ptr: isize) -> isize {
-        (self
+        (self.refer
             .get_holder(self.refers_to)
             .memory_director_raw_ptr
             .unwrap())(ptr)
@@ -255,16 +272,16 @@ impl WasmAccessDynCompatibleRaw for StandardPseudoWasmMultipleHolderInstant<'_> 
 
     #[inline(always)]
     fn _main_raw(&self) -> wasip1::Errno {
-        (self.get_holder(self.refers_to)._main_ptr)()
+        (self.refer.get_holder(self.refers_to)._main_ptr)()
     }
 
     #[inline(always)]
     fn _reset_raw(&self) {
-        (self.get_holder(self.refers_to)._reset_ptr)()
+        (self.refer.get_holder(self.refers_to)._reset_ptr)()
     }
 
     #[inline(always)]
     fn _start_raw(&self) {
-        (self.get_holder(self.refers_to)._start_ptr)()
+        (self.refer.get_holder(self.refers_to)._start_ptr)()
     }
 }

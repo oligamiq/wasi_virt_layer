@@ -658,6 +658,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "dynamic-wasm-multiple"
+version = "0.1.5"
+dependencies = [
+ "wasi_virt_layer",
+]
+
+[[package]]
 name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
