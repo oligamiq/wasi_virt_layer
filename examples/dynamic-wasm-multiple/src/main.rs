@@ -7,13 +7,12 @@ use wasi_virt_layer::file::multiple::dynamic_wasm::StandardPseudoWasmMultipleHol
 static WASM_MULTIPLE_HOLDER: StandardPseudoWasmMultipleHolder = StandardPseudoWasmMultipleHolder::new();
 
 export_pseudo_wasm!(wasm_multiple_holder; &WASM_MULTIPLE_HOLDER);
-import_pseudo_wasm!(wasm_multiple_holder; &WASM_MULTIPLE_HOLDER);
 
 fn main() {
     let mut vfs = Wasip1MultipleVFS::<BoxedInodeNormal>::new();
 
     // Use the generated struct to add the pseudo Wasm module with ID 0
-    let wasm = wasm_multiple_holder(WASM_MULTIPLE_HOLDER.restore(0));
+    let wasm = WASM_MULTIPLE_HOLDER.restore(0);
     vfs.add_wasm_access(
         wasm.name(),
         WasmAccessDynCompatibleWrapper::new(wasm),

@@ -6,7 +6,6 @@ use wasi_virt_layer::memory::WasmAccessNameDynCompatible;
 static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_const();
 
 export_pseudo_wasm!(wasm_holder);
-import_pseudo_wasm!(wasm_holder);
 
 fn main() {
     let mut vfs = Wasip1MultipleVFS::<BoxedInodeNormal>::new();

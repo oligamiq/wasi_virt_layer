@@ -1,8 +1,5 @@
 #![cfg(feature = "multiple-fs")]
 
-#[cfg(feature = "threads")]
-use core::ops::Deref as _;
-
 use smallbox::SmallBox;
 use smallvec::SmallVec;
 use core::ops::Deref;
@@ -377,7 +374,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                             .first()
                             .unwrap()
                             .fd_write_stdout_raw_dyn_compatible(
-                                access.as_ref(),
+                                access,
                                 iovs.buf as *const u8,
                                 iovs.buf_len,
                             ) {
@@ -389,7 +386,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                             .first()
                             .unwrap()
                             .fd_write_stderr_raw_dyn_compatible(
-                                access.as_ref(),
+                                access,
                                 iovs.buf as *const u8,
                                 iovs.buf_len,
                             ) {
@@ -412,7 +409,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                 let mut written = 0;
                 for iovs in iovs_vec {
                     match lfs.fd_write_raw_dyn_compatible(
-                        access.as_ref(),
+                        access,
                         inode,
                         iovs.buf as *const u8,
                         iovs.buf_len,
@@ -442,7 +439,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.fd_readdir_raw_dyn_compatible(access.as_ref(), inode, buf, buf_len, cookie) {
+        match lfs.fd_readdir_raw_dyn_compatible(access, inode, buf, buf_len, cookie) {
             Ok((read, _)) => {
                 Wasm::store_le(nread_ret, read as Size);
                 wasip1::ERRNO_SUCCESS
@@ -466,7 +463,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.path_filestat_get_raw_dyn_compatible(
-            access.as_ref(),
+            access,
             inode,
             flags,
             path_ptr,
@@ -500,7 +497,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_open_fd!((open_fd, lfs) = self, fd);
         get_inode!(inode = open_fd);
 
-        match lfs.fd_prestat_get_raw_dyn_compatible(access.as_ref(), inode) {
+        match lfs.fd_prestat_get_raw_dyn_compatible(access, inode) {
             Ok(prestat) => {
                 trace_fs!(self, Wasm; "fd_prestat_get: storing prestat");
                 Wasm::store_le(prestat_ret, prestat);
@@ -523,7 +520,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.fd_prestat_dir_name_raw_dyn_compatible(
-            access.as_ref(),
+            access,
             inode,
             dir_path_ptr,
             dir_path_len,
@@ -553,7 +550,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.fd_filestat_get_raw_dyn_compatible(access.as_ref(), inode) {
+        match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
             Ok(filestat) => {
                 let filestat = wasip1::Filestat {
                     dev: 0,
@@ -595,7 +592,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
                 get_inode!(inode = open_fd);
 
-                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access.as_ref(), inode)
+                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, inode)
                 {
                     Ok(f) => f.filetype,
                     Err(e) => return e,
@@ -632,7 +629,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
         for iovs in iovs_vec {
             match lfs.fd_pread_raw_dyn_compatible(
-                access.as_ref(),
+                access,
                 inode,
                 iovs.buf as *mut u8,
                 iovs.buf_len,
@@ -691,7 +688,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.path_open_raw_dyn_compatible(
-            access.as_ref(),
+            access,
             inode,
             dir_flags,
             path_ptr,

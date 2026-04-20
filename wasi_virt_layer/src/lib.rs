@@ -103,7 +103,7 @@ pub mod file {
     #[cfg(feature = "multiple-fs")]
     pub use crate::wasi::file::multiple::{
         self, Wasip1MultipleVFS,
-        dynamic_wasm::{PseudoWasmSimple, PseudoWasmTrait, StandardPseudoWasmHolder},
+        dynamic_wasm::*,
         inode::BoxedInodeNormal,
     };
 }

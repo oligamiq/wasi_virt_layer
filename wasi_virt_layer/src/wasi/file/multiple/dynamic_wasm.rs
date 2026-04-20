@@ -1,12 +1,16 @@
 #![cfg(feature = "multiple-fs")]
 
 use crate::__private::wasip1;
-use crate::memory::WasmAccessDynCompatibleRaw;
+use crate::file::multiple::wasm::WasmAccessDynCompatibleTuple;
+use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessNameDynCompatible};
 
 /// A structure holding function pointers for a pseudo-Wasm module.
+/// This has separated name values so you must build in PseudoWasmTrait's receiver fn.
 #[repr(C)]
 #[derive(Clone, Debug)]
-pub struct PseudoWasmSimple {
+pub struct PseudoWasmSimpleBuilder {
+    pub name_ptr: *const u8,
+    pub name_len: usize,
     pub _main_ptr: fn() -> wasip1::Errno,
     pub _reset_ptr: fn(),
     pub _start_ptr: fn(),
@@ -16,15 +20,61 @@ pub struct PseudoWasmSimple {
     pub memory_director_raw_ptr: Option<fn(isize) -> isize>, // Optional for multi-memory support
 }
 
+impl PseudoWasmSimpleBuilder {
+    pub fn build(self) -> PseudoWasmSimple {
+        let name = if self.name_ptr.is_null() || self.name_len == 0 {
+            smallstr::SmallString::new()
+        } else {
+            unsafe {
+                let slice = core::slice::from_raw_parts(self.name_ptr, self.name_len);
+                smallstr::SmallString::from_str(core::str::from_utf8_unchecked(slice))
+            }
+        };
+
+        PseudoWasmSimple {
+            name,
+            _main_ptr: self._main_ptr,
+            _reset_ptr: self._reset_ptr,
+            _start_ptr: self._start_ptr,
+            memcpy_raw_ptr: self.memcpy_raw_ptr,
+            memcpy_to_raw_ptr: self.memcpy_to_raw_ptr,
+            #[cfg(not(feature = "multi_memory"))]
+            memory_director_raw_ptr: self.memory_director_raw_ptr,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct PseudoWasmSimple {
+    pub name: smallstr::SmallString<[u8; 32]>,
+    pub _main_ptr: fn() -> wasip1::Errno,
+    pub _reset_ptr: fn(),
+    pub _start_ptr: fn(),
+    pub memcpy_raw_ptr: fn(*mut u8, *const u8, usize),
+    pub memcpy_to_raw_ptr: fn(*mut u8, *const u8, usize),
+    #[cfg(not(feature = "multi_memory"))]
+    pub memory_director_raw_ptr: Option<fn(isize) -> isize>, // Optional for multi-memory support
+}
+
+impl PseudoWasmSimple {
+    pub fn with_name(&self, f: &mut dyn FnMut(&str)) {
+        if self.name.is_empty() {
+            f("");
+        } else {
+            f(self.name.as_str());
+        }
+    }
+}
+
 /// A specific trait for static pseudo-Wasm structures.
 /// It provides a function that receives the underlying pointer group and requires dynamic Wasm compatibility.
 pub trait PseudoWasmTrait {
     type Generated;
 
-    fn restore(&self, generated: Self::Generated) -> impl WasmAccessDynCompatibleRaw;
+    fn restore(&self, generated: Self::Generated) -> impl WasmAccessDynCompatibleTuple;
 
     /// Receives the struct holding the pointer group to create an instance.
-    fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimple) -> Self::Generated;
+    fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimpleBuilder) -> Self::Generated;
 }
 
 /// A standard struct that holds the pointer group and implements `PseudoWasmTrait`
@@ -52,7 +102,7 @@ impl StandardPseudoWasmHolder {
         }
     }
 
-    pub fn get(&self) -> &PseudoWasmSimple {
+    pub fn get<'s>(&'s self) -> &'s PseudoWasmSimple {
         #[cfg(feature = "trace")]
         unsafe { (*self.simple.get()).as_ref().expect("PseudoWasmSimple is not initialized yet") }
 
@@ -67,11 +117,12 @@ unsafe impl Sync for StandardPseudoWasmHolder {}
 impl PseudoWasmTrait for StandardPseudoWasmHolder {
     type Generated = ();
 
-    fn restore(&self, _: Self::Generated) -> impl WasmAccessDynCompatibleRaw {
+    fn restore(&self, _: Self::Generated) -> impl WasmAccessDynCompatibleTuple {
         self
     }
 
-    fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimple) -> Self::Generated {
+    fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimpleBuilder) -> Self::Generated {
+        let ptrs = ptrs.build();
         #[cfg(feature = "threads")]
         {
             use core::sync::atomic::Ordering;
@@ -86,6 +137,7 @@ impl PseudoWasmTrait for StandardPseudoWasmHolder {
         }
         #[cfg(not(feature = "threads"))]
         {
+            #[cfg_attr(not(feature = "trace"), allow(unused_variables))]
             if let Some(ptr) = unsafe { &mut *self.simple.get() }.as_mut() {
                 #[cfg(feature = "trace")]
                 {
@@ -95,6 +147,12 @@ impl PseudoWasmTrait for StandardPseudoWasmHolder {
                 unsafe { *self.simple.get() = Some(ptrs) };
             }
         }
+    }
+}
+
+impl WasmAccessNameDynCompatible for StandardPseudoWasmHolder {
+    fn with_name(&self, f: &mut dyn FnMut(&str)) {
+        self.get().with_name(f);
     }
 }
 
@@ -149,33 +207,10 @@ macro_rules! export_pseudo_wasm {
 
         $crate::__private::paste::paste! {
             #[unsafe(no_mangle)]
-            pub extern "C" fn [<__wasi_export_pseudo_wasm_ $name>](ptrs: PseudoWasmSimple) {
+            pub extern "C" fn [<__wasi_export_pseudo_wasm_ $name>](ptrs: $crate::file::PseudoWasmSimpleBuilder) {
                 let holder = $holder;
                 holder.receive_pseudo_wasm(ptrs);
             }
-        }
-    };
-}
-
-/// Like `import_wasm!`, but for pseudo-Wasm modules.
-/// This macro generates a struct that implements `WasmAccessDynCompatibleRaw` and `WasmAccessNameDynCompatible` only.
-/// This macro must can use StandardPseudoWasmHolder, and StandardPseudoWasmMultipleHolder, or any struct that implements PseudoWasmTrait as the holder.
-#[macro_export]
-macro_rules! import_pseudo_wasm {
-    ($name:ident) => {
-        $crate::__private::paste::paste! {
-            $crate::import_pseudo_wasm!($name; &[<$name:upper>]);
-        }
-    };
-
-    ($name:ident; $holder:expr) => {
-        const _: () = {
-            const fn __asserter(_: &impl $crate::file::PseudoWasmTrait) {}
-
-            __asserter($holder);
-        };
-
-        $crate::__private::paste::paste! {
         }
     };
 }
@@ -219,14 +254,18 @@ impl StandardPseudoWasmMultipleHolder {
         }
     }
 
-    pub fn get_holder(&self, index: usize) -> PseudoWasmSimple {
+    pub fn get_holder_with<R>(&self, id: usize, f: impl FnOnce(&PseudoWasmSimple) -> R) -> R {
         #[cfg(feature = "threads")]
         {
-            self.holders.read()[index].clone()
+            let holders = self.holders.read();
+            let holder = &holders[id];
+            f(holder)
         }
         #[cfg(not(feature = "threads"))]
         {
-            unsafe { (&(*self.holders.get()))[index].clone() }
+            let holders = unsafe { &*self.holders.get() };
+            let holder = &holders[id];
+            f(holder)
         }
     }
 }
@@ -234,15 +273,15 @@ impl StandardPseudoWasmMultipleHolder {
 impl PseudoWasmTrait for StandardPseudoWasmMultipleHolder {
     type Generated = usize;
 
-    fn restore(&self, id: Self::Generated) -> impl WasmAccessDynCompatibleRaw {
+    fn restore(&self, id: Self::Generated) -> impl WasmAccessDynCompatibleTuple {
         StandardPseudoWasmMultipleHolderInstant {
             refer: self,
             refers_to: id,
         }
     }
 
-    fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimple) -> Self::Generated {
-        self.add_holder(ptrs);
+    fn receive_pseudo_wasm(&self, ptrs: PseudoWasmSimpleBuilder) -> Self::Generated {
+        self.add_holder(ptrs.build());
 
         #[cfg(feature = "threads")]
         let len = self.holders.read().len();
@@ -253,38 +292,55 @@ impl PseudoWasmTrait for StandardPseudoWasmMultipleHolder {
     }
 }
 
+impl WasmAccessNameDynCompatible for StandardPseudoWasmMultipleHolderInstant<'_> {
+    fn with_name(&self, f: &mut dyn FnMut(&str)) {
+        self.refer.get_holder_with(self.refers_to, |holder| {
+            #[cfg(feature = "trace")]
+            {
+                if holder.name.is_empty() {
+                    panic!("WasmAccessName is not initialized yet for holder: {:?}", holder);
+                }
+            }
+
+            if holder.name.is_empty() {
+                f("");
+            } else {
+                f(holder.name.as_str());
+            }
+        })
+
+    }
+}
+
 impl WasmAccessDynCompatibleRaw for StandardPseudoWasmMultipleHolderInstant<'_> {
     #[inline(always)]
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        (self.refer.get_holder(self.refers_to).memcpy_raw_ptr)(offset, src, len)
+        self.refer.get_holder_with(self.refers_to, |holder| (holder.memcpy_raw_ptr)(offset, src, len))
     }
 
     #[inline(always)]
     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        (self.refer.get_holder(self.refers_to).memcpy_to_raw_ptr)(offset, src, len)
+        self.refer.get_holder_with(self.refers_to, |holder| (holder.memcpy_to_raw_ptr)(offset, src, len))
     }
 
     #[cfg(not(feature = "multi_memory"))]
     #[inline(always)]
     fn memory_director_raw(&self, ptr: isize) -> isize {
-        (self.refer
-            .get_holder(self.refers_to)
-            .memory_director_raw_ptr
-            .unwrap())(ptr)
+        self.refer.get_holder_with(self.refers_to, |holder| (holder.memory_director_raw_ptr.unwrap())(ptr))
     }
 
     #[inline(always)]
     fn _main_raw(&self) -> wasip1::Errno {
-        (self.refer.get_holder(self.refers_to)._main_ptr)()
+        self.refer.get_holder_with(self.refers_to, |holder| (holder._main_ptr)())
     }
 
     #[inline(always)]
     fn _reset_raw(&self) {
-        (self.refer.get_holder(self.refers_to)._reset_ptr)()
+        self.refer.get_holder_with(self.refers_to, |holder| (holder._reset_ptr)())
     }
 
     #[inline(always)]
     fn _start_raw(&self) {
-        (self.refer.get_holder(self.refers_to)._start_ptr)()
+        self.refer.get_holder_with(self.refers_to, |holder| (holder._start_ptr)())
     }
 }

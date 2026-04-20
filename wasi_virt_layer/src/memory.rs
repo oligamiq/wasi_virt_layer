@@ -70,6 +70,12 @@ macro_rules! import_wasm {
                 const NAME: &'static str = stringify!($name);
             }
 
+            impl $crate::memory::WasmAccessNameDynCompatible for $name {
+                fn with_name(&self, f: &mut dyn FnMut(&str)) {
+                    f(<Self as $crate::memory::WasmAccessName>::NAME);
+                }
+            }
+
             impl $crate::memory::WasmAccessDynCompatibleRaw for $name {
                 #[inline(always)]
                 fn memcpy_raw(&self, offset: *mut u8, data: *const u8, len: usize)
@@ -202,14 +208,14 @@ macro_rules! __memory_director_wasm_access {
     (@dyn, $name:ident) => {
         $crate::__private::paste::paste! {
             #[inline(always)]
-            fn memory_director_raw(&self, ptr: isize) -> isize {
+            fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
                 #[cfg(not(target_os = "wasi"))]
                 unimplemented!("this is not supported on this architecture");
 
                 #[cfg(target_os = "wasi")]
-                unsafe { [<__wasip1_vfs_ $name _memory_director>](
+                Some(unsafe { [<__wasip1_vfs_ $name _memory_director>](
                     ptr,
-                ) }
+                ) })
             }
         }
     };
@@ -478,12 +484,12 @@ pub trait WasmAccessName: core::fmt::Debug {
 /// A dynamically compatible trait for providing the name of the WASM module access.
 pub trait WasmAccessNameDynCompatible: core::fmt::Debug {
     /// Returns the name of the WASM module access.
-    fn name(&self) -> &'static str;
+    fn with_name(&self, f: &mut dyn FnMut(&str));
 }
 
-impl<T: WasmAccessName> WasmAccessNameDynCompatible for T {
-    fn name(&self) -> &'static str {
-        Self::NAME
+impl<T: WasmAccessNameDynCompatible + ?Sized> WasmAccessNameDynCompatible for &T {
+    fn with_name(&self, f: &mut dyn FnMut(&str)) {
+        (*self).with_name(f);
     }
 }
 
@@ -497,7 +503,7 @@ pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
 
     /// Directs a pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize;
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize>;
 
     /// Execute the `_main` entrypoint of the WASM module.
     fn _main_raw(&self) -> wasip1::Errno;
@@ -552,11 +558,11 @@ pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
 
     /// Directs a pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<T>(&self, ptr: *const T) -> *const T;
+    fn memory_director_with<T>(&self, ptr: *const T) -> Option<*const T>;
 
     /// Directs a mutable pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<T>(&self, ptr: *mut T) -> *mut T;
+    fn memory_director_mut_with<T>(&self, ptr: *mut T) -> Option<*mut T>;
 
     /// Execute the `_main` entrypoint of the WASM module.
     fn _main_with(&self) -> wasip1::Errno;
@@ -578,7 +584,7 @@ impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatibleRaw for &T {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
         <T as WasmAccessDynCompatibleRaw>::memory_director_raw(self, ptr)
     }
 
@@ -605,7 +611,7 @@ impl<T: WasmAccessDynCompatibleRaw> WasmAccessDynCompatibleRaw for Box<T> {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
         <T as WasmAccessDynCompatibleRaw>::memory_director_raw(self, ptr)
     }
 
@@ -640,13 +646,13 @@ impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatible for T {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<U>(&self, ptr: *const U) -> *const U {
-        Self::memory_director_raw(self, ptr as isize) as *const U
+    fn memory_director_with<U>(&self, ptr: *const U) -> Option<*const U> {
+        Self::memory_director_raw(self, ptr as isize).map(|p| p as *const U)
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<U>(&self, ptr: *mut U) -> *mut U {
-        Self::memory_director_raw(self, ptr as isize) as *mut U
+    fn memory_director_mut_with<U>(&self, ptr: *mut U) -> Option<*mut U> {
+        Self::memory_director_raw(self, ptr as isize).map(|p| p as *mut U)
     }
 
     fn _main_with(&self) -> wasip1::Errno {
@@ -1650,6 +1656,12 @@ impl WasmAccessName for WasmAccessFaker {
     const NAME: &'static str = "WasmAccessFaker";
 }
 
+impl WasmAccessNameDynCompatible for WasmAccessFaker {
+    fn with_name(&self, f: &mut dyn FnMut(&str)) {
+        f(Self::NAME);
+    }
+}
+
 impl WasmAccessDynCompatibleRaw for WasmAccessFaker {
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
         unsafe {
@@ -1675,8 +1687,8 @@ impl WasmAccessDynCompatibleRaw for WasmAccessFaker {
     fn _start_raw(&self) {}
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
-        ptr
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
+        Some(ptr)
     }
 }
 

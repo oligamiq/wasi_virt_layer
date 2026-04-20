@@ -128,12 +128,36 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let iovec_arr = [wasip1::Iovec {
-                buf: access.memory_director_mut_with(buf),
-                buf_len: len,
-            }];
+            #[cfg(feature = "alloc")]
+            if let Some(directed_buf) = access.memory_director_mut_with(buf) {
+                let iovec_arr = [wasip1::Iovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            } else {
+                let mut alloc_buf = alloc::vec![0u8; len];
+                let iovec_arr = [wasip1::Iovec {
+                    buf: alloc_buf.as_mut_ptr() as *mut u8,
+                    buf_len: len,
+                }];
+                let nread = unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }?;
+
+                access.memcpy_with(buf, &alloc_buf[..nread]);
+
+                Ok(nread)
+            }
+
+            #[cfg(not(feature = "alloc"))]
+            {
+                let iovec_arr = [wasip1::Iovec {
+                    buf: access.memory_director_mut_with(buf).unwrap(),
+                    buf_len: len,
+                }];
+
+                unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            }
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -193,12 +217,33 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let ciovec_arr = [wasip1::Ciovec {
-                buf: access.memory_director_with(buf),
-                buf_len: len,
-            }];
+            #[cfg(feature = "alloc")]
+            if let Some(directed_buf) = access.memory_director_with(buf) {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            } else {
+                let mut alloc_buf = alloc::vec![0u8; len];
+                access.memcpy_to_with(&mut alloc_buf, buf);
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: alloc_buf.as_ptr() as *const u8,
+                    buf_len: len,
+                }];
+                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            }
+
+            #[cfg(not(feature = "alloc"))]
+            {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: access.memory_director_with(buf).unwrap(),
+                    buf_len: len,
+                }];
+
+                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            }
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -258,12 +303,33 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let ciovec_arr = [wasip1::Ciovec {
-                buf: access.memory_director_with(buf),
-                buf_len: len,
-            }];
+            #[cfg(feature = "alloc")]
+            if let Some(directed_buf) = access.memory_director_with(buf) {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            } else {
+                let mut alloc_buf = alloc::vec![0u8; len];
+                access.memcpy_to_with(&mut alloc_buf, buf);
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: alloc_buf.as_ptr() as *const u8,
+                    buf_len: len,
+                }];
+                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            }
+
+            #[cfg(not(feature = "alloc"))]
+            {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: access.memory_director_with(buf).unwrap(),
+                    buf_len: len,
+                }];
+
+                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            }
         }
 
         #[cfg(not(target_os = "wasi"))]

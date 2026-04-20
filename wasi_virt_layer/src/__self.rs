@@ -1,5 +1,5 @@
 use crate::__private::wasip1;
-use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessName, WasmAccessRaw};
+use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessName, WasmAccessNameDynCompatible, WasmAccessRaw};
 
 /// Internal struct representing the host context itself for WasmAccess.
 #[allow(non_camel_case_types)]
@@ -8,6 +8,12 @@ pub struct __self;
 
 impl WasmAccessName for __self {
     const NAME: &'static str = "__self";
+}
+
+impl WasmAccessNameDynCompatible for __self {
+    fn with_name(&self, f: &mut dyn FnMut(&str)) {
+        f(Self::NAME);
+    }
 }
 
 impl WasmAccessDynCompatibleRaw for __self {
@@ -22,8 +28,8 @@ impl WasmAccessDynCompatibleRaw for __self {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
-        ptr
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
+        Some(ptr)
     }
 
     fn _main_raw(&self) -> wasip1::Errno {
