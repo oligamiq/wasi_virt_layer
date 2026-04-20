@@ -164,7 +164,7 @@ macro_rules! import_pseudo_wasm {
     };
 }
 
-#[derive(Debug, Clone)]
+#[derive(Deb)]
 pub struct StandardPseudoWasmMultipleHolder {
     #[cfg(feature = "threads")]
     pub holders: parking_lot::RwLock<smallvec::SmallVec<[PseudoWasmSimple; 4]>>,
