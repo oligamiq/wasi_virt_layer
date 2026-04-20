@@ -3,6 +3,7 @@
 #[cfg(feature = "threads")]
 use core::ops::Deref as _;
 
+use smallbox::SmallBox;
 use smallvec::SmallVec;
 
 use crate::{
@@ -18,11 +19,13 @@ use crate::{
     },
 };
 
+type Wasip1DynCompatibleLFSWrapperInner<B> = SmallBox<dyn Wasip1DynCompatibleLFS<B>, [usize; 4]>;
+
 /// A wrapper around a dynamically compatible WASI filesystem.
 #[derive(Debug)]
 pub struct Wasip1DynCompatibleLFSWrapper<B: BoxedInode> {
     /// The boxed dynamically compatible file system.
-    pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>,
+    pub lfs: Wasip1DynCompatibleLFSWrapperInner<B>,
 }
 
 unsafe impl<B: BoxedInode> Send for Wasip1DynCompatibleLFSWrapper<B> {}
@@ -30,14 +33,20 @@ unsafe impl<B: BoxedInode> Sync for Wasip1DynCompatibleLFSWrapper<B> {}
 
 impl<B: BoxedInode> Wasip1DynCompatibleLFSWrapper<B> {
     /// Creates a new `Wasip1DynCompatibleLFSWrapper`.
-    pub fn new(lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>) -> Self {
+    pub const fn new_const(lfs: Wasip1DynCompatibleLFSWrapperInner<B>) -> Self {
         Self { lfs }
+    }
+
+    pub fn new(lfs: impl Wasip1DynCompatibleLFS<B> + 'static) -> Self {
+        Self {
+            lfs: smallbox::smallbox!(lfs),
+        }
     }
 }
 
 impl<B: BoxedInode> AsRef<dyn Wasip1DynCompatibleLFS<B>> for Wasip1DynCompatibleLFSWrapper<B> {
     fn as_ref(&self) -> &(dyn Wasip1DynCompatibleLFS<B> + 'static) {
-        self.lfs.as_ref()
+        self.lfs.deref()
     }
 }
 
@@ -45,7 +54,7 @@ impl<B: BoxedInode> core::ops::Deref for Wasip1DynCompatibleLFSWrapper<B> {
     type Target = dyn Wasip1DynCompatibleLFS<B>;
 
     fn deref(&self) -> &Self::Target {
-        self.lfs.as_ref()
+        self.lfs.deref()
     }
 }
 
@@ -141,8 +150,12 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         }
     }
 
+    pub fn add_lfs_raw(&mut self, lfs: Wasip1DynCompatibleLFSWrapper<B>) {
+        self.lfss.push(lfs);
+    }
+
     /// Adds a file system to the multiple VFS.
-    pub fn add_lfs(&mut self, lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>) {
+    pub fn add_lfs(&mut self, lfs: impl Wasip1DynCompatibleLFS<B> + 'static) {
         self.lfss.push(Wasip1DynCompatibleLFSWrapper::new(lfs));
     }
 
