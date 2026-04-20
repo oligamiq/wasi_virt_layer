@@ -1,4 +1,3 @@
-use camino::Utf8Path;
 use eyre::Context;
 
 use crate::args::NewArgs;

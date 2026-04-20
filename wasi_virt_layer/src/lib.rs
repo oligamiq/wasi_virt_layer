@@ -74,9 +74,16 @@ pub mod thread {
 
 /// Virtual File System operations and definitions.
 pub mod file {
+    #[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
     pub use crate::wasi::file::{
         BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon, NoAddInfo, OpenFdInfo,
         OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait, stdio::DefaultStdIO,
+    };
+
+    #[cfg(not(any(feature = "const-fs", feature = "changeable-fs")))]
+    pub use crate::wasi::file::{
+        BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon, NoAddInfo, OpenFdInfo,
+        OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait,
     };
 
     #[cfg(feature = "const-fs")]

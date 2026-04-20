@@ -3,6 +3,7 @@
 #[allow(dead_code)]
 #[allow(missing_docs)]
 #[cfg(feature = "threads")]
+#[allow(unused_imports)]
 pub mod virtual_file_system_threads;
 #[cfg(feature = "threads")]
 pub use virtual_file_system_threads as virtual_file_system;

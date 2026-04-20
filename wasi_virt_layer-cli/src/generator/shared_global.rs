@@ -317,12 +317,9 @@ impl SharedGlobal {
 impl Generator for SharedGlobal {
     fn post_lower_memory(
         &mut self,
-        module: &mut walrus::Module,
+        _module: &mut walrus::Module,
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
-        use std::collections::{HashMap, HashSet};
-        use walrus::ir::*;
-
         if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
             unreachable!();
         }

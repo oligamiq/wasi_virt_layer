@@ -1736,7 +1736,7 @@ pub fn merge(
     vfs: &Utf8PathBuf,
     wasm: &[impl AsRef<std::path::Path>],
     output: impl AsRef<std::path::Path>,
-    threads: bool,
+    _threads: bool,
     dwarf: bool,
 ) -> eyre::Result<()> {
     let custom_section = {

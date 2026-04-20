@@ -148,4 +148,5 @@ impl<InodeId: InodeIdCommon> OpenFdInfoWithInode for DetailedOpenFd<InodeId> {
 }
 
 /// A trait defining constraints for an Inode ID type, requiring it to be debuggable and convertible to/from `InodeId`.
+#[allow(dead_code)]
 pub trait InodeConstraint: core::fmt::Debug + Into<InodeId> + From<InodeId> {}

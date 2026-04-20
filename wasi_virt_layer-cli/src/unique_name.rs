@@ -269,6 +269,7 @@ impl<'a> From<&'a MemoryUniqueName<'_>> for UniqueName<'_, 'a> {
 
 /// To verify whether an identical entry exists
 /// in the destination for generating UniqueName, prepare an iterator.
+#[allow(dead_code)]
 trait UniqueNameIterator<'a>
 where
     Self: Sized,

@@ -5,13 +5,16 @@ use crate::__private::wasip1::Size;
 use crate::memory::WasmAccess;
 use crate::transporter::Wasip1Transporter;
 
+#[cfg(all(not(feature = "multi_memory"), feature = "alloc"))]
+use crate::memory::WasmAccessDynCompatible;
 #[cfg(not(feature = "multi_memory"))]
-use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
+use crate::memory::WasmAccessDynCompatibleRaw;
 
 /// Default implementation of `StdIO` using the system's standard I/O.
 #[derive(Debug)]
 pub struct DefaultStdIO;
 
+#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
 impl StdIO for DefaultStdIO {
     fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::read_from_stdin(buf)
@@ -72,6 +75,7 @@ impl StdIO for DefaultStdIO {
     }
 }
 
+#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
 /// Trait for handling standard I/O operations.
 pub trait StdIO: core::fmt::Debug {
     /// Reads data from stdin into the provided buffer.

@@ -1,4 +1,5 @@
 #![cfg(feature = "const-fs")]
+#![allow(missing_docs)]
 
 pub mod lfs;
 pub mod lfs_impl;

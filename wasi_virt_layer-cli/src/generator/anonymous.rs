@@ -9,7 +9,6 @@ use crate::{
     abi::Wasip1ABIFunc,
     generator::{Generator, GeneratorCtx, memory::MemoryUniqueName},
     unique_name::UniqueName,
-    util::WasmName,
 };
 
 /// Generator component translating un-named single targets into explicit generic bindings.

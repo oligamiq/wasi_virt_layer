@@ -176,7 +176,7 @@ impl Generator for ThreadsSpawn {
             let component_name =
                 gen_component_name(UniqueName::WASIP1_THREADS_ABI_MODULE_ALT, name);
 
-            let real_thread_spawn_fn_id =
+            let _real_thread_spawn_fn_id =
                 (UniqueName::THREADS_MODULE_ROOT, &component_name).get_fid(&module.imports)?;
 
             module.exports.erase_with(

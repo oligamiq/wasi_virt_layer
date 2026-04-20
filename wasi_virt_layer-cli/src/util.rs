@@ -7,7 +7,6 @@ use std::{
     sync::atomic::AtomicUsize,
 };
 
-use bitvec::array::BitArray;
 use compact_str::CompactString;
 use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
@@ -2809,7 +2808,7 @@ where
                 .collect::<Vec<_>>()
         };
 
-        let mut data = data.into_iter().zip(num).collect::<Vec<_>>();
+        let data = data.into_iter().zip(num).collect::<Vec<_>>();
 
         // TODO!(); fix with behavior change
         // data.sort_by_key(|(_, v)| *v);
@@ -2970,7 +2969,6 @@ where
                 let (indices, _) = &features_base[i];
                 let mut mask = features_masks[i];
                 for &dep_idx in indices {
-                    let old = mask;
                     mask |= features_masks[dep_idx];
                     if mask != features_masks[i] { // Check against current stored mask, not 'old' local var if we updated it?
                         // Logic: mask |= dep_mask.
@@ -3019,18 +3017,17 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
             }
 
             // Compute skip mask (dependents of absent features)
-            let mut mask = FeatureCombinationIteratorInnerBits::ZERO;
+            let mut _mask = FeatureCombinationIteratorInnerBits::ZERO;
             for (i, (_, feature_bits, _)) in self.features.iter().enumerate() {
                 if !bits[i] {
                     // Feature i is absent
-                    mask |= *feature_bits; // Dependents of i are forbidden
+                    _mask |= *feature_bits; // Dependents of i are forbidden
                 }
             }
 
             // Compute skip mask (dependents of absent features)
             // AND resolve violations (features present without dependencies)
-            let mut violation = FeatureCombinationIteratorInnerBits::ZERO;
-            let mut mask = FeatureCombinationIteratorInnerBits::ZERO;
+            let _mask = FeatureCombinationIteratorInnerBits::ZERO;
 
             // Check for Forbidden features (because dependency is missing)
             // This is equivalent to checking "Present features have all dependencies".
@@ -3063,7 +3060,6 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
                         // 2. Set d (for each d in missing). (add distance to d).
 
                         // Option 1: Clear i.
-                        let jump_clear_i = FeatureCombinationIteratorInnerBits::from_one_pos(i);
 
                         // Option 2: Set d.
                         // For each d in missing:
@@ -3167,7 +3163,6 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
                         // Just find the lowest bit involved in any violation (either the feature itself or its missing dependency).
                         // And add 1 << that bit.
 
-                        let missing_indices = missing; // How to iterate?
                         // Iterate bits of missing.
 
                         // Let's accumulate a "jump_mask".
@@ -3188,7 +3183,6 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
             if let Some(jump_mask) = min_jump {
                 // Found violations.
                 // We want smallest bit in jump_mask.
-                let lz = jump_mask.trailing_zeros(); // LSB (Start).
                 // Wait. trailing_zeros counts from MSB in BitArray (Lsb0)???
                 // NO. I decided earlier it counted from MSB.
                 // But leading_zeros counted from LSB?

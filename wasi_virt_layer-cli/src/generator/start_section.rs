@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use std::collections::HashMap;
 use std::panic;
 use std::sync::Arc;
@@ -7,7 +6,7 @@ use walrus::FunctionId;
 use crate::{
     generator::{Generator, GeneratorCtx},
     unique_name::UniqueName,
-    util::{WalrusFID, WalrusUtilExport, WalrusUtilFuncs, WalrusUtilModule, WasmName},
+    util::{WalrusFID, WasmName},
 };
 
 /// Dictates the execution phase for added start functions.
@@ -205,7 +204,7 @@ impl StartSectionGenerator {
             .filter(|info| matches!(info.priority, StartFnPriority::AfterAll))
         {
             match &mut info.source {
-                StartSource::ExportFunc(name) => {
+                StartSource::ExportFunc(_name) => {
                     unimplemented!();
                 }
                 StartSource::Rewrite(f) => {

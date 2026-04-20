@@ -5,11 +5,14 @@ use crate::__private::wasip1;
 /// Transports data between the virtual layer and the underlying WASI system.
 pub struct Wasip1Transporter;
 
+#[cfg(all(not(feature = "multi_memory"), target_os = "wasi"))]
+use crate::memory::WasmAccessDynCompatible;
+
 #[cfg(not(feature = "multi_memory"))]
 use crate::prelude::WasmAccess;
 
 #[cfg(not(feature = "multi_memory"))]
-use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
+use crate::memory::WasmAccessDynCompatibleRaw;
 
 unsafe fn non_recursive_fd_read(
     fd: wasip1::Fd,
@@ -117,6 +120,7 @@ impl Wasip1Transporter {
     }
 
     #[cfg(not(feature = "multi_memory"))]
+    #[cfg_attr(not(target_os = "wasi"), allow(unused_variables))]
     pub fn read_from_stdin_direct_dyn_compatible(
         access: &dyn WasmAccessDynCompatibleRaw,
         buf: *mut u8,
@@ -181,19 +185,20 @@ impl Wasip1Transporter {
     }
 
     #[cfg(not(feature = "multi_memory"))]
+    #[cfg_attr(not(target_os = "wasi"), allow(unused_variables))]
     pub fn write_to_stdout_direct_dyn_compatible(
         access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: access.memory_director_with(buf),
-            buf_len: len,
-        }];
-
         #[cfg(target_os = "wasi")]
-        unsafe {
-            non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr)
+        {
+            let ciovec_arr = [wasip1::Ciovec {
+                buf: access.memory_director_with(buf),
+                buf_len: len,
+            }];
+
+            unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -245,6 +250,7 @@ impl Wasip1Transporter {
     }
 
     #[cfg(not(feature = "multi_memory"))]
+    #[cfg_attr(not(target_os = "wasi"), allow(unused_variables))]
     pub fn write_to_stderr_direct_dyn_compatible(
         access: &dyn WasmAccessDynCompatibleRaw,
         buf: *const u8,

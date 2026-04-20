@@ -1,4 +1,5 @@
 #![cfg(feature = "multiple-fs")]
+#![allow(missing_docs)]
 
 pub mod inode;
 pub mod lfs;

@@ -125,7 +125,7 @@ impl Generator for ConnectWasip1ABI {
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
             for import in <Wasip1ABIFunc as strum::VariantNames>::VARIANTS {
-                if let Some(import_id) = (UniqueName::WASIP1_ABI_MODULE, import)
+                if let Some(_import_id) = (UniqueName::WASIP1_ABI_MODULE, import)
                     .get_fid(&module.imports)
                     .ok()
                 {
