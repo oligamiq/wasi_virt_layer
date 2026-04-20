@@ -658,7 +658,7 @@ pub trait WasmAccessRaw: core::fmt::Debug {
 }
 
 /// Utility trait providing generic upper-level memory operations for WASM access.
-pub trait WasmAccessMemoryUtilUpper {
+pub trait WasmAccessMemoryUtilUpper: FnOnce(*mut u8, *const u8, usize) + Sized{
     /// Require `memcpy_raw` to be implemented.
     fn memcpy_upper<U>(self, offset: *mut U, data: &[U])
     where
@@ -670,19 +670,47 @@ pub trait WasmAccessMemoryUtilUpper {
         .memcpy_upper_with_inline((), offset, data);
     }
 
+    /// Require `memcpy_to_raw` to be implemented.
+    fn memcpy_to_upper<U>(self, offset: &mut [U], src: *const U)
+    {
+        (|_: (), offset, src, len| {
+            self(offset, src, len);
+        })
+        .memcpy_to_upper_with_inline((), offset, src);
+    }
+
     /// Require `memcpy_raw` to be implemented.
-    fn memcpy_upper_with<U, T>(self, t: T, offset: *mut U, data: &[U])
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn store_le_upper<U>(self, offset: *mut U, value: U)
+    {
+        (|_: (), offset, value, len| {
+            self(offset, value, len);
+        })
+        .store_le_upper_with_inline((), offset, value);
+    }
+
+    /// Require `memcpy_to_raw` to be implemented.
+    fn load_le_upper<U: core::fmt::Debug + Copy>(self, offset: *const U) -> U
+    {
+        (|_: (), offset, src, len| self(offset, src, len)).load_le_upper_with_inline((), offset)
+    }
+
+}
+
+impl<T: FnOnce(*mut u8, *const u8, usize) + Sized> WasmAccessMemoryUtilUpper for T
+{}
+
+/// A trait providing generic upper-level memory operations for WASM access with an additional context parameter.
+pub trait WasmAccessMemoryUtilUpperWith<T>: FnOnce(T, *mut u8, *const u8, usize) + Sized
+{
+    /// Require `memcpy_raw` to be implemented.
+    fn memcpy_upper_with<U>(self, t: T, offset: *mut U, data: &[U])
     {
         self.memcpy_upper_with_inline(t, offset, data);
     }
 
     /// Inlined version of `memcpy_upper_with`.
     #[inline(always)]
-    fn memcpy_upper_with_inline<U, T>(self, t: T, offset: *mut U, data: &[U])
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn memcpy_upper_with_inline<U>(self, t: T, offset: *mut U, data: &[U])
     {
         self(
             t,
@@ -693,29 +721,14 @@ pub trait WasmAccessMemoryUtilUpper {
     }
 
     /// Require `memcpy_to_raw` to be implemented.
-    fn memcpy_to_upper<U>(self, offset: &mut [U], src: *const U)
-    where
-        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
-    {
-        (|_: (), offset, src, len| {
-            self(offset, src, len);
-        })
-        .memcpy_to_upper_with_inline((), offset, src);
-    }
-
-    /// Require `memcpy_to_raw` to be implemented.
-    fn memcpy_to_upper_with<U, T>(self, t: T, offset: &mut [U], src: *const U)
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn memcpy_to_upper_with<U>(self, t: T, offset: &mut [U], src: *const U)
     {
         self.memcpy_to_upper_with_inline(t, offset, src);
     }
 
     /// Inlined version of `memcpy_to_upper_with`.
     #[inline(always)]
-    fn memcpy_to_upper_with_inline<U, T>(self, t: T, offset: &mut [U], src: *const U)
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn memcpy_to_upper_with_inline<U>(self, t: T, offset: &mut [U], src: *const U)
     {
         self(
             t,
@@ -726,29 +739,14 @@ pub trait WasmAccessMemoryUtilUpper {
     }
 
     /// Require `memcpy_raw` to be implemented.
-    fn store_le_upper<U>(self, offset: *mut U, value: U)
-    where
-        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
-    {
-        (|_: (), offset, value, len| {
-            self(offset, value, len);
-        })
-        .store_le_upper_with_inline((), offset, value);
-    }
-
-    /// Require `memcpy_raw` to be implemented.
-    fn store_le_upper_with<U, T>(self, t: T, offset: *mut U, value: U)
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn store_le_upper_with<U>(self, t: T, offset: *mut U, value: U)
     {
         self.store_le_upper_with_inline(t, offset, value);
     }
 
     /// Inline version of `store_le_upper_with`.
     #[inline(always)]
-    fn store_le_upper_with_inline<U, T>(self, t: T, offset: *mut U, value: U)
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn store_le_upper_with_inline<U>(self, t: T, offset: *mut U, value: U)
     {
         self(
             t,
@@ -759,26 +757,14 @@ pub trait WasmAccessMemoryUtilUpper {
     }
 
     /// Require `memcpy_to_raw` to be implemented.
-    fn load_le_upper<U: core::fmt::Debug + Copy>(self, offset: *const U) -> U
-    where
-        Self: FnOnce(*mut u8, *const u8, usize) + Sized,
-    {
-        (|_: (), offset, src, len| self(offset, src, len)).load_le_upper_with_inline((), offset)
-    }
-
-    /// Require `memcpy_to_raw` to be implemented.
-    fn load_le_upper_with<U: core::fmt::Debug + Copy, T>(self, t: T, offset: *const U) -> U
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn load_le_upper_with<U: core::fmt::Debug + Copy>(self, t: T, offset: *const U) -> U
     {
         self.load_le_upper_with_inline(t, offset)
     }
 
     /// Inline version of `load_le_upper_with`.
     #[inline(always)]
-    fn load_le_upper_with_inline<U: core::fmt::Debug + Copy, T>(self, t: T, offset: *const U) -> U
-    where
-        Self: FnOnce(T, *mut u8, *const u8, usize) + Sized,
+    fn load_le_upper_with_inline<U: core::fmt::Debug + Copy>(self, t: T, offset: *const U) -> U
     {
         let mut value = core::mem::MaybeUninit::<U>::uninit();
         self(
@@ -791,7 +777,8 @@ pub trait WasmAccessMemoryUtilUpper {
     }
 }
 
-impl<T> WasmAccessMemoryUtilUpper for T {}
+impl<V: FnOnce(T, *mut u8, *const u8, usize) + Sized, T> WasmAccessMemoryUtilUpperWith<T> for V
+{}
 
 impl<T: WasmAccessRaw> WasmAccess for T {
     fn memcpy<U>(offset: *mut U, data: &[U]) {
