@@ -5,6 +5,7 @@ use core::ops::Deref as _;
 
 use smallbox::SmallBox;
 use smallvec::SmallVec;
+use core::ops::Deref;
 
 use crate::{
     __private::wasip1::{self, *},
@@ -162,13 +163,13 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
     /// Adds a dynamically compatible WASM access object to the multiple VFS.
     pub fn add_wasm_access(
         &mut self,
-        name: smallstr::SmallString<[u8; 32]>,
+        name: impl Into<smallstr::SmallString<[u8; 32]>>,
         access: WasmAccessDynCompatibleWrapper,
     ) {
         #[cfg(feature = "threads")]
-        self.wasms.insert(name, access);
+        self.wasms.insert(name.into(), access);
         #[cfg(not(feature = "threads"))]
-        unsafe { &mut *self.wasms.get() }.insert(name, access);
+        unsafe { &mut *self.wasms.get() }.insert(name.into(), access);
     }
 
     /// Adds a statically typed WASM instance to the multiple VFS.
@@ -178,7 +179,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         &mut self,
     ) {
         self.add_wasm_access(
-            <Wasm as WasmAccessName>::NAME.into(),
+            <Wasm as WasmAccessName>::NAME,
             WasmAccessDynCompatibleWrapper::new(Wasm::DEFAULT),
         );
     }

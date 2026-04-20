@@ -1,5 +1,7 @@
 use wasi_virt_layer::file::*;
 use wasi_virt_layer::*;
+use wasi_virt_layer::file::multiple::wasm::WasmAccessDynCompatibleWrapper;
+use wasi_virt_layer::memory::WasmAccessNameDynCompatible;
 
 static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_const();
 
@@ -9,7 +11,11 @@ import_pseudo_wasm!(wasm_holder);
 fn main() {
     let mut vfs = Wasip1MultipleVFS::<BoxedInodeNormal>::new();
 
-    vfs.add_wasm::<wasm_holder>();
+    let wasm = wasm_holder(WASM_HOLDER.restore(()));
+    vfs.add_wasm_access(
+        wasm.name(),
+        WasmAccessDynCompatibleWrapper::new(wasm),
+    );
 
     let lfs1 = ChangeableLFS::<DefaultStdIO>::new();
     let root_inode1 = lfs1.add_preopen(".");
