@@ -325,8 +325,10 @@ impl WasmAccessDynCompatibleRaw for StandardPseudoWasmMultipleHolderInstant<'_> 
 
     #[cfg(not(feature = "multi_memory"))]
     #[inline(always)]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
-        self.refer.get_holder_with(self.refers_to, |holder| (holder.memory_director_raw_ptr.unwrap())(ptr))
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
+        self.refer.get_holder_with(self.refers_to, |holder| {
+            holder.memory_director_raw_ptr.map(|f| f(ptr))
+        })
     }
 
     #[inline(always)]
