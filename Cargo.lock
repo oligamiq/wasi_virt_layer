@@ -382,9 +382,9 @@ checksum = "d9c50fcfdf972929aff202c16b80086aa3cfc6a3a820af714096c58c7c1d0582"
 
 [[package]]
 name = "const_struct"
-version = "0.6.4"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04207617e66ca2c3e0c7847ac072f5e921c498f0b0979f56874c669907835832"
+checksum = "735d4efc6044b13fb0e080265eb8f3e80c44bfa18d4c25dd9abcb0ceb2c51f7b"
 dependencies = [
  "const_struct_derive",
  "crc",
@@ -393,9 +393,9 @@ dependencies = [
 
 [[package]]
 name = "const_struct_derive"
-version = "0.6.4"
+version = "0.6.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a826a86812811697608b61d703f3129cc3247c15163358353e38c0c3ced08e5a"
+checksum = "be51542a1fd7f54220ae8f10a29cf400315f58d3b6a7d73f2ce9ec4627925678"
 dependencies = [
  "convert_case",
  "crc",

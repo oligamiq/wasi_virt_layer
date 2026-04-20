@@ -24,9 +24,9 @@ simple-debug = []
 unstable_print_debug = ["std", "dep:backtrace"]
 
 [dependencies]
-smallvec = { version = "1.10.0", default-features = false, features = [
+smallvec = { version = "1.15.1", default-features = false, features = [
     "union",
-    "new_const",
+    "const_new",
 ] }
 smallstr = { version = "0.3.0", default-features = false, features = ["union"] }
 wit-bindgen = { version = "0.54.0", default-features = false }
