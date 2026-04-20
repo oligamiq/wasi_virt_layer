@@ -521,9 +521,6 @@ impl<File: WasiConstPrimitiveFile> Wasip1FileTrait for WasiConstFile<File> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ConstFiles;
-
-    use const_for::const_for;
 
     /// If not using `--release`, compilation will fail with: link error
     /// cargo test -r --package wasi_virt_layer --lib -- wasi::file::tests::test_file_flat_iterate --exact --show-output

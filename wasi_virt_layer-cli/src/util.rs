@@ -3218,8 +3218,6 @@ impl<C: Borrow<T> + std::cmp::Eq + std::hash::Hash + Clone, T: ?Sized> Iterator
 mod tests {
     use std::{collections::HashSet, sync::Arc};
 
-    use clap::builder::Str;
-
     use super::*;
 
     #[test]
@@ -3314,7 +3312,7 @@ mod tests {
         println!("Iterator created: {:?}", iterator);
 
         let combinations = iterator.collect::<Vec<_>>();
-        let combinations2 = iterator2.collect::<Vec<_>>();
+        let _combinations2 = iterator2.collect::<Vec<_>>();
 
         let expected = vec![
             HashSet::from([]),
@@ -3343,14 +3341,12 @@ mod tests {
 
         println!("Iterator created: {:?}", iterator);
 
-        let combinations = iterator.collect::<Vec<_>>();
+        let _combinations = iterator.collect::<Vec<_>>();
     }
 
     #[test]
     #[should_panic(expected = "Mutual reference detected!")]
     fn test_feature_combination_iterator_mutual_ref() {
-        use std::collections::HashSet;
-
         // A includes B
         // B includes A
         // Cycle!
