@@ -485,6 +485,18 @@ pub trait WasmAccessName: core::fmt::Debug {
 pub trait WasmAccessNameDynCompatible: core::fmt::Debug {
     /// Returns the name of the WASM module access.
     fn with_name(&self, f: &mut dyn FnMut(&str));
+
+    /// Helper method to get the name as a `String`.
+    fn name(&self) -> alloc::string::String {
+        let mut name = None;
+        self.with_name(&mut |n| name = Some(n.to_string()));
+        name.expect("WasmAccessNameDynCompatible must provide a name")
+    }
+
+    /// Helper method to get the name as a `SmallString`.
+    fn smmallstr(&self) -> smallstr::SmallString<[u8; 32]> {
+        self.name().into()
+    }
 }
 
 impl<T: WasmAccessNameDynCompatible + ?Sized> WasmAccessNameDynCompatible for &T {

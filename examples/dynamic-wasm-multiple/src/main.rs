@@ -1,7 +1,5 @@
 use wasi_virt_layer::file::*;
 use wasi_virt_layer::*;
-use wasi_virt_layer::file::multiple::wasm::WasmAccessDynCompatibleWrapper;
-use wasi_virt_layer::memory::WasmAccessNameDynCompatible;
 use wasi_virt_layer::file::multiple::dynamic_wasm::StandardPseudoWasmMultipleHolder;
 
 static WASM_MULTIPLE_HOLDER: StandardPseudoWasmMultipleHolder = StandardPseudoWasmMultipleHolder::new();
@@ -14,8 +12,7 @@ fn main() {
     // Use the generated struct to add the pseudo Wasm module with ID 0
     let wasm = WASM_MULTIPLE_HOLDER.restore(0);
     vfs.add_wasm_access(
-        wasm.name(),
-        WasmAccessDynCompatibleWrapper::new(wasm),
+        wasm,
     );
 
     let lfs1 = ChangeableLFS::<DefaultStdIO>::new();

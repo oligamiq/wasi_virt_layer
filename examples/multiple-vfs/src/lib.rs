@@ -76,7 +76,7 @@ mod fs {
         lfs1.add_file(root_inode1, "lfs1.txt", b"Content from LFS 1".to_vec())
             .unwrap();
 
-        vfs.add_lfs(Box::new(lfs1));
+        vfs.add_lfs(lfs1);
         vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
 
         // Create second LFS
@@ -85,7 +85,7 @@ mod fs {
         lfs2.add_file(root_inode2, "lfs2.txt", b"Content from LFS 2".to_vec())
             .unwrap();
 
-        vfs.add_lfs(Box::new(lfs2));
+        vfs.add_lfs(lfs2);
         vfs.add_preopen_fd(1, BoxedInodeNormal::from_inode(root_inode2));
 
         vfs

@@ -10,10 +10,9 @@ export_pseudo_wasm!(wasm_holder);
 fn main() {
     let mut vfs = Wasip1MultipleVFS::<BoxedInodeNormal>::new();
 
-    let wasm = wasm_holder(WASM_HOLDER.restore(()));
+    let wasm = WASM_HOLDER.restore(());
     vfs.add_wasm_access(
-        wasm.name(),
-        WasmAccessDynCompatibleWrapper::new(wasm),
+        wasm,
     );
 
     let lfs1 = ChangeableLFS::<DefaultStdIO>::new();

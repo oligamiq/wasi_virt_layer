@@ -158,7 +158,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
     }
 
     /// Adds a dynamically compatible WASM access object to the multiple VFS.
-    pub fn add_wasm_access(
+    pub fn add_wasm_access_by_name(
         &mut self,
         name: impl Into<smallstr::SmallString<[u8; 32]>>,
         access: WasmAccessDynCompatibleWrapper,
@@ -169,13 +169,25 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         unsafe { &mut *self.wasms.get() }.insert(name.into(), access);
     }
 
+    pub fn add_wasm_access(
+        &mut self,
+        access: impl WasmAccessDynCompatibleTuple + 'static,
+    ) {
+        let mut name = core::mem::MaybeUninit::<smallstr::SmallString<[u8; 32]>>::uninit();
+        access.with_name(&mut |n| {
+            name.write(n.into());
+        });
+        let name = unsafe { name.assume_init() };
+        self.add_wasm_access_by_name(name, WasmAccessDynCompatibleWrapper::new(access));
+    }
+
     /// Adds a statically typed WASM instance to the multiple VFS.
     pub fn add_wasm<
         Wasm: WasmAccessDynCompatibleTuple + WasmAccessName + ConstDefault + 'static,
     >(
         &mut self,
     ) {
-        self.add_wasm_access(
+        self.add_wasm_access_by_name(
             <Wasm as WasmAccessName>::NAME,
             WasmAccessDynCompatibleWrapper::new(Wasm::DEFAULT),
         );
