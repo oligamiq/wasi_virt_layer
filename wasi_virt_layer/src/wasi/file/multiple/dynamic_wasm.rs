@@ -158,6 +158,8 @@ macro_rules! export_pseudo_wasm {
 }
 
 /// Like `import_wasm!`, but for pseudo-Wasm modules.
+/// This macro generates a struct that implements `WasmAccessDynCompatibleRaw` and `WasmAccessNameDynCompatible` only.
+/// This macro must can use StandardPseudoWasmHolder, and StandardPseudoWasmMultipleHolder, or any struct that implements PseudoWasmTrait as the holder.
 #[macro_export]
 macro_rules! import_pseudo_wasm {
     ($name:ident) => {
@@ -174,83 +176,6 @@ macro_rules! import_pseudo_wasm {
         };
 
         $crate::__private::paste::paste! {
-            #[allow(non_camel_case_types)]
-            #[derive(Debug, Clone, Copy)]
-            pub struct $name;
-
-            impl $crate::__private::ConstDefault for $name {
-                const DEFAULT: Self = Self;
-            }
-
-            impl $crate::memory::WasmAccessName for $name {
-                const NAME: &'static str = stringify!($name);
-            }
-
-            impl $crate::memory::WasmAccessDynCompatibleRaw for $name {
-                #[inline(always)]
-                fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default()).memcpy_raw(offset, src, len)
-                }
-
-                #[inline(always)]
-                fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default()).memcpy_to_raw(offset, src, len)
-                }
-
-                #[cfg(not(feature = "multi_memory"))]
-                #[inline(always)]
-                fn memory_director_raw(&self, ptr: isize) -> isize {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default()).memory_director_raw(ptr)
-                }
-
-                #[inline(always)]
-                fn _main_raw(&self) -> $crate::__private::wasip1::Errno {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default())._main_raw()
-                }
-
-                #[inline(always)]
-                fn _reset_raw(&self) {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default())._reset_raw()
-                }
-
-                #[inline(always)]
-                fn _start_raw(&self) {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default())._start_raw()
-                }
-            }
-
-            impl $crate::memory::WasmAccessRaw for $name {
-                #[inline(always)]
-                fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize) {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default()).memcpy_raw(offset, src, len)
-                }
-
-                #[inline(always)]
-                fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize) {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default()).memcpy_to_raw(offset, src, len)
-                }
-
-                #[cfg(not(feature = "multi_memory"))]
-                #[inline(always)]
-                fn memory_director_raw(ptr: isize) -> isize {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default()).memory_director_raw(ptr)
-                }
-
-                #[inline(always)]
-                fn _main_raw() -> $crate::__private::wasip1::Errno {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default())._main_raw()
-                }
-
-                #[inline(always)]
-                fn _reset_raw() {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default())._reset_raw()
-                }
-
-                #[inline(always)]
-                fn _start_raw() {
-                    $crate::file::PseudoWasmTrait::restore($holder, core::default::Default::default())._start_raw()
-                }
-            }
         }
     };
 }
