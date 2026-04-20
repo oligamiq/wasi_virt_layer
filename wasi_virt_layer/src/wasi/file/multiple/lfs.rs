@@ -18,8 +18,10 @@ use crate::{
     },
 };
 
+/// A wrapper around a dynamically compatible WASI filesystem.
 #[derive(Debug)]
 pub struct Wasip1DynCompatibleLFSWrapper<B: BoxedInode> {
+    /// The boxed dynamically compatible file system.
     pub lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>,
 }
 
@@ -27,6 +29,7 @@ unsafe impl<B: BoxedInode> Send for Wasip1DynCompatibleLFSWrapper<B> {}
 unsafe impl<B: BoxedInode> Sync for Wasip1DynCompatibleLFSWrapper<B> {}
 
 impl<B: BoxedInode> Wasip1DynCompatibleLFSWrapper<B> {
+    /// Creates a new `Wasip1DynCompatibleLFSWrapper`.
     pub fn new(lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>) -> Self {
         Self { lfs }
     }
@@ -58,19 +61,27 @@ use core::cell::UnsafeCell;
 #[cfg(not(feature = "threads"))]
 use alloc::collections::BTreeMap;
 
+/// A virtual file system that supports multiple underlying file systems and multiple WASM instances.
 pub struct Wasip1MultipleVFS<B: BoxedInode = BoxedInodeNormal, OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd> {
+    /// The list of file systems added to this multiple VFS.
     pub lfss: SmallVec<[Wasip1DynCompatibleLFSWrapper<B>; 4]>,
+    /// Mapping of WASM instance names to their memory access objects.
     #[cfg(feature = "threads")]
     pub wasms: DashMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>,
+    /// Mapping of WASM instance names to their memory access objects.
     #[cfg(not(feature = "threads"))]
     pub wasms:
         UnsafeCell<BTreeMap<smallstr::SmallString<[u8; 32]>, WasmAccessDynCompatibleWrapper>>,
+    /// Map of file descriptors to their corresponding file system index and open file object.
     #[cfg(feature = "threads")]
     pub fd_map: DashMap<Fd, (usize, OpenFd)>,
+    /// The next file descriptor number to allocate.
     #[cfg(feature = "threads")]
     pub next_fd: std::sync::atomic::AtomicU32,
+    /// Map of file descriptors to their corresponding file system index and open file object.
     #[cfg(not(feature = "threads"))]
     pub fd_map: UnsafeCell<BTreeMap<Fd, (usize, OpenFd)>>,
+    /// The next file descriptor number to allocate.
     #[cfg(not(feature = "threads"))]
     pub next_fd: UnsafeCell<Fd>,
 }
@@ -101,6 +112,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug for 
 
 
 impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, OpenFd> {
+    /// Creates a new `Wasip1MultipleVFS` instance.
     pub fn new() -> Self {
         Self {
             lfss: SmallVec::new(),
@@ -119,10 +131,12 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         }
     }
 
+    /// Adds a file system to the multiple VFS.
     pub fn add_lfs(&mut self, lfs: alloc::boxed::Box<dyn Wasip1DynCompatibleLFS<B>>) {
         self.lfss.push(Wasip1DynCompatibleLFSWrapper::new(lfs));
     }
 
+    /// Adds a dynamically compatible WASM access object to the multiple VFS.
     pub fn add_wasm_access(
         &mut self,
         name: smallstr::SmallString<[u8; 32]>,
@@ -134,6 +148,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         unsafe { &mut *self.wasms.get() }.insert(name, access);
     }
 
+    /// Adds a statically typed WASM instance to the multiple VFS.
     pub fn add_wasm<Wasm: WasmAccessDynCompatibleTuple + WasmAccessName + ConstDefault + 'static>(&mut self) {
         self.add_wasm_access(<Wasm as WasmAccessName>::NAME.into(), WasmAccessDynCompatibleWrapper::new(Wasm::DEFAULT));
     }
@@ -193,6 +208,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         }
     }
 
+    /// Adds an opened file descriptor to the VFS.
     pub fn add_fd(
         &self,
         lfs_idx: usize,
@@ -206,6 +222,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, 
         self.allocate_fd(lfs_idx, open_fd)
     }
 
+    /// Adds a preopened file descriptor (like a root directory) to the VFS.
     pub fn add_preopen_fd(
         &self,
         lfs_idx: usize,

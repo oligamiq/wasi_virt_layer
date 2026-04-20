@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 #[allow(dead_code)]
 #[allow(missing_docs)]
 #[cfg(feature = "threads")]

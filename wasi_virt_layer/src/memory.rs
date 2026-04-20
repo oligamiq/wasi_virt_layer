@@ -195,6 +195,7 @@ macro_rules! import_wasm {
     };
 }
 
+/// Internal macro used to generate the `memory_director_raw` method for WASM access.
 #[cfg(not(feature = "multi_memory"))]
 #[macro_export]
 macro_rules! __memory_director_wasm_access {
@@ -229,6 +230,7 @@ macro_rules! __memory_director_wasm_access {
     };
 }
 
+/// Internal macro used to generate the `memory_director_raw` method for WASM access (multi-memory).
 #[cfg(feature = "multi_memory")]
 #[macro_export]
 macro_rules! __memory_director_wasm_access {
@@ -237,6 +239,7 @@ macro_rules! __memory_director_wasm_access {
     (@const, $_:ident) => {};
 }
 
+/// Internal macro used to generate memory trap and director imports for WASM access.
 #[cfg(not(feature = "multi_memory"))]
 #[macro_export]
 macro_rules! __memory_director_import_etc {
@@ -268,6 +271,7 @@ macro_rules! __memory_director_import_etc {
     };
 }
 
+/// Internal macro used to generate memory trap and director imports for WASM access (multi-memory).
 #[cfg(feature = "multi_memory")]
 #[macro_export]
 macro_rules! __memory_director_import_etc {
@@ -465,11 +469,15 @@ impl<T: core::fmt::Debug + Copy, Wasm: WasmAccess + ?Sized> Iterator
     }
 }
 
+/// A trait for providing the name of the WASM module access.
 pub trait WasmAccessName: core::fmt::Debug {
+    /// The name of the WASM module access.
     const NAME: &'static str;
 }
 
+/// A dynamically compatible trait for providing the name of the WASM module access.
 pub trait WasmAccessNameDynCompatible: core::fmt::Debug {
+    /// Returns the name of the WASM module access.
     fn name(&self) -> &'static str;
 }
 
@@ -479,6 +487,7 @@ impl<T: WasmAccessName> WasmAccessNameDynCompatible for T {
     }
 }
 
+/// A dynamically compatible trait for low-level memory operations in WASM.
 pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize);
@@ -486,33 +495,44 @@ pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     /// Copies data from the source pointer into the provided mutable slice of WASM memory.
     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize);
 
+    /// Directs a pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(&self, ptr: isize) -> isize;
 
+    /// Execute the `_main` entrypoint of the WASM module.
     fn _main_raw(&self) -> wasip1::Errno;
 
+    /// Resets the memory state of the WASM module.
     fn _reset_raw(&self);
 
+    /// Executes the `_start` initialization entrypoint.
     fn _start_raw(&self);
 }
 
+/// A dynamically compatible trait providing high-level memory operations in WASM.
 pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
+    /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy_with<T>(&self, offset: *mut T, data: &[T]);
 
+    /// Copies data from the source pointer into the provided mutable slice of WASM memory.
     fn memcpy_to_with<T>(&self, offset: &mut [T], src: *const T);
 
+    /// Stores a value in WASM memory at the given offset using little-endian encoding.
     fn store_le_with<T>(&self, offset: *mut T, value: T);
 
+    /// Loads a value from WASM memory at the given offset using little-endian encoding.
     fn load_le_with<T: core::fmt::Debug + Copy>(&self, offset: *const T) -> T;
 
+    /// Helper method to create a `WasmArrayAccessDynCompatible` for the given pointer and length.
     fn as_array_with<T: core::fmt::Debug + Copy>(
         &self,
         ptr: *const T,
         len: usize,
-    ) -> WasmArrayAccessDynCompatible<T, Self> {
+    ) -> WasmArrayAccessDynCompatible<'_, '_, T, Self> {
         WasmArrayAccessDynCompatible::new(self, ptr, len)
     }
 
+    /// Returns a box containing the data from the WASM array.
     #[cfg(feature = "alloc")]
     fn get_array_with<T: core::fmt::Debug + Copy>(
         &self,
@@ -530,16 +550,21 @@ pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
         buff
     }
 
+    /// Directs a pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_with<T>(&self, ptr: *const T) -> *const T;
 
+    /// Directs a mutable pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_mut_with<T>(&self, ptr: *mut T) -> *mut T;
 
+    /// Execute the `_main` entrypoint of the WASM module.
     fn _main_with(&self) -> wasip1::Errno;
 
+    /// Resets the memory state of the WASM module.
     fn _reset_with(&self);
 
+    /// Executes the `_start` initialization entrypoint.
     fn _start_with(&self);
 }
 
@@ -610,21 +635,29 @@ impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatible for T {
     }
 }
 
+/// A trait for low-level static memory operations in WASM.
 pub trait WasmAccessRaw: core::fmt::Debug {
+    /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy_raw(offset: *mut u8, src: *const u8, len: usize);
 
+    /// Copies data from the source pointer into the provided mutable slice of WASM memory.
     fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize);
 
+    /// Directs a pointer to its mapped address in a single-memory model.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(ptr: isize) -> isize;
 
+    /// Execute the `_main` entrypoint of the WASM module.
     fn _main_raw() -> wasip1::Errno;
 
+    /// Resets the memory state of the WASM module.
     fn _reset_raw();
 
+    /// Executes the `_start` initialization entrypoint.
     fn _start_raw();
 }
 
+/// Utility trait providing generic upper-level memory operations for WASM access.
 pub trait WasmAccessMemoryUtilUpper {
     /// Require `memcpy_raw` to be implemented.
     fn memcpy_upper<U>(self, offset: *mut U, data: &[U])
@@ -645,6 +678,7 @@ pub trait WasmAccessMemoryUtilUpper {
         self.memcpy_upper_with_inline(t, offset, data);
     }
 
+    /// Inlined version of `memcpy_upper_with`.
     #[inline(always)]
     fn memcpy_upper_with_inline<U, T>(self, t: T, offset: *mut U, data: &[U])
     where
@@ -677,6 +711,7 @@ pub trait WasmAccessMemoryUtilUpper {
         self.memcpy_to_upper_with_inline(t, offset, src);
     }
 
+    /// Inlined version of `memcpy_to_upper_with`.
     #[inline(always)]
     fn memcpy_to_upper_with_inline<U, T>(self, t: T, offset: &mut [U], src: *const U)
     where
@@ -709,6 +744,7 @@ pub trait WasmAccessMemoryUtilUpper {
         self.store_le_upper_with_inline(t, offset, value);
     }
 
+    /// Inline version of `store_le_upper_with`.
     #[inline(always)]
     fn store_le_upper_with_inline<U, T>(self, t: T, offset: *mut U, value: U)
     where
@@ -738,6 +774,7 @@ pub trait WasmAccessMemoryUtilUpper {
         self.load_le_upper_with_inline(t, offset)
     }
 
+    /// Inline version of `load_le_upper_with`.
     #[inline(always)]
     fn load_le_upper_with_inline<U: core::fmt::Debug + Copy, T>(self, t: T, offset: *const U) -> U
     where
@@ -796,6 +833,7 @@ impl<T: WasmAccessRaw> WasmAccess for T {
     }
 }
 
+/// A trait providing high-level static memory operations in WASM.
 pub trait WasmAccess: WasmAccessRaw {
     /// Copies a slice of data into WASM memory starting at the given offset.
     fn memcpy<T>(offset: *mut T, data: &[T]);
@@ -933,17 +971,24 @@ pub struct WasmPathComponents<'a, Wasm: WasmAccess + ?Sized> {
     path: WasmArrayAccess<'a, u8, Wasm>,
 }
 
+/// A common trait for components of a WASM path.
 pub trait WasmPathComponentCommon: core::fmt::Debug + Copy + PartialEq {
+    /// Returns true if the component represents the root directory `/`.
     fn as_root_dir(&self) -> bool;
 
+    /// Returns true if the component represents the current directory `.`.
     fn as_cur_dir(&self) -> bool;
 
+    /// Returns true if the component represents the parent directory `..`.
     fn as_parent_dir(&self) -> bool;
 
+    /// Returns the bytes of the normal directory/file name component.
     fn as_normal(&self) -> Option<impl IntoIterator<Item = u8> + Clone + '_>;
 }
 
+/// A common trait for accessing components of a WASM path.
 pub trait WasmPathAccessCommon: core::fmt::Debug {
+    /// Returns an iterator over the components of the path.
     fn components_common<'a>(
         &'a self,
     ) -> impl Iterator<Item = impl WasmPathComponentCommon + 'a> + 'a;
@@ -1201,6 +1246,7 @@ impl<'a, 'b, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized>
     }
 }
 
+/// A dynamically compatible iterator over elements in a WASM array.
 pub struct WasmArrayAccessDynCompatibleIterator<
     'c,
     T: core::fmt::Debug + Copy,
@@ -1240,6 +1286,7 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> Ite
     }
 }
 
+/// A dynamically compatible mutable iterator over elements in a WASM array.
 pub struct WasmArrayAccessDynCompatibleMutIterator<
     'c,
     T: core::fmt::Debug + Copy,
@@ -1263,6 +1310,7 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible>
     }
 }
 
+/// A component representing a single mutable element in a dynamically compatible WASM array iterator.
 pub struct WasmArrayAccessDynCompatibleMutIteratorComponent<
     'c,
     T: core::fmt::Debug + Copy,
@@ -1303,6 +1351,7 @@ impl<'c, T: core::fmt::Debug + Copy, Wasm: WasmAccessDynCompatible + ?Sized> Ite
     }
 }
 
+/// A dynamically compatible structure for accessing a file path in WASM memory.
 #[derive(Debug)]
 pub struct WasmPathAccessDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> {
     path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
@@ -1356,15 +1405,21 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> WasmPathAccessCommon
     }
 }
 
+/// A dynamically compatible iterator over the components of a WASM path.
 pub struct WasmPathComponentsDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> {
     path: WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>,
 }
 
+/// A component of a dynamically compatible WASM path.
 #[derive(Debug)]
 pub enum WasmPathComponentDynCompatible<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> {
+    /// The root directory component.
     RootDir,
+    /// The current directory component.
     CurDir,
+    /// The parent directory component.
     ParentDir,
+    /// A normal path component.
     Normal(WasmArrayAccessDynCompatible<'a, 'b, u8, Wasm>),
 }
 
@@ -1413,6 +1468,7 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> PartialEq
 }
 
 impl<'a, 'b, Wasm: WasmAccessDynCompatible> WasmPathComponentDynCompatible<'a, 'b, Wasm> {
+    /// Checks if the path component is equal to the given string.
     pub fn eq_str(&self, other: &str) -> bool {
         match self {
             WasmPathComponentDynCompatible::RootDir => other == "/",

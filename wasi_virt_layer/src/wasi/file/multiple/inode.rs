@@ -9,6 +9,7 @@ use crate::{
     },
 };
 
+/// A normal boxed inode used for multiple file systems.
 #[derive(Debug)]
 pub struct BoxedInodeNormal(SmallBox<dyn InodeIdCommon, [usize; 4]>);
 

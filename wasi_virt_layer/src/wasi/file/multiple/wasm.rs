@@ -4,6 +4,7 @@ use crate::{
     memory::{WasmAccessDynCompatibleRaw, WasmAccessNameDynCompatible},
 };
 
+/// A trait tuple combining `WasmAccessNameDynCompatible` and `WasmAccessDynCompatibleRaw`.
 pub trait WasmAccessDynCompatibleTuple:
     WasmAccessNameDynCompatible + WasmAccessDynCompatibleRaw
 {
@@ -14,6 +15,7 @@ impl<T: WasmAccessNameDynCompatible + WasmAccessDynCompatibleRaw> WasmAccessDynC
 {
 }
 
+/// A wrapper around a dynamic `WasmAccessDynCompatibleTuple`.
 #[derive(Debug)]
 pub struct WasmAccessDynCompatibleWrapper(pub alloc::boxed::Box<dyn WasmAccessDynCompatibleTuple>);
 
@@ -33,6 +35,7 @@ impl AsRef<dyn WasmAccessDynCompatibleRaw> for WasmAccessDynCompatibleWrapper {
 }
 
 impl WasmAccessDynCompatibleWrapper {
+    /// Creates a new `WasmAccessDynCompatibleWrapper` from a given access tuple.
     pub fn new<T: WasmAccessDynCompatibleTuple + 'static>(access: T) -> Self {
         Self(alloc::boxed::Box::new(access))
     }

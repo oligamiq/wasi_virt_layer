@@ -45,7 +45,9 @@ pub struct FilestatWithoutDevice {
     pub ctim: Timestamp,
 }
 
+/// Trait for a type that provides a constant default value.
 pub trait ConstDefault: core::fmt::Debug {
+    /// The constant default value.
     const DEFAULT: Self;
 }
 
@@ -258,6 +260,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<Self::Inode, wasip1::Errno>;
 }
 
+/// Trait for a static or constant local file system implementation.
 pub trait Wasip1ConstLFS: Wasip1LFSBase
 where
     Self::Inode: 'static,
@@ -354,6 +357,7 @@ pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
     );
 }
 
+/// Trait for a dynamically compatible local file system.
 pub trait Wasip1DynCompatibleLFS<B: BoxedInode>: core::fmt::Debug {
     fn pre_open_inodes(&self, f: &mut dyn for<'a> FnMut(&'a dyn Wasip1DynCompatibleLFSSlice));
 
@@ -493,6 +497,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
         }
     }
 
+    /// Reads data from the file into the provided buffer at a given offset compatible with dynamic dispatch.
     fn pread_raw_dyn_compatible(
         &self,
         access: &dyn WasmAccessDynCompatibleRaw,

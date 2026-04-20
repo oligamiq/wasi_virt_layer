@@ -203,6 +203,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
         }
     }
 
+    /// Creates a new `StaticArrayBuilder`.
     pub const fn new() -> Self {
         Self::const_new()
     }
