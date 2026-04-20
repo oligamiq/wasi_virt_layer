@@ -55,11 +55,7 @@ pub struct FilestatWithoutDevice {
     pub ctim: Timestamp,
 }
 
-/// Trait for a type that provides a constant default value.
-pub trait ConstDefault: core::fmt::Debug {
-    /// The constant default value.
-    const DEFAULT: Self;
-}
+pub use const_struct::ConstDefault;
 
 /// Additional mutable info for an inode.
 pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
