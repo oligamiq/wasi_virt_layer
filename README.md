@@ -9,29 +9,22 @@ cargo binstall wasi_virt_layer-cli
 1. Prepare a WebAssembly module built for wasip1 (e.g. wasm32-wasip1 or wasm32-wasip1-threads).
 2. Create a new virtual filesystem (VFS) project with
 ```bash
-cargo new --lib name
+wasi_virt_layer new my_vfs_project
 ```
-and add the following to your Cargo.toml:
-```toml
-[lib]
-crate-type = ["cdylib"]
-```
-3. Add wasi_virt_layer and wit-bindgen as dependencies, and create a wit directory.
-
-   Note: if your module uses the const virtual file system template, enable the `const-fs` feature for `wasi_virt_layer`.
-4. Use the import_wasm! macro to prepare for using the wasm module.
-5. Use the plug! macro series (plug_process!, plug_env!, etc.) to connect to the wasip1 ABI, and link virtual filesystems or virtual environment variables.
-6. Run the command
+   This will automatically set up `Cargo.toml` with `crate-type = ["cdylib"]` and the necessary dependencies (`wasi_virt_layer`, `wit-bindgen`), as well as a basic `wit` directory and template source code.
+3. Edit your VFS implementation. Use the `import_wasm!` macro to prepare for using the target wasm module.
+4. Use the `plug!` macro series (`plug_process!`, `plug_env!`, `plug_fs!`, etc.) to connect to the wasip1 ABI, and link virtual filesystems or virtual environment variables.
+5. Run the build command
 ```bash
-wasi_virt_layer wasm_path
+wasi_virt_layer build <wasm_path> -p my_vfs_project
 ```
-to execute the program.
-7. The built files will be generated in the dist directory.
-8. Run it with
+   to execute the virtualization process.
+6. The built files (including the transpiled JavaScript if applicable) will be generated in the `dist` directory.
+7. Run it with Deno or Node.js:
 ```bash
 deno run dist/test_run.ts
 ```
-or start a static server and open test_run.html in your browser.
+or start a static server and open `test_run.html` in your browser.
 
 ## As a component
 By using plug! to block all WASIp1 ABIs and creating the ABI solely with wit-bindgen, it is entirely possible to treat it as a component. However, wasip1-threads is not supported as per the specification.
