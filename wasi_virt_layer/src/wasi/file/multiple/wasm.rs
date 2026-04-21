@@ -46,7 +46,7 @@ impl WasmAccessDynCompatibleRaw for WasmAccessDynCompatibleWrapper {
 
     #[cfg(not(feature = "multi_memory"))]
     #[inline(always)]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
         self.0.memory_director_raw(ptr)
     }
 

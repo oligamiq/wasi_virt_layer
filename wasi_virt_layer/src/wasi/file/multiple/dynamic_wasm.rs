@@ -169,8 +169,8 @@ impl WasmAccessDynCompatibleRaw for StandardPseudoWasmHolder {
 
     #[cfg(not(feature = "multi_memory"))]
     #[inline(always)]
-    fn memory_director_raw(&self, ptr: isize) -> isize {
-        (self.get().memory_director_raw_ptr.unwrap())(ptr)
+    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
+        Some((self.get().memory_director_raw_ptr.unwrap())(ptr))
     }
 
     #[inline(always)]

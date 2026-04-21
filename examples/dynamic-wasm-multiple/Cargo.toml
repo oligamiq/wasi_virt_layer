@@ -4,6 +4,13 @@ version.workspace = true
 edition.workspace = true
 publish = false
 
+[dependencies]
+wit-bindgen = "0.54.0"
+parking_lot = "0.12.3"
+
 [dependencies.wasi_virt_layer]
 workspace = true
 features = ["std", "alloc", "changeable-fs", "multiple-fs"]
+
+[lib]
+crate-type = ["cdylib"]

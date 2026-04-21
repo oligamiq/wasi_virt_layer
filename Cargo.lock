@@ -654,14 +654,18 @@ dependencies = [
 name = "dynamic-wasm"
 version = "0.1.5"
 dependencies = [
+ "parking_lot",
  "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "dynamic-wasm-multiple"
 version = "0.1.5"
 dependencies = [
+ "parking_lot",
  "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
 ]
 
 [[package]]
