@@ -167,7 +167,7 @@ pub(crate) const fn merge_arrays_to_tuples<T: Copy, U: Copy, const N: usize>(
     b: [U; N],
 ) -> [(T, U); N] {
     use const_for::const_for;
-    let mut key_with_values = StaticArrayBuilder::new();
+    let mut key_with_values = EmbeddedArrayBuilder::new();
     const_for!(i in 0..N => {
         key_with_values.push((a[i], b[i]));
     });
@@ -178,8 +178,8 @@ pub(crate) const fn split_tuples_to_arrays<T: Copy, U: Copy, const N: usize>(
     tuples: &[(T, U); N],
 ) -> ([T; N], [U; N]) {
     use const_for::const_for;
-    let mut keys = StaticArrayBuilder::new();
-    let mut values = StaticArrayBuilder::new();
+    let mut keys = EmbeddedArrayBuilder::new();
+    let mut values = EmbeddedArrayBuilder::new();
     const_for!(i in 0..N => {
         keys.push(tuples[i].0);
         values.push(tuples[i].1);
@@ -189,23 +189,23 @@ pub(crate) const fn split_tuples_to_arrays<T: Copy, U: Copy, const N: usize>(
 
 /// A fixed-capacity array builder that can be used in `const` context.
 #[derive(Debug, Clone, Copy)]
-pub struct StaticArrayBuilder<T: Copy, const N: usize> {
+pub struct EmbeddedArrayBuilder<T: Copy, const N: usize> {
     data: [Option<T>; N],
     len: usize,
 }
 
-impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
-    /// Creates a new `StaticArrayBuilder`.
-    pub const fn new_const() -> Self {
+impl<T: Copy, const N: usize> EmbeddedArrayBuilder<T, N> {
+    /// Creates a new `EmbeddedArrayBuilder`.
+    pub const fn new_embedded() -> Self {
         Self {
             data: [None; N],
             len: 0,
         }
     }
 
-    /// Creates a new `StaticArrayBuilder`.
+    /// Creates a new `EmbeddedArrayBuilder`.
     pub const fn new() -> Self {
-        Self::new_const()
+        Self::new_embedded()
     }
 
     /// Pushes a value into the builder. Returns `Some(value)` if the builder is full.
@@ -288,7 +288,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
             if let Some(value) = self.data[i] {
                 array[i] = value;
             } else {
-                panic!("StaticArrayBuilder is not full, cannot build array");
+                panic!("EmbeddedArrayBuilder is not full, cannot build array");
             }
         });
 
@@ -306,7 +306,7 @@ impl<T: Copy, const N: usize> StaticArrayBuilder<T, N> {
                 array[i] = value;
             } else {
                 if is_full {
-                    panic!("StaticArrayBuilder is not full, cannot build array");
+                    panic!("EmbeddedArrayBuilder is not full, cannot build array");
                 }
             }
         });
@@ -335,7 +335,7 @@ pub struct InitOnce {
 
 impl InitOnce {
     /// Creates a new `InitOnce` instance.
-    pub const fn new_const() -> Self {
+    pub const fn new_embedded() -> Self {
         Self {
             is_init: core::sync::atomic::AtomicBool::new(false),
         }

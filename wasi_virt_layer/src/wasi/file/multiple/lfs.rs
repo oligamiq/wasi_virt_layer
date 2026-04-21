@@ -31,7 +31,7 @@ unsafe impl<B: BoxedInode> Sync for Wasip1DynCompatibleLFSWrapper<B> {}
 
 impl<B: BoxedInode> Wasip1DynCompatibleLFSWrapper<B> {
     /// Creates a new `Wasip1DynCompatibleLFSWrapper`.
-    pub const fn new_const(lfs: Wasip1DynCompatibleLFSWrapperInner<B>) -> Self {
+    pub const fn new_embedded(lfs: Wasip1DynCompatibleLFSWrapperInner<B>) -> Self {
         Self { lfs }
     }
 
@@ -69,7 +69,7 @@ use core::cell::UnsafeCell;
 use alloc::collections::BTreeMap;
 
 /// A virtual file system that supports multiple underlying file systems and multiple WASM instances.
-pub struct Wasip1MultipleVFS<
+pub struct StandardMultipleFileSystem<
     B: BoxedInode = BoxedInodeNormal,
     OpenFd: OpenFdInfoWithInode + 'static = DetailedDynamicOpenFd,
 > {
@@ -97,19 +97,19 @@ pub struct Wasip1MultipleVFS<
 }
 
 unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Send
-    for Wasip1MultipleVFS<B, OpenFd>
+    for StandardMultipleFileSystem<B, OpenFd>
 {
 }
 unsafe impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Sync
-    for Wasip1MultipleVFS<B, OpenFd>
+    for StandardMultipleFileSystem<B, OpenFd>
 {
 }
 
 impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug
-    for Wasip1MultipleVFS<B, OpenFd>
+    for StandardMultipleFileSystem<B, OpenFd>
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let mut debug_struct = f.debug_struct("Wasip1MultipleVFS");
+        let mut debug_struct = f.debug_struct("StandardMultipleFileSystem");
         debug_struct.field("lfss", &self.lfss);
 
         #[cfg(feature = "threads")]
@@ -128,8 +128,8 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug
     }
 }
 
-impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> Wasip1MultipleVFS<B, OpenFd> {
-    /// Creates a new `Wasip1MultipleVFS` instance.
+impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> StandardMultipleFileSystem<B, OpenFd> {
+    /// Creates a new `StandardMultipleFileSystem` instance.
     pub fn new() -> Self {
         Self {
             lfss: SmallVec::new(),
@@ -357,7 +357,7 @@ macro_rules! get_inode {
 }
 
 impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1FileSystem
-    for Wasip1MultipleVFS<B, OpenFd>
+    for StandardMultipleFileSystem<B, OpenFd>
 {
     fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,

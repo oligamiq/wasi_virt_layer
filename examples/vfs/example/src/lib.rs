@@ -16,8 +16,8 @@ impl Guest for Hello {
     fn world() {
         println!("Hello, world!");
 
-        type F = WasiConstFile<&'static str>;
-        const FILES2: VFSConstNormalFiles<F, 5> = ConstFiles!([(
+        type F = WasiEmbeddedFile<&'static str>;
+        const FILES2: StandardEmbeddedFiles<F, 5> = EmbeddedFiles!([(
             ".",
             [
                 ("hey", F::new("Hey!")),
@@ -76,7 +76,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
 plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), test_wasm);
 
 #[const_struct]
-const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
+const HOST_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     environ: &[
         // "RUST_MIN_STACK=16777216",
         "HOME=~/",
@@ -84,22 +84,22 @@ const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
     ],
 };
 
-plug_env!(@const, HostEnvTy, self);
+plug_env!(@embedded, HostEnvTy, self);
 
 const FILE_COUNT: usize = 10;
 
 #[const_struct]
-const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
-    ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
+const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> = EmbeddedFiles!([
+    ("/root", [("root.txt", WasiEmbeddedFile::new("This is root"))]),
     (
         ".",
         [
-            ("hey", WasiConstFile::new("Hey!")),
+            ("hey", WasiEmbeddedFile::new("Hey!")),
             (
                 "hello",
                 [
-                    ("world", WasiConstFile::new("Hello, world!")),
-                    ("everyone", WasiConstFile::new("Hello, everyone!")),
+                    ("world", WasiEmbeddedFile::new("Hello, world!")),
+                    ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
                 ]
             )
         ]
@@ -107,8 +107,8 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = 
     (
         "~",
         [
-            ("home", WasiConstFile::new("This is home")),
-            ("user", WasiConstFile::new("This is user")),
+            ("home", WasiEmbeddedFile::new("This is home")),
+            ("user", WasiEmbeddedFile::new("This is user")),
         ]
     )
 ]);
@@ -116,10 +116,13 @@ const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = 
 mod fs {
     use super::*;
 
-    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
+    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
-    static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());
+    static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
+        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_wasm);
 }
+
+
+

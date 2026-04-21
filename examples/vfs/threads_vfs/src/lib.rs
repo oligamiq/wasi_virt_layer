@@ -47,11 +47,11 @@ import_wasm!(test_threads);
 
 const FILE_COUNT: usize = 5;
 
-type F = WasiConstFile<&'static str>;
-type NormalFILES = VFSConstNormalFiles<F, { FILE_COUNT }>;
+type F = WasiEmbeddedFile<&'static str>;
+type NormalFILES = StandardEmbeddedFiles<F, { FILE_COUNT }>;
 
 #[const_struct]
-const FILES: NormalFILES = ConstFiles!([(
+const EMBEDDED_FILES: NormalFILES = EmbeddedFiles!([(
     ".",
     [
         ("hey", F::new("Hey!")),
@@ -66,20 +66,20 @@ const FILES: NormalFILES = ConstFiles!([(
 )]);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_embedded() },
     self,
     test_threads
 );
 plug_process!(wasi_virt_layer::process::DefaultProcess, test_threads, self);
 #[const_struct]
-const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
+const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     environ: &[
         // "RUST_MIN_STACK=16777216",
         "HOME=~/",
         // "RUST_BACKTRACE=full",
     ],
 };
-plug_env!(@const, VirtualEnvTy, test_threads, self);
+plug_env!(@embedded, VirtualEnvTy, test_threads, self);
 
 #[cfg(test)]
 mod tests {
@@ -94,10 +94,13 @@ mod tests {
 mod fs {
     use super::*;
 
-    type LFS = VFSConstNormalLFS<FilesTy, F, FILE_COUNT, DefaultStdIO>;
+    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, F, FILE_COUNT, DefaultStdIO>;
 
-    static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());
+    static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
+        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_threads, self);
 }
+
+
+

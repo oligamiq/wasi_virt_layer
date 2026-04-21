@@ -1,0 +1,17 @@
+[package]
+name = "changeable-vfs"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+wit-bindgen = "0.54.0"
+const_struct = "0.6.4"
+parking_lot = "0.12.3"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+features = ["std", "alloc", "dynamic-fs"]
+
+[lib]
+crate-type = ["cdylib"]

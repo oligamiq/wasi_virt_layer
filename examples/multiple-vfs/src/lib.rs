@@ -65,13 +65,13 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 #[allow(dead_code)]
 mod fs {
     use super::*;
-    pub static VIRTUAL_FILE_SYSTEM: LazyLock<Wasip1MultipleVFS> = LazyLock::new(|| {
-        let mut vfs = Wasip1MultipleVFS::new();
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardMultipleFileSystem> = LazyLock::new(|| {
+        let mut vfs = StandardMultipleFileSystem::new();
 
         vfs.add_wasm::<ls>();
 
         // Create first LFS
-        let lfs1 = ChangeableLFS::<DefaultStdIO>::new();
+        let lfs1 = StandardDynamicLFS::<DefaultStdIO>::new();
         let root_inode1 = lfs1.add_preopen(".");
         lfs1.add_file(root_inode1, "lfs1.txt", b"Content from LFS 1".to_vec())
             .unwrap();
@@ -80,7 +80,7 @@ mod fs {
         vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
 
         // Create second LFS
-        let lfs2 = ChangeableLFS::<DefaultStdIO>::new();
+        let lfs2 = StandardDynamicLFS::<DefaultStdIO>::new();
         let root_inode2 = lfs2.add_preopen("/data");
         lfs2.add_file(root_inode2, "lfs2.txt", b"Content from LFS 2".to_vec())
             .unwrap();
@@ -93,3 +93,4 @@ mod fs {
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }
+

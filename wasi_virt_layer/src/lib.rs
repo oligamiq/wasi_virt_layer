@@ -52,13 +52,13 @@ pub mod prelude {
     pub use crate::memory::WasmAccess;
     #[cfg(feature = "threads")]
     pub use crate::plug_thread;
-    pub use crate::wasi::env::{VirtualEnv, VirtualEnvConstState};
+    pub use crate::wasi::env::{VirtualEnv, VirtualEnvEmbeddedState};
 
-    #[cfg(feature = "const-fs")]
-    pub use crate::wasi::file::constant::vfs::Wasip1ConstVFS;
+    #[cfg(feature = "embedded-fs")]
+    pub use crate::wasi::file::embedded::vfs::StandardEmbeddedFileSystem;
 
-    #[cfg(feature = "const-fs")]
-    pub use crate::ConstFiles;
+    #[cfg(feature = "embedded-fs")]
+    pub use crate::EmbeddedFiles;
 
     pub use crate::{import_wasm, plug_env, plug_fs, plug_poll, plug_process};
 }
@@ -74,35 +74,35 @@ pub mod thread {
 
 /// Virtual File System operations and definitions.
 pub mod file {
-    #[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+    #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
     pub use crate::wasi::file::{
         BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon, NoAddInfo, OpenFdInfo,
         OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait, stdio::DefaultStdIO,
     };
 
-    #[cfg(not(any(feature = "const-fs", feature = "changeable-fs")))]
+    #[cfg(not(any(feature = "embedded-fs", feature = "dynamic-fs")))]
     pub use crate::wasi::file::{
         BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon, NoAddInfo, OpenFdInfo,
         OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait,
     };
 
-    #[cfg(feature = "const-fs")]
-    pub use crate::wasi::file::constant::{
-        lfs::VFSConstNormalLFS,
-        lfs_raw::{VFSConstNormalFiles, WasiConstFile},
-        vfs::Wasip1ConstVFS,
+    #[cfg(feature = "embedded-fs")]
+    pub use crate::wasi::file::embedded::{
+        lfs::StandardEmbeddedNormalLFS,
+        lfs_raw::{StandardEmbeddedFiles, WasiEmbeddedFile},
+        vfs::StandardEmbeddedFileSystem,
     };
 
-    #[cfg(feature = "changeable-fs")]
-    pub use crate::wasi::file::changeable::{
+    #[cfg(feature = "dynamic-fs")]
+    pub use crate::wasi::file::dynamic::{
         inode::{DirMap, Inode, InodeData, InodeId, InodeMetadata},
-        lfs::ChangeableLFS,
-        vfs::ChangeableVFS,
+        lfs::StandardDynamicLFS,
+        vfs::StandardDynamicFileSystem,
     };
 
     #[cfg(feature = "multiple-fs")]
     pub use crate::wasi::file::multiple::{
-        self, Wasip1MultipleVFS,
+        self, StandardMultipleFileSystem,
         dynamic_wasm::*,
         inode::BoxedInodeNormal,
     };
@@ -134,15 +134,15 @@ pub mod __private {
         pub mod env {
             #[cfg(target_os = "wasi")]
             pub use crate::wasi::env::{
-                environ_get_const_inner, environ_get_inner, environ_sizes_get_const_inner,
+                environ_get_embedded_inner, environ_get_inner, environ_sizes_get_embedded_inner,
                 environ_sizes_get_inner,
             };
         }
 
         pub mod fs {
-            #[cfg(feature = "const-fs")]
-            pub use crate::wasi::file::constant::lfs_raw::{
-                VFSConstNormalFiles, VFSConstNormalInode, WasiConstPrimitiveFile,
+            #[cfg(feature = "embedded-fs")]
+            pub use crate::wasi::file::embedded::lfs_raw::{
+                StandardEmbeddedFiles, StandardEmbeddedInode, WasiEmbeddedPrimitiveFile,
             };
         }
 
@@ -155,7 +155,7 @@ pub mod __private {
     }
 
     pub mod utils {
-        pub use crate::utils::StaticArrayBuilder;
+        pub use crate::utils::EmbeddedArrayBuilder;
         #[cfg(feature = "alloc")]
         pub use crate::utils::alloc_buff;
     }

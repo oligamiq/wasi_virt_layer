@@ -13,7 +13,7 @@ struct Hello;
 
 import_wasm!(ls);
 
-static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_const();
+static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_embedded();
 
 export_pseudo_wasm!(wasm_holder);
 
@@ -70,13 +70,13 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 #[allow(dead_code)]
 mod fs {
     use super::*;
-    pub static VIRTUAL_FILE_SYSTEM: LazyLock<Wasip1MultipleVFS<BoxedInodeNormal>> = LazyLock::new(|| {
-        let mut vfs = Wasip1MultipleVFS::<BoxedInodeNormal>::new();
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardMultipleFileSystem<BoxedInodeNormal>> = LazyLock::new(|| {
+        let mut vfs = StandardMultipleFileSystem::<BoxedInodeNormal>::new();
 
         let wasm = WASM_HOLDER.restore(());
         vfs.add_wasm_access(wasm);
 
-        let lfs1 = ChangeableLFS::<DefaultStdIO>::new();
+        let lfs1 = StandardDynamicLFS::<DefaultStdIO>::new();
         let root_inode1 = lfs1.add_preopen(".");
         lfs1.add_file(root_inode1, "hello.txt", b"Hello, Dynamic WASM!".to_vec())
             .unwrap();
@@ -89,3 +89,5 @@ mod fs {
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }
+
+

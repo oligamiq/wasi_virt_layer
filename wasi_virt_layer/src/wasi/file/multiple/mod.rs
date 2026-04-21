@@ -7,5 +7,5 @@ pub mod lfs;
 pub mod wasm;
 
 pub use inode::DetailedDynamicOpenFd;
-pub use lfs::Wasip1MultipleVFS;
+pub use lfs::StandardMultipleFileSystem;
 pub use wasm::WasmAccessDynCompatibleWrapper;

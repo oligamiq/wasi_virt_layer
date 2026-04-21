@@ -13,7 +13,7 @@ readme.workspace = true
 
 [dependencies]
 const_struct = "0.6.4"
-wasi_virt_layer = { workspace = true, features = ["const-fs"] }
+wasi_virt_layer = { workspace = true, features = ["embedded-fs"] }
 wit-bindgen = { version = "0.57.1", default-features = false, features = [
     "macros",
     "std",

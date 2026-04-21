@@ -14,7 +14,7 @@ use crate::memory::WasmAccessDynCompatibleRaw;
 #[derive(Debug)]
 pub struct DefaultStdIO;
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl StdIO for DefaultStdIO {
     fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::read_from_stdin(buf)
@@ -75,7 +75,7 @@ impl StdIO for DefaultStdIO {
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 /// Trait for handling standard I/O operations.
 pub trait StdIO: core::fmt::Debug {
     /// Reads data from stdin into the provided buffer.

@@ -15,14 +15,14 @@ This design aims to unify terminology within the `wasi_virt_layer` project to av
 ### 2.2 Structs and Traits
 | Old Name | New Name | Nature |
 | :--- | :--- | :--- |
-| `Wasip1ConstVFS` | `StandardEmbeddedFileSystem` | Implementation of `Wasip1FileSystem` |
-| `ChangeableVFS` | `StandardDynamicFileSystem` | Implementation of `Wasip1FileSystem` |
-| `Wasip1MultipleVFS` | `StandardMultipleFileSystem` | Implementation of `Wasip1FileSystem` |
-| `VFSConstNormalLFS` | `StandardEmbeddedNormalLFS` | Implementation of LFS trait |
-| `ChangeableLFS` | `StandardDynamicLFS` | Implementation of LFS trait |
-| `StaticArrayBuilder` | `EmbeddedArrayBuilder` | Fixed-capacity utility |
+| `StandardEmbeddedFileSystem` | `StandardEmbeddedFileSystem` | Implementation of `Wasip1FileSystem` |
+| `StandardDynamicFileSystem` | `StandardDynamicFileSystem` | Implementation of `Wasip1FileSystem` |
+| `StandardMultipleFileSystem` | `StandardMultipleFileSystem` | Implementation of `Wasip1FileSystem` |
+| `StandardEmbeddedNormalLFS` | `StandardEmbeddedNormalLFS` | Implementation of LFS trait |
+| `StandardDynamicLFS` | `StandardDynamicLFS` | Implementation of LFS trait |
+| `EmbeddedArrayBuilder` | `EmbeddedArrayBuilder` | Fixed-capacity utility |
 | `DefaultStdIO` | `StandardStdIO` | Standard I/O implementation |
-| `VirtualEnvConstState` | `EmbeddedVirtualEnvState` | Environment state |
+| `VirtualEnvEmbeddedState` | `EmbeddedVirtualEnvState` | Environment state |
 | `VirtualEnvState` | `DynamicVirtualEnvState` | Environment state |
 
 ### 2.3 File System / Feature Flags
@@ -40,7 +40,7 @@ This design aims to unify terminology within the `wasi_virt_layer` project to av
 - Associated files within these directories will be renamed to match their new struct names where appropriate.
 
 ### 3.2 Macro Updates
-- `plug_env!(@const, ...)` -> `plug_env!(@embedded, ...)`
+- `plug_env!(@embedded, ...)` -> `plug_env!(@embedded, ...)`
 - `plug_env!(@dynamic, ...)` -> `plug_env!(@dynamic, ...)` (mode name stays same, internal logic might change)
 
 ### 3.3 CI & Config
@@ -53,3 +53,5 @@ This design aims to unify terminology within the `wasi_virt_layer` project to av
 3.  Update workspace-wide `Cargo.toml` and feature usage.
 4.  Refactor examples and integration tests.
 5.  Verify with full test suite.
+
+

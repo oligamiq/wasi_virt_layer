@@ -21,7 +21,7 @@ wit-bindgen = { version = "0.54.0", default-features = false, features = [
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["threads", "const-fs"]
+features = ["threads", "embedded-fs"]
 
 [lib]
 crate-type = ["cdylib"]

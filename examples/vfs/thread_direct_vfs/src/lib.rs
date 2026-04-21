@@ -1,6 +1,6 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{
-    file::{VFSConstNormalFiles, WasiConstFile},
+    file::{StandardEmbeddedFiles, WasiEmbeddedFile},
     poll::PollOneoff,
     prelude::*,
 };
@@ -27,21 +27,21 @@ import_wasm!(test_pool_thread);
 
 const FILE_COUNT: usize = 10;
 
-type F = WasiConstFile<&'static str>;
-type NormalFILES = VFSConstNormalFiles<F, { FILE_COUNT }>;
+type F = WasiEmbeddedFile<&'static str>;
+type NormalFILES = StandardEmbeddedFiles<F, { FILE_COUNT }>;
 
 #[const_struct]
-const FILES: NormalFILES = ConstFiles!([
-    ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
+const EMBEDDED_FILES: NormalFILES = EmbeddedFiles!([
+    ("/root", [("root.txt", WasiEmbeddedFile::new("This is root"))]),
     (
         ".",
         [
-            ("hey", WasiConstFile::new("Hey!")),
+            ("hey", WasiEmbeddedFile::new("Hey!")),
             (
                 "hello",
                 [
-                    ("world", WasiConstFile::new("Hello, world!")),
-                    ("everyone", WasiConstFile::new("Hello, everyone!")),
+                    ("world", WasiEmbeddedFile::new("Hello, world!")),
+                    ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
                 ]
             )
         ]
@@ -49,14 +49,14 @@ const FILES: NormalFILES = ConstFiles!([
     (
         "~",
         [
-            ("home", WasiConstFile::new("This is home")),
-            ("user", WasiConstFile::new("This is user")),
+            ("home", WasiEmbeddedFile::new("This is home")),
+            ("user", WasiEmbeddedFile::new("This is user")),
         ]
     )
 ]);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_embedded() },
     self,
     test_pool_thread
 );
@@ -66,10 +66,10 @@ plug_process!(
     self
 );
 #[const_struct]
-const ENV: VirtualEnvConstState = VirtualEnvConstState {
+const ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     environ: &["HOME=~/"],
 };
-plug_env!(@const, EnvTy, test_pool_thread, self);
+plug_env!(@embedded, EnvTy, test_pool_thread, self);
 
 struct WaitPoll;
 
@@ -163,14 +163,17 @@ impl PollOneoff for WaitPoll {
 plug_poll!(WaitPoll, test_pool_thread);
 
 mod fs {
-    use wasi_virt_layer::file::{DefaultStdIO, VFSConstNormalLFS, Wasip1ConstVFS};
+    use wasi_virt_layer::file::{DefaultStdIO, StandardEmbeddedNormalLFS, StandardEmbeddedFileSystem};
 
     use super::*;
 
-    type LFS = VFSConstNormalLFS<FilesTy, F, FILE_COUNT, DefaultStdIO>;
+    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, F, FILE_COUNT, DefaultStdIO>;
 
-    static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());
+    static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
+        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_pool_thread, self);
 }
+
+
+

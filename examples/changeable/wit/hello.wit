@@ -1,9 +1,0 @@
-package hello:host;
-
-world hello {
-  include utils;
-
-  export %world: func();
-
-  export main: func();
-}

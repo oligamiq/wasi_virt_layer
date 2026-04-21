@@ -27,11 +27,11 @@ mod env {
     use super::*;
 
     #[const_struct]
-    const HOST_ENV: VirtualEnvConstState = VirtualEnvConstState {
+    const HOST_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
         environ: &["HOME=~/"],
     };
 
-    plug_env!(@const, HostEnvTy, anonymous, self);
+    plug_env!(@embedded, HostEnvTy, anonymous, self);
 }
 
 mod fs {
@@ -40,7 +40,45 @@ mod fs {
     const FILE_COUNT: usize = 10;
 
     #[const_struct]
-    const FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
+    const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> = EmbeddedFiles!([
+        ("/root", [("root.txt", WasiEmbeddedFile::new("This is root"))]),
+        (
+            ".",
+            [
+                ("hey", WasiEmbeddedFile::new("Hey!")),
+                (
+                    "hello",
+                    [
+                        ("world", WasiEmbeddedFile::new("Hello, world!")),
+                        ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
+                    ]
+                )
+            ]
+        ),
+        (
+            "~",
+            [
+                ("home", WasiEmbeddedFile::new("This is home")),
+                ("user", WasiEmbeddedFile::new("This is user")),
+            ]
+        )
+    ]);
+
+    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, FILE_COUNT, DefaultStdIO>;
+
+    static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
+        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
+
+    plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous);
+}
+
+mod fs {
+    use super::*;
+
+    const FILE_COUNT: usize = 10;
+
+    #[const_struct]
+    const EMBEDDED_FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
         ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
         (
             ".",
@@ -64,7 +102,7 @@ mod fs {
         )
     ]);
 
-    type LFS = VFSConstNormalLFS<FilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
+    type LFS = VFSConstNormalLFS<EmbeddedFilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
         Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());

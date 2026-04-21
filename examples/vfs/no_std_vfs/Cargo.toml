@@ -15,7 +15,7 @@ publish = false
 
 [dependencies]
 wasi_virt_layer = { workspace = true, default-features = false, features = [
-    "const-fs",
+    "embedded-fs",
     "multi_memory",
     "unstable_print_debug",
 ] }

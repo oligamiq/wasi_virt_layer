@@ -167,7 +167,7 @@ macro_rules! import_wasm {
                     ) };
                 }
 
-                $crate::__memory_director_wasm_access!(@const, $name);
+                $crate::__memory_director_wasm_access!(@embedded, $name);
 
                 #[inline(always)]
                 fn _main_raw() -> $crate::__private::wasip1::Errno
@@ -220,7 +220,7 @@ macro_rules! __memory_director_wasm_access {
         }
     };
 
-    (@const, $name:ident) => {
+    (@embedded, $name:ident) => {
         $crate::__private::paste::paste! {
             #[inline(always)]
             fn memory_director_raw(ptr: isize) -> isize {
@@ -242,7 +242,7 @@ macro_rules! __memory_director_wasm_access {
 macro_rules! __memory_director_wasm_access {
     (@dyn, $_:ident) => {};
 
-    (@const, $_:ident) => {};
+    (@embedded, $_:ident) => {};
 }
 
 /// Internal macro used to generate memory trap and director imports for WASM access.
@@ -1730,3 +1730,4 @@ impl WasmAccessRaw for WasmAccessFaker {
         ptr
     }
 }
+

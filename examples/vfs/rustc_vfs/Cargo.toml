@@ -19,7 +19,7 @@ const_struct = "0.6.4"
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["std", "threads", "const-fs"]
+features = ["std", "threads", "embedded-fs"]
 
 [lib]
 crate-type = ["cdylib"]

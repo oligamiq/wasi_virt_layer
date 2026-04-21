@@ -11,23 +11,29 @@ use crate::memory::WasmAccess;
 /// so that you can block it
 /// @through if retrieving from JavaScript runtime.
 ///
-/// @const or @dynamic
-/// Whether to use const or dynamic env.
-/// @const if using const env.
+/// @embedded or @dynamic
+/// Whether to import JavaScript runtime env from vfs,
+/// env is automatically imported even if you are not using it,
+/// so that you can block it
+/// @through if retrieving from JavaScript runtime.
+///
+/// @embedded or @dynamic
+/// Whether to use embedded or dynamic env.
+/// @embedded if using embedded env.
 /// @dynamic if using dynamic env.
-/// @const is faster and small than @dynamic.
+/// @embedded is faster and small than @dynamic.
 ///
 /// ```rust
-/// // @const
+/// // @embedded
 /// import_wasm!(test_wasm);
 ///
 /// use const_struct::*;
 /// use wasi_virt_layer::prelude::*;
 /// #[const_struct]
-/// const VIRTUAL_ENV: VirtualEnvConstState = VirtualEnvConstState {
+/// const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 ///     environ: &["RUST_MIN_STACK=16777216", "HOME=~/"],
 /// };
-/// plug_env!(@const, VirtualEnvTy, test_wasm);
+/// plug_env!(@embedded, VirtualEnvTy, test_wasm);
 /// ```
 ///
 /// ```rust
@@ -58,15 +64,49 @@ use crate::memory::WasmAccess;
 /// Plugs the environment variable ecosystem.
 #[macro_export]
 macro_rules! plug_env {
-    (@const, $ty:ty, $($wasm:ident),* $(,)?) => {
-        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @const, $ty);
+    (@embedded, $ty:ty, $($wasm:ident),* $(,)?) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @embedded, $ty);
     };
 
     (@dynamic, $state:expr, $($wasm:ident),* $(,)?) => {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @dynamic, $state);
     };
 
-    (@inner, @const, $ty:ty, $($wasm:ident),*) => {
+    (@inner, @embedded, $ty:ty, $($wasm:ident),*) => {
+        const _: () = {
+            type __TYPE = $ty;
+        };
+
+        $crate::__private::paste::paste! {
+            $(
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
+                    environ_count: *mut $crate::__private::wasip1::Size,
+                    environ_buf_size: *mut $crate::__private::wasip1::Size,
+                ) -> $crate::__private::wasip1::Errno {
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::__private::inner::env::environ_sizes_get_embedded_inner::<$ty, T>(environ_count, environ_buf_size)
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
+                    environ: *mut *const u8,
+                    environ_buf: *mut u8,
+                ) -> $crate::__private::wasip1::Errno {
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::__private::inner::env::environ_get_embedded_inner::<$ty, T>(environ, environ_buf)
+                }
+            )*
+        }
+    };
+
+    (@dynamic, $state:expr, $($wasm:ident),* $(,)?) => {
+        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @dynamic, $state);
+    };
+
+    (@inner, @embedded, $ty:ty, $($wasm:ident),*) => {
         const _: () = {
             type __TYPE = $ty;
         };
@@ -127,7 +167,7 @@ macro_rules! plug_env {
 
 /// A structure holding constant environment variables.
 #[const_struct]
-pub struct VirtualEnvConstState {
+pub struct VirtualEnvEmbeddedState {
     /// The environment variables as a slice of name-value pairs (e.g., "KEY=VALUE").
     pub environ: &'static [&'static str],
 }
@@ -135,14 +175,67 @@ pub struct VirtualEnvConstState {
 /// Inner function for retrieving constant environment variable sizes.
 #[inline]
 #[cfg(target_os = "wasi")]
-pub fn environ_sizes_get_const_inner<
-    T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
+pub fn environ_sizes_get_embedded_inner<
+    T: PrimitiveTraits<DATATYPE = VirtualEnvEmbeddedState>,
     Wasm: WasmAccess,
 >(
     environ_count: *mut Size,
     environ_buf_size: *mut Size,
 ) -> Errno {
-    const fn inner<T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>>() -> (Size, Size) {
+    const fn inner<T: PrimitiveTraits<DATATYPE = VirtualEnvEmbeddedState>>() -> (Size, Size) {
+        let mut size = 0;
+        let mut count = 0;
+        const_for!(i in 0..T::__DATA.environ.len() => {
+            let len = T::__DATA.environ[i].len() + 1; // +1 for null terminator
+            size += len;
+            count += 1;
+        });
+
+        (size, count)
+    }
+
+    Wasm::store_le(environ_buf_size, inner::<T>().0);
+    Wasm::store_le(environ_count, inner::<T>().1);
+    ERRNO_SUCCESS
+}
+
+/// Inner function for retrieving constant environment variables.
+#[inline]
+#[cfg(target_os = "wasi")]
+pub fn environ_get_embedded_inner<
+    T: PrimitiveTraits<DATATYPE = VirtualEnvEmbeddedState>,
+    Wasm: WasmAccess,
+>(
+    environ: *mut *const u8,
+    environ_buf: *mut u8,
+) -> Errno {
+    let mut environ = environ;
+    let mut environ_buf = environ_buf;
+
+    const_for!(i in 0..T::__DATA.environ.len() => {
+        Wasm::store_le(environ, environ_buf as *const u8);
+
+        Wasm::memcpy(environ_buf, T::__DATA.environ[i].as_bytes());
+        Wasm::store_le(unsafe { environ_buf.add(T::__DATA.environ[i].len()) }, 0u8);
+
+        environ = unsafe { environ.add(1) };
+        environ_buf = unsafe { environ_buf.add(T::__DATA.environ[i].len() + 1) };
+    });
+
+    ERRNO_SUCCESS
+}
+
+/// Inner function for retrieving constant environment variable sizes.
+#[inline]
+#[cfg(target_os = "wasi")]
+pub fn environ_sizes_get_const_inner<
+    T: PrimitiveTraits<DATATYPE = VirtualEnvEmbeddedState>,
+    Wasm: WasmAccess,
+>(
+    environ_count: *mut Size,
+    environ_buf_size: *mut Size,
+) -> Errno {
+    const fn inner<T: PrimitiveTraits<DATATYPE = VirtualEnvEmbeddedState>>() -> (Size, Size) {
         let mut size = 0;
         let mut count = 0;
         const_for!(i in 0..T::__DATA.environ.len() => {
@@ -163,7 +256,7 @@ pub fn environ_sizes_get_const_inner<
 #[inline]
 #[cfg(target_os = "wasi")]
 pub fn environ_get_const_inner<
-    T: PrimitiveTraits<DATATYPE = VirtualEnvConstState>,
+    T: PrimitiveTraits<DATATYPE = VirtualEnvEmbeddedState>,
     Wasm: WasmAccess,
 >(
     environ: *mut *const u8,
@@ -270,3 +363,4 @@ pub fn environ_get_inner<'a, Wasm: WasmAccess>(
 ) -> Errno {
     state.environ_get::<Wasm>(environ, environ_buf)
 }
+

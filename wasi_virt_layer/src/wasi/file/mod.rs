@@ -1,30 +1,30 @@
 // https://docs.rs/wasmtime-wasi/17.0.3/wasmtime_wasi/struct.WasiCtx.html
 // https://docs.rs/wasi-common/17.0.3/wasi_common/table/struct.Table.html
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 use core::any::Any;
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 use core::borrow::Borrow;
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 use core::ops::Deref;
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 use smallstr::SmallString;
 
 #[cfg(feature = "alloc")]
 use crate::memory::WasmAccessDynCompatible as _;
 use crate::memory::{WasmAccess, WasmAccessDynCompatibleRaw, WasmAccessName};
-#[cfg(feature = "changeable-fs")]
-pub mod changeable;
-#[cfg(feature = "const-fs")]
-pub mod constant;
+#[cfg(feature = "dynamic-fs")]
+pub mod dynamic;
+#[cfg(feature = "embedded-fs")]
+pub mod embedded;
 #[cfg(feature = "multiple-fs")]
 pub mod multiple;
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 pub mod stdio;
 #[cfg(any(
-    feature = "const-fs",
-    feature = "changeable-fs",
+    feature = "embedded-fs",
+    feature = "dynamic-fs",
     feature = "multiple-fs"
 ))]
 pub(crate) mod trace;
@@ -133,13 +133,13 @@ impl WasiAddInfo for DefaultAddInfo {
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
 pub(crate) trait Wasip1LFSBaseWrapper: Wasip1LFSBase {
     fn downcast_inode(inode: &dyn InodeIdCommon) -> &<Self as Wasip1LFSBase>::Inode;
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl<T: Wasip1LFSBase + ?Sized> Wasip1LFSBaseWrapper for T
 where
     <Self as Wasip1LFSBase>::Inode: 'static,
@@ -270,28 +270,28 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
 }
 
 /// Trait for a static or constant local file system implementation.
-#[cfg(feature = "const-fs")]
-pub trait Wasip1ConstLFS: Wasip1LFSBase
+#[cfg(feature = "embedded-fs")]
+pub trait StandardEmbeddedLFS: Wasip1LFSBase
 where
     Self::Inode: 'static,
 {
     const PRE_OPEN: &'static [Self::Inode];
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
-pub trait Wasip1DynamicLFS: Wasip1LFSBase {
+pub trait StandardDynamicLFS: Wasip1LFSBase {
     fn pre_open_inodes(&self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStrCustom)>;
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
 pub trait DerefToStrCustom {
     fn deref_to_str<'a>(&'a self) -> &'a str;
 }
 
 #[cfg(all(
-    any(feature = "const-fs", feature = "changeable-fs"),
+    any(feature = "embedded-fs", feature = "dynamic-fs"),
     feature = "alloc",
     not(feature = "std")
 ))]
@@ -302,7 +302,7 @@ impl DerefToStrCustom for alloc::string::String {
 }
 
 #[cfg(all(
-    any(feature = "const-fs", feature = "changeable-fs"),
+    any(feature = "embedded-fs", feature = "dynamic-fs"),
     feature = "alloc",
     not(feature = "std")
 ))]
@@ -312,49 +312,49 @@ impl DerefToStrCustom for &alloc::string::String {
     }
 }
 
-#[cfg(all(any(feature = "const-fs", feature = "changeable-fs"), feature = "std"))]
+#[cfg(all(any(feature = "embedded-fs", feature = "dynamic-fs"), feature = "std"))]
 impl DerefToStrCustom for std::string::String {
     fn deref_to_str<'a>(&'a self) -> &'a str {
         self.as_str()
     }
 }
 
-#[cfg(all(any(feature = "const-fs", feature = "changeable-fs"), feature = "std"))]
+#[cfg(all(any(feature = "embedded-fs", feature = "dynamic-fs"), feature = "std"))]
 impl DerefToStrCustom for &std::string::String {
     fn deref_to_str<'a>(&'a self) -> &'a str {
         self.as_str()
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl DerefToStrCustom for str {
     fn deref_to_str<'a>(&'a self) -> &'a str {
         self
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl DerefToStrCustom for &str {
     fn deref_to_str<'a>(&'a self) -> &'a str {
         self
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl<const N: usize> DerefToStrCustom for SmallString<[u8; N]> {
     fn deref_to_str<'a>(&'a self) -> &'a str {
         self.as_str()
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl<const N: usize> DerefToStrCustom for &SmallString<[u8; N]> {
     fn deref_to_str<'a>(&'a self) -> &'a str {
         self.as_str()
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl<T> DerefToStrCustom for (T,)
 where
     T: Deref,
@@ -365,7 +365,7 @@ where
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl<T, U> DerefToStrCustom for (T, U)
 where
     T: Deref,
@@ -376,7 +376,7 @@ where
     }
 }
 
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
 pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
     /// return inode, and the name of the pre-opened directory
@@ -388,7 +388,7 @@ pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
 }
 
 /// Trait for a dynamically compatible local file system.
-#[cfg(any(feature = "const-fs", feature = "changeable-fs"))]
+#[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
 pub trait Wasip1DynCompatibleLFS<B: BoxedInode>: core::fmt::Debug {
     fn pre_open_inodes(&self, f: &mut dyn for<'a> FnMut(&'a dyn Wasip1DynCompatibleLFSSlice));
@@ -793,3 +793,4 @@ macro_rules! plug_fs {
         }
     };
 }
+
