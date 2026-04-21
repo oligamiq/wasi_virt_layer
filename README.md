@@ -16,9 +16,9 @@ wasi_virt_layer new my_vfs_project
 4. Use the `plug!` macro series (`plug_process!`, `plug_env!`, `plug_fs!`, etc.) to connect to the wasip1 ABI, and link virtual filesystems or virtual environment variables.
 5. Run the build command
 ```bash
-wasi_virt_layer build <wasm_path> -p my_vfs_project
+wasi_virt_layer build <wasm_path>
 ```
-   to execute the virtualization process.
+   to execute the virtualization process. Note: use `-p <package_name>` if your VFS project is part of a workspace.
 6. The built files (including the transpiled JavaScript if applicable) will be generated in the `dist` directory.
 7. Run it with Deno or Node.js:
 ```bash
