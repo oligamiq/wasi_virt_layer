@@ -1102,9 +1102,42 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
 
     fn pre_open_inodes(
         &self,
-        _f: &mut dyn for<'a> FnMut(&'a dyn crate::wasi::file::Wasip1DynCompatibleLFSSlice),
+        f: &mut dyn for<'a> FnMut(&'a dyn crate::wasi::file::Wasip1DynCompatibleLFSSlice),
     ) {
-        todo!()
+        #[derive(Debug)]
+        struct PreOpenInodesIndex<'a, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static>(&'a ChangeableLFS<StdIo, AddInfo>);
+
+        impl<'a, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> crate::wasi::file::Wasip1DynCompatibleLFSSlice for PreOpenInodesIndex<'a, StdIo, AddInfo> {
+            fn index(
+                &self,
+                idx: usize,
+                f: &mut dyn for<'b, 'c> FnMut(
+                    Option<(&'b dyn InodeIdCommon, &'c dyn crate::wasi::file::DerefToStrCustom)>,
+                ),
+            ) {
+                #[cfg(feature = "threads")]
+                {
+                    if let Some(entry) = self.0.preopens.iter().nth(idx) {
+                        let inode = entry.key();
+                        let name = entry.value();
+                        f(Some((inode as &dyn InodeIdCommon, name as &dyn crate::wasi::file::DerefToStrCustom)));
+                    } else {
+                        f(None);
+                    }
+                }
+                #[cfg(not(feature = "threads"))]
+                {
+                    let map = unsafe { &*self.0.preopens.get() };
+                    if let Some((inode, name)) = map.iter().nth(idx) {
+                        f(Some((inode as &dyn InodeIdCommon, name as &dyn crate::wasi::file::DerefToStrCustom)));
+                    } else {
+                        f(None);
+                    }
+                }
+            }
+        }
+
+        f(&PreOpenInodesIndex(self));
     }
 }
 
