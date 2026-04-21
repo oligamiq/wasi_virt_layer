@@ -16,3 +16,5 @@
 /docs/plans
 
 _debug_*.wat
+
+.worktrees/
