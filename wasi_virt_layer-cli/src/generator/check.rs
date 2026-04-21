@@ -3,9 +3,35 @@ use strum::VariantNames;
 
 use crate::{
     abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc},
-    generator::{Generator, GeneratorCtx, ModuleExternal},
+    generator::{Generator, GeneratorCtx, ModuleExternal, threads::ThreadsSpawnName},
+    unique_name::UniqueName,
     util::{ResultUtil as _, WalrusFID as _, WalrusUtilModule},
 };
+
+fn has_library_import_anchor_names(export_names: &[&str]) -> bool {
+    let has_legacy_thread_anchor = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
+        .iter()
+        .map(|name| format!("{name}_import_anchor"))
+        .any(|legacy| export_names.iter().any(|name| *name == legacy));
+
+    if has_legacy_thread_anchor {
+        return false;
+    }
+
+    let has_wasip1_anchor = <Wasip1ABIFunc as VariantNames>::VARIANTS
+        .iter()
+        .map(|name| format!("{name}_import_anchor"))
+        .any(|required| export_names.iter().any(|name| *name == required));
+
+    let has_prefixed_thread_anchor = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
+        .iter()
+        .map(
+            |name| UniqueName::ThreadsSpawn(&ThreadsSpawnName::ImportAnchor(name)).to_string(),
+        )
+        .any(|required| export_names.iter().any(|name| *name == required));
+
+    has_wasip1_anchor || has_prefixed_thread_anchor
+}
 
 /// Checks if the provided Wasm securely linked `wasi_virt_layer` anchors correctly.
 #[derive(Debug, Default)]
@@ -14,15 +40,13 @@ pub struct CheckUseLibrary;
 impl Generator for CheckUseLibrary {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         // If you're using the library, anchors should be generated automatically.
-        if !<Wasip1ABIFunc as VariantNames>::VARIANTS
+        let export_names = module
+            .exports
             .iter()
-            .chain(<Wasip1ThreadsABIFunc as VariantNames>::VARIANTS)
-            .any(|name| {
-                module
-                    .exports
-                    .iter()
-                    .any(|e| e.name == format!("{name}_import_anchor"))
-            })
+            .map(|e| e.name.as_str())
+            .collect::<Vec<_>>();
+
+        if !has_library_import_anchor_names(&export_names)
         {
             eyre::bail!(
                 r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer; or, it does not import a crate."#
@@ -69,6 +93,44 @@ impl Generator for CheckUseLibrary {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strict_accepts_prefixed_thread_anchor() {
+        let exports = vec!["__wasip1_vfs_thread-spawn_import_anchor"];
+        assert!(has_library_import_anchor_names(&exports));
+    }
+
+    #[test]
+    fn strict_rejects_legacy_thread_anchor() {
+        let exports = vec!["thread-spawn_import_anchor"];
+        assert!(!has_library_import_anchor_names(&exports));
+    }
+
+    #[test]
+    fn strict_rejects_legacy_thread_anchor_with_wasip1_anchor() {
+        let exports = vec!["thread-spawn_import_anchor", "fd_write_import_anchor"];
+        assert!(!has_library_import_anchor_names(&exports));
+    }
+
+    #[test]
+    fn still_accepts_wasip1_import_anchor() {
+        let exports = vec!["fd_write_import_anchor"];
+        assert!(has_library_import_anchor_names(&exports));
+    }
+
+    #[test]
+    fn strict_accepts_prefixed_thread_anchor_with_wasip1_anchor() {
+        let exports = vec![
+            "__wasip1_vfs_thread-spawn_import_anchor",
+            "fd_write_import_anchor",
+        ];
+        assert!(has_library_import_anchor_names(&exports));
     }
 }
 

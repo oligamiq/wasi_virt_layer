@@ -449,7 +449,7 @@ mod import {
     mod wasip1_threads {
         use super::super::virtual_file_system_threads::wasip1_vfs::host::virtual_file_system_wasip1_threads_import::Wasip1Threads;
 
-        #[unsafe(export_name = "thread-spawn_import_anchor")]
+        #[unsafe(export_name = "__wasip1_vfs_thread-spawn_import_anchor")]
         pub unsafe extern "C" fn thread_spawn_import_anchor(data_ptr: i32) -> i32 {
             Wasip1Threads::thread_spawn_import(data_ptr)
         }

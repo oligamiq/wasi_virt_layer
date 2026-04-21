@@ -81,6 +81,13 @@ mod tests {
             format!("{}start_alt_suffix", super::UniqueName::PREFIX)
         );
     }
+
+    #[test]
+    fn test_unique_name_threads_import_anchor_is_prefixed() {
+        let t = crate::generator::threads::ThreadsSpawnName::ImportAnchor("thread-spawn");
+        let s = super::UniqueName::ThreadsSpawn(&t).to_string();
+        assert_eq!(s, "__wasip1_vfs_thread-spawn_import_anchor");
+    }
 }
 
 impl UniqueName<'_, '_> {
@@ -160,8 +167,7 @@ impl UniqueName<'_, '_> {
                 let name = t.as_ref();
                 match t {
                     ThreadsSpawnName::ImportAnchor(wasm) => {
-                        // todo!(); use unique name
-                        format!("{wasm}_{name}")
+                        fmt!(ThreadsSpawn; "{wasm}_{name}")
                     }
                     ThreadsSpawnName::WasiThreadStart(wasm)
                     | ThreadsSpawnName::WasiThreadStartAnchor(wasm) => {
