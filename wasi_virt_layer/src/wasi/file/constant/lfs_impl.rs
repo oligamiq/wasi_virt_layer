@@ -463,7 +463,21 @@ impl<
         buf_len: usize,
         offset: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        todo!();
+        let inode = Self::downcast_inode(inode);
+        let (_, file_or_dir) = ROOT::FILES[*inode];
+
+        if let VFSConstNormalInode::File(file, _) = file_or_dir {
+            if offset >= file.size() {
+                return Ok(0); // No data to read
+            }
+
+            let buf_len = core::cmp::min(buf_len, file.size() - offset);
+            let nread = file.pread_raw_dyn_compatible(access, buf, buf_len, offset)?;
+
+            Ok(nread)
+        } else {
+            unreachable!();
+        }
     }
     fn fd_read_stdin_raw_dyn_compatible(
         &self,
