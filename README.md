@@ -39,14 +39,14 @@ For further details, please refer to the example.
 
 # TODO!
 - Support non-binary Wasm modules
-- Enable specifying multiple Wasm modules
+- [x] Enable specifying multiple Wasm modules
 - Support self is not passed in plug_thread!
 - Support self binary
 - support flush sync to file system
 - Fake global allocator and center allocator and merge with vfs
 - Access Time Trait
-- Multiple lfs file system (VFS)
-- Static file system
+- [x] Multiple lfs file system (VFS)
+- [x] Static file system
 - Feature Access time etc traits
 - Separate mode (connect function by javascript)
 - threading vfs with non threading wasm
