@@ -555,7 +555,6 @@ mod tests {
         ]);
 
         #[cfg(feature = "std")]
-        println!("Files: {:#?}", FILES);
+        println!("Files: {:#?}", EMBEDDED_FILES);
     }
 }
-

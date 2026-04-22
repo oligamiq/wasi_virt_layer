@@ -487,15 +487,18 @@ pub trait WasmAccessNameDynCompatible: core::fmt::Debug {
     fn with_name(&self, f: &mut dyn FnMut(&str));
 
     /// Helper method to get the name as a `String`.
+    #[cfg(feature = "alloc")]
     fn name(&self) -> alloc::string::String {
         let mut name = None;
         self.with_name(&mut |n| name = Some(n.to_string()));
-        name.expect("WasmAccessNameDynCompatible must provide a name")
+        name.unwrap()
     }
 
     /// Helper method to get the name as a `SmallString`.
     fn smmallstr(&self) -> smallstr::SmallString<[u8; 32]> {
-        self.name().into()
+        let mut name = None;
+        self.with_name(&mut |n| name = Some(n.into()));
+        name.unwrap()
     }
 }
 
@@ -613,7 +616,8 @@ impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatibleRaw for &T {
     }
 }
 
-impl<T: WasmAccessDynCompatibleRaw> WasmAccessDynCompatibleRaw for Box<T> {
+#[cfg(feature = "alloc")]
+impl<T: WasmAccessDynCompatibleRaw> WasmAccessDynCompatibleRaw for alloc::boxed::Box<T> {
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
         <T as WasmAccessDynCompatibleRaw>::memcpy_raw(self, offset, src, len);
     }

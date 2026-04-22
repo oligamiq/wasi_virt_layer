@@ -1,8 +1,6 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{file::*, prelude::*, process::*};
 
-struct ComponentABI;
-
 wit_bindgen::generate!({
     // the name of the world in the `*.wit` input file
     world: "component-abi",
@@ -10,13 +8,17 @@ wit_bindgen::generate!({
 
 import_wasm!(<anonymous>);
 
-impl Guest for ComponentABI {
-    fn main() {
+struct ComponentAbi;
+
+impl Guest for ComponentAbi {
+    fn start() {
         anonymous::_reset();
         anonymous::_start();
         anonymous::_main();
     }
 }
+
+export!(ComponentAbi);
 
 mod process {
     use super::*;
@@ -71,44 +73,3 @@ mod fs {
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous);
 }
-
-mod fs {
-    use super::*;
-
-    const FILE_COUNT: usize = 10;
-
-    #[const_struct]
-    const EMBEDDED_FILES: VFSConstNormalFiles<WasiConstFile<&'static str>, { FILE_COUNT }> = ConstFiles!([
-        ("/root", [("root.txt", WasiConstFile::new("This is root"))]),
-        (
-            ".",
-            [
-                ("hey", WasiConstFile::new("Hey!")),
-                (
-                    "hello",
-                    [
-                        ("world", WasiConstFile::new("Hello, world!")),
-                        ("everyone", WasiConstFile::new("Hello, everyone!")),
-                    ]
-                )
-            ]
-        ),
-        (
-            "~",
-            [
-                ("home", WasiConstFile::new("This is home")),
-                ("user", WasiConstFile::new("This is user")),
-            ]
-        )
-    ]);
-
-    type LFS = VFSConstNormalLFS<EmbeddedFilesTy, WasiConstFile<&'static str>, FILE_COUNT, DefaultStdIO>;
-
-    static VIRTUAL_FILE_SYSTEM: Wasip1ConstVFS<LFS, FILE_COUNT> =
-        Wasip1ConstVFS::new_const(VFSConstNormalLFS::new_const());
-
-    plug_fs!(&VIRTUAL_FILE_SYSTEM, anonymous);
-}
-
-#[cfg(not(test))]
-export!(ComponentABI);

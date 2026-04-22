@@ -70,7 +70,9 @@ plug_thread!(
     self,
     test_threads
 );
+
 plug_process!(wasi_virt_layer::process::DefaultProcess, test_threads, self);
+
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     environ: &[
@@ -87,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_files() {
-        println!("Files: {:#?}", FILES);
+        println!("Files: {:#?}", EMBEDDED_FILES);
     }
 }
 
@@ -101,6 +103,3 @@ mod fs {
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_threads, self);
 }
-
-
-
