@@ -1,0 +1,24 @@
+[package]
+name = "self-rw-vfs"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+wit-bindgen = "0.54.0"
+parking_lot = "0.12.3"
+const_struct = "0.6.4"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+features = ["std", "alloc", "dynamic-fs"]
+
+[lib]
+crate-type = ["cdylib"]

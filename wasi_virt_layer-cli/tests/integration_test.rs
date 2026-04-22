@@ -6,6 +6,7 @@ use camino::Utf8PathBuf;
 use eyre::Context;
 use glob;
 use itertools::Itertools;
+use uuid::Uuid;
 use utils::*;
 use wasi_virt_layer_cli::unique_name::UniqueName;
 
@@ -100,6 +101,66 @@ fn build_threads(single: bool) -> color_eyre::Result<TestDir> {
         false, // keep_build_artifacts
         &[],
     )
+}
+
+/// Tests the self-virtualizing read/write VFS example in single-memory mode.
+/// This validates that a VFS can act as both the virtualizer and an executable-style workload.
+#[test]
+fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("self-rw-vfs"),
+        Some("ls"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+    )
+    .wrap_err("Failed to run self-rw-vfs example")?;
+
+    Ok(())
+}
+
+/// Tests the threaded self-virtualizing read/write VFS example in single-memory mode.
+/// This validates that the threaded pair builds successfully.
+///
+/// Runtime execution is intentionally skipped here because the Node/Bun test runner backend
+/// used by `run_thread` does not support `parking_lot` parking in this environment.
+#[test]
+fn test_self_rw_threads_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    let out_dir = format!(
+        "{THIS_FOLDER}/onetime/{}/dist",
+        Uuid::new_v4()
+    );
+
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    cmd.current_dir(THIS_FOLDER).args([
+        "build",
+        "-p",
+        "self-rw-threads-vfs",
+        "self_rw_example",
+        "-t",
+        "single",
+        "--threads",
+        "true",
+        "--out-dir",
+        &out_dir,
+    ]);
+
+    let status = cmd.status().wrap_err("Failed to execute wasi_virt_layer")?;
+    if !status.success() {
+        return Err(color_eyre::eyre::eyre!(
+            "self-rw-threads-vfs build failed with status: {status}"
+        ));
+    }
+
+    let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
+
+    Ok(())
 }
 
 fn set_features_inner<T>(

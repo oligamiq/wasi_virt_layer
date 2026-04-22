@@ -3,7 +3,7 @@
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::{BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1LFSBaseWrapper};
-use crate::wasi::file::{Wasip1DynCompatibleLFS, StandardDynamicLFS, Wasip1LFSBase};
+use crate::wasi::file::{Wasip1DynCompatibleLFS, DynamicLFS, Wasip1LFSBase};
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
@@ -1141,7 +1141,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
     }
 }
 
-impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> StandardDynamicLFS
+impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> DynamicLFS
     for StandardDynamicLFS<StdIo, AddInfo>
 {
     fn pre_open_inodes(&self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStrCustom)> {

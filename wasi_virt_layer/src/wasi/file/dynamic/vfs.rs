@@ -5,7 +5,7 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::wasi::file::dynamic::inode::DetailedOpenFd;
 use crate::wasi::file::trace::trace_fs;
-use crate::wasi::file::{InodeIdCommon, OpenFdInfoWithInode, StandardDynamicLFS, Wasip1LFSBase};
+use crate::wasi::file::{InodeIdCommon, OpenFdInfoWithInode, DynamicLFS, Wasip1LFSBase};
 use crate::{memory::WasmAccess, wasi::file::Wasip1FileSystem};
 
 #[cfg(feature = "threads")]
@@ -22,7 +22,7 @@ use alloc::collections::BTreeMap;
 
 /// A virtual file system implementation that maps file descriptors to inodes in a StandardDynamicLFS.
 pub struct StandardDynamicFileSystem<
-    LFS: StandardDynamicLFS + core::fmt::Debug,
+    LFS: DynamicLFS + core::fmt::Debug,
     OpenFd: OpenFdInfoWithInode + 'static = DetailedOpenFd<<LFS as Wasip1LFSBase>::Inode>,
 > where
     LFS::Inode: InodeIdCommon,
@@ -38,7 +38,7 @@ pub struct StandardDynamicFileSystem<
     pub next_fd: UnsafeCell<Fd>,
 }
 
-impl<LFS: StandardDynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
+impl<LFS: DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
     core::fmt::Debug for StandardDynamicFileSystem<LFS, OpenFd>
 where
     LFS::Inode: InodeIdCommon,
@@ -74,13 +74,13 @@ where
     }
 }
 
-unsafe impl<LFS: StandardDynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Send
+unsafe impl<LFS: DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Send
     for StandardDynamicFileSystem<LFS, OpenFd>
 where
     LFS::Inode: InodeIdCommon,
 {
 }
-unsafe impl<LFS: StandardDynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Sync
+unsafe impl<LFS: DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> Sync
     for StandardDynamicFileSystem<LFS, OpenFd>
 where
     LFS::Inode: InodeIdCommon,
@@ -108,7 +108,7 @@ macro_rules! get_open_fd {
 }
 
 impl<
-    LFS: StandardDynamicLFS + core::fmt::Debug,
+    LFS: DynamicLFS + core::fmt::Debug,
     OpenFd: OpenFdInfoWithInode<InodeId = LFS::Inode> + 'static,
 > StandardDynamicFileSystem<LFS, OpenFd>
 where
@@ -215,7 +215,7 @@ where
 }
 
 impl<
-    LFS: StandardDynamicLFS + core::fmt::Debug,
+    LFS: DynamicLFS + core::fmt::Debug,
     OpenFd: OpenFdInfoWithInode<InodeId = LFS::Inode> + 'static,
 > Wasip1FileSystem for StandardDynamicFileSystem<LFS, OpenFd>
 where

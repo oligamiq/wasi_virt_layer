@@ -1542,6 +1542,30 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
+name = "self-rw-threads-vfs"
+version = "0.1.5"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
+name = "self-rw-vfs"
+version = "0.1.5"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
+name = "self_rw_example"
+version = "0.1.5"
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -7,11 +7,11 @@ use crate::wasi::file::trace::trace_fs;
 use crate::{
     memory::WasmAccess,
     wasi::file::{
-        InodeIdCommon, OpenFdInfo, StandardEmbeddedLFS, Wasip1FileSystem, embedded::vfs::StandardEmbeddedFileSystem,
+        InodeIdCommon, OpenFdInfo, EmbeddedLFS, Wasip1FileSystem, embedded::vfs::StandardEmbeddedFileSystem,
     },
 };
 
-impl<LFS: StandardEmbeddedLFS + Sync, const FLAT_LEN: usize, OpenFd: OpenFdInfo + Default>
+impl<LFS: EmbeddedLFS + Sync, const FLAT_LEN: usize, OpenFd: OpenFdInfo + Default>
     Wasip1FileSystem for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
 where
     LFS::Inode: InodeIdCommon,

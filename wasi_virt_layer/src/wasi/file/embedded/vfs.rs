@@ -3,7 +3,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 pub use crate::wasi::file::OpenFdInfo;
-use crate::wasi::file::{ConstDefault, InodeIdCommon, StandardEmbeddedLFS};
+use crate::wasi::file::{ConstDefault, InodeIdCommon, EmbeddedLFS};
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
@@ -42,7 +42,7 @@ impl ConstDefault for SimpleOpenFd {
 /// A embedded virtual file system implementation.
 #[derive(Debug)]
 pub struct StandardEmbeddedFileSystem<
-    LFS: StandardEmbeddedLFS + Sync + core::fmt::Debug,
+    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
     OpenFd: OpenFdInfo + 'static = SimpleOpenFd,
 > where
@@ -57,7 +57,7 @@ pub struct StandardEmbeddedFileSystem<
 }
 
 unsafe impl<
-    LFS: StandardEmbeddedLFS + Sync + core::fmt::Debug,
+    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
     OpenFd: OpenFdInfo,
 > Sync for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
@@ -67,7 +67,7 @@ where
 }
 
 unsafe impl<
-    LFS: StandardEmbeddedLFS + Sync + core::fmt::Debug,
+    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
     OpenFd: OpenFdInfo,
 > Send for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
@@ -77,7 +77,7 @@ where
 }
 
 impl<
-    LFS: StandardEmbeddedLFS + Sync + core::fmt::Debug,
+    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
     OpenFd: OpenFdInfo + Copy + ConstDefault + 'static,
 > StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
@@ -116,7 +116,7 @@ where
 }
 
 impl<
-    LFS: StandardEmbeddedLFS + Sync + core::fmt::Debug,
+    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
     OpenFd: OpenFdInfo + Default + 'static,
 > StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
@@ -141,7 +141,7 @@ where
 }
 
 impl<
-    LFS: StandardEmbeddedLFS + Sync + core::fmt::Debug,
+    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
     const FLAT_LEN: usize,
     OpenFd: OpenFdInfo + Default + 'static,
 > StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>

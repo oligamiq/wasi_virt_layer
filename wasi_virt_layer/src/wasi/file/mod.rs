@@ -271,7 +271,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
 
 /// Trait for a static or constant local file system implementation.
 #[cfg(feature = "embedded-fs")]
-pub trait StandardEmbeddedLFS: Wasip1LFSBase
+pub trait EmbeddedLFS: Wasip1LFSBase
 where
     Self::Inode: 'static,
 {
@@ -280,7 +280,7 @@ where
 
 #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
-pub trait StandardDynamicLFS: Wasip1LFSBase {
+pub trait DynamicLFS: Wasip1LFSBase {
     fn pre_open_inodes(&self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStrCustom)>;
 }
 

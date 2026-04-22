@@ -20,6 +20,9 @@ members = [
     "examples/bare/ls-vfs",
     "examples/threads/ls-threads", "examples/threads/ls-threads-vfs",
     "examples/multiple-vfs", "test_new_bare", "examples/bare/tree", "examples/dynamic-wasm", "examples/dynamic-wasm-multiple",
+    "examples/bare/self-rw-vfs",
+    "examples/threads/self-rw-vfs",
+    "examples/test_wasm/self_rw_example",
 ]
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 

@@ -6,8 +6,8 @@ use crate::__private::wasip1::Dircookie;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::Wasip1LFSBaseWrapper as _;
 use crate::wasi::file::{
-    BoxedInode, DerefToStrCustom, InodeIdCommon, StandardEmbeddedLFS, Wasip1DynCompatibleLFS,
-    Wasip1DynCompatibleLFSSlice, StandardDynamicLFS, Wasip1LFSBase,
+    BoxedInode, DerefToStrCustom, InodeIdCommon, EmbeddedLFS, Wasip1DynCompatibleLFS,
+    Wasip1DynCompatibleLFSSlice, DynamicLFS, Wasip1LFSBase,
 };
 use crate::{
     memory::WasmAccess,
@@ -244,7 +244,7 @@ impl<
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
     AddInfo: WasiAddInfo + 'static,
-> StandardEmbeddedLFS for StandardEmbeddedNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
+> EmbeddedLFS for StandardEmbeddedNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
 {
     const PRE_OPEN: &'static [Self::Inode] = ROOT::PRE_OPEN;
 }
@@ -255,7 +255,7 @@ impl<
     const FLAT_LEN: usize,
     StdIo: StdIO + 'static,
     AddInfo: WasiAddInfo + 'static,
-> StandardDynamicLFS for StandardEmbeddedNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
+> DynamicLFS for StandardEmbeddedNormalLFS<ROOT, File, FLAT_LEN, StdIo, AddInfo>
 {
     fn pre_open_inodes(&self) -> impl IntoIterator<Item = (Self::Inode, impl DerefToStrCustom)> {
         ROOT::PRE_OPEN.iter().map(|&inode| {
