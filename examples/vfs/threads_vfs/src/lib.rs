@@ -66,7 +66,7 @@ const EMBEDDED_FILES: NormalFILES = EmbeddedFiles!([(
 )]);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_embedded() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
     test_threads
 );
@@ -97,7 +97,7 @@ mod fs {
     type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, F, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
-        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
+        StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_threads, self);
 }

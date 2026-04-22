@@ -65,7 +65,7 @@ mod fs {
     type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, F, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
-        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
+        StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, spawn_vfs_and_body_example, self);
 }
@@ -78,7 +78,7 @@ const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 plug_env!(@embedded, VirtualEnvTy, spawn_vfs_and_body_example, self);
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_embedded() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
     spawn_vfs_and_body_example
 );

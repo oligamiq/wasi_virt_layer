@@ -110,7 +110,7 @@ impl JoinPoolHandle {
         guard.extend(iter);
     }
 
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         JoinPoolHandle { pool: None }
     }
 
@@ -241,10 +241,10 @@ pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess> {
 
 impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
     /// Creates a new `VirtualThreadPool` without initialization.
-    pub const unsafe fn new_embedded(max_threads: usize) -> Self {
+    pub const unsafe fn new_const(max_threads: usize) -> Self {
         VirtualThreadPool {
             max_threads: AtomicUsize::new(max_threads),
-            kept_workers_pool: JoinPoolHandle::new_embedded(),
+            kept_workers_pool: JoinPoolHandle::new_const(),
             queue: parking_lot::Mutex::new(None),
             queue_receiver: None,
             read_kept_workers_pool_size: AtomicUsize::new(0),
@@ -428,7 +428,7 @@ pub struct DirectThreadPool<ThreadAccessor: ThreadAccess>(
 
 impl<ThreadAccessor: ThreadAccess> DirectThreadPool<ThreadAccessor> {
     /// Creates a new `DirectThreadPool`.
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         DirectThreadPool(core::marker::PhantomData)
     }
 }
@@ -661,7 +661,7 @@ macro_rules! plug_thread {
 mod reset_on_thread {
     use crate::utils::InitOnce;
 
-    static INIT: InitOnce = InitOnce::new_embedded();
+    static INIT: InitOnce = InitOnce::new_const();
 
     #[link(wasm_import_module = "wasip1-vfs")]
     unsafe extern "C" {

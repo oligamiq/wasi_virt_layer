@@ -39,7 +39,7 @@ impl<
 > StandardEmbeddedNormalLFS<EmbeddedRoot, File, FLAT_LEN, StdIo, AddInfo>
 {
     /// Creates a new `StandardEmbeddedNormalLFS`.
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             add_info: [AddInfo::DEFAULT; FLAT_LEN],
             __marker: core::marker::PhantomData,

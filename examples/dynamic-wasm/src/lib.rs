@@ -13,7 +13,7 @@ struct Hello;
 
 import_wasm!(ls);
 
-static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_embedded();
+static WASM_HOLDER: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_const();
 
 export_pseudo_wasm!(wasm_holder);
 

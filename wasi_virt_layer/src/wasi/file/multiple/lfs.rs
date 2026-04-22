@@ -31,7 +31,7 @@ unsafe impl<B: BoxedInode> Sync for Wasip1DynCompatibleLFSWrapper<B> {}
 
 impl<B: BoxedInode> Wasip1DynCompatibleLFSWrapper<B> {
     /// Creates a new `Wasip1DynCompatibleLFSWrapper`.
-    pub const fn new_embedded(lfs: Wasip1DynCompatibleLFSWrapperInner<B>) -> Self {
+    pub const fn new_const(lfs: Wasip1DynCompatibleLFSWrapperInner<B>) -> Self {
         Self { lfs }
     }
 

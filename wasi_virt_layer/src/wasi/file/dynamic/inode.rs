@@ -39,7 +39,7 @@ pub struct InodeMetadata<AddInfo: WasiAddInfo> {
 
 impl<AddInfo: WasiAddInfo + ConstDefault> InodeMetadata<AddInfo> {
     /// Create new default metadata for a given file type
-    pub const fn new_embedded(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
+    pub const fn new_const(filetype: wasip1::Filetype, rights: wasip1::Rights) -> Self {
         Self {
             filetype,
             nlink: 1,

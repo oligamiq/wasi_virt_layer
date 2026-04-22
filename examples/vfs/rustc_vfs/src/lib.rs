@@ -54,7 +54,7 @@ mod fs {
     type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
-        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
+        StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, rustc_opt);
 }

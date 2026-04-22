@@ -86,7 +86,7 @@ where
 {
     /// Creates a new `StandardEmbeddedFileSystem` with thread support.
     #[cfg(feature = "threads")]
-    pub const fn new_embedded(lfs: LFS) -> Self {
+    pub const fn new_const(lfs: LFS) -> Self {
         let mut map: [RwLock<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN] =
             [const { RwLock::new(None) }; FLAT_LEN];
 
@@ -101,7 +101,7 @@ where
 
     /// Creates a new `StandardEmbeddedFileSystem` without thread support.
     #[cfg(not(feature = "threads"))]
-    pub const fn new_embedded(lfs: LFS) -> Self {
+    pub const fn new_const(lfs: LFS) -> Self {
         let mut map: [UnsafeCell<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN] =
             [const { UnsafeCell::new(None) }; FLAT_LEN];
 

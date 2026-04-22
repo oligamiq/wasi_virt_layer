@@ -65,7 +65,7 @@ struct ThreadAlt<ThreadAccessor: ThreadAccess> {
     _marker: core::marker::PhantomData<ThreadAccessor>,
 }
 impl<ThreadAccessor: ThreadAccess> ThreadAlt<ThreadAccessor> {
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         ThreadAlt {
             _marker: core::marker::PhantomData,
         }
@@ -112,7 +112,7 @@ impl ThreadAccess for ThreadAccessorAlt {
     }
 }
 
-plug_thread!(@sched_yield, { ThreadAlt::<ThreadAccessorAlt>::new_embedded() }, test_wasm);
+plug_thread!(@sched_yield, { ThreadAlt::<ThreadAccessorAlt>::new_const() }, test_wasm);
 
 mod fs {
     use wasi_virt_layer::file::{DefaultStdIO, StandardEmbeddedNormalLFS, StandardEmbeddedFileSystem};
@@ -122,7 +122,7 @@ mod fs {
     type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, FILE_COUNT, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
-        StandardEmbeddedFileSystem::new_embedded(StandardEmbeddedNormalLFS::new_embedded());
+        StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_wasm);
 }

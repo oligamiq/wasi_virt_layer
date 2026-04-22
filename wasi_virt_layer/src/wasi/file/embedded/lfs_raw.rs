@@ -19,7 +19,7 @@ impl<File: Wasip1FileTrait + 'static + Copy, const FLAT_LEN: usize>
     StandardEmbeddedFiles<File, FLAT_LEN>
 {
     /// Creates a new `StandardEmbeddedFiles`.
-    pub const fn new_embedded(
+    pub const fn new_const(
         files: (
             [(&'static str, StandardEmbeddedInode<File>); FLAT_LEN],
             &'static [usize],
@@ -75,7 +75,7 @@ macro_rules! EmbeddedFiles {
             $(($dir_name:expr, $file_or_dir:tt $(,)?)),* $(,)?
         ] $(,)?
     ) => {
-        $crate::__private::inner::fs::StandardEmbeddedFiles::new_embedded({
+        $crate::__private::inner::fs::StandardEmbeddedFiles::new_const({
             const COUNT: usize = {
                 let mut count = 0;
 
@@ -209,7 +209,7 @@ macro_rules! EmbeddedFiles {
             const fn custom_sort<T: Copy, const N: usize>(
                 mut files: $crate::__private::utils::EmbeddedArrayBuilder<(usize, T), N>,
             ) -> [T; N] {
-                let mut sorted = $crate::__private::utils::EmbeddedArrayBuilder::<_, N>::new_embedded();
+                let mut sorted = $crate::__private::utils::EmbeddedArrayBuilder::<_, N>::new_const();
 
                 while (files.len() > 0) {
                     let mut depth = None;
@@ -237,7 +237,7 @@ macro_rules! EmbeddedFiles {
             }
 
             const EMPTY_ARR: [&'static str; COUNT] = {
-                let mut empty_arr = $crate::__private::utils::EmbeddedArrayBuilder::new_embedded();
+                let mut empty_arr = $crate::__private::utils::EmbeddedArrayBuilder::new_const();
 
                 $(
                     $crate::EmbeddedFiles!(@empty, 0, empty_arr, [$dir_name], $file_or_dir);
@@ -249,7 +249,7 @@ macro_rules! EmbeddedFiles {
             };
 
             let flatten = {
-                let mut static_array = $crate::__private::utils::EmbeddedArrayBuilder::new_embedded();
+                let mut static_array = $crate::__private::utils::EmbeddedArrayBuilder::new_const();
 
                 $(
                     $crate::EmbeddedFiles!(
@@ -265,7 +265,7 @@ macro_rules! EmbeddedFiles {
 
                 let static_array = custom_sort(static_array);
 
-                let mut file_array = $crate::__private::utils::EmbeddedArrayBuilder::new_embedded();
+                let mut file_array = $crate::__private::utils::EmbeddedArrayBuilder::new_const();
                 const_for!(i in 0..static_array.len() => {
                     let (_, name, file_or_dir) = static_array[i];
                     file_array.push((
@@ -291,7 +291,7 @@ macro_rules! EmbeddedFiles {
             };
 
             const PRE_OPEN: [usize; PRE_OPEN_COUNT] = {
-                let mut static_array = $crate::__private::utils::EmbeddedArrayBuilder::new_embedded();
+                let mut static_array = $crate::__private::utils::EmbeddedArrayBuilder::new_const();
 
                 $(
                     static_array.push(get_self(EMPTY_ARR, $dir_name));
@@ -462,7 +462,7 @@ pub struct WasiEmbeddedFile<File: WasiEmbeddedPrimitiveFile> {
 
 impl<File: WasiEmbeddedPrimitiveFile> WasiEmbeddedFile<File> {
     /// Creates a new `WasiEmbeddedFile`.
-    pub const fn new_embedded(file: File) -> Self {
+    pub const fn new_const(file: File) -> Self {
         Self { file }
     }
 
@@ -530,17 +530,17 @@ mod tests {
         const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, 10> = EmbeddedFiles!([
             (
                 "/root",
-                [("root.txt", WasiEmbeddedFile::new_embedded("This is root"))]
+                [("root.txt", WasiEmbeddedFile::new_const("This is root"))]
             ),
             (
                 ".",
                 [
-                    ("hey", WasiEmbeddedFile::new_embedded("Hey!")),
+                    ("hey", WasiEmbeddedFile::new_const("Hey!")),
                     (
                         "hello",
                         [
-                            ("world", WasiEmbeddedFile::new_embedded("Hello, world!")),
-                            ("everyone", WasiEmbeddedFile::new_embedded("Hello, everyone!")),
+                            ("world", WasiEmbeddedFile::new_const("Hello, world!")),
+                            ("everyone", WasiEmbeddedFile::new_const("Hello, everyone!")),
                         ]
                     )
                 ]
@@ -548,8 +548,8 @@ mod tests {
             (
                 "~",
                 [
-                    ("home", WasiEmbeddedFile::new_embedded("This is home")),
-                    ("user", WasiEmbeddedFile::new_embedded("This is user")),
+                    ("home", WasiEmbeddedFile::new_const("This is home")),
+                    ("user", WasiEmbeddedFile::new_const("This is user")),
                 ]
             )
         ]);

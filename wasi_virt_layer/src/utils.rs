@@ -196,7 +196,7 @@ pub struct EmbeddedArrayBuilder<T: Copy, const N: usize> {
 
 impl<T: Copy, const N: usize> EmbeddedArrayBuilder<T, N> {
     /// Creates a new `EmbeddedArrayBuilder`.
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             data: [None; N],
             len: 0,
@@ -205,7 +205,7 @@ impl<T: Copy, const N: usize> EmbeddedArrayBuilder<T, N> {
 
     /// Creates a new `EmbeddedArrayBuilder`.
     pub const fn new() -> Self {
-        Self::new_embedded()
+        Self::new_const()
     }
 
     /// Pushes a value into the builder. Returns `Some(value)` if the builder is full.
@@ -335,7 +335,7 @@ pub struct InitOnce {
 
 impl InitOnce {
     /// Creates a new `InitOnce` instance.
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             is_init: core::sync::atomic::AtomicBool::new(false),
         }

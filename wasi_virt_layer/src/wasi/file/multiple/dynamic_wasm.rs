@@ -94,7 +94,7 @@ impl AsRef<StandardPseudoWasmHolder> for StandardPseudoWasmHolder {
 }
 
 impl StandardPseudoWasmHolder {
-    pub const fn new_embedded() -> Self {
+    pub const fn new_const() -> Self {
         Self {
             #[cfg(feature = "threads")]
             once: core::sync::atomic::AtomicBool::new(false),
@@ -237,9 +237,9 @@ impl StandardPseudoWasmMultipleHolder {
     pub const fn new() -> Self {
         Self {
             #[cfg(feature = "threads")]
-            holders: parking_lot::RwLock::new(smallvec::SmallVec::new_embedded()),
+            holders: parking_lot::RwLock::new(smallvec::SmallVec::new_const()),
             #[cfg(not(feature = "threads"))]
-            holders: core::cell::UnsafeCell::new(smallvec::SmallVec::new_embedded()),
+            holders: core::cell::UnsafeCell::new(smallvec::SmallVec::new_const()),
         }
     }
 

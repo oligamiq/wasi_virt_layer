@@ -78,7 +78,7 @@ mod env {
 }
 
 plug_thread!(
-    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_embedded() },
+    { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
     self_rw_example
 );
