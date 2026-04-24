@@ -42,8 +42,22 @@ impl Generator for Anonymous {
             .filter(|t| !anonymous_targets.iter().any(|at| at == t.as_ref()))
             .collect::<SmallVec<[_; 1]>>();
 
+        const PREFIX: &str = UniqueName::PREFIX;
+
         if collected.len() == 0 {
-            return Ok(());
+            // Check this library use anonymous.
+            // If use anonymous but there is no target, it is an error.
+
+            // check anonymous export.
+            if module                .exports
+                .iter()
+                .any(|e| e.name == format!("{PREFIX}anonymous__start_anchor"))
+            {
+                // The target does not exist, even though “anonymous” is specified.
+                eyre::bail!(
+                    "The target which VFS wasm required from `<anonymous>` does not exist. Please add argument `<target_wasm>` or remove `<anonymous>` if you do not want to use VFS wasm.",
+                );
+            }
         }
         if collected.len() > 1 {
             eyre::bail!(
@@ -61,7 +75,6 @@ impl Generator for Anonymous {
             "_memory_trap_anchor",
             "_wasi_thread_start_anchor",
         ];
-        const PREFIX: &str = UniqueName::PREFIX;
 
         for postfix in EXPORT_POSTFIXS {
             let anonymous_export_name = format!("{PREFIX}anonymous{postfix}");
