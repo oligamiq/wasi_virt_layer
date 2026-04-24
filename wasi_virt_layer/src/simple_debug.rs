@@ -1,4 +1,4 @@
-use crate::__private::wasip1;
+use crate::{__private::wasip1, transporter::non_recursive_fd_write};
 
 /// Prints a simple debug message to stderr.
 /// This function is safe to call even in early initialization stages,
@@ -14,15 +14,12 @@ pub fn simple_debug_print(buf: impl AsRef<[u8]>) {
         let ciovec_arr = [wasip1::Ciovec {
             buf: buf.as_ref().as_ptr() as *const u8,
             buf_len: buf.as_ref().len(),
+        }, wasip1::Ciovec {
+            buf: b"\n".as_ptr(),
+            buf_len: 1,
         }];
 
-        let mut rp0 = core::mem::MaybeUninit::<wasip1::Size>::uninit();
-        wasip1::wasi_snapshot_preview1::fd_write(
-            wasip1::FD_STDERR as i32,
-            ciovec_arr.as_ptr() as i32,
-            1,
-            rp0.as_mut_ptr() as i32,
-        );
+        let _ = non_recursive_fd_write(2, &ciovec_arr);
     }
 }
 

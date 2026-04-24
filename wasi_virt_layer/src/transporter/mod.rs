@@ -14,7 +14,7 @@ use crate::prelude::WasmAccess;
 #[cfg(not(feature = "multi_memory"))]
 use crate::memory::WasmAccessDynCompatibleRaw;
 
-unsafe fn non_recursive_fd_read(
+pub unsafe fn non_recursive_fd_read(
     fd: wasip1::Fd,
     iovs: wasip1::IovecArray<'_>,
 ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -40,7 +40,7 @@ unsafe fn non_recursive_fd_read(
     }
 }
 
-unsafe fn non_recursive_fd_write(
+pub unsafe fn non_recursive_fd_write(
     fd: wasip1::Fd,
     iovs: wasip1::CiovecArray<'_>,
 ) -> Result<wasip1::Size, wasip1::Errno> {
