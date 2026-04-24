@@ -63,26 +63,21 @@ mod fs {
 
     type LFS = StandardDynamicLFS<DefaultStdIO>;
 
-    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardDynamicFileSystem<LFS>> =
-        LazyLock::new(|| {
-            let lfs = StandardDynamicLFS::new();
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardDynamicFileSystem<LFS>> = LazyLock::new(|| {
+        let lfs = StandardDynamicLFS::new();
 
-            let root_inode = lfs.add_preopen(".");
+        let root_inode = lfs.add_preopen(".");
 
-            lfs.add_file(
-                root_inode,
-                "readme.txt",
-                b"Hello from the virtual filesystem!".to_vec(),
-            )
+        lfs.add_file(root_inode, "readme.txt", b"Hello from the virtual filesystem!".to_vec())
             .unwrap();
 
-            lfs.add_file(root_inode, "data.txt", b"Some initial data".to_vec())
-                .unwrap();
+        lfs.add_file(root_inode, "data.txt", b"Some initial data".to_vec())
+            .unwrap();
 
-            let vfs = StandardDynamicFileSystem::new(lfs);
-            vfs.add_fd(root_inode, !0, !0);
-            vfs
-        });
+        let vfs = StandardDynamicFileSystem::new(lfs);
+        vfs.add_fd(root_inode, !0, !0);
+        vfs
+    });
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, anonymous, self);
 }
