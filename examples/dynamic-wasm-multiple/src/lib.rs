@@ -14,7 +14,8 @@ struct Hello;
 
 import_wasm!(ls);
 
-static WASM_MULTIPLE_HOLDER: StandardPseudoWasmMultipleHolder = StandardPseudoWasmMultipleHolder::new();
+static WASM_MULTIPLE_HOLDER: StandardPseudoWasmMultipleHolder =
+    StandardPseudoWasmMultipleHolder::new();
 
 export_pseudo_wasm!(wasm_multiple_holder; &WASM_MULTIPLE_HOLDER);
 
@@ -71,24 +72,28 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 #[allow(dead_code)]
 mod fs {
     use super::*;
-    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardMultipleFileSystem<BoxedInodeNormal>> = LazyLock::new(|| {
-        let mut vfs = StandardMultipleFileSystem::<BoxedInodeNormal>::new();
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardMultipleFileSystem<BoxedInodeNormal>> =
+        LazyLock::new(|| {
+            let mut vfs = StandardMultipleFileSystem::<BoxedInodeNormal>::new();
 
-        // Use the generated struct to add the pseudo Wasm module with ID 0
-        let wasm = WASM_MULTIPLE_HOLDER.restore(0);
-        vfs.add_wasm_access(wasm);
+            // Use the generated struct to add the pseudo Wasm module with ID 0
+            let wasm = WASM_MULTIPLE_HOLDER.restore(0);
+            vfs.add_wasm_access(wasm);
 
-        let lfs1 = StandardDynamicLFS::<DefaultStdIO>::new();
-        let root_inode1 = lfs1.add_preopen(".");
-        lfs1.add_file(root_inode1, "hello.txt", b"Hello, Multiple Dynamic WASM!".to_vec())
+            let lfs1 = StandardDynamicLFS::<DefaultStdIO>::new();
+            let root_inode1 = lfs1.add_preopen(".");
+            lfs1.add_file(
+                root_inode1,
+                "hello.txt",
+                b"Hello, Multiple Dynamic WASM!".to_vec(),
+            )
             .unwrap();
 
-        vfs.add_lfs(lfs1);
-        vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
+            vfs.add_lfs(lfs1);
+            vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
 
-        vfs
-    });
+            vfs
+        });
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }
-

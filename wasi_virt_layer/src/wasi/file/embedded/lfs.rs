@@ -143,14 +143,17 @@ impl<
                 };
 
                 let len = wasm_array_access.clone().into_iter().count();
-                if let Some(i) = EmbeddedRoot::FILES[start..end].iter().position(|(name, _)| {
-                    name.len() == len
-                        && name
-                            .as_bytes()
-                            .iter()
-                            .zip(wasm_array_access.clone())
-                            .all(|(a, b)| *a == b)
-                }) {
+                if let Some(i) = EmbeddedRoot::FILES[start..end]
+                    .iter()
+                    .position(|(name, _)| {
+                        name.len() == len
+                            && name
+                                .as_bytes()
+                                .iter()
+                                .zip(wasm_array_access.clone())
+                                .all(|(a, b)| *a == b)
+                    })
+                {
                     current_inode = start + i;
                 } else {
                     return None; // Not found

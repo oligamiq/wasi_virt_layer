@@ -363,4 +363,3 @@ pub fn environ_get_inner<'a, Wasm: WasmAccess>(
 ) -> Errno {
     state.environ_get::<Wasm>(environ, environ_buf)
 }
-

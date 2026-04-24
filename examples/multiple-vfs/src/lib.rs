@@ -93,4 +93,3 @@ mod fs {
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }
-

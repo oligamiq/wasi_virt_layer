@@ -3,7 +3,7 @@
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
 use crate::wasi::file::{BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1LFSBaseWrapper};
-use crate::wasi::file::{Wasip1DynCompatibleLFS, DynamicLFS, Wasip1LFSBase};
+use crate::wasi::file::{DynamicLFS, Wasip1DynCompatibleLFS, Wasip1LFSBase};
 use crate::{
     memory::{WasmAccess, WasmPathAccess, WasmPathComponent},
     wasi::file::{
@@ -25,7 +25,10 @@ use alloc::collections::BTreeMap;
 use core::cell::UnsafeCell;
 
 /// A local file system that allows runtime modifications
-pub struct StandardDynamicLFS<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static = DefaultAddInfo> {
+pub struct StandardDynamicLFS<
+    StdIo: StdIO + 'static,
+    AddInfo: WasiAddInfo + 'static = DefaultAddInfo,
+> {
     #[cfg(feature = "threads")]
     pub inodes: DashMap<InodeId, Inode<AddInfo>>,
     #[cfg(not(feature = "threads"))]
@@ -1105,14 +1108,22 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         f: &mut dyn for<'a> FnMut(&'a dyn crate::wasi::file::Wasip1DynCompatibleLFSSlice),
     ) {
         #[derive(Debug)]
-        struct PreOpenInodesIndex<'a, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static>(&'a StandardDynamicLFS<StdIo, AddInfo>);
+        struct PreOpenInodesIndex<'a, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static>(
+            &'a StandardDynamicLFS<StdIo, AddInfo>,
+        );
 
-        impl<'a, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> crate::wasi::file::Wasip1DynCompatibleLFSSlice for PreOpenInodesIndex<'a, StdIo, AddInfo> {
+        impl<'a, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static>
+            crate::wasi::file::Wasip1DynCompatibleLFSSlice
+            for PreOpenInodesIndex<'a, StdIo, AddInfo>
+        {
             fn index(
                 &self,
                 idx: usize,
                 f: &mut dyn for<'b, 'c> FnMut(
-                    Option<(&'b dyn InodeIdCommon, &'c dyn crate::wasi::file::DerefToStrCustom)>,
+                    Option<(
+                        &'b dyn InodeIdCommon,
+                        &'c dyn crate::wasi::file::DerefToStrCustom,
+                    )>,
                 ),
             ) {
                 #[cfg(feature = "threads")]
@@ -1120,7 +1131,10 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                     if let Some(entry) = self.0.preopens.iter().nth(idx) {
                         let inode = entry.key();
                         let name = entry.value();
-                        f(Some((inode as &dyn InodeIdCommon, name as &dyn crate::wasi::file::DerefToStrCustom)));
+                        f(Some((
+                            inode as &dyn InodeIdCommon,
+                            name as &dyn crate::wasi::file::DerefToStrCustom,
+                        )));
                     } else {
                         f(None);
                     }
@@ -1129,7 +1143,10 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                 {
                     let map = unsafe { &*self.0.preopens.get() };
                     if let Some((inode, name)) = map.iter().nth(idx) {
-                        f(Some((inode as &dyn InodeIdCommon, name as &dyn crate::wasi::file::DerefToStrCustom)));
+                        f(Some((
+                            inode as &dyn InodeIdCommon,
+                            name as &dyn crate::wasi::file::DerefToStrCustom,
+                        )));
                     } else {
                         f(None);
                     }
@@ -1161,4 +1178,3 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> DynamicLF
         }
     }
 }
-

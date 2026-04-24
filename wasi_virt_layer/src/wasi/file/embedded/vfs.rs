@@ -3,7 +3,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 pub use crate::wasi::file::OpenFdInfo;
-use crate::wasi::file::{ConstDefault, InodeIdCommon, EmbeddedLFS};
+use crate::wasi::file::{ConstDefault, EmbeddedLFS, InodeIdCommon};
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
@@ -56,21 +56,15 @@ pub struct StandardEmbeddedFileSystem<
     map: [UnsafeCell<Option<(LFS::Inode, OpenFd)>>; FLAT_LEN],
 }
 
-unsafe impl<
-    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
-    const FLAT_LEN: usize,
-    OpenFd: OpenFdInfo,
-> Sync for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
+unsafe impl<LFS: EmbeddedLFS + Sync + core::fmt::Debug, const FLAT_LEN: usize, OpenFd: OpenFdInfo>
+    Sync for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
 where
     LFS::Inode: InodeIdCommon,
 {
 }
 
-unsafe impl<
-    LFS: EmbeddedLFS + Sync + core::fmt::Debug,
-    const FLAT_LEN: usize,
-    OpenFd: OpenFdInfo,
-> Send for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
+unsafe impl<LFS: EmbeddedLFS + Sync + core::fmt::Debug, const FLAT_LEN: usize, OpenFd: OpenFdInfo>
+    Send for StandardEmbeddedFileSystem<LFS, FLAT_LEN, OpenFd>
 where
     LFS::Inode: InodeIdCommon,
 {

@@ -57,7 +57,10 @@ type NormalFILES = StandardEmbeddedFiles<F, { FILE_COUNT }>;
 
 #[const_struct]
 const EMBEDDED_FILES: NormalFILES = EmbeddedFiles!([
-    ("/root", [("root.txt", WasiEmbeddedFile::new("This is root"))]),
+    (
+        "/root",
+        [("root.txt", WasiEmbeddedFile::new("This is root"))]
+    ),
     (
         ".",
         [
@@ -192,7 +195,9 @@ impl PollOneoff for WaitPoll {
 plug_poll!(WaitPoll, test_pool_thread);
 
 mod fs {
-    use wasi_virt_layer::file::{DefaultStdIO, StandardEmbeddedNormalLFS, StandardEmbeddedFileSystem};
+    use wasi_virt_layer::file::{
+        DefaultStdIO, StandardEmbeddedFileSystem, StandardEmbeddedNormalLFS,
+    };
 
     use super::*;
 
@@ -203,6 +208,3 @@ mod fs {
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_pool_thread, self);
 }
-
-
-

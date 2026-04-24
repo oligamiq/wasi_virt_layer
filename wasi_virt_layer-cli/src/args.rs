@@ -113,30 +113,6 @@ pub struct BuildArgs {
 }
 
 impl BuildArgs {
-    /// Creates a new `BuildArgs` instance from iterator of strings.
-    pub fn new(args: impl IntoIterator<Item = impl Into<String>>) -> Self {
-        let args = args
-            .into_iter()
-            .map(Into::<String>::into)
-            .map(Into::<std::ffi::OsString>::into)
-            .collect::<Vec<_>>();
-        let parsed = BuildArgs::parse_from(args);
-        if parsed.wasm.is_empty()
-            && !parsed
-                .package
-                .as_ref()
-                .is_some_and(|p| matches!(p, WasmPath::Component(_)))
-        {
-            unimplemented!("target to only self file is not supported yet");
-        }
-
-        if parsed.dwarf.unwrap_or(false) {
-            log::error!("Warning: dwarf support is experimental and may not work as expected.");
-        }
-
-        parsed
-    }
-
     /// Returns the memory hints for each target module.
     pub fn get_wasm_memory_hints(&self) -> Box<[Option<usize>]> {
         self.wasm_memory_hint

@@ -70,24 +70,23 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), ls);
 #[allow(dead_code)]
 mod fs {
     use super::*;
-    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardMultipleFileSystem<BoxedInodeNormal>> = LazyLock::new(|| {
-        let mut vfs = StandardMultipleFileSystem::<BoxedInodeNormal>::new();
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardMultipleFileSystem<BoxedInodeNormal>> =
+        LazyLock::new(|| {
+            let mut vfs = StandardMultipleFileSystem::<BoxedInodeNormal>::new();
 
-        let wasm = WASM_HOLDER.restore(());
-        vfs.add_wasm_access(wasm);
+            let wasm = WASM_HOLDER.restore(());
+            vfs.add_wasm_access(wasm);
 
-        let lfs1 = StandardDynamicLFS::<DefaultStdIO>::new();
-        let root_inode1 = lfs1.add_preopen(".");
-        lfs1.add_file(root_inode1, "hello.txt", b"Hello, Dynamic WASM!".to_vec())
-            .unwrap();
+            let lfs1 = StandardDynamicLFS::<DefaultStdIO>::new();
+            let root_inode1 = lfs1.add_preopen(".");
+            lfs1.add_file(root_inode1, "hello.txt", b"Hello, Dynamic WASM!".to_vec())
+                .unwrap();
 
-        vfs.add_lfs(lfs1);
-        vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
+            vfs.add_lfs(lfs1);
+            vfs.add_preopen_fd(0, BoxedInodeNormal::from_inode(root_inode1));
 
-        vfs
-    });
+            vfs
+        });
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }
-
-

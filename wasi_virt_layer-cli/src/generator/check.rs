@@ -25,9 +25,7 @@ fn has_library_import_anchor_names(export_names: &[&str]) -> bool {
 
     let has_prefixed_thread_anchor = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
         .iter()
-        .map(
-            |name| UniqueName::ThreadsSpawn(&ThreadsSpawnName::ImportAnchor(name)).to_string(),
-        )
+        .map(|name| UniqueName::ThreadsSpawn(&ThreadsSpawnName::ImportAnchor(name)).to_string())
         .any(|required| export_names.iter().any(|name| *name == required));
 
     has_wasip1_anchor || has_prefixed_thread_anchor
@@ -46,8 +44,7 @@ impl Generator for CheckUseLibrary {
             .map(|e| e.name.as_str())
             .collect::<Vec<_>>();
 
-        if !has_library_import_anchor_names(&export_names)
-        {
+        if !has_library_import_anchor_names(&export_names) {
             eyre::bail!(
                 r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer; or, it does not import a crate."#
             );

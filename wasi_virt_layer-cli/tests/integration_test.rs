@@ -6,8 +6,8 @@ use camino::Utf8PathBuf;
 use eyre::Context;
 use glob;
 use itertools::Itertools;
-use uuid::Uuid;
 use utils::*;
+use uuid::Uuid;
 use wasi_virt_layer_cli::unique_name::UniqueName;
 
 // alloc
@@ -132,10 +132,7 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
 fn test_self_rw_threads_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
-    let out_dir = format!(
-        "{THIS_FOLDER}/onetime/{}/dist",
-        Uuid::new_v4()
-    );
+    let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
     cmd.current_dir(THIS_FOLDER).args([

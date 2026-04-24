@@ -27,29 +27,33 @@ import_wasm!(test_wasm);
 const FILE_COUNT: usize = 10;
 
 #[const_struct]
-const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> = EmbeddedFiles!([
-    ("/root", [("root.txt", WasiEmbeddedFile::new("This is root"))]),
-    (
-        ".",
-        [
-            ("hey", WasiEmbeddedFile::new("Hey!")),
-            (
-                "hello",
-                [
-                    ("world", WasiEmbeddedFile::new("Hello, world!")),
-                    ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
-                ]
-            )
-        ]
-    ),
-    (
-        "~",
-        [
-            ("home", WasiEmbeddedFile::new("This is home")),
-            ("user", WasiEmbeddedFile::new("This is user")),
-        ]
-    )
-]);
+const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
+    EmbeddedFiles!([
+        (
+            "/root",
+            [("root.txt", WasiEmbeddedFile::new("This is root"))]
+        ),
+        (
+            ".",
+            [
+                ("hey", WasiEmbeddedFile::new("Hey!")),
+                (
+                    "hello",
+                    [
+                        ("world", WasiEmbeddedFile::new("Hello, world!")),
+                        ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
+                    ]
+                )
+            ]
+        ),
+        (
+            "~",
+            [
+                ("home", WasiEmbeddedFile::new("This is home")),
+                ("user", WasiEmbeddedFile::new("This is user")),
+            ]
+        )
+    ]);
 
 plug_process!(test_wasm);
 
@@ -61,17 +65,21 @@ const ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 plug_env!(@embedded, EnvTy, test_wasm);
 
 mod fs {
-    use wasi_virt_layer::file::{DefaultStdIO, StandardEmbeddedNormalLFS, StandardEmbeddedFileSystem};
+    use wasi_virt_layer::file::{
+        DefaultStdIO, StandardEmbeddedFileSystem, StandardEmbeddedNormalLFS,
+    };
 
     use super::*;
 
-    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, FILE_COUNT, DefaultStdIO>;
+    type LFS = StandardEmbeddedNormalLFS<
+        EmbeddedFilesTy,
+        WasiEmbeddedFile<&'static str>,
+        FILE_COUNT,
+        DefaultStdIO,
+    >;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
         StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_wasm);
 }
-
-
-

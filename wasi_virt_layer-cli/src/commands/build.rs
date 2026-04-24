@@ -49,6 +49,10 @@ macro_rules! add_generator {
 pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
     let package = parsed_args.get_package()?;
 
+    if parsed_args.dwarf.unwrap_or(false) {
+        log::error!("Warning: dwarf support is experimental and may not work as expected.");
+    }
+
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());
         add_generator!(component_runner);

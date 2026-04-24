@@ -67,33 +67,33 @@ mod fs {
 
     type LFS = StandardDynamicLFS<DefaultStdIO>;
 
-    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardDynamicFileSystem<LFS>> = LazyLock::new(|| {
-        let lfs = StandardDynamicLFS::new(); // Inode 0 is root "."
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardDynamicFileSystem<LFS>> =
+        LazyLock::new(|| {
+            let lfs = StandardDynamicLFS::new(); // Inode 0 is root "."
 
-        // Add a preopen entry for root "."
-        let root_inode = lfs.add_preopen(".");
+            // Add a preopen entry for root "."
+            let root_inode = lfs.add_preopen(".");
 
-        let docs_inode = lfs.add_dir(root_inode, "docs").unwrap();
+            let docs_inode = lfs.add_dir(root_inode, "docs").unwrap();
 
-        let sub_inode = lfs.add_dir(docs_inode, "sub").unwrap();
-        lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
-            .unwrap();
+            let sub_inode = lfs.add_dir(docs_inode, "sub").unwrap();
+            lfs.add_file(sub_inode, "hello.txt", b"Sub directory!".to_vec())
+                .unwrap();
 
-        lfs.add_file(root_inode, "hello.txt", b"Hello, root!".to_vec())
-            .unwrap();
+            lfs.add_file(root_inode, "hello.txt", b"Hello, root!".to_vec())
+                .unwrap();
 
-        lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
-            .unwrap();
+            lfs.add_file(docs_inode, "readme.txt", b"Hello World!".to_vec())
+                .unwrap();
 
-        let vfs = StandardDynamicFileSystem::new(lfs);
+            let vfs = StandardDynamicFileSystem::new(lfs);
 
-        // Add preopen fd for root
-        vfs.add_fd(root_inode, !0, !0);
+            // Add preopen fd for root
+            vfs.add_fd(root_inode, !0, !0);
 
-        // Wrap in VFS
-        vfs
-    });
+            // Wrap in VFS
+            vfs
+        });
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, ls);
 }
-

@@ -88,6 +88,3 @@ plug_process!(
     spawn_vfs_and_body_example,
     self
 );
-
-
-

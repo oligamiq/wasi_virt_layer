@@ -1,8 +1,8 @@
 #![cfg(feature = "multiple-fs")]
 
+use core::ops::Deref;
 use smallbox::SmallBox;
 use smallvec::SmallVec;
-use core::ops::Deref;
 
 use crate::{
     __private::wasip1::{self, *},
@@ -169,10 +169,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> StandardMultipleFileS
         unsafe { &mut *self.wasms.get() }.insert(name.into(), access);
     }
 
-    pub fn add_wasm_access(
-        &mut self,
-        access: impl WasmAccessDynCompatibleTuple + 'static,
-    ) {
+    pub fn add_wasm_access(&mut self, access: impl WasmAccessDynCompatibleTuple + 'static) {
         let mut name = core::mem::MaybeUninit::<smallstr::SmallString<[u8; 32]>>::uninit();
         access.with_name(&mut |n| {
             name.write(n.into());
@@ -474,13 +471,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.path_filestat_get_raw_dyn_compatible(
-            access,
-            inode,
-            flags,
-            path_ptr,
-            path_len,
-        ) {
+        match lfs.path_filestat_get_raw_dyn_compatible(access, inode, flags, path_ptr, path_len) {
             Ok(filestat) => {
                 let filestat = wasip1::Filestat {
                     dev: 0,
@@ -531,12 +522,8 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.fd_prestat_dir_name_raw_dyn_compatible(
-            access,
-            inode,
-            dir_path_ptr,
-            dir_path_len,
-        ) {
+        match lfs.fd_prestat_dir_name_raw_dyn_compatible(access, inode, dir_path_ptr, dir_path_len)
+        {
             Ok(_) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,
         }
@@ -604,8 +591,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
                 get_inode!(inode = open_fd);
 
-                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, inode)
-                {
+                let filetype = match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
                     Ok(f) => f.filetype,
                     Err(e) => return e,
                 };

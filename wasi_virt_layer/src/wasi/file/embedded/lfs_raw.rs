@@ -527,32 +527,33 @@ mod tests {
     #[test]
     fn test_file_flat_iterate() {
         #[allow(dead_code)]
-        const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, 10> = EmbeddedFiles!([
-            (
-                "/root",
-                [("root.txt", WasiEmbeddedFile::new_const("This is root"))]
-            ),
-            (
-                ".",
-                [
-                    ("hey", WasiEmbeddedFile::new_const("Hey!")),
-                    (
-                        "hello",
-                        [
-                            ("world", WasiEmbeddedFile::new_const("Hello, world!")),
-                            ("everyone", WasiEmbeddedFile::new_const("Hello, everyone!")),
-                        ]
-                    )
-                ]
-            ),
-            (
-                "~",
-                [
-                    ("home", WasiEmbeddedFile::new_const("This is home")),
-                    ("user", WasiEmbeddedFile::new_const("This is user")),
-                ]
-            )
-        ]);
+        const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, 10> =
+            EmbeddedFiles!([
+                (
+                    "/root",
+                    [("root.txt", WasiEmbeddedFile::new_const("This is root"))]
+                ),
+                (
+                    ".",
+                    [
+                        ("hey", WasiEmbeddedFile::new_const("Hey!")),
+                        (
+                            "hello",
+                            [
+                                ("world", WasiEmbeddedFile::new_const("Hello, world!")),
+                                ("everyone", WasiEmbeddedFile::new_const("Hello, everyone!")),
+                            ]
+                        )
+                    ]
+                ),
+                (
+                    "~",
+                    [
+                        ("home", WasiEmbeddedFile::new_const("This is home")),
+                        ("user", WasiEmbeddedFile::new_const("This is user")),
+                    ]
+                )
+            ]);
 
         #[cfg(feature = "std")]
         println!("Files: {:#?}", EMBEDDED_FILES);

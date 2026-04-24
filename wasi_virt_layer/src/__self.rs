@@ -1,5 +1,7 @@
 use crate::__private::wasip1;
-use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessName, WasmAccessNameDynCompatible, WasmAccessRaw};
+use crate::memory::{
+    WasmAccessDynCompatibleRaw, WasmAccessName, WasmAccessNameDynCompatible, WasmAccessRaw,
+};
 
 /// Internal struct representing the host context itself for WasmAccess.
 #[allow(non_camel_case_types)]

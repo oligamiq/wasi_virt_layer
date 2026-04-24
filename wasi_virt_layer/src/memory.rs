@@ -1734,4 +1734,3 @@ impl WasmAccessRaw for WasmAccessFaker {
         ptr
     }
 }
-

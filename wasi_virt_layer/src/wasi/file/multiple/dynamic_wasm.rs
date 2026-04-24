@@ -104,10 +104,16 @@ impl StandardPseudoWasmHolder {
 
     pub fn get<'s>(&'s self) -> &'s PseudoWasmSimple {
         #[cfg(feature = "trace")]
-        unsafe { (*self.simple.get()).as_ref().expect("PseudoWasmSimple is not initialized yet") }
+        unsafe {
+            (*self.simple.get())
+                .as_ref()
+                .expect("PseudoWasmSimple is not initialized yet")
+        }
 
         #[cfg(not(feature = "trace"))]
-        unsafe { (*self.simple.get()).as_ref().unwrap() }
+        unsafe {
+            (*self.simple.get()).as_ref().unwrap()
+        }
     }
 }
 
@@ -298,7 +304,10 @@ impl WasmAccessNameDynCompatible for StandardPseudoWasmMultipleHolderInstant<'_>
             #[cfg(feature = "trace")]
             {
                 if holder.name.is_empty() {
-                    panic!("WasmAccessName is not initialized yet for holder: {:?}", holder);
+                    panic!(
+                        "WasmAccessName is not initialized yet for holder: {:?}",
+                        holder
+                    );
                 }
             }
 
@@ -308,19 +317,22 @@ impl WasmAccessNameDynCompatible for StandardPseudoWasmMultipleHolderInstant<'_>
                 f(holder.name.as_str());
             }
         })
-
     }
 }
 
 impl WasmAccessDynCompatibleRaw for StandardPseudoWasmMultipleHolderInstant<'_> {
     #[inline(always)]
     fn memcpy_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        self.refer.get_holder_with(self.refers_to, |holder| (holder.memcpy_raw_ptr)(offset, src, len))
+        self.refer.get_holder_with(self.refers_to, |holder| {
+            (holder.memcpy_raw_ptr)(offset, src, len)
+        })
     }
 
     #[inline(always)]
     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize) {
-        self.refer.get_holder_with(self.refers_to, |holder| (holder.memcpy_to_raw_ptr)(offset, src, len))
+        self.refer.get_holder_with(self.refers_to, |holder| {
+            (holder.memcpy_to_raw_ptr)(offset, src, len)
+        })
     }
 
     #[cfg(not(feature = "multi_memory"))]
@@ -333,16 +345,19 @@ impl WasmAccessDynCompatibleRaw for StandardPseudoWasmMultipleHolderInstant<'_> 
 
     #[inline(always)]
     fn _main_raw(&self) -> wasip1::Errno {
-        self.refer.get_holder_with(self.refers_to, |holder| (holder._main_ptr)())
+        self.refer
+            .get_holder_with(self.refers_to, |holder| (holder._main_ptr)())
     }
 
     #[inline(always)]
     fn _reset_raw(&self) {
-        self.refer.get_holder_with(self.refers_to, |holder| (holder._reset_ptr)())
+        self.refer
+            .get_holder_with(self.refers_to, |holder| (holder._reset_ptr)())
     }
 
     #[inline(always)]
     fn _start_raw(&self) {
-        self.refer.get_holder_with(self.refers_to, |holder| (holder._start_ptr)())
+        self.refer
+            .get_holder_with(self.refers_to, |holder| (holder._start_ptr)())
     }
 }

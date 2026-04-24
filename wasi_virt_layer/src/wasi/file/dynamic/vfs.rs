@@ -5,7 +5,7 @@ use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
 use crate::wasi::file::dynamic::inode::DetailedOpenFd;
 use crate::wasi::file::trace::trace_fs;
-use crate::wasi::file::{InodeIdCommon, OpenFdInfoWithInode, DynamicLFS, Wasip1LFSBase};
+use crate::wasi::file::{DynamicLFS, InodeIdCommon, OpenFdInfoWithInode, Wasip1LFSBase};
 use crate::{memory::WasmAccess, wasi::file::Wasip1FileSystem};
 
 #[cfg(feature = "threads")]
@@ -38,8 +38,8 @@ pub struct StandardDynamicFileSystem<
     pub next_fd: UnsafeCell<Fd>,
 }
 
-impl<LFS: DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static>
-    core::fmt::Debug for StandardDynamicFileSystem<LFS, OpenFd>
+impl<LFS: DynamicLFS + core::fmt::Debug, OpenFd: OpenFdInfoWithInode + 'static> core::fmt::Debug
+    for StandardDynamicFileSystem<LFS, OpenFd>
 where
     LFS::Inode: InodeIdCommon,
 {
@@ -547,4 +547,3 @@ where
         }
     }
 }
-
