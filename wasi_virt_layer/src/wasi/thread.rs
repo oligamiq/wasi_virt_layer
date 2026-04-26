@@ -386,10 +386,23 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
 
     /// Runs a thread runner on an available worker thread.
     pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
+        #[cfg(not(feature = "trace"))]
         self.queue
             .lock()
             .as_mut()
             .unwrap()
+            .send(VirtualThreadPoolMessage::Run(
+                runner,
+                ThreadAccessorWrapper::new(accessor),
+                thread_id,
+            ))
+            .unwrap();
+
+        #[cfg(feature = "trace")]
+        self.queue
+            .lock()
+            .as_mut()
+            .expect("Thread pool queue not initialized")
             .send(VirtualThreadPoolMessage::Run(
                 runner,
                 ThreadAccessorWrapper::new(accessor),
