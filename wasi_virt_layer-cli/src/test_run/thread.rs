@@ -11,9 +11,8 @@ pub fn gen_threads_run(
     let wasm_name = wasm_name.as_ref();
 
     [
-        ("common.ts", common_ts()),
-        ("inst.ts", &custom_instantiate_ts(wasm_name)),
         ("test_run.ts", test_run_ts()),
+        ("inst.ts", &custom_instantiate_ts(wasm_name)),
         ("thread_spawn.ts", thread_spawn_ts()),
         ("tsconfig.json", tsconfig_json()),
         ("package.json", package_json()),
@@ -33,63 +32,6 @@ pub fn gen_threads_run(
             .write_all(content.as_bytes())
             .expect("Failed to write file");
     });
-}
-
-fn common_ts() -> &'static str {
-    r#"
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-let _worker: any = null;
-const set_fake_worker = async () => {
-	if (
-		typeof process !== "undefined" &&
-		process.versions &&
-		process.versions.node
-	) {
-		_worker = _worker || (await import("node:worker_threads"));
-		const { Worker, isMainThread, parentPort } = _worker;
-
-		class WorkerWrapper {
-			worker: Worker;
-			onmessage?: (event: unknown) => void;
-			constructor(path: string) {
-				this.worker = new Worker(new URL(path, import.meta.url));
-				this.worker.on("message", (event) => {
-					this.onmessage?.(event);
-				});
-			}
-			postMessage(msg: unknown) {
-				this.worker.postMessage({
-					data: msg,
-				});
-			}
-			terminate() {
-				return this.worker.terminate();
-			}
-		}
-
-		if (isMainThread) {
-			throw new Error("not main thread");
-		}
-
-		const postMessage = parentPort.postMessage.bind(parentPort);
-		globalThis.postMessage = (msg: unknown) => {
-			postMessage({
-				data: msg,
-			});
-		};
-		parentPort.on("message", (event) => {
-			// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-			(globalThis as any).onmessage?.(event);
-		});
-
-		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-		(globalThis as any).Worker = WorkerWrapper;
-	}
-};
-
-export { set_fake_worker };
-"#
-    .trim()
 }
 
 fn custom_instantiate_ts(wasm_name: &str) -> String {
@@ -186,8 +128,8 @@ fn test_run_ts() -> &'static str {
     r#"
 // npx ts-node test_run.ts
 
-import { ConsoleStdout, Fd, File, OpenFile } from "npm:@bjorn3/browser_wasi_shim";
-import { WASIFarm, wait_async_polyfill } from "npm:@oligami/browser_wasi_shim-threads";
+import { ConsoleStdout, Fd, File, OpenFile } from "@bjorn3/browser_wasi_shim";
+import { WASIFarm, wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
 
 const isNode =
 	typeof process !== "undefined" && process.versions && process.versions.node;
@@ -258,9 +200,7 @@ if (!isNode) {
 	const worker = new _worker.Worker(new URL("./worker.ts", import.meta.url));
 
 	worker.postMessage({
-		data: {
-			wasi_ref: farm.get_ref(),
-		},
+        wasi_ref: farm.get_ref(),
 	});
 }
 "#
@@ -269,11 +209,8 @@ if (!isNode) {
 
 fn thread_spawn_ts() -> &'static str {
     r#"
-import { thread_spawn_on_worker } from "npm:@oligami/browser_wasi_shim-threads";
-import { set_fake_worker } from "./common.ts";
+import { thread_spawn_on_worker } from "@oligami/browser_wasi_shim-threads";
 import { custom_instantiate } from "./inst.ts";
-
-await set_fake_worker();
 
 globalThis.onmessage = (event) => {
 	thread_spawn_on_worker(
@@ -351,10 +288,6 @@ import { wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
 // @ts-ignore
 import run from "./node_modules/@oligami/browser_wasi_shim-threads/dist/worker_background_worker.min.js";
 
-import { set_fake_worker } from "./common.ts";
-
-await set_fake_worker();
-
 wait_async_polyfill();
 
 run();
@@ -381,10 +314,7 @@ fn worker_ts(wasm_name: &str, mem_size: &HashMap<CompactString, (u64, u64)>) -> 
     format!(
         r#"
 import {{ WASIFarmAnimal }} from "@oligami/browser_wasi_shim-threads";
-import {{ set_fake_worker }} from "./common.ts";
 import {{ custom_instantiate }} from "./inst.ts";
-
-await set_fake_worker();
 
 const isNode =
     typeof process !== "undefined" && process.versions && process.versions.node;
