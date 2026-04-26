@@ -54,7 +54,13 @@ const set_fake_worker = async () => {
             onmessage;
 
             constructor(url) {
-                this.worker = new Worker(new URL(url, import.meta.url), {
+                let absolute_url;
+                if (url instanceof URL) {
+                    absolute_url = url;
+                } else {
+                    absolute_url = new URL(url, import.meta.url);
+                }
+                this.worker = new Worker(absolute_url, {
                     type: "module",
                 });
 
@@ -71,17 +77,6 @@ const set_fake_worker = async () => {
 
 		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 		(globalThis as any).Worker = FakeWorker;
-
-        if (!isMainThread && parentPort) {
-            parentPort.on("message", (message: any) => {
-                if (globalThis.onmessage) {
-                    globalThis.onmessage({ data: message } as any);
-                }
-            });
-            globalThis.postMessage = (message: any) => {
-                parentPort.postMessage(message);
-            };
-        }
 	}
 };
 
@@ -404,23 +399,15 @@ globalThis.onmessage = async (message) => {{
 	const args = ["bin", "arg1", "arg2"];
 	const env = ["FOO=bar"];
 
-    const path_to_url = (path) => {{
-        if (isNode) {{
-            return new URL(path, import.meta.url);
-        }} else {{
-            return path;
-        }}
-    }};
-
 	const wasi = new WASIFarmAnimal(
 		wasi_ref,
 		args, // args
 		env, // env
 		{{
 			can_thread_spawn: true,
-			thread_spawn_worker_url: path_to_url("./thread_spawn.ts"),
+			thread_spawn_worker_url: "./thread_spawn.ts",
 			thread_spawn_wasm: wasm,
-			worker_background_worker_url: path_to_url("./worker_background_worker.ts"),
+			worker_background_worker_url: "./worker_background_worker.ts",
             share_memory: {{
 {memories}
             }},
