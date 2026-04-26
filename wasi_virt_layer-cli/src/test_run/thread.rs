@@ -41,9 +41,10 @@ fn common_ts() -> &'static str {
 let _worker: any = null;
 const set_fake_worker = async () => {
 	if (
-		typeof process !== "undefined" &&
-		process.versions &&
-		process.versions.node
+		(typeof process !== "undefined" &&
+			process.versions &&
+			process.versions.node) ||
+		(typeof Deno !== "undefined")
 	) {
 		_worker = _worker || (await import("node:worker_threads"));
 		const { Worker, isMainThread, parentPort } = _worker;
@@ -178,7 +179,8 @@ import { WASIFarm, wait_async_polyfill } from "@oligami/browser_wasi_shim-thread
 import { set_fake_worker } from "./common.ts";
 
 const isNode =
-	typeof process !== "undefined" && process.versions && process.versions.node;
+	(typeof process !== "undefined" && !!process.versions?.node) ||
+	(typeof Deno !== "undefined");
 
 // biome-ignore lint/suspicious/noExplicitAny: <explanation>
 let _worker: any = null;
@@ -371,7 +373,8 @@ import {{ custom_instantiate }} from "./inst.ts";
 await set_fake_worker();
 
 const isNode =
-    typeof process !== "undefined" && process.versions && process.versions.node;
+	(typeof process !== "undefined" && !!process.versions?.node) ||
+	(typeof Deno !== "undefined");
 // biome-ignore lint/suspicious/noExplicitAny: <explanation>
 let _fs: any = null;
 async function fetchCompile(url) {{
@@ -427,6 +430,7 @@ globalThis.onmessage = async (message) => {{
 	wasi.start(root as any);
 
     globalThis.process?.exit(0);
+    globalThis.Deno?.exit(0);
 }};
 "#
     )
