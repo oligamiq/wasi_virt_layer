@@ -489,6 +489,8 @@ pub trait WasmAccessNameDynCompatible: core::fmt::Debug {
     /// Helper method to get the name as a `String`.
     #[cfg(feature = "alloc")]
     fn name(&self) -> alloc::string::String {
+        use alloc::string::ToString;
+
         let mut name = None;
         self.with_name(&mut |n| name = Some(n.to_string()));
         name.unwrap()
