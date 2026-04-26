@@ -43,8 +43,8 @@ const set_fake_worker = async () => {
 	if (
 		(typeof process !== "undefined" &&
 			process.versions &&
-			process.versions.node) ||
-		(typeof Deno !== "undefined")
+			process.versions.node &&
+            typeof Deno === "undefined")
 	) {
 		_worker = _worker || (await import("node:worker_threads"));
 		const { Worker, isMainThread, parentPort } = _worker;
@@ -70,7 +70,18 @@ const set_fake_worker = async () => {
         }
 
 		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-		(globalThis as any).Worker = Worker;
+		(globalThis as any).Worker = FakeWorker;
+
+        if (!isMainThread && parentPort) {
+            parentPort.on("message", (message: any) => {
+                if (globalThis.onmessage) {
+                    globalThis.onmessage({ data: message } as any);
+                }
+            });
+            globalThis.postMessage = (message: any) => {
+                parentPort.postMessage(message);
+            };
+        }
 	}
 };
 
@@ -178,12 +189,11 @@ import { WASIFarm, wait_async_polyfill } from "@oligami/browser_wasi_shim-thread
 
 import { set_fake_worker } from "./common.ts";
 
+await set_fake_worker();
+
 const isNode =
 	(typeof process !== "undefined" && !!process.versions?.node) ||
 	(typeof Deno !== "undefined");
-
-// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-let _worker: any = null;
 
 let farm: WASIFarm;
 if (!isNode) {
