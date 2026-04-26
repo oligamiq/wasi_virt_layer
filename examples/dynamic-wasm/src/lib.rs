@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use wasi_virt_layer::export_pseudo_wasm;
 use wasi_virt_layer::file::multiple::inode::BoxedInodeNormal;
 use wasi_virt_layer::file::multiple::*;
-use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
+use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
 wit_bindgen::generate!({
     world: "hello",
@@ -44,7 +44,7 @@ impl Guest for Hello {
 #[cfg(not(test))]
 export!(Hello);
 
-plug_process!(DefaultProcess, ls, self);
+plug_process!(StandardProcess, ls, self);
 
 struct VirtualEnvState {
     environ: Vec<String>,

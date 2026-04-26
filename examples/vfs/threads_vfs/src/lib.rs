@@ -71,7 +71,7 @@ plug_thread!(
     test_threads
 );
 
-plug_process!(wasi_virt_layer::process::DefaultProcess, test_threads, self);
+plug_process!(wasi_virt_layer::process::StandardProcess, test_threads, self);
 
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {

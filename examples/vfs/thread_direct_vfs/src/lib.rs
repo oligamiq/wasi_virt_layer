@@ -64,7 +64,7 @@ plug_thread!(
     test_pool_thread
 );
 plug_process!(
-    wasi_virt_layer::process::DefaultProcess,
+    wasi_virt_layer::process::StandardProcess,
     test_pool_thread,
     self
 );

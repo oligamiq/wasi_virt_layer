@@ -84,7 +84,7 @@ plug_thread!(
 );
 
 plug_process!(
-    wasi_virt_layer::process::DefaultProcess,
+    wasi_virt_layer::process::StandardProcess,
     spawn_vfs_and_body_example,
     self
 );

@@ -108,7 +108,7 @@ pub mod file {
 
 /// Process execution and lifecycle virtualization.
 pub mod process {
-    pub use crate::wasi::process::{DefaultProcess, ProcessExit};
+    pub use crate::wasi::process::{StandardProcess, ProcessExit};
 }
 
 /// I/O polling and event waiting mechanisms.

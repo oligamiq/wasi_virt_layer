@@ -161,7 +161,7 @@ export!(ComponentABI);
 
 mod process {
     use super::*;
-    plug_process!(DefaultProcess, anonymous, self);
+    plug_process!(StandardProcess, anonymous, self);
 }
 
 mod env {
@@ -254,7 +254,7 @@ plug_thread!(
 
 mod process {
     use super::*;
-    plug_process!(DefaultProcess, anonymous, self);
+    plug_process!(StandardProcess, anonymous, self);
 }
 
 mod env {

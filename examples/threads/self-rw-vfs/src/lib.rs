@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
+use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
 wit_bindgen::generate!({
     world: "init",
@@ -83,7 +83,7 @@ plug_thread!(
     self_rw_example
 );
 
-plug_process!(DefaultProcess, self_rw_example, self);
+plug_process!(StandardProcess, self_rw_example, self);
 
 mod fs {
     use super::*;

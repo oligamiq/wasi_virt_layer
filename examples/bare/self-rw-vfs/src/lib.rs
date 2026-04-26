@@ -1,6 +1,6 @@
 use std::sync::LazyLock;
 
-use wasi_virt_layer::{file::*, plug_process, prelude::*, process::DefaultProcess};
+use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
 wit_bindgen::generate!({
     world: "component-abi",
@@ -44,7 +44,7 @@ impl Guest for ComponentABI {
 #[cfg(not(test))]
 export!(ComponentABI);
 
-plug_process!(DefaultProcess, anonymous, self);
+plug_process!(StandardProcess, anonymous, self);
 
 mod env {
     use super::*;

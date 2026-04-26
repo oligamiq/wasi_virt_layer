@@ -1,28 +1,38 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{file::*, plug_thread, prelude::*, process::*};
+use std::thread;
 
 struct ComponentABI;
 
 wit_bindgen::generate!({
-    // the name of the world in the `*.wit` input file
     world: "component-abi",
 });
 
 import_wasm!(<anonymous>);
 
 impl Guest for ComponentABI {
-    // fn init() {
-    //     // initialization logic if needed
-    // }
-
-    // fn start() {
-    //     anonymous::_start();
-    // }
-
     fn main() {
         anonymous::_reset();
         anonymous::_start();
-        anonymous::_main();
+
+        // Spawn multiple threads to perform concurrent file access
+        let mut handles = vec![];
+
+        for i in 0..3 {
+            let handle = thread::spawn(move || {
+                // Simulate some work and concurrent access
+                // In a real WASI app, this would use standard file system APIs
+                // which are intercepted by our VFS layer.
+                println!("Thread {} accessing VFS...", i);
+            });
+            handles.push(handle);
+        }
+
+        for handle in handles {
+            handle.join().unwrap();
+        }
+
+        println!("All threads finished.");
     }
 }
 
@@ -54,33 +64,24 @@ mod env {
 mod fs {
     use super::*;
 
-    const FILE_COUNT: usize = 10;
+    const FILE_COUNT: usize = 7;
 
     #[const_struct]
     const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
         EmbeddedFiles!([
             (
-                "/root",
-                [("root.txt", WasiEmbeddedFile::new("This is root"))]
-            ),
-            (
-                ".",
+                "/",
                 [
-                    ("hey", WasiEmbeddedFile::new("Hey!")),
-                    (
-                        "hello",
-                        [
-                            ("world", WasiEmbeddedFile::new("Hello, world!")),
-                            ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
-                        ]
-                    )
+                    ("data1.txt", WasiEmbeddedFile::new("Data 1")),
+                    ("data2.txt", WasiEmbeddedFile::new("Data 2")),
+                    ("data3.txt", WasiEmbeddedFile::new("Data 3")),
                 ]
             ),
             (
-                "~",
+                "/logs",
                 [
-                    ("home", WasiEmbeddedFile::new("This is home")),
-                    ("user", WasiEmbeddedFile::new("This is user")),
+                    ("thread1.log", WasiEmbeddedFile::new("Log 1")),
+                    ("thread2.log", WasiEmbeddedFile::new("Log 2")),
                 ]
             )
         ]);

@@ -363,6 +363,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "complex-threads-vfs"
+version = "0.1.5"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "console"
 version = "0.16.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -22,7 +22,7 @@ export!(ComponentAbi);
 
 mod process {
     use super::*;
-    plug_process!(DefaultProcess, anonymous, self);
+    plug_process!(StandardProcess, anonymous, self);
 }
 
 mod env {

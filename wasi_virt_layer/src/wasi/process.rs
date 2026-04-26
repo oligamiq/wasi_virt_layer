@@ -7,9 +7,9 @@ pub trait ProcessExit {
 }
 
 /// Default implementation of `ProcessExit`.
-pub struct DefaultProcess;
+pub struct StandardProcess;
 
-impl ProcessExit for DefaultProcess {
+impl ProcessExit for StandardProcess {
     fn proc_exit<Wasm: WasmAccess>(code: i32) -> ! {
         #[cfg(feature = "std")]
         {
@@ -49,6 +49,6 @@ macro_rules! plug_process {
         $crate::__as_t!(@through, $($wasm),* => $crate::plug_process, @inner);
     };
     (@inner, $($wasm:ident),*) => {
-        $crate::plug_process!($crate::process::DefaultProcess, $($wasm),*);
+        $crate::plug_process!($crate::process::StandardProcess, $($wasm),*);
     };
 }
