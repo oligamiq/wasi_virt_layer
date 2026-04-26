@@ -123,6 +123,25 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests the self-virtualizing VFS example where a single module virtualizes itself.
+#[test]
+fn test_self_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("self_vfs"),
+        None,
+        Some(true),
+        false,
+        OutDir::Random,
+        true,
+        &[],
+    )
+    .wrap_err("Failed to run self-vfs example")?;
+
+    Ok(())
+}
+
 /// Tests the threaded self-virtualizing read/write VFS example in single-memory mode.
 /// This validates that the threaded pair builds successfully.
 ///

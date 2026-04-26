@@ -1,0 +1,5 @@
+package wasi-virt-layer:self-vfs;
+
+world self-vfs {
+    export main: func();
+}

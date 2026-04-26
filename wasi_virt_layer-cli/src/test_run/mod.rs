@@ -34,7 +34,15 @@ wasi.start({{
         _start: () => {{
             // init only
             console.log("[WASI main]");
-            root.main();
+            if (root.main) {{
+                root.main();
+            }} else if (root._start) {{
+                root._start();
+            }} else if (inst.exports._start) {{
+                (inst.exports._start as Function)();
+            }} else if (inst.exports.main) {{
+                (inst.exports.main as Function)();
+            }}
             console.log("[WASI main] done.");
         }}
     }},
@@ -212,7 +220,15 @@ self.onmessage = async (ev) => {
         memory: inst.exports.memory,
         _start: () => {
           postLog('log', '[WASI main]');
-          root.main();
+          if (root.main) {
+            root.main();
+          } else if (root._start) {
+            root._start();
+          } else if (inst.exports._start) {
+            inst.exports._start();
+          } else if (inst.exports.main) {
+            inst.exports.main();
+          }
           postLog('log', '[WASI main] done.');
         },
       },

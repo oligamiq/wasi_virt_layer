@@ -158,7 +158,15 @@ export const custom_instantiate = async (
 			memory: inst.exports.memory as WebAssembly.Memory,
 			_start: () => {
 				// init only
-				root.main();
+				if (root.main) {
+					root.main();
+				} else if (root._start) {
+					root._start();
+				} else if (inst.exports._start) {
+					(inst.exports._start as Function)();
+				} else if (inst.exports.main) {
+					(inst.exports.main as Function)();
+				}
 				console.log("[WASI main] done.");
 			},
 			wasi_thread_start: (tid, arg) => {

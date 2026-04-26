@@ -1586,6 +1586,16 @@ name = "self_rw_example"
 version = "0.2.0"
 
 [[package]]
+name = "self_vfs"
+version = "0.2.0"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "semver"
 version = "1.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"

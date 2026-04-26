@@ -1,0 +1,16 @@
+[package]
+name = "self_vfs"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+wit-bindgen = "0.54.0"
+parking_lot = "0.12.3"
+const_struct = "0.6.4"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+features = ["std", "alloc", "embedded-fs"]
+
