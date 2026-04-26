@@ -34,8 +34,9 @@
                 // "--inspect-brk", // default additional args
                 // "--allow-read",
                 // "--allow-env",
+                "-A",
             ],
-            "cwd": "${workspaceFolder}",
+            "cwd": "${workspaceFolder}/dist",
             "env": {
                 "RUST_BACKTRACE": "1"
             }
