@@ -54,12 +54,15 @@ pub struct FallbackCommand<F>
 where
     F: FnOnce(&[String]) -> i32 + Send + 'static,
 {
-    bin: String,
-    args: Vec<String>,
-    func: Option<F>,
+    /// The binary name.
+    pub bin: String,
+    /// The arguments to the command.
+    pub args: Vec<String>,
+    /// The optional fallback function.
+    pub func: Option<F>,
 }
 
-const DISABLE_FALLBACK: bool = true;
+const DISABLE_FALLBACK: bool = false;
 
 /// A file-based lock to prevent concurrent execution of commands.
 pub struct CommandLock(File);
