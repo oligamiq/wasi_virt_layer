@@ -112,4 +112,47 @@ mod fs {
         });
 
     plug_fs!(&*VIRTUAL_FILE_SYSTEM, self_rw_example, self);
+
+    // const FILE_COUNT: usize = 10;
+
+    // #[const_struct::const_struct]
+    // const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
+    //     EmbeddedFiles!([
+    //         (
+    //             "/root",
+    //             [("root.txt", WasiEmbeddedFile::new("This is root"))]
+    //         ),
+    //         (
+    //             ".",
+    //             [
+    //                 ("hey", WasiEmbeddedFile::new("Hey!")),
+    //                 (
+    //                     "hello",
+    //                     [
+    //                         ("world", WasiEmbeddedFile::new("Hello, world!")),
+    //                         ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
+    //                     ]
+    //                 )
+    //             ]
+    //         ),
+    //         (
+    //             "~",
+    //             [
+    //                 ("home", WasiEmbeddedFile::new("This is home")),
+    //                 ("user", WasiEmbeddedFile::new("This is user")),
+    //             ]
+    //         )
+    //     ]);
+
+    // type LFS = StandardEmbeddedNormalLFS<
+    //     EmbeddedFilesTy,
+    //     WasiEmbeddedFile<&'static str>,
+    //     FILE_COUNT,
+    //     DefaultStdIO,
+    // >;
+
+    // static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
+    //     StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
+
+    // plug_fs!(&VIRTUAL_FILE_SYSTEM, self_rw_example, self);
 }

@@ -495,8 +495,16 @@ where
                         cursor,
                     ) {
                         Ok(nread) => {
+                            if nread == 0 {
+                                break;
+                            }
+
                             total_read += nread;
                             cursor += nread;
+
+                            if nread < iovs.buf_len as usize {
+                                break;
+                            }
                         }
                         Err(e) => return e,
                     }
