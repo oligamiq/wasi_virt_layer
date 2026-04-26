@@ -113,7 +113,7 @@ pub mod process {
 
 /// I/O polling and event waiting mechanisms.
 pub mod poll {
-    pub use crate::wasi::poll::{DefaultPoll, PollOneoff};
+    pub use crate::wasi::poll::{DefaultPoll, PollOneoff, WaitPoll};
 }
 
 #[doc(hidden)]

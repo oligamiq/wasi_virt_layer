@@ -1,3 +1,5 @@
+pub mod wait_poll;
+pub use wait_poll::WaitPoll;
 use crate::__private::wasip1::*;
 use crate::memory::WasmAccess;
 
