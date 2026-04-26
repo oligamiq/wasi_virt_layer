@@ -52,7 +52,7 @@ const set_fake_worker = async () => {
 			worker: Worker;
 			onmessage?: (event: unknown) => void;
 			constructor(path: string) {
-				this.worker = new Worker(path);
+				this.worker = new Worker(new URL(path, import.meta.url));
 				this.worker.on("message", (event) => {
 					this.onmessage?.(event);
 				});
@@ -71,8 +71,9 @@ const set_fake_worker = async () => {
 			throw new Error("not main thread");
 		}
 
+		const postMessage = parentPort.postMessage.bind(parentPort);
 		globalThis.postMessage = (msg: unknown) => {
-			parentPort.postMessage({
+			postMessage({
 				data: msg,
 			});
 		};
@@ -254,7 +255,7 @@ if (!isNode) {
 		[],
 	);
 
-	const worker = new _worker.Worker("./worker.ts");
+	const worker = new _worker.Worker(new URL("./worker.ts", import.meta.url));
 
 	worker.postMessage({
 		data: {
@@ -392,7 +393,7 @@ let _fs: any = null;
 async function fetchCompile(url) {{
     if (isNode) {{
         _fs = _fs || (await import("node:fs/promises"));
-        return WebAssembly.compile(await _fs.readFile(url));
+        return WebAssembly.compile(await _fs.readFile(new URL(url, import.meta.url)));
     }}
     return fetch(url).then(WebAssembly.compileStreaming);
 }}
