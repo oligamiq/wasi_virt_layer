@@ -1,9 +1,10 @@
-use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 use const_struct::const_struct;
+use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
 #[unsafe(no_mangle)]
 pub extern "C" fn __wasip1_vfs_self_vfs__start_anchor() {}
 
+#[cfg(target_arch = "wasm32")]
 #[unsafe(export_name = "main")]
 pub extern "C" fn wasm_main() {
     // Calling the Rust main logic
@@ -54,9 +55,13 @@ plug_env!(@embedded, HostEnvTy, self);
 const FILE_COUNT: usize = 2;
 #[const_struct]
 const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-    EmbeddedFiles!([
-        ("/", [("hello.txt", WasiEmbeddedFile::new("Hello from my own virtual filesystem!"))])
-    ]);
+    EmbeddedFiles!([(
+        "/",
+        [(
+            "hello.txt",
+            WasiEmbeddedFile::new("Hello from my own virtual filesystem!")
+        )]
+    )]);
 
 type LFS = StandardEmbeddedNormalLFS<
     EmbeddedFilesTy,

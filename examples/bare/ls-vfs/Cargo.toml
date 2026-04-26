@@ -30,3 +30,4 @@ features = [
 
 [lib]
 crate-type = ["cdylib"]
+test = false

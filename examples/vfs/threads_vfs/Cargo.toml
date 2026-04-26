@@ -25,3 +25,4 @@ features = ["threads", "unstable_print_debug", "embedded-fs", "multi_memory"]
 
 [lib]
 crate-type = ["cdylib"]
+test = false

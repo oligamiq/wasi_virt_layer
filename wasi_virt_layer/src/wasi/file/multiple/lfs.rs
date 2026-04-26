@@ -315,18 +315,18 @@ macro_rules! get_open_fd_mut {
         #[cfg(feature = "threads")]
         let mut __bind = $self.fd_map.get_mut(&$fd);
         #[cfg(feature = "threads")]
-        let ($lfs_idx, $name) = match __bind.as_mut() {
+        let (__lfs_idx, $name) = match __bind.as_mut() {
             Some(entry) => entry.value_mut(),
             None => return wasip1::ERRNO_BADF,
         };
 
         #[cfg(not(feature = "threads"))]
-        let ($lfs_idx, $name) = match unsafe { &mut *$self.fd_map.get() }.get_mut(&$fd) {
+        let (__lfs_idx, $name) = match unsafe { &mut *$self.fd_map.get() }.get_mut(&$fd) {
             Some(entry) => entry,
             None => return wasip1::ERRNO_BADF,
         };
 
-        let $lfs = &$self.lfss[*$lfs_idx];
+        let $lfs = &$self.lfss[*__lfs_idx];
     };
 }
 

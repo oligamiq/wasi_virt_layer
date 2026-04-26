@@ -399,6 +399,8 @@ macro_rules! non_recursive_wasi_snapshot_preview1 {
         $name:ident ($($arg:ident : $arg_ty:ty),* $(,)?) -> $ret:ty
     ) => {
         {
+        #[cfg(target_arch = "wasm32")]
+        {
             #[link(wasm_import_module = "non_recursive_wasi_snapshot_preview1")]
             unsafe extern "C" {
                 pub fn $name($($arg: $arg_ty),*) -> $ret;
@@ -406,5 +408,16 @@ macro_rules! non_recursive_wasi_snapshot_preview1 {
 
             unsafe { $name($($arg),*) }
         }
+
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            #[allow(unused_variables)]
+            fn $name($(_: $arg_ty),*) -> $ret {
+                unimplemented!("non_recursive_wasi_snapshot_preview1 is only supported on wasm32 target")
+            }
+
+            $name($($arg),*)
+        }
+    }
     };
 }

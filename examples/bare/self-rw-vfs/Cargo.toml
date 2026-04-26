@@ -22,3 +22,4 @@ features = ["std", "alloc", "dynamic-fs"]
 
 [lib]
 crate-type = ["cdylib"]
+test = false

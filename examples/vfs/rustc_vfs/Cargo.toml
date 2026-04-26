@@ -23,3 +23,4 @@ features = ["std", "threads", "embedded-fs"]
 
 [lib]
 crate-type = ["cdylib"]
+test = false

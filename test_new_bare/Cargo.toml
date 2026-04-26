@@ -21,3 +21,4 @@ wit-bindgen = { version = "0.57.1", default-features = false, features = [
 
 [lib]
 crate-type = ["cdylib"]
+test = false
