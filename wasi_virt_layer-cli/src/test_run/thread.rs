@@ -48,42 +48,8 @@ const set_fake_worker = async () => {
 		_worker = _worker || (await import("node:worker_threads"));
 		const { Worker, isMainThread, parentPort } = _worker;
 
-		class WorkerWrapper {
-			worker: Worker;
-			onmessage?: (event: unknown) => void;
-			constructor(path: string) {
-				this.worker = new Worker(new URL(path, import.meta.url));
-				this.worker.on("message", (event) => {
-					this.onmessage?.(event);
-				});
-			}
-			postMessage(msg: unknown) {
-				this.worker.postMessage({
-					data: msg,
-				});
-			}
-			terminate() {
-				return this.worker.terminate();
-			}
-		}
-
-		if (isMainThread) {
-			throw new Error("not main thread");
-		}
-
-		const postMessage = parentPort.postMessage.bind(parentPort);
-		globalThis.postMessage = (msg: unknown) => {
-			postMessage({
-				data: msg,
-			});
-		};
-		parentPort.on("message", (event) => {
-			// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-			(globalThis as any).onmessage?.(event);
-		});
-
 		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-		(globalThis as any).Worker = WorkerWrapper;
+		(globalThis as any).Worker = Worker;
 	}
 };
 
@@ -186,8 +152,10 @@ fn test_run_ts() -> &'static str {
     r#"
 // npx ts-node test_run.ts
 
-import { ConsoleStdout, Fd, File, OpenFile } from "npm:@bjorn3/browser_wasi_shim";
-import { WASIFarm, wait_async_polyfill } from "npm:@oligami/browser_wasi_shim-threads";
+import { ConsoleStdout, Fd, File, OpenFile } from "@bjorn3/browser_wasi_shim";
+import { WASIFarm, wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
+
+import { set_fake_worker } from "./common.ts";
 
 const isNode =
 	typeof process !== "undefined" && process.versions && process.versions.node;
@@ -246,8 +214,6 @@ if (!isNode) {
 		wasi_ref: farm.get_ref(),
 	});
 } else {
-	_worker = _worker || (await import("node:worker_threads"));
-
 	farm = new WASIFarm(
 		new OpenFile(new File([])), // stdin
 		ConsoleStdout.lineBuffered((msg) => console.log(`[WASI stdout] ${msg}`)),
@@ -255,12 +221,10 @@ if (!isNode) {
 		[],
 	);
 
-	const worker = new _worker.Worker(new URL("./worker.ts", import.meta.url));
+	const worker = new Worker(new URL("./worker.ts", import.meta.url), { type: "module" });
 
 	worker.postMessage({
-		data: {
-			wasi_ref: farm.get_ref(),
-		},
+        wasi_ref: farm.get_ref(),
 	});
 }
 "#
@@ -269,7 +233,7 @@ if (!isNode) {
 
 fn thread_spawn_ts() -> &'static str {
     r#"
-import { thread_spawn_on_worker } from "npm:@oligami/browser_wasi_shim-threads";
+import { thread_spawn_on_worker } from "@oligami/browser_wasi_shim-threads";
 import { set_fake_worker } from "./common.ts";
 import { custom_instantiate } from "./inst.ts";
 
@@ -407,15 +371,23 @@ globalThis.onmessage = async (message) => {{
 	const args = ["bin", "arg1", "arg2"];
 	const env = ["FOO=bar"];
 
+    const path_to_url = (path) => {{
+        if (isNode) {{
+            return new URL(path, import.meta.url);
+        }} else {{
+            return path;
+        }}
+    }};
+
 	const wasi = new WASIFarmAnimal(
 		wasi_ref,
 		args, // args
 		env, // env
 		{{
 			can_thread_spawn: true,
-			thread_spawn_worker_url: "./thread_spawn.ts",
+			thread_spawn_worker_url: path_to_url("./thread_spawn.ts"),
 			thread_spawn_wasm: wasm,
-			worker_background_worker_url: "./worker_background_worker.ts",
+			worker_background_worker_url: path_to_url("./worker_background_worker.ts"),
             share_memory: {{
 {memories}
             }},
