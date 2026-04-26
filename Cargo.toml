@@ -18,8 +18,13 @@ members = [
     "examples/vfs/spawn_vfs_and_body_vfs",
     "examples/test_wasm/spawn_vfs_and_body_example",
     "examples/bare/ls-vfs",
-    "examples/threads/ls-threads", "examples/threads/ls-threads-vfs",
-    "examples/multiple-vfs", "test_new_bare", "examples/bare/tree", "examples/dynamic-wasm", "examples/dynamic-wasm-multiple",
+    "examples/threads/ls-threads",
+    "examples/threads/ls-threads-vfs",
+    "examples/multiple-vfs",
+    "test_new_bare",
+    "examples/bare/tree",
+    "examples/dynamic-wasm",
+    "examples/dynamic-wasm-multiple",
     "examples/bare/self-rw-vfs",
     "examples/threads/self-rw-vfs",
     "examples/threads/complex-threads-vfs",
@@ -30,7 +35,7 @@ default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]
-version = "0.1.5"
+version = "0.2.0"
 edition = "2024"
 description = ""
 rust-version = "1.89.0"
