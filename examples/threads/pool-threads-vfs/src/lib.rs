@@ -1,5 +1,4 @@
 use const_struct::const_struct;
-use std::thread;
 use wasi_virt_layer::{
     file::*,
     plug_thread,
@@ -23,9 +22,9 @@ static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
 impl Guest for ComponentABI {
     fn main() {
         anonymous::_reset();
-        anonymous::_start();
 
-        // Initialize the pool
+        // Initialize the pool before _start(), because _start() triggers
+        // the guest's main() which immediately spawns threads via the pool.
         let pool = unsafe { &mut *(&raw mut THREAD_POOL) };
         pool.init();
         pool.set_capacity(2);
@@ -33,19 +32,7 @@ impl Guest for ComponentABI {
 
         println!("Pool threads initialized.");
 
-        let mut handles = vec![];
-        for i in 0..3 {
-            let handle = thread::spawn(move || {
-                println!("Thread {} running on virtual pool.", i);
-            });
-            handles.push(handle);
-        }
-
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        
-        println!("All threads finished.");
+        anonymous::_start();
     }
 }
 
