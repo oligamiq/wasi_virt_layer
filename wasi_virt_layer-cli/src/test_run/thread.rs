@@ -186,8 +186,8 @@ fn test_run_ts() -> &'static str {
     r#"
 // npx ts-node test_run.ts
 
-import { ConsoleStdout, Fd, File, OpenFile } from "@bjorn3/browser_wasi_shim";
-import { WASIFarm, wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
+import { ConsoleStdout, Fd, File, OpenFile } from "npm:@bjorn3/browser_wasi_shim";
+import { WASIFarm, wait_async_polyfill } from "npm:@oligami/browser_wasi_shim-threads";
 
 const isNode =
 	typeof process !== "undefined" && process.versions && process.versions.node;
@@ -269,7 +269,7 @@ if (!isNode) {
 
 fn thread_spawn_ts() -> &'static str {
     r#"
-import { thread_spawn_on_worker } from "@oligami/browser_wasi_shim-threads";
+import { thread_spawn_on_worker } from "npm:@oligami/browser_wasi_shim-threads";
 import { set_fake_worker } from "./common.ts";
 import { custom_instantiate } from "./inst.ts";
 

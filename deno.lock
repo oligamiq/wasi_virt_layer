@@ -1,16 +1,24 @@
 {
   "version": "5",
   "specifiers": {
-    "npm:@bjorn3/browser_wasi_shim@~0.4.2": "0.4.2"
+    "npm:@bjorn3/browser_wasi_shim@~0.4.2": "0.4.2",
+    "npm:@oligami/browser_wasi_shim-threads@~0.2.3": "0.2.3_@bjorn3+browser_wasi_shim@0.4.2"
   },
   "npm": {
     "@bjorn3/browser_wasi_shim@0.4.2": {
       "integrity": "sha512-/iHkCVUG3VbcbmEHn5iIUpIrh7a7WPiwZ3sHy4HZKZzBdSadwdddYDZAII2zBvQYV0Lfi8naZngPCN7WPHI/hA=="
+    },
+    "@oligami/browser_wasi_shim-threads@0.2.3_@bjorn3+browser_wasi_shim@0.4.2": {
+      "integrity": "sha512-oLv0X37BX0T21IN/bGMftrGJzWDFct5EURjwyF1rUICJONcLHuwpaKcl7JPEUmDorASo7Eja6trlqPHZMWDaxg==",
+      "dependencies": [
+        "@bjorn3/browser_wasi_shim"
+      ]
     }
   },
   "workspace": {
     "dependencies": [
-      "npm:@bjorn3/browser_wasi_shim@~0.4.2"
+      "npm:@bjorn3/browser_wasi_shim@~0.4.2",
+      "npm:@oligami/browser_wasi_shim-threads@~0.2.3"
     ]
   }
 }
