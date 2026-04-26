@@ -199,24 +199,6 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode + 'static> StandardMultipleFileS
     }
 
     #[inline]
-    fn set_cursor(&self, fd: Fd, cursor: usize) -> Option<()> {
-        #[cfg(feature = "threads")]
-        {
-            self.fd_map.get_mut(&fd).map(|mut entry| {
-                entry.value_mut().1.set_cursor(cursor);
-            })
-        }
-        #[cfg(not(feature = "threads"))]
-        {
-            unsafe { &mut *self.fd_map.get() }
-                .get_mut(&fd)
-                .map(|entry: &mut (usize, OpenFd)| {
-                    entry.1.set_cursor(cursor);
-                })
-        }
-    }
-
-    #[inline]
     fn remove_open_fd(&self, fd: Fd) -> Option<(usize, OpenFd)> {
         #[cfg(feature = "threads")]
         {
@@ -326,6 +308,28 @@ macro_rules! get_open_fd {
     };
 }
 
+macro_rules! get_open_fd_mut {
+    (($name:ident, $lfs:ident) = $self:ident, $fd:ident) => {
+        trace_fs!($self, Wasm; "get_open_fd_mut: fd={}", $fd);
+
+        #[cfg(feature = "threads")]
+        let mut __bind = $self.fd_map.get_mut(&$fd);
+        #[cfg(feature = "threads")]
+        let ($lfs_idx, $name) = match __bind.as_mut() {
+            Some(entry) => entry.value_mut(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let ($lfs_idx, $name) = match unsafe { &mut *$self.fd_map.get() }.get_mut(&$fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        let $lfs = &$self.lfss[*$lfs_idx];
+    };
+}
+
 macro_rules! get_access {
     ($name:ident = $self:ident, $wasm:ty) => {
         trace_fs!($self, $wasm; "get_access: wasm={}", <$wasm as WasmAccessName>::NAME);
@@ -409,11 +413,12 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                 wasip1::ERRNO_SUCCESS
             }
             fd => {
-                get_open_fd!((open_fd, lfs) = self, fd);
+                get_open_fd_mut!((open_fd, lfs) = self, fd);
 
                 get_inode!(inode = open_fd);
 
                 let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                let mut cursor = open_fd.cursor();
 
                 let mut written = 0;
                 for iovs in iovs_vec {
@@ -423,11 +428,15 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
                         iovs.buf as *const u8,
                         iovs.buf_len,
                     ) {
-                        Ok(w) => written += w,
+                        Ok(w) => {
+                            written += w;
+                            cursor += w;
+                        }
                         Err(e) => return e,
                     }
                 }
 
+                open_fd.set_cursor(cursor);
                 Wasm::store_le(nwritten_ret, written as Size);
                 wasip1::ERRNO_SUCCESS
             }
@@ -618,7 +627,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
     ) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_read: fd={fd}, iovs_len={iovs_len}");
         get_access!(access = self, Wasm);
-        get_open_fd!((open_fd, lfs) = self, fd);
+        get_open_fd_mut!((open_fd, lfs) = self, fd);
 
         let mut read = 0;
         let mut cursor = open_fd.cursor();
@@ -646,7 +655,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
             }
         }
 
-        self.set_cursor(fd, cursor);
+        open_fd.set_cursor(cursor);
         Wasm::store_le(nread_ret, read as Size);
         wasip1::ERRNO_SUCCESS
     }
@@ -666,37 +675,44 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         trace_fs!(self, Wasm; "path_open: dir_fd={dir_fd}, dir_flags={dir_flags}, path_len={path_len}, o_flags={o_flags}, fs_rights_base={fs_rights_base}, fs_rights_inheriting={fs_rights_inheriting}, fd_flags={fd_flags}");
         get_access!(access = self, Wasm);
 
-        #[cfg(feature = "threads")]
-        let __bind = self.fd_map.get(&dir_fd);
-        #[cfg(feature = "threads")]
-        let (lfs_idx, open_fd) = match __bind.as_ref() {
-            Some(entry) => entry.value(),
-            None => return wasip1::ERRNO_BADF,
+        let new_inode_result = {
+            #[cfg(feature = "threads")]
+            let __bind = self.fd_map.get(&dir_fd);
+            #[cfg(feature = "threads")]
+            let (lfs_idx, open_fd) = match __bind.as_ref() {
+                Some(entry) => entry.value(),
+                None => return wasip1::ERRNO_BADF,
+            };
+
+            #[cfg(not(feature = "threads"))]
+            let (lfs_idx, open_fd) = match unsafe { &*self.fd_map.get() }.get(&dir_fd) {
+                Some(entry) => entry,
+                None => return wasip1::ERRNO_BADF,
+            };
+
+            let lfs_idx = *lfs_idx;
+            let lfs = &self.lfss[lfs_idx];
+
+            get_inode!(inode = open_fd);
+
+            match lfs.path_open_raw_dyn_compatible(
+                access,
+                inode,
+                dir_flags,
+                path_ptr,
+                path_len,
+                o_flags,
+                fs_rights_base,
+                fs_rights_inheriting,
+                fd_flags,
+            ) {
+                Ok(new_inode) => Ok((lfs_idx, new_inode)),
+                Err(e) => Err(e),
+            }
         };
 
-        #[cfg(not(feature = "threads"))]
-        let (lfs_idx, open_fd) = match unsafe { &*self.fd_map.get() }.get(&dir_fd) {
-            Some(entry) => entry,
-            None => return wasip1::ERRNO_BADF,
-        };
-
-        let lfs_idx = *lfs_idx;
-        let lfs = &self.lfss[lfs_idx];
-
-        get_inode!(inode = open_fd);
-
-        match lfs.path_open_raw_dyn_compatible(
-            access,
-            inode,
-            dir_flags,
-            path_ptr,
-            path_len,
-            o_flags,
-            fs_rights_base,
-            fs_rights_inheriting,
-            fd_flags,
-        ) {
-            Ok(new_inode) => {
+        match new_inode_result {
+            Ok((lfs_idx, new_inode)) => {
                 let mut new_open_fd = OpenFd::from_inode_id(new_inode);
                 new_open_fd.set_cursor(0);
                 new_open_fd.set_base_rights(fs_rights_base);
