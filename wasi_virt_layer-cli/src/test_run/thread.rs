@@ -48,6 +48,26 @@ const set_fake_worker = async () => {
 		_worker = _worker || (await import("node:worker_threads"));
 		const { Worker, isMainThread, parentPort } = _worker;
 
+        class FakeWorker {
+            worker;
+            onmessage;
+
+            constructor(url) {
+                this.worker = new Worker(new URL(url, import.meta.url), {
+                    type: "module",
+                });
+
+                this.worker.on("message", (message) => {
+                    if (this.onmessage) {
+                        this.onmessage({ data: message });
+                    }
+                });
+            }
+            postMessage(message) {
+                this.worker.postMessage(message);
+            }
+        }
+
 		// biome-ignore lint/suspicious/noExplicitAny: <explanation>
 		(globalThis as any).Worker = Worker;
 	}
