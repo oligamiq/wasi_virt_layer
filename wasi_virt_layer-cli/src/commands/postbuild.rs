@@ -63,6 +63,21 @@ pub(crate) fn run_postbuild(
     if !parsed_args.adjust_abi() {
         if threads {
             test_run::thread::gen_threads_run(name, memory, parsed_args.out_dir());
+
+            let out_dir = parsed_args.out_dir();
+            println!("\nBuilding for Deno...");
+            let status = std::process::Command::new("deno")
+                .arg("install")
+                .current_dir(&out_dir)
+                .status();
+
+            if let Ok(s) = status {
+                if s.success() {
+                    println!("Deno dependencies installed successfully.");
+                } else {
+                    eprintln!("Warning: Failed to install Deno dependencies automatically.");
+                }
+            }
         } else {
             test_run::gen_test_run(name, parsed_args.out_dir());
         }
@@ -72,6 +87,8 @@ pub(crate) fn run_postbuild(
         println!("To run the generated program:");
         if threads {
             println!("  cd {out_dir}");
+            println!("  deno run -A test_run.ts");
+            println!("\n  # If using Bun:");
             println!("  bun install");
             println!("  bun run run");
             println!("\nOr run in browser:");
