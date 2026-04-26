@@ -366,6 +366,7 @@ impl TranspileOpts {
                 guest: self.guest,
                 async_mode: None,
                 strict: false,
+                asmjs: false,
             },
         )
         .to_eyre()
