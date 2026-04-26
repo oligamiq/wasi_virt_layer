@@ -1,5 +1,5 @@
-use crate::memory::WasmAccess;
 use crate::__private::wasip1::*;
+use crate::memory::WasmAccess;
 
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
 pub struct WaitPoll;

@@ -1,11 +1,6 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{
-    file::*,
-    plug_thread,
-    prelude::*,
-    process::*,
-    thread::VirtualThreadPool,
-    poll::WaitPoll,
+    file::*, plug_thread, poll::WaitPoll, prelude::*, process::*, thread::VirtualThreadPool,
 };
 
 struct ComponentABI;
@@ -39,11 +34,7 @@ impl Guest for ComponentABI {
 #[cfg(not(test))]
 export!(ComponentABI);
 
-plug_thread!(
-    { unsafe { &mut *(&raw mut THREAD_POOL) } },
-    anonymous,
-    self
-);
+plug_thread!({ unsafe { &mut *(&raw mut THREAD_POOL) } }, anonymous, self);
 
 plug_poll!(WaitPoll, anonymous);
 
@@ -70,9 +61,7 @@ mod fs {
 
     #[const_struct]
     const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-        EmbeddedFiles!([
-            ("/", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])
-        ]);
+        EmbeddedFiles!([("/", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])]);
 
     type LFS = StandardEmbeddedNormalLFS<
         EmbeddedFilesTy,

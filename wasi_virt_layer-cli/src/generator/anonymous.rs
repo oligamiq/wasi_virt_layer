@@ -49,7 +49,8 @@ impl Generator for Anonymous {
             // If use anonymous but there is no target, it is an error.
 
             // check anonymous export.
-            if module                .exports
+            if module
+                .exports
                 .iter()
                 .any(|e| e.name == format!("{PREFIX}anonymous__start_anchor"))
             {

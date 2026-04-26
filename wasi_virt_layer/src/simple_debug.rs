@@ -11,13 +11,16 @@ pub fn simple_debug_print(buf: impl AsRef<[u8]>) {
     }
 
     unsafe {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: buf.as_ref().as_ptr() as *const u8,
-            buf_len: buf.as_ref().len(),
-        }, wasip1::Ciovec {
-            buf: b"\n".as_ptr(),
-            buf_len: 1,
-        }];
+        let ciovec_arr = [
+            wasip1::Ciovec {
+                buf: buf.as_ref().as_ptr() as *const u8,
+                buf_len: buf.as_ref().len(),
+            },
+            wasip1::Ciovec {
+                buf: b"\n".as_ptr(),
+                buf_len: 1,
+            },
+        ];
 
         let _ = non_recursive_fd_write(2, &ciovec_arr);
     }
