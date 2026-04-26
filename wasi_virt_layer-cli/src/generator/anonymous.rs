@@ -57,6 +57,8 @@ impl Generator for Anonymous {
                 eyre::bail!(
                     "The target which VFS wasm required from `<anonymous>` does not exist. Please add argument `<target_wasm>` or remove `<anonymous>` if you do not want to use VFS wasm.",
                 );
+            } else {
+                return Ok(());
             }
         }
         if collected.len() > 1 {
