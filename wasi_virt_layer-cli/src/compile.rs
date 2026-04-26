@@ -6,7 +6,7 @@ use std::{
 
 use eyre::{Context as _, ContextCompat};
 
-use crate::{abi, down_color, util::ResultUtil as _};
+use crate::{abi, down_color, fallback_command, util::ResultUtil as _};
 
 struct CustomReadIterator<const T: usize, R: BufRead> {
     r: R,
@@ -373,7 +373,7 @@ pub fn optimize_wasm(
                 .wrap_err("Failed to remove existing optimized WASM file")?;
         }
 
-        let mut cmd = std::process::Command::new("wasm-opt");
+        let mut cmd = fallback_command::get_fallback_command("wasm-opt");
 
         if dwarf {
             cmd.arg("--debuginfo");
@@ -393,8 +393,6 @@ pub fn optimize_wasm(
 
         cmd.args(["--output", output_path.as_str()]);
         let command = cmd
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
             .spawn()
             .wrap_err("Failed to spawn wasm-opt process")?;
 
@@ -402,7 +400,7 @@ pub fn optimize_wasm(
             .wait_with_output()
             .wrap_err("Failed to wait for wasm-opt process")?;
 
-        if !output.status.success() {
+        if !output.success {
             let out = String::from_utf8_lossy(&output.stdout);
             let err = String::from_utf8_lossy(&output.stderr);
             eyre::bail!("wasm-opt failed: {err}\nstdout: {out}");

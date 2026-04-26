@@ -71,6 +71,30 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .map(Into::<String>::into)
         .map(Into::<std::ffi::OsString>::into);
 
+    if let Some(bin) = std::env::var(fallback_command::COMMAND_ALTERNATE_ENV_VAR).ok() {
+        let args: Vec<String> = args.map(|s| s.into_string().unwrap()).collect();
+
+        match bin.as_str() {
+            "wasm-merge" => {
+                return match fallback_command::wasm_merge(&args) {
+                    0 => Ok(()),
+                    code => Err(eyre::eyre!("wasm-merge failed with exit code {code}")),
+                };
+            }
+            "wasm-opt" => {
+                return match fallback_command::wasm_opt(&args) {
+                    0 => Ok(()),
+                    code => Err(eyre::eyre!("wasm-opt failed with exit code {code}")),
+                };
+            }
+            _ => {
+                return Err(eyre::eyre!(
+                    "Unsupported fallback command specified: {bin}"
+                ));
+            }
+        }
+    }
+
     let parsed_args = args::Cli::parse_from(args);
 
     match parsed_args.command {

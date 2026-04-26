@@ -30,15 +30,10 @@ use itertools::Itertools;
 use walrus::MemoryId;
 
 use crate::{
-    args::{self, TargetMemoryType},
-    compile,
-    config_checker::TomlRestorers,
-    generator::start_section::StartSectionGenerator,
-    unique_name::UniqueName,
-    util::{
+    args::{self, TargetMemoryType}, compile, config_checker::TomlRestorers, fallback_command, generator::start_section::StartSectionGenerator, unique_name::UniqueName, util::{
         CaminoUtilModule as _, ResultUtil, WalrusFID as _, WalrusUtilExport as _, WalrusUtilModule,
         WasmName, WasmNameHolder,
-    },
+    }
 };
 
 /// Represents the generation context, holding configuration arguments and targeted module info.
@@ -1760,7 +1755,7 @@ pub fn merge(
         custom_section
     };
 
-    let mut merge_cmd = std::process::Command::new("wasm-merge");
+    let mut merge_cmd = fallback_command::get_fallback_command("wasm-merge");
 
     // if threads {
     //     merge_cmd.arg("--enable-threads");
@@ -1773,7 +1768,7 @@ pub fn merge(
     merge_cmd.arg(vfs).arg(UniqueName::WASIP1_ABI_MODULE);
 
     for wasm in wasm {
-        merge_cmd.arg(wasm.as_ref()).arg(format!(
+        merge_cmd.arg(wasm.as_ref().as_os_str().to_str().unwrap()).arg(format!(
             "wasip1_vfs_{}",
             wasm.as_ref().get_file_main_name().unwrap()
         ));
@@ -1781,7 +1776,7 @@ pub fn merge(
 
     merge_cmd
         .arg("--output")
-        .arg(output.as_ref())
+        .arg(output.as_ref().as_os_str().to_str().unwrap())
         // .arg("--rename-export-conflicts")
         .arg("--enable-multimemory")
         .arg("--enable-threads");
@@ -1794,10 +1789,10 @@ pub fn merge(
             ),
             _ => e.into(),
         })?
-        .wait()
-        .expect("Failed to wait for wasm-merge command");
+        .wait_with_output()
+        .wrap_err("Failed to wait for wasm-merge process")?;
 
-    if !result.success() {
+    if !result.success {
         return Err(eyre::eyre!("wasm-merge command failed"));
     }
 

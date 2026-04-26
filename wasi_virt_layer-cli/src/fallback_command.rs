@@ -8,6 +8,47 @@ use eyre::Context as _;
 use fs2::FileExt as _;
 use tempfile::Builder as TempFileBuilder;
 
+pub(crate) const COMMAND_ALTERNATE_ENV_VAR: &str = "WASI_VIRT_LAYER_FALLBACK_ALTERNATE_COMMAND";
+
+#[allow(unused)]
+pub(crate) fn wasm_merge(args: &[String]) -> i32 {
+    #[cfg(feature = "fallback")]
+    {
+        wasm_merge_sys::run_wasm_merge(args)
+    }
+    #[cfg(not(feature = "fallback"))]
+    {
+        eprintln!("wasm-merge fallback is not enabled");
+        1
+    }
+}
+
+#[allow(unused)]
+pub(crate) fn wasm_opt(args: &[String]) -> i32 {
+    #[cfg(feature = "fallback")]
+    {
+        wasm_opt_sys::run_wasm_opt(args)
+    }
+    #[cfg(not(feature = "fallback"))]
+    {
+        eprintln!("wasm-opt fallback is not enabled");
+        1
+    }
+}
+
+fn fake_fallback(args: &[String]) -> i32 {
+    unimplemented!("This is a fake fallback function. It should never be called. Args: {args:?}");
+}
+
+/// Gets a `FallbackCommand` for the specified binary, with a fallback function that will be called if the binary is not found.
+pub fn get_fallback_command(bin: impl AsRef<str>) -> FallbackCommand<impl FnOnce(&[String]) -> i32 + Send + 'static> {
+    match bin.as_ref() {
+        "wasm-merge" => FallbackCommand::new("wasm-merge", fake_fallback),
+        "wasm-opt" => FallbackCommand::new("wasm-opt", fake_fallback),
+        _ => panic!("Unsupported fallback command specified: {}", bin.as_ref()),
+    }
+}
+
 /// A command that can fall back to a Rust function if the binary is not found.
 pub struct FallbackCommand<F>
 where
@@ -57,11 +98,14 @@ where
     /// Spawns the command, either as a child process or as a fallback thread.
     pub fn spawn(&mut self) -> std::io::Result<FallbackChild> {
         let mut cmd = std::process::Command::new(&self.bin);
-        cmd.args(&self.args);
-        let piped_out = std::process::Stdio::piped();
-        let piped_err = std::process::Stdio::piped();
-        cmd.stdout(piped_out);
-        cmd.stderr(piped_err);
+        let setter = |cmd: &mut std::process::Command| {
+            cmd.args(&self.args);
+            let piped_out = std::process::Stdio::piped();
+            let piped_err = std::process::Stdio::piped();
+            cmd.stdout(piped_out);
+            cmd.stderr(piped_err);
+        };
+        setter(&mut cmd);
         match cmd.spawn() {
             Ok(child) => Ok(FallbackChild::new_process(child)),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound && DISABLE_FALLBACK => {
@@ -69,36 +113,43 @@ where
                 Err(e)
             }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-                // Fallback to the provided function
-                let args = self.args.clone();
-                let func = self.func.take().expect("Function already taken");
-                let handle = std::thread::spawn(move || {
-                    let log = std::fs::OpenOptions::new()
-                        .truncate(true)
-                        .read(true)
-                        .create(true)
-                        .write(true)
-                        .open(get_temp_filepath())
-                        .unwrap();
+                // // Fallback to the provided function
+                // let args = self.args.clone();
+                // let func = self.func.take().expect("Function already taken");
+                // let handle = std::thread::spawn(move || {
+                //     let log = std::fs::OpenOptions::new()
+                //         .truncate(true)
+                //         .read(true)
+                //         .create(true)
+                //         .write(true)
+                //         .open(get_temp_filepath())
+                //         .unwrap();
 
-                    let print_redirect = gag::Redirect::stdout(log).unwrap();
+                //     let print_redirect = gag::Redirect::stdout(log).unwrap();
 
-                    let result = (func)(&args);
+                //     let result = (func)(&args);
 
-                    // Extract redirect
-                    let mut log = print_redirect.into_inner();
+                //     // Extract redirect
+                //     let mut log = print_redirect.into_inner();
 
-                    let mut buf = String::new();
-                    log.seek(std::io::SeekFrom::Start(0)).unwrap();
-                    log.read_to_string(&mut buf).unwrap();
+                //     let mut buf = String::new();
+                //     log.seek(std::io::SeekFrom::Start(0)).unwrap();
+                //     log.read_to_string(&mut buf).unwrap();
 
-                    FallbackOutput {
-                        stdout: buf.into_bytes(),
-                        stderr: Vec::new(),
-                        success: result == 0,
-                    }
-                });
-                Ok(FallbackChild::new_thread(handle))
+                //     FallbackOutput {
+                //         stdout: buf.into_bytes(),
+                //         stderr: Vec::new(),
+                //         success: result == 0,
+                //     }
+                // });
+                // Ok(FallbackChild::new_thread(handle))
+
+                // Fallback to self call with env var
+                let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+                setter(&mut cmd);
+                cmd.env(COMMAND_ALTERNATE_ENV_VAR, &self.bin);
+                let child = cmd.spawn()?;
+                Ok(FallbackChild::new_process(child))
             }
             Err(e) => Err(e),
         }
@@ -118,6 +169,7 @@ impl FallbackChild {
         FallbackChild::Process(child)
     }
 
+    #[allow(unused)]
     fn new_thread(handle: std::thread::JoinHandle<FallbackOutput>) -> Self {
         FallbackChild::Thread(handle)
     }
