@@ -18,7 +18,7 @@ const_struct = "0.6.4"
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["std", "alloc", "dynamic-fs", "trace"]
+features = ["std", "alloc", "dynamic-fs"]
 
 [lib]
 crate-type = ["cdylib"]

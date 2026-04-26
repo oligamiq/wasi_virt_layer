@@ -95,8 +95,6 @@ impl Generator for ResetFunc {
     ) -> eyre::Result<()> {
         let mut mem_manager = VFSExternalMemoryManager::new(module);
 
-        let wasm_mem = ctx.vfs_used_memory_id.unwrap();
-
         let initializers = module
             .add_func(&[], &[], |_, _| Ok(()))
             .wrap_err_with(|| eyre::eyre!("Failed to add initializer function"))?;
@@ -104,6 +102,8 @@ impl Generator for ResetFunc {
         let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
 
         for wasm in &ctx.target_names {
+            let wasm_mem = ctx.target_used_memory_id.as_ref().unwrap()[wasm];
+
             if let Some(reset) = (
                 UniqueName::NAMESPACE,
                 &UniqueName::SpecialFunc(&SpecialFuncUniqueName::Reset(wasm)),
