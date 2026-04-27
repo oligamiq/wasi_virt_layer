@@ -6,6 +6,7 @@ use camino::Utf8PathBuf;
 use eyre::Context;
 use glob;
 use itertools::Itertools;
+use std::{collections::HashSet, process::Command, sync::OnceLock};
 use utils::*;
 use uuid::Uuid;
 use wasi_virt_layer_cli::unique_name::UniqueName;
@@ -21,10 +22,65 @@ use wasi_virt_layer_cli::unique_name::UniqueName;
 // threads + unstable_print_debug
 // multi_memory + threads + unstable_print_debug
 
+static INSTALLED_TARGETS_STABLE: OnceLock<HashSet<String>> = OnceLock::new();
+static INSTALLED_TARGETS_NIGHTLY: OnceLock<HashSet<String>> = OnceLock::new();
+
+fn installed_targets(nightly: bool) -> &'static HashSet<String> {
+    let list = || {
+        let mut cmd = Command::new("rustup");
+        if nightly {
+            cmd.arg("+nightly");
+        }
+        let output = cmd.args(["target", "list", "--installed"]).output();
+
+        let Ok(output) = output else {
+            return HashSet::new();
+        };
+        if !output.status.success() {
+            return HashSet::new();
+        }
+
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect()
+    };
+
+    if nightly {
+        INSTALLED_TARGETS_NIGHTLY.get_or_init(list)
+    } else {
+        INSTALLED_TARGETS_STABLE.get_or_init(list)
+    }
+}
+
+fn has_required_wasi_targets(threads: bool) -> bool {
+    if !installed_targets(false).contains("wasm32-wasip1") {
+        eprintln!(
+            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
+        );
+        return false;
+    }
+
+    if threads && !installed_targets(true).contains("wasm32-wasip1-threads") {
+        eprintln!(
+            "Skipping test: missing nightly rust target `wasm32-wasip1-threads` (install with `rustup +nightly target add wasm32-wasip1-threads`)"
+        );
+        return false;
+    }
+
+    true
+}
+
 /// Tests the build process with the `--out-dir` argument, ensuring output is directed to a specific temporary directory.
 #[test]
 fn test_build_out_dir() -> color_eyre::Result<()> {
     color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
 
     // rm onetime dir if it exists
     let _ = std::fs::remove_dir_all(format!("{THIS_FOLDER}/tmp"));
@@ -40,6 +96,10 @@ fn test_build_out_dir() -> color_eyre::Result<()> {
 fn test_build_multi() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
     let _test_dir_normal = build_normal(false).wrap_err("Failed to build normal multi")?;
     println!("Normal multi build done.");
     let _test_dir_threads = build_threads(false).wrap_err("Failed to build threads multi")?;
@@ -52,6 +112,10 @@ fn test_build_multi() -> color_eyre::Result<()> {
 #[test]
 fn test_build_single() -> color_eyre::Result<()> {
     color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
 
     let _test_dir_normal = build_normal(true).wrap_err("Failed to build normal single")?;
     println!("Normal single build done.");
@@ -109,6 +173,10 @@ fn build_threads(single: bool) -> color_eyre::Result<TestDir> {
 fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
     let _test_dir = run_wasi_virt_layer(
         Some("self-rw-vfs"),
         Some("ls"),
@@ -127,6 +195,10 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
 #[test]
 fn test_self_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
 
     let _test_dir = run_wasi_virt_layer(
         Some("self_vfs"),
@@ -150,6 +222,10 @@ fn test_self_vfs_example() -> color_eyre::Result<()> {
 #[test]
 fn test_self_rw_threads_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
 
     let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
 
@@ -184,8 +260,9 @@ fn set_features_inner<T>(
     p: &str,
     fn_: impl FnOnce() -> color_eyre::Result<T>,
 ) -> color_eyre::Result<T> {
-    let manifest_path = Utf8PathBuf::from(EXAMPLE_DIR.to_owned() + "./vfs/" + p + "/Cargo.toml");
-    let root_manifest_path = Utf8PathBuf::from(EXAMPLE_DIR.to_owned() + "./../Cargo.toml");
+    let example_dir = Utf8PathBuf::from(EXAMPLE_DIR);
+    let manifest_path = example_dir.join("vfs").join(p).join("Cargo.toml");
+    let root_manifest_path = example_dir.join("..").join("Cargo.toml");
     let original = std::fs::read_to_string(&manifest_path)
         .wrap_err("Failed to read Cargo.toml for feature checking")?;
     features
@@ -228,6 +305,10 @@ impl core::ops::Drop for Resetter<'_> {
 fn all_features_without_threads() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
     let run = || -> color_eyre::Result<TestDir> {
         run_wasi_virt_layer(
             Some("no_std_vfs"),
@@ -267,6 +348,10 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
 fn all_features_with_threads() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
     let run = || -> color_eyre::Result<TestDir> {
         run_wasi_virt_layer(
             Some("threads_vfs"),
@@ -304,6 +389,10 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
 fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
     let fn_ = |m: bool| -> color_eyre::Result<TestDir> {
         run_wasi_virt_layer(
             Some("no_thread_with_thread_feature_vfs"),
@@ -326,6 +415,10 @@ fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
 #[test]
 fn test_keep_build_artifacts() -> color_eyre::Result<()> {
     color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
 
     // Test with keep_build_artifacts = true
     let test_dir_keep = run_wasi_virt_layer(

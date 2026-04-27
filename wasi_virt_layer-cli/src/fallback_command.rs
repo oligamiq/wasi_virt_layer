@@ -27,7 +27,16 @@ pub(crate) fn wasm_merge(args: &[String]) -> i32 {
 pub(crate) fn wasm_opt(args: &[String]) -> i32 {
     #[cfg(feature = "fallback")]
     {
-        wasm_opt::integration::run_from_command_args(args)
+        let mut command = wasm_opt::integration::Command::new("wasm-opt");
+        command.args(args.iter().skip(1));
+
+        match wasm_opt::integration::run_from_command_args(command) {
+            Ok(()) => 0,
+            Err(err) => {
+                eprintln!("wasm-opt fallback failed: {err}");
+                1
+            }
+        }
     }
     #[cfg(not(feature = "fallback"))]
     {

@@ -1,5 +1,5 @@
 use std::sync::Mutex;
-use wasi_virt_layer_cli::fallback_command::{FallbackCommand, check_gag};
+use wasi_virt_layer_cli::fallback_command::{check_gag, get_fallback_command, FallbackCommand};
 
 static MUTEX: Mutex<()> = Mutex::new(());
 
@@ -32,9 +32,7 @@ fn test_fallback_wasm_merge_version() {
         return;
     }
 
-    let mut cmd = FallbackCommand::new("wasm-merge", |args: &[String]| {
-        wasi_virt_layer_cli::fallback_command::wasm_merge(args)
-    });
+    let mut cmd = get_fallback_command("wasm-merge");
     cmd.arg("--version");
 
     let child = cmd.spawn().expect("Failed to spawn command");
@@ -51,9 +49,7 @@ fn test_fallback_wasm_opt_version() {
         return;
     }
 
-    let mut cmd = FallbackCommand::new("wasm-opt", |args: &[String]| {
-        wasi_virt_layer_cli::fallback_command::wasm_opt(args)
-    });
+    let mut cmd = get_fallback_command("wasm-opt");
     cmd.arg("--version");
 
     let child = cmd.spawn().expect("Failed to spawn command");
