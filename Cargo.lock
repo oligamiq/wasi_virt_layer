@@ -251,7 +251,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "changeable-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "complex-threads-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -662,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -671,7 +671,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm-multiple"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -743,7 +743,7 @@ dependencies = [
 
 [[package]]
 name = "example_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1143,15 +1143,15 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "ls"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "ls-threads"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "ls-threads-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1161,7 +1161,7 @@ dependencies = [
 
 [[package]]
 name = "ls-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1185,7 +1185,7 @@ dependencies = [
 
 [[package]]
 name = "multiple-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "parking_lot",
  "smallstr",
@@ -1207,7 +1207,7 @@ dependencies = [
 
 [[package]]
 name = "no_std_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1216,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "no_thread_with_thread_feature_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1323,7 +1323,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pool-threads-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1508,7 +1508,7 @@ checksum = "b50b8869d9fc858ce7266cce0194bd74df58b9d0e3f6df3a9fc8eb470d95c09d"
 
 [[package]]
 name = "rustc_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1563,7 +1563,7 @@ checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
 name = "self-rw-threads-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1573,7 +1573,7 @@ dependencies = [
 
 [[package]]
 name = "self-rw-vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1583,11 +1583,11 @@ dependencies = [
 
 [[package]]
 name = "self_rw_example"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "self_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1691,11 +1691,11 @@ dependencies = [
 
 [[package]]
 name = "spawn_vfs_and_body_example"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "spawn_vfs_and_body_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1833,7 +1833,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test_new_bare"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1842,15 +1842,15 @@ dependencies = [
 
 [[package]]
 name = "test_pool_thread"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "test_threads"
-version = "0.2.2"
+version = "0.2.3"
 
 [[package]]
 name = "test_wasm"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "walkdir",
 ]
@@ -1897,7 +1897,7 @@ dependencies = [
 
 [[package]]
 name = "thread_direct_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1906,7 +1906,7 @@ dependencies = [
 
 [[package]]
 name = "thread_pool_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1915,7 +1915,7 @@ dependencies = [
 
 [[package]]
 name = "threads_vfs"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1962,7 +1962,7 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tree"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2089,7 +2089,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi_virt_layer"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "backtrace",
  "const_for",
@@ -2108,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "wasi_virt_layer-cli"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "anyhow",
  "assert_cmd",
