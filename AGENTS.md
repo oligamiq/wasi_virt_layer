@@ -1,113 +1,32 @@
-# Agent Playbook for `wasi_virt_layer`
+# AGENTS.md
 
-This file aggregates all development instructions, workflows, and rules for agents working on `wasi_virt_layer`. It combines information from `GEMINI.md` and developer notes from `README.md`.
+## Scope
+- Workspace default members: `wasi_virt_layer` (lib) and `wasi_virt_layer-cli` (CLI). See `Cargo.toml` for full workspace members.
+- Rust edition is 2024; minimum rustc is 1.89.0 (`Cargo.toml`).
 
-## 1. Project Overview
-`wasi_virt_layer` provides a virtualization layer for WASI modules, combining a virtual file system (VFS) WASM module with main WASM modules.
-- **Core crates:** `wasi_virt_layer` (library), `wasi_virt_layer-cli` (CLI).
-- **Workspace root:** `D:/projects/wasi_virt_layer` (Rust 2024, rustc >= 1.89.0).
+## Commands
+- Check workspace (release profile): `cargo check -r`
+- Run CLI (preferred): `cargo r -r -- <args>`
+- Nextest (recommended): `cargo nextest run -r --fail-fast` (install via `cargo binstall cargo-nextest -y` per `README.md`)
+- Lint: `cargo clippy --all-targets --all-features -D warnings`
+- Format: `cargo fmt`
 
-## 2. Core Mandates & Constraints
-- **Conventions First:** Adhere strictly to existing code style, naming, and architecture.
-- **No Assumptions:** Verify library usage before importing.
-- **Sparse Comments:** Explain *why*, not *what*.
-- **Git Safety:**
-  - No direct `git add/commit` commands. Propose changes and messages instead.
-  - Check `git status`, `git diff`, and `git log` before proposing.
-  - Never push without explicit request.
-  - Confirm changes to `Cargo.toml`, CI files, or shared configs.
-- **Existing Warnings:** Do not fix pre-existing warnings. Only address warnings introduced by your changes.
-- **Documentation:** Keep this file (`AGENTS.md`) and `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` updated.
+## Testing and examples
+- CLI integration tests live in `wasi_virt_layer-cli/tests/`; use `utils.rs::run_wasi_virt_layer` helper.
+- Use `OutDir::Random` in tests to avoid parallel collisions; set `keep_build_artifacts: true` to keep intermediates for debugging.
+- Example runs from `README.md`:
+  - `cargo r -r -- -p example_vfs examples/test_wasm/example/test_wasm_opt.wasm`
+  - `cargo r -r -- -p threads_vfs test_threads -t single --threads true`
+  - `cargo r -- -p threads_vfs test_threads -t multi --threads true`
 
-## 3. Build, Run, & Test Commands
+## Generator / ABI changes
+- If touching generator modules or ABI naming, consult `wasi_virt_layer-cli/IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` and keep import/export names in sync across stages; keep `Debug*` generators unless intentionally removed.
 
-### Basic Workflow
-| Action | Command | Notes |
-| :--- | :--- | :--- |
-| **Check** | `cargo check -r` | Workspace-wide, release profile |
-| **Test (Nextest)** | `cargo nextest run -r --fail-fast` | Recommended for fast fail verification |
-| **Run CLI** | `cargo r -r -- <args>` | Preferred method for running the tool |
-| **Format** | `cargo fmt` | Standard rustfmt |
-| **Lint** | `cargo clippy --all-targets --all-features -D warnings` | |
+## Known quirks (from `README.md`)
+- Threads + memory mode: `single_memory` can fail where `multi_memory` succeeds; reset sequence `test_threads::_reset(); _start(); _main();` exposes this.
+- Build cache: target dir caching may require `--no-cache`.
+- Very long CLI args and self-calling binaries are known to be tricky.
 
-### Specific Test Patterns
-- **Library only:** `cargo check -p wasi_virt_layer`
-- **CLI only:** `cargo check -p wasi_virt_layer-cli`
-- **Single Integration Test:** `cargo test -r -p wasi_virt_layer-cli --test <file_stem>`
-- **Filter Test Case:** `cargo test -r -p wasi_virt_layer-cli --test <file_stem> <test_fn_substring>`
-- **Examples (Short run):** `cargo test -r -p wasi_virt_layer --lib <filter>`
-
-### Example Runs (from README)
-```bash
-# Threads example (single memory)
-cargo r -r -- -p threads_vfs test_threads -t single --threads true
-
-# Threads example (multi memory)
-cargo r -- -p threads_vfs test_threads -t multi --threads true
-```
-
-## 4. Development Workflow
-
-### 4.1. Task Execution Strategy
-1.  **Understand:** Use `grep`, `glob`, and `read` to analyze context.
-2.  **Plan:** Create a step-by-step plan.
-3.  **Implement:** Edit files, strictly following `IMPORTS_EXPORTS_EVOLUTION_DETAILED.md` if touching generators.
-4.  **Verify:** Run tests (`cargo nextest run -r --fail-fast`) and linters.
-5.  **Refine:** Fix any issues found during verification.
-
-### 4.2. Refactoring Generators
-**CRITICAL:** When modifying `generator` modules or ABI logic:
-- Consult `wasi_virt_layer-cli/IMPORTS_EXPORTS_EVOLUTION_DETAILED.md`.
-- Ensure import/export names match exactly at each stage.
-- Preserve debug generators (`Debug*`) unless explicitly pruned.
-
-### 4.3. Integration Testing Details
-Tests live in `wasi_virt_layer-cli/tests/` and use `utils.rs`.
-- Use `run_wasi_virt_layer` helper to abstract CLI execution.
-- **Output Isolation:** Use `OutDir::Random` to avoid collisions during parallel tests.
-- **Artifacts:** Use `keep_build_artifacts: true` in `run_wasi_virt_layer` if you need to debug intermediate WASM files.
-
-## 5. Technical Notes & Troubleshooting
-
-### Feature Flags
-- **Workspace:** `std`, `alloc`, `threads`, `multi_memory`, `unstable_print_debug`.
-- **Consistency:** Ensure CLI args (e.g., `--threads`) match the manifest feature flags checked by `config_checker`.
-
-### Known Issues & Debugging (from README)
-- **Threads & Memory:**
-  - `single_memory` may fail where `multi_memory` succeeds in threaded contexts.
-  - Pay attention to the order of thread creation:
-    - VFS -> Body: (Check status)
-    - Body -> Body: Success
-    - VFS -> VFS: Success
-- **Reset Behavior:**
-  - Without `_reset()`, both single and multi memory modes might appear to succeed.
-  - With `test_threads::_reset(); _start(); _main();`: Multi-memory succeeds; Single-memory might panic with `unreachable`.
-- **Build Caching:** Watch out for build target directory caching (`--no-cache` might be needed).
-- **Recursion:** Self-calling binaries (fallback mechanisms) are tricky.
-- **CLI Arguments:** Extremely long arguments might cause failures.
-
-### Deno Usage
-Generated artifacts (in `dist/`) can often be run with Deno:
-```bash
-deno run dist/test_run.ts
-```
-
-## 6. Roadmap & TODOs
-- [ ] Support non-binary Wasm modules
-- [ ] Enable specifying multiple Wasm modules
-- [ ] Support `self` not passed in `plug_thread!`
-- [ ] Support `self` binary
-- [ ] Support flush sync to file system
-- [ ] Fake global allocator / center allocator merged with VFS
-- [ ] Access Time Trait
-- [ ] Multiple LFS file systems (VFS)
-- [ ] Static file system
-- [ ] Separate mode (connect function by javascript)
-- [ ] Threading VFS with non-threading WASM
-- [ ] Validator with error on threads
-- [ ] Unicode support
-- [ ] Async WIT support
-
-## 7. Non-Goals & Limitations
-- **wasm-bindgen:** Not supported because it cannot use WASI.
+## Conventions
+- Doc comments: add them as much as possible.
+- `wasm-bindgen` is not supported (README “cannot”).
