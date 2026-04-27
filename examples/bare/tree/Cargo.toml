@@ -24,4 +24,3 @@ features = ["embedded-fs"]
 
 [lib]
 crate-type = ["cdylib"]
-test = false

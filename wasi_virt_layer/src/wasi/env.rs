@@ -5,17 +5,10 @@ use const_struct::*;
 
 use crate::memory::WasmAccess;
 
-/// @block or @through
-/// Whether to import JavaScript runtime env from vfs,
-/// env is automatically imported even if you are not using it,
-/// so that you can block it
-/// @through if retrieving from JavaScript runtime.
-///
 /// @embedded or @dynamic
 /// Whether to import JavaScript runtime env from vfs,
 /// env is automatically imported even if you are not using it,
 /// so that you can block it
-/// @through if retrieving from JavaScript runtime.
 ///
 /// @embedded or @dynamic
 /// Whether to use embedded or dynamic env.

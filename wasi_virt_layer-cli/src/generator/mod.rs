@@ -30,10 +30,16 @@ use itertools::Itertools;
 use walrus::MemoryId;
 
 use crate::{
-    args::{self, TargetMemoryType}, compile, config_checker::TomlRestorers, fallback_command, generator::start_section::StartSectionGenerator, unique_name::UniqueName, util::{
+    args::{self, TargetMemoryType},
+    compile,
+    config_checker::TomlRestorers,
+    fallback_command,
+    generator::start_section::StartSectionGenerator,
+    unique_name::UniqueName,
+    util::{
         CaminoUtilModule as _, ResultUtil, WalrusFID as _, WalrusUtilExport as _, WalrusUtilModule,
         WasmName, WasmNameHolder,
-    }
+    },
 };
 
 /// Represents the generation context, holding configuration arguments and targeted module info.
@@ -1768,10 +1774,12 @@ pub fn merge(
     merge_cmd.arg(vfs).arg(UniqueName::WASIP1_ABI_MODULE);
 
     for wasm in wasm {
-        merge_cmd.arg(wasm.as_ref().as_os_str().to_str().unwrap()).arg(format!(
-            "wasip1_vfs_{}",
-            wasm.as_ref().get_file_main_name().unwrap()
-        ));
+        merge_cmd
+            .arg(wasm.as_ref().as_os_str().to_str().unwrap())
+            .arg(format!(
+                "wasip1_vfs_{}",
+                wasm.as_ref().get_file_main_name().unwrap()
+            ));
     }
 
     merge_cmd

@@ -15,4 +15,3 @@ features = ["std", "alloc", "dynamic-fs", "multiple-fs", "trace-fs", "trace"]
 
 [lib]
 crate-type = ["cdylib"]
-test = false

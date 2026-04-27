@@ -157,6 +157,7 @@ impl Guest for ComponentABI {
     }
 }
 
+#[cfg(not(test))]
 export!(ComponentABI);
 
 mod process {
@@ -244,6 +245,7 @@ impl Guest for ComponentABI {
     }
 }
 
+#[cfg(not(test))]
 export!(ComponentABI);
 
 plug_thread!(

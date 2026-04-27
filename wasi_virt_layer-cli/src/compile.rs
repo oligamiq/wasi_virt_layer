@@ -392,9 +392,7 @@ pub fn optimize_wasm(
         cmd.arg(wasm_path.as_str());
 
         cmd.args(["--output", output_path.as_str()]);
-        let command = cmd
-            .spawn()
-            .wrap_err("Failed to spawn wasm-opt process")?;
+        let command = cmd.spawn().wrap_err("Failed to spawn wasm-opt process")?;
 
         let output = command
             .wait_with_output()

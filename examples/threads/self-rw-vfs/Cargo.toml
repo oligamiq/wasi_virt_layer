@@ -23,4 +23,3 @@ features = ["threads", "dynamic-fs", "embedded-fs", "trace"]
 
 [lib]
 crate-type = ["cdylib"]
-test = false

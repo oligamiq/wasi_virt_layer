@@ -27,7 +27,7 @@ pub(crate) fn wasm_merge(args: &[String]) -> i32 {
 pub(crate) fn wasm_opt(args: &[String]) -> i32 {
     #[cfg(feature = "fallback")]
     {
-        wasm_opt_sys::run_wasm_opt(args)
+        wasm_opt::integration::run_from_command_args(args)
     }
     #[cfg(not(feature = "fallback"))]
     {
@@ -41,7 +41,9 @@ fn fake_fallback(args: &[String]) -> i32 {
 }
 
 /// Gets a `FallbackCommand` for the specified binary, with a fallback function that will be called if the binary is not found.
-pub fn get_fallback_command(bin: impl AsRef<str>) -> FallbackCommand<impl FnOnce(&[String]) -> i32 + Send + 'static> {
+pub fn get_fallback_command(
+    bin: impl AsRef<str>,
+) -> FallbackCommand<impl FnOnce(&[String]) -> i32 + Send + 'static> {
     match bin.as_ref() {
         "wasm-merge" => FallbackCommand::new("wasm-merge", fake_fallback),
         "wasm-opt" => FallbackCommand::new("wasm-opt", fake_fallback),

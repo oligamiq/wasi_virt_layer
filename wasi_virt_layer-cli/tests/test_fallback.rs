@@ -1,5 +1,5 @@
-use wasi_virt_layer_cli::fallback_command::{FallbackCommand, check_gag};
 use std::sync::Mutex;
+use wasi_virt_layer_cli::fallback_command::{FallbackCommand, check_gag};
 
 static MUTEX: Mutex<()> = Mutex::new(());
 

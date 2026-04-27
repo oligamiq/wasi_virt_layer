@@ -88,9 +88,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                 };
             }
             _ => {
-                return Err(eyre::eyre!(
-                    "Unsupported fallback command specified: {bin}"
-                ));
+                return Err(eyre::eyre!("Unsupported fallback command specified: {bin}"));
             }
         }
     }
