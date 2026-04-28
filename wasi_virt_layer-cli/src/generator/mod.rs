@@ -980,6 +980,15 @@ impl GeneratorRunner {
             if !keep_build_artifacts {
                 std::fs::remove_file(&old_path)
                     .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
+                for target in self.targets.iter() {
+                    if let Ok(target_path) = target.path() {
+                        if !target.is_original(target_path) {
+                            std::fs::remove_file(target_path).unwrap_or_else(|e| {
+                                log::warn!("Failed to remove intermediate target file {target_path}: {e}");
+                            });
+                        }
+                    }
+                }
             }
 
             path.set_path(output.into())
