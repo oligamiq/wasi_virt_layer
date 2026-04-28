@@ -609,9 +609,9 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
         dwarf: bool,
         keep_build_artifacts: bool,
     ) -> eyre::Result<T> {
-        let old_path = path.path()?;
+        let old_path = path.path()?.clone();
         let module =
-            &mut walrus::Module::load(old_path, dwarf).wrap_err("Failed to load Wasm module")?;
+            &mut walrus::Module::load(&old_path, dwarf).wrap_err("Failed to load Wasm module")?;
 
         let result = (self)(module)?;
 
@@ -627,8 +627,8 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
             .to_eyre()
             .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
 
-        if !keep_build_artifacts {
-            std::fs::remove_file(old_path)
+        if !keep_build_artifacts && !path.is_original(&old_path) {
+            std::fs::remove_file(&old_path)
                 .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
         }
 
@@ -679,7 +679,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let new_path = compile::optimize_wasm(&old_path, &[], false, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
 
-        if !keep_build_artifacts && old_path != new_path {
+        if !keep_build_artifacts && old_path != new_path && !path.is_original(&old_path) {
             std::fs::remove_file(&old_path)
                 .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
         }
@@ -707,7 +707,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let new_path = compile::optimize_wasm(&old_path, args, require_update, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
 
-        if !keep_build_artifacts && old_path != new_path {
+        if !keep_build_artifacts && old_path != new_path && !path.is_original(&old_path) {
             std::fs::remove_file(&old_path)
                 .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
         }
@@ -1528,6 +1528,14 @@ pub enum WasmPath {
     Definitely(Utf8PathBuf),
     /// A completed explicitly transpiled WebAssembly Component standard architecture module.
     Component(Utf8PathBuf),
+    /// A user-provided raw WebAssembly binary file that should never be deleted.
+    /// The inner path tracks the original file location.
+    Original {
+        /// The current working path (may change as transformations produce new files).
+        current: Utf8PathBuf,
+        /// The original user-provided path that must be preserved.
+        original: Utf8PathBuf,
+    },
 }
 
 impl FromStr for WasmPath {
@@ -1577,7 +1585,9 @@ impl WasmPath {
     pub fn name(&self) -> eyre::Result<CompactString> {
         match self {
             WasmPath::Maybe { package, .. } => Ok(package.to_compact_string()),
-            WasmPath::Definitely(path) | WasmPath::Component(path) => path
+            WasmPath::Definitely(path)
+            | WasmPath::Component(path)
+            | WasmPath::Original { current: path, .. } => path
                 .get_file_main_name()
                 .ok_or_else(|| eyre::eyre!("Failed to get file name from {path}")),
         }
@@ -1587,7 +1597,7 @@ impl WasmPath {
     pub fn manifest_path(&self) -> Option<&Utf8PathBuf> {
         match self {
             WasmPath::Maybe { manifest_path, .. } => Some(manifest_path),
-            WasmPath::Definitely(_) | WasmPath::Component(_) => None,
+            WasmPath::Definitely(_) | WasmPath::Component(_) | WasmPath::Original { .. } => None,
         }
     }
 
@@ -1602,7 +1612,7 @@ impl WasmPath {
                 };
                 Some(cargo_metadata.workspace_root.join("Cargo.toml"))
             }
-            WasmPath::Definitely(_) | WasmPath::Component(_) => None,
+            WasmPath::Definitely(_) | WasmPath::Component(_) | WasmPath::Original { .. } => None,
         }
     }
 
@@ -1658,6 +1668,7 @@ impl WasmPath {
     }
 
     /// Scans an exact provided `.wasm` artifact verifying magic byte signatures correctly to assign a resolution state.
+    /// User-provided `.wasm` files are wrapped in `Original` to prevent deletion of the original file.
     pub fn with_wasm(path: Utf8PathBuf) -> eyre::Result<Self> {
         if path.extension() != Some("wasm") {
             eyre::bail!("Wasm file does not have .wasm extension: {path}");
@@ -1684,7 +1695,10 @@ impl WasmPath {
             eyre::bail!("Wasm file does not have valid version: {path}");
         }
 
-        Ok(Self::Definitely(path))
+        Ok(Self::Original {
+            current: path.clone(),
+            original: path,
+        })
     }
 
     /// Forcefully invokes internal compiling mechanisms translating a declarative specification down into an executable binary structurally.
@@ -1709,6 +1723,8 @@ impl WasmPath {
             *self = WasmPath::Definitely(path);
         }
 
+        // Original variant is already resolved, no action needed.
+
         Ok(())
     }
 
@@ -1718,16 +1734,32 @@ impl WasmPath {
             WasmPath::Maybe { .. } => {
                 eyre::bail!("WasmPath is not definitely set: {self:?}")
             }
-            WasmPath::Definitely(p) | WasmPath::Component(p) => Ok(p),
+            WasmPath::Definitely(p)
+            | WasmPath::Component(p)
+            | WasmPath::Original { current: p, .. } => Ok(p),
         }
     }
 
+    /// Returns `true` if the given path is the original user-provided file that should be preserved.
+    pub fn is_original(&self, path: &Utf8PathBuf) -> bool {
+        matches!(self, WasmPath::Original { original, .. } if original == path)
+    }
+
     /// Forcefully overrides the explicitly resolved file path for definite path targets.
+    /// For `Original` variants, preserves the original path tracking.
     pub fn set_path(&mut self, path: Utf8PathBuf) -> eyre::Result<()> {
-        if matches!(self, WasmPath::Maybe { .. }) {
-            eyre::bail!("WasmPath is not definitely set: {path}")
+        match self {
+            WasmPath::Maybe { .. } => {
+                eyre::bail!("WasmPath is not definitely set: {path}")
+            }
+            WasmPath::Original { current, .. } => {
+                // Keep the original path, only update current
+                *current = path;
+            }
+            _ => {
+                *self = WasmPath::Definitely(path);
+            }
         }
-        *self = WasmPath::Definitely(path);
         Ok(())
     }
 }
