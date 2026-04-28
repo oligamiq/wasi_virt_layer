@@ -450,7 +450,7 @@ pub fn wasm_to_component(
     // https://github.com/bytecodealliance/wasm-tools/blob/main/src/bin/wasm-tools/component.rs#L259
     let wasm = std::fs::read(wasm_path)?;
 
-    abi::is_valid::is_valid_wasm_for_component(&wasm, wasm_names)?;
+    abi::is_valid::is_valid_wasm_for_component(&wasm, wasm_names, wasm_path.as_str())?;
 
     let mut encoder = wit_component::ComponentEncoder::default()
         .validate(true)

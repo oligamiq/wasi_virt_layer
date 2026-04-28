@@ -7,6 +7,7 @@ pub mod is_valid {
     pub fn is_valid_wasm_for_component(
         wasm_bytes: &[u8],
         wasm_names: &[impl AsRef<str>],
+        source_name: &str,
     ) -> eyre::Result<()> {
         let module = walrus::Module::from_buffer(wasm_bytes)
             .to_eyre()
@@ -43,7 +44,7 @@ pub mod is_valid {
         .map(|(name, variants)| {
             // println!("Extra imports remain. You must use the `{name}!` macro plugger to export these functions.");
             log::error!(
-                "Extra imports remain. You must use the `{name}!` macro plugger to export these functions: {}{}",
+                "Extra imports remain in `{source_name}`. You must use the `{name}!` macro plugger to export these functions: {}{}",
                 variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "),
                 format!("\nExtra message: {}", name.get_message().unwrap_or(""))
             );
@@ -52,7 +53,7 @@ pub mod is_valid {
         > 0
         {
             Err(eyre::eyre!(
-                "Extra imports remain. This is not allowed in a component"
+                "Extra imports remain in `{source_name}`. This is not allowed in a component"
             ))
         } else {
             Ok(())
