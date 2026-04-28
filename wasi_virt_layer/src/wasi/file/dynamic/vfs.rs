@@ -565,4 +565,32 @@ where
             Err(e) => e,
         }
     }
+
+    fn path_readlink_raw<Wasm: WasmAccess + crate::memory::WasmAccessName>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+        buf_nread: *mut Size,
+    ) -> wasip1::Errno {
+        get_open_fd!(open_fd = self, fd);
+
+        trace_fs!(self, Wasm; "path_readlink: fd={fd}, path_len={path_len}, buf_len={buf_len}");
+
+        match self.lfs.path_readlink_raw::<Wasm>(
+            open_fd.inode_id(),
+            path_ptr,
+            path_len,
+            buf,
+            buf_len,
+        ) {
+            Ok(nread) => {
+                Wasm::store_le(buf_nread, nread as Size);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
 }

@@ -737,6 +737,31 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
             }
         }
     }
+
+    fn path_readlink_raw<Wasm: WasmAccess>(
+        &self,
+        inode: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        let target_inode = self
+            .get_inode_for_path::<Wasm>(inode, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        self.read_inode(&target_inode, |node| {
+            if let InodeData::Symlink(ref target) = node.data {
+                let target_bytes = target.as_bytes();
+                let n = core::cmp::min(target_bytes.len(), buf_len);
+                Wasm::memcpy(buf, &target_bytes[..n]);
+                Ok(n)
+            } else {
+                Err(wasip1::ERRNO_INVAL)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
 }
 
 impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static>
@@ -1101,6 +1126,33 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                 Err(wasip1::ERRNO_NOENT)
             }
         }
+    }
+
+    fn path_readlink_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        let inode_id = Self::downcast_inode(inode);
+        let target_inode = self
+            .get_inode_for_path_dyn_compatible(access, &inode_id, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        self.read_inode(&target_inode, |node| {
+            if let InodeData::Symlink(ref target) = node.data {
+                let target_bytes = target.as_bytes();
+                let n = core::cmp::min(target_bytes.len(), buf_len);
+                access.memcpy_with(buf, &target_bytes[..n]);
+                Ok(n)
+            } else {
+                Err(wasip1::ERRNO_INVAL)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
     fn pre_open_inodes(

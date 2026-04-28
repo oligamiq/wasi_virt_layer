@@ -39,6 +39,32 @@ pub mod util;
 
 /// Central execution entrypoint for the CLI logic
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
+    let args_vec: Vec<String> = args.into_iter().map(Into::into).collect();
+
+    if let Some(bin) = std::env::var(fallback_command::COMMAND_ALTERNATE_ENV_VAR).ok() {
+        match bin.as_str() {
+            "wasm-merge" => {
+                return match fallback_command::wasm_merge(&args_vec) {
+                    0 => Ok(()),
+                    code => Err(eyre::eyre!("wasm-merge failed with exit code {code}")),
+                };
+            }
+            "wasm-opt" => {
+                return match fallback_command::wasm_opt(&args_vec) {
+                    0 => Ok(()),
+                    code => Err(eyre::eyre!("wasm-opt failed with exit code {code}")),
+                };
+            }
+            _ => {
+                // For custom fallbacks (like in tests), we might need to handle them.
+                // However, the self-call fallback doesn't support closures.
+                // If this is reached, it means an unknown fallback was requested.
+                // We'll just exit with an error to avoid deadlock/unexpected behavior.
+                return Err(eyre::eyre!("Unsupported fallback command specified: {bin}"));
+            }
+        }
+    }
+
     ctrlc_handler::init();
 
     let command_lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire()?)));
@@ -66,32 +92,9 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .init();
     color_eyre::install()?;
 
-    let args = args
+    let args = args_vec
         .into_iter()
-        .map(Into::<String>::into)
         .map(Into::<std::ffi::OsString>::into);
-
-    if let Some(bin) = std::env::var(fallback_command::COMMAND_ALTERNATE_ENV_VAR).ok() {
-        let args: Vec<String> = args.map(|s| s.into_string().unwrap()).collect();
-
-        match bin.as_str() {
-            "wasm-merge" => {
-                return match fallback_command::wasm_merge(&args) {
-                    0 => Ok(()),
-                    code => Err(eyre::eyre!("wasm-merge failed with exit code {code}")),
-                };
-            }
-            "wasm-opt" => {
-                return match fallback_command::wasm_opt(&args) {
-                    0 => Ok(()),
-                    code => Err(eyre::eyre!("wasm-opt failed with exit code {code}")),
-                };
-            }
-            _ => {
-                return Err(eyre::eyre!("Unsupported fallback command specified: {bin}"));
-            }
-        }
-    }
 
     let parsed_args = args::Cli::parse_from(args);
 

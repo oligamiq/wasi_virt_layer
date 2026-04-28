@@ -236,6 +236,26 @@ impl<
             Err(wasip1::ERRNO_NOENT)
         }
     }
+
+    fn path_readlink_raw<Wasm: WasmAccess>(
+        &self,
+        inode: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+        _: *mut u8,
+        _: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        let inode = self
+            .get_inode_for_path::<Wasm>(*inode, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        let (_, file_or_dir) = ROOT::FILES[inode];
+        match file_or_dir {
+            StandardEmbeddedInode::File(..) | StandardEmbeddedInode::Dir(..) => {
+                Err(wasip1::ERRNO_INVAL)
+            }
+        }
+    }
 }
 
 impl<
@@ -541,6 +561,29 @@ impl<
             }
 
             Err(wasip1::ERRNO_NOENT)
+        }
+    }
+
+    fn path_readlink_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+        _: *mut u8,
+        _: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        let inode = Self::downcast_inode(inode);
+
+        let inode = self
+            .get_inode_for_path_dyn_compatible(access, *inode, path_ptr, path_len)
+            .ok_or(wasip1::ERRNO_NOENT)?;
+
+        let (_, file_or_dir) = ROOT::FILES[inode];
+        match file_or_dir {
+            StandardEmbeddedInode::File(..) | StandardEmbeddedInode::Dir(..) => {
+                Err(wasip1::ERRNO_INVAL)
+            }
         }
     }
 }

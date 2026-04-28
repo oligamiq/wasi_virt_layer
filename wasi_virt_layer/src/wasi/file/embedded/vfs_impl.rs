@@ -194,4 +194,24 @@ where
             Err(e) => e,
         }
     }
+
+    fn path_readlink_raw<Wasm: WasmAccess + crate::memory::WasmAccessName>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+        buf_nread: *mut Size,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_readlink: fd={fd}, path_len={path_len}, buf_len={buf_len}");
+
+        match self.path_readlink_raw_inner::<Wasm>(fd, path_ptr, path_len, buf, buf_len) {
+            Ok(n) => {
+                Wasm::store_le(buf_nread, n);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
 }

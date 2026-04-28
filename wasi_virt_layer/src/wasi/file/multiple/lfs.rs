@@ -725,4 +725,28 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
             Err(e) => e,
         }
     }
+
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+        buf_nread_ret: *mut Size,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_readlink: fd={fd}, path_len={path_len}, buf_len={buf_len}");
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+
+        get_inode!(inode = open_fd);
+
+        match lfs.path_readlink_raw_dyn_compatible(access, inode, path_ptr, path_len, buf, buf_len) {
+            Ok(nread) => {
+                Wasm::store_le(buf_nread_ret, nread as Size);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
 }

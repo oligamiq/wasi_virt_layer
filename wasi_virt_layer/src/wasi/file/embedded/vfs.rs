@@ -557,4 +557,17 @@ where
 
         Ok(self.push_inode(new_inode))
     }
+
+    pub(crate) fn path_readlink_raw_inner<Wasm: WasmAccess>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno> {
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.path_readlink_raw::<Wasm>(inode, path_ptr, path_len, buf, buf_len)
+        })?
+    }
 }

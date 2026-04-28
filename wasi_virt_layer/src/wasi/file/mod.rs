@@ -267,6 +267,16 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
     ) -> Result<Self::Inode, wasip1::Errno>;
+
+    /// Reads the contents of a symbolic link.
+    fn path_readlink_raw<Wasm: WasmAccess>(
+        &self,
+        inode: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
 }
 
 /// Trait for a static or constant local file system implementation.
@@ -481,6 +491,16 @@ pub trait Wasip1DynCompatibleLFS<B: BoxedInode>: core::fmt::Debug {
         fs_rights_inheriting: wasip1::Rights,
         fd_flags: wasip1::Fdflags,
     ) -> Result<B, wasip1::Errno>;
+
+    fn path_readlink_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> Result<Size, wasip1::Errno>;
 }
 
 /// Trait for a virtual file implementation.
@@ -646,6 +666,17 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         fd_flags: wasip1::Fdflags,
         fd_ret: *mut wasip1::Fd,
     ) -> wasip1::Errno;
+
+    /// Reads the contents of a symbolic link relative to a file descriptor.
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+        buf: *mut u8,
+        buf_len: usize,
+        buf_nread: *mut Size,
+    ) -> wasip1::Errno;
 }
 
 /// Plugs the file system ecosystem by defining necessary handlers.
@@ -788,6 +819,21 @@ macro_rules! plug_fs {
                     let state = $state;
                     $crate::__as_t!(@as_t, $wasm);
                     $crate::file::Wasip1FileSystem::fd_fdstat_get_raw::<T>(state, fd, fdstat)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_readlink>](
+                    fd: $crate::__private::wasip1::Fd,
+                    path_ptr: *const u8,
+                    path_len: usize,
+                    buf: *mut u8,
+                    buf_len: usize,
+                    buf_nread: *mut $crate::__private::wasip1::Size,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_readlink_raw::<T>(state, fd, path_ptr, path_len, buf, buf_len, buf_nread)
                 }
             )*
         }
