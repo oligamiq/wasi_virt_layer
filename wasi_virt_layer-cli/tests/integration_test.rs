@@ -411,6 +411,53 @@ fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests the `<anonymous>` target feature with threads enabled, resolving the TODO in `anonymous.rs` and `producer.rs`.
+#[test]
+fn test_anonymous_with_threads() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let run = || -> color_eyre::Result<TestDir> {
+        run_wasi_virt_layer(
+            Some("anonymous_threads_vfs"),
+            Some("test_threads"),
+            Some(false), // multi memory
+            true, // threads
+            OutDir::Random,
+            false,
+            &[],
+        )
+    };
+
+    let test_new_bare_dir = Utf8PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/vfs/anonymous_threads_vfs"));
+    let manifest_path = test_new_bare_dir.join("Cargo.toml");
+    let root_manifest_path = test_new_bare_dir.join("../Cargo.toml");
+
+    let original = std::fs::read_to_string(&manifest_path)
+        .wrap_err("Failed to read Cargo.toml for feature checking")?;
+
+    let mut checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
+        "threads",
+        &manifest_path,
+        &root_manifest_path,
+        UniqueName::CRATE_NAME,
+    );
+    checker.set(true)?;
+
+    let res = run();
+
+    let _resetter = Resetter {
+        manifest_path: &manifest_path,
+        original,
+    };
+
+    res.wrap_err("Failed to run anonymous with threads")?;
+    Ok(())
+}
+
 /// Tests the `--keep-build-artifacts` argument.
 #[test]
 fn test_keep_build_artifacts() -> color_eyre::Result<()> {

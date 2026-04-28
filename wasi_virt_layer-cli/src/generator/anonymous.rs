@@ -15,7 +15,6 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct Anonymous;
 
-// TODO: Check thourgh with threads feature.
 impl Generator for Anonymous {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         // If vfs include anonymous, and there is only one target, assign it to the target.

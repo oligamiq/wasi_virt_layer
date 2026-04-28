@@ -1,23 +1,27 @@
 [package]
-name = "test_new_bare"
+name = "anonymous_threads_vfs"
 authors.workspace = true
 version.workspace = true
 edition.workspace = true
 description.workspace = true
+license = "CC0-1.0"
 rust-version.workspace = true
 keywords.workspace = true
 repository.workspace = true
 documentation.workspace = true
 homepage.workspace = true
 readme.workspace = true
+publish = false
 
 [dependencies]
+wit-bindgen = "0.54.0"
 const_struct = "0.6.4"
-wasi_virt_layer = { workspace = true, features = ["embedded-fs", "multi_memory"] }
-wit-bindgen = { version = "0.57.1", default-features = false, features = [
-    "macros",
-    "std",
-] }
+parking_lot = "0.12.3"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+default-features = false
+features = ["threads", "unstable_print_debug", "embedded-fs", "multi_memory"]
 
 [lib]
 crate-type = ["cdylib"]

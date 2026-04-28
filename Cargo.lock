@@ -27,6 +27,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "anonymous_threads_vfs"
+version = "0.2.3"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "anstream"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
