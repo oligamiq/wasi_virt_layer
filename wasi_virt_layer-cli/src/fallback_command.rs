@@ -320,6 +320,7 @@ mod tests {
 
     static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
+    #[cfg_attr(not(feature = "fallback"), ignore = "fallback feature disabled")]
     #[test]
     /// if not use nocapture arg, skip test.
     /// because gag crate require it.
