@@ -7,7 +7,6 @@ pub mod is_valid {
     pub fn is_valid_wasm_for_component(
         wasm_bytes: &[u8],
         wasm_names: &[impl AsRef<str>],
-        source_name: &str,
     ) -> eyre::Result<()> {
         let module = walrus::Module::from_buffer(wasm_bytes)
             .to_eyre()
@@ -15,7 +14,7 @@ pub mod is_valid {
 
         let import = module.imports;
 
-        if import
+        let err_wasm_names = import
         .iter()
         .filter(|import| {
             import.module == UniqueName::WASIP1_ABI_MODULE
@@ -25,35 +24,40 @@ pub mod is_valid {
             let name = import.name.strip_prefix("__wasip1_vfs_")
                 .wrap_err_with(|| eyre::eyre!("This import is not a valid this library custom import. {name}", name = import.name))?;
             wasm_names.iter().find_map(|n| {
-                name.strip_prefix(n.as_ref())?.strip_prefix("_")?.parse().ok()
+                let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
+                let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
+                Some((n.as_ref().to_string(), func))
             })
             .wrap_err("Failed to parse wasm target and WASI function name")
         })
         .filter_map(|v| v.inspect_err(|e| {
             log::error!("Invalid import: {e}");
         }).ok())
-        .map(|v| (Wasip1ABIPlugger::from_variant(&v).unwrap(), v))
-        .fold(HashMap::<_, Vec<_>>::new(), |mut acc, (plugger, v)| {
+        .map(|(wasm_name, v)| (wasm_name, Wasip1ABIPlugger::from_variant(&v).unwrap(), v))
+        .fold(HashMap::<_, Vec<_>>::new(), |mut acc, (wasm_name, plugger, v)| {
             acc
-                .entry(plugger)
+                .entry((wasm_name, plugger))
                 .or_default()
                 .push(v);
             acc
         })
         .into_iter()
-        .map(|(name, variants)| {
-            // println!("Extra imports remain. You must use the `{name}!` macro plugger to export these functions.");
+        .map(|((wasm_name, plugger), variants)| {
             log::error!(
-                "Extra imports remain in `{source_name}`. You must use the `{name}!` macro plugger to export these functions: {}{}",
+                "Extra imports remain for `{wasm_name}`. You must use the `{plugger}!` macro plugger to export these functions: {}{}",
                 variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "),
-                format!("\nExtra message: {}", name.get_message().unwrap_or(""))
+                format!("\nExtra message: {}", plugger.get_message().unwrap_or(""))
             );
+            wasm_name
         })
-        .count()
-        > 0
-        {
+        .collect::<std::collections::HashSet<_>>();
+
+        if !err_wasm_names.is_empty() {
+            let mut names = err_wasm_names.into_iter().collect::<Vec<_>>();
+            names.sort();
             Err(eyre::eyre!(
-                "Extra imports remain in `{source_name}`. This is not allowed in a component"
+                "Extra imports remain for `{names}`. This is not allowed in a component",
+                names = names.join(", ")
             ))
         } else {
             Ok(())
