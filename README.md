@@ -31,21 +31,21 @@ By using plug! to block all WASIp1 ABIs and creating the ABI solely with wit-bin
 For further details, please refer to the example.
 
 # TODO!
-- Support non-binary Wasm modules
+- [ ] Support non-binary Wasm modules (e.g., .wat files)
 - [x] Enable specifying multiple Wasm modules
-- Support self is not passed in plug_thread!
-- Support self binary
-- support flush sync to file system
-- Fake global allocator and center allocator and merge with vfs
-- Access Time Trait
-- [x] Multiple lfs file system (VFS)
-- [x] Static file system
-- Feature Access time etc traits
-- Separate mode (connect function by javascript)
-- threading vfs with non threading wasm
-- validator with error on threads
-- Unicode support
-- Async wit support
+- [ ] Support `self` is not passed in `plug_thread!` (make it optional)
+- [ ] Support self binary (improved `import_wasm!(self)` and CLI integration)
+- [ ] Support `flush`/`sync` to virtual file system
+- [ ] Fake global allocator and center allocator and merge with VFS
+- [ ] Access Time Trait (expose to WASI ABI)
+- [x] Multiple LFS file system (VFS)
+- [x] Static file system (Embedded VFS)
+- [ ] Feature: Access time and other stat traits
+- [ ] Separate mode (connecting functions via JavaScript/Host)
+- [ ] Threading VFS with non-threading WASM target
+- [ ] Validator with detailed error reporting on thread mismatches
+- [ ] Full Unicode support for paths (currently assumes Latin-1 bytes)
+- [ ] Async WIT support
 
 # run example
 ```bash
@@ -66,28 +66,16 @@ install `cargo binstall cargo-nextest -y`
 install deno
 - `cargo nextest run -r --fail-fast`
 
-# メモ
-cargo r -- -p threads_vfs test_threads -t multi --threads true
-_resetなしだとsingleもmultiも成功
+# Notes and Caveats
+- **Thread & Memory Modes**: `single_memory` mode can sometimes fail in scenarios where `multi_memory` succeeds. A sequence like `_reset(); _start(); _main();` in multi-threaded environments has been observed to trigger issues in single-memory mode.
+- **Build Cache**: The build process may benefit from a `--no-cache` option (currently a TODO) if the target directory caching causes stale builds.
+- **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.
+- **CLI Arguments**: Very long argument lists might still cause issues in some environments.
+- **Self-Calling Fallback**: The tool supports a fallback mechanism for tools like `wasm-merge` and `wasm-opt` by calling itself if the binaries are not found in the PATH.
 
-        test_threads::_reset();
-        test_threads::_start();
-        test_threads::_main();
-だとmultiで成功。singleでunreacable
-
-ここら辺もテストに追加
-build target dirのキャッシュ(--no-cache)
-同時実行対策
-超絶長い引数で失敗するかも
-自分自身を呼び出す（フォールバック）
-
-## 色んなスレッド作成の順番での失敗か
-single_memory failed
-multi_memory OK
-VFS -> Body
-
-success
-Body -> Body
-
-success
-VFS -> VFS
+## Multi-threading execution order
+- single_memory: known failures in some configurations.
+- multi_memory: generally stable.
+- VFS -> Target Module: Success
+- Target Module -> Target Module: Success
+- VFS -> VFS: Success
