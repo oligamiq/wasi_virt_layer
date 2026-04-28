@@ -458,6 +458,69 @@ fn test_anonymous_with_threads() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests parallel build executions to verify concurrency countermeasures (file-based locking).
+#[test]
+fn test_concurrency() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let num_threads = 3;
+    let mut handles = Vec::new();
+
+    for _ in 0..num_threads {
+        handles.push(std::thread::spawn(|| {
+            run_wasi_virt_layer(
+                Some("example_vfs"),
+                Some("test_wasm"),
+                Some(true),
+                false,
+                OutDir::Random,
+                false,
+                &[],
+            )
+        }));
+    }
+
+    for handle in handles {
+        let res = handle.join().expect("Thread panicked");
+        res.wrap_err("Concurrent build failed")?;
+    }
+
+    Ok(())
+}
+
+/// Tests that very long argument lists are handled gracefully.
+#[test]
+fn test_long_arguments() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let mut other_args = Vec::new();
+    for _ in 0..300 {
+        other_args.push("--map");
+        other_args.push("dummy=dummy");
+    }
+
+    let res = run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &other_args,
+    );
+
+    res.wrap_err("Failed with long arguments")?;
+    Ok(())
+}
+
 /// Tests the `--keep-build-artifacts` argument.
 #[test]
 fn test_keep_build_artifacts() -> color_eyre::Result<()> {
