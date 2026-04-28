@@ -76,6 +76,27 @@ unsafe fn non_recursive_proc_exit(rval: wasip1::Exitcode) -> ! {
     unreachable!();
 }
 
+/// Calls the WASI `random_get` function using a non-recursive call.
+pub unsafe fn non_recursive_random_get(
+    buf: *mut u8,
+    buf_len: wasip1::Size,
+) -> Result<(), wasip1::Errno> {
+    let buf = buf as i32;
+    let buf_len = buf_len as i32;
+
+    let ret = crate::non_recursive_wasi_snapshot_preview1!(
+        random_get(
+            buf: i32,
+            buf_len: i32
+        ) -> i32
+    );
+
+    match ret {
+        0 => Ok(()),
+        _ => Err(unsafe { core::mem::transmute::<u16, wasip1::Errno>(ret as u16) }),
+    }
+}
+
 impl Wasip1Transporter {
     /// Reads data from stdin into the provided buffer using a non-recursive WASI call.
     #[allow(unused_variables)]

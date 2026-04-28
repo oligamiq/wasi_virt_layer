@@ -4,6 +4,7 @@ pub mod env;
 pub mod file;
 pub mod poll;
 pub mod process;
+pub mod random;
 #[cfg(feature = "threads")]
 pub mod thread;
 

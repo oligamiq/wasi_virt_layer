@@ -60,7 +60,7 @@ pub mod prelude {
     #[cfg(feature = "embedded-fs")]
     pub use crate::EmbeddedFiles;
 
-    pub use crate::{import_wasm, plug_env, plug_fs, plug_poll, plug_process};
+    pub use crate::{import_wasm, plug_env, plug_fs, plug_poll, plug_process, plug_random};
 }
 
 #[cfg(feature = "threads")]
@@ -114,6 +114,11 @@ pub mod process {
 /// I/O polling and event waiting mechanisms.
 pub mod poll {
     pub use crate::wasi::poll::{DefaultPoll, PollOneoff, WaitPoll};
+}
+
+/// Random number generation and virtualization.
+pub mod random {
+    pub use crate::wasi::random::{PseudoRandom, Random, StandardRandom};
 }
 
 #[doc(hidden)]

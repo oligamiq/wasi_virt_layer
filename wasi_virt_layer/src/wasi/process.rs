@@ -27,7 +27,7 @@ impl ProcessExit for StandardProcess {
 /// Plugs the process exit ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_process {
-    ($ty:ty, $($wasm:ident),*) => {
+    ($ty:ty, $($wasm:ident),+) => {
         const _ : () = {
             type __TYPE = $ty;
         };
