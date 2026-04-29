@@ -1,5 +1,4 @@
 [workspace]
-resolver = "2"
 members = [
     "wasi_virt_layer-cli",
     "wasi_virt_layer",
@@ -33,8 +32,13 @@ members = [
     "examples/threads/complex-threads-vfs",
     "examples/threads/pool-threads-vfs",
     "examples/test_wasm/self_rw_example",
-    "examples/vfs/self-vfs", "examples/bare/test-unreachable", "examples/test_wasm/test_unreachable_target",
+    "examples/vfs/self-vfs",
+    "examples/bare/test-unreachable",
+    "examples/test_wasm/test_unreachable_target",
+    "examples/vfs/unreachable_threads_vfs",
+    "examples/test_wasm/unreachable_threads_target",
 ]
+resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
 [workspace.package]

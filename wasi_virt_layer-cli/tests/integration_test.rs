@@ -214,6 +214,53 @@ fn test_unreachable_example() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests the wrap_unreachable macro with threads enabled.
+#[test]
+fn test_unreachable_threads_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let run = || -> color_eyre::Result<TestDir> {
+        run_wasi_virt_layer(
+            Some("unreachable_threads_vfs"),
+            Some("unreachable_threads_target"),
+            Some(false), // multi memory required for threads
+            true, // threads
+            OutDir::Random,
+            false,
+            &[],
+        )
+    };
+
+    let test_dir = Utf8PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/vfs/unreachable_threads_vfs"));
+    let manifest_path = test_dir.join("Cargo.toml");
+    let root_manifest_path = test_dir.join("../../../Cargo.toml");
+
+    let original = std::fs::read_to_string(&manifest_path)
+        .wrap_err("Failed to read Cargo.toml for feature checking")?;
+
+    let mut checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
+        "threads",
+        &manifest_path,
+        &root_manifest_path,
+        UniqueName::CRATE_NAME,
+    );
+    checker.set(true)?;
+
+    let res = run();
+
+    let _resetter = Resetter {
+        manifest_path: &manifest_path,
+        original,
+    };
+
+    res.wrap_err("Failed to run unreachable_threads_vfs with threads")?;
+    Ok(())
+}
+
 #[test]
 fn test_self_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
