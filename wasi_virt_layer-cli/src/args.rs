@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
 use compact_str::CompactString;
@@ -299,8 +297,8 @@ pub struct TranspileOpts {
     import_bindings: Option<js_component_bindgen::BindingsMode>,
 
     /// Comma-separated list of "from-specifier=./to-specifier.js" mappings of component import specifiers to JS import specifiers.
-    #[arg(long, value_delimiter = ',', value_parser = analysis::parse_mapping, num_args = 0.., action = clap::ArgAction::Append)]
-    map: Option<HashMap<String, String>>,
+    #[arg(long, value_delimiter = ',', value_parser = analysis::parse_mapping, action = clap::ArgAction::Append)]
+    map: Vec<(String, String)>,
 
     /// Disables compatibility in Node.js without a fetch global.
     #[arg(long, default_value = "false")]
@@ -345,16 +343,10 @@ impl TranspileOpts {
                 no_typescript: self.no_typescript,
                 instantiation: self.instantiation.clone().0,
                 import_bindings: self.import_bindings.clone(),
-                map: {
-                    if let Some(opts_map) = &self.map {
-                        let mut map = HashMap::new();
-                        for (k, v) in opts_map.iter() {
-                            map.insert(k.clone(), v.clone());
-                        }
-                        Some(map)
-                    } else {
-                        None
-                    }
+                map: if !self.map.is_empty() {
+                    Some(self.map.iter().cloned().collect())
+                } else {
+                    None
                 },
                 no_nodejs_compat: self.no_nodejs_compat,
                 base64_cutoff: self.base64_cutoff,
