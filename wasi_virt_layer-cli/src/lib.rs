@@ -36,6 +36,8 @@ pub mod test_run;
 pub mod unique_name;
 /// General utility functions for CLI logic and AST operations.
 pub mod util;
+/// Generate TypeScript helper code for VFS modules.
+pub mod gen_ts_helper;
 
 /// Central execution entrypoint for the CLI logic
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {

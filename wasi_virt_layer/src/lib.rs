@@ -47,6 +47,10 @@ pub mod wasip1;
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+#[cfg(feature = "threads")]
+/// Shared memory management for zero-copy inter-module memory access.
+pub mod shared_memory;
+
 /// Common traits, structs, and macros representing the core functionality.
 pub mod prelude {
     pub use crate::memory::WasmAccess;
