@@ -8,7 +8,7 @@ macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
             abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, threads,
+            special_func, threads, wrap_unreachable,
         };
 
         generator::add_generators_by_type!(
@@ -37,6 +37,7 @@ macro_rules! add_generator {
             debug::DebugCallFunctionSmallScale,
             debug::DebugCallFunctionMain,
             patch_component::PatchComponent,
+            wrap_unreachable::WrapUnreachableGenerator,
         );
 
         $runner.checker(check::CheckUseWasiVirtLayer);

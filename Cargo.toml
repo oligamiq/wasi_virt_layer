@@ -33,7 +33,7 @@ members = [
     "examples/threads/complex-threads-vfs",
     "examples/threads/pool-threads-vfs",
     "examples/test_wasm/self_rw_example",
-    "examples/vfs/self-vfs",
+    "examples/vfs/self-vfs", "examples/bare/test-unreachable", "examples/test_wasm/test_unreachable_target",
 ]
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 

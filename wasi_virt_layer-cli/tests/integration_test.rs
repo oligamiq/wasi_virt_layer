@@ -193,6 +193,28 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
 
 /// Tests the self-virtualizing VFS example where a single module virtualizes itself.
 #[test]
+fn test_unreachable_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("test-unreachable"),
+        Some("test_unreachable_target"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+    )
+    .wrap_err("Failed to run test-unreachable example")?;
+
+    Ok(())
+}
+
+#[test]
 fn test_self_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
