@@ -1,5 +1,6 @@
 use crate::__private::wasip1::*;
 use crate::memory::WasmAccess;
+use crate::transporter::non_recursive_sched_yield;
 
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
 pub struct WaitPoll;
@@ -56,7 +57,7 @@ impl crate::poll::PollOneoff for WaitPoll {
         .saturating_sub(precision);
 
         loop {
-            std::thread::yield_now();
+            unsafe { non_recursive_sched_yield() };
 
             let now = get_now();
 

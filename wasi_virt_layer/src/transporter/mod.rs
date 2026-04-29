@@ -66,7 +66,7 @@ pub unsafe fn non_recursive_fd_write(
     }
 }
 
-unsafe fn non_recursive_proc_exit(rval: wasip1::Exitcode) -> ! {
+pub unsafe fn non_recursive_proc_exit(rval: wasip1::Exitcode) -> ! {
     let rval = rval as i32;
 
     crate::non_recursive_wasi_snapshot_preview1!(
@@ -74,6 +74,12 @@ unsafe fn non_recursive_proc_exit(rval: wasip1::Exitcode) -> ! {
     );
 
     unreachable!();
+}
+
+pub unsafe fn non_recursive_sched_yield() {
+    crate::non_recursive_wasi_snapshot_preview1!(
+        sched_yield() -> i32
+    );
 }
 
 /// Calls the WASI `random_get` function using a non-recursive call.
