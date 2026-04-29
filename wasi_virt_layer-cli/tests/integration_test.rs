@@ -425,14 +425,17 @@ fn test_anonymous_with_threads() -> color_eyre::Result<()> {
             Some("anonymous_threads_vfs"),
             Some("test_threads"),
             Some(false), // multi memory
-            true, // threads
+            true,        // threads
             OutDir::Random,
             false,
             &[],
         )
     };
 
-    let test_new_bare_dir = Utf8PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/vfs/anonymous_threads_vfs"));
+    let test_new_bare_dir = Utf8PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../examples/vfs/anonymous_threads_vfs"
+    ));
     let manifest_path = test_new_bare_dir.join("Cargo.toml");
     let root_manifest_path = test_new_bare_dir.join("../Cargo.toml");
 
@@ -472,14 +475,17 @@ fn test_threading_vfs_with_non_threading_wasm() -> color_eyre::Result<()> {
             Some("anonymous_threads_vfs"),
             Some("test_wasm"),
             Some(false), // multi memory
-            true, // threads
+            true,        // threads
             OutDir::Random,
             false,
             &[],
         )
     };
 
-    let test_dir = Utf8PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/vfs/anonymous_threads_vfs"));
+    let test_dir = Utf8PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../examples/vfs/anonymous_threads_vfs"
+    ));
     let manifest_path = test_dir.join("Cargo.toml");
     let root_manifest_path = test_dir.join("../Cargo.toml");
 

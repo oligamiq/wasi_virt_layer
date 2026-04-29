@@ -71,11 +71,7 @@ plug_thread!(
     anonymous
 );
 
-plug_process!(
-    wasi_virt_layer::process::StandardProcess,
-    anonymous,
-    self
-);
+plug_process!(wasi_virt_layer::process::StandardProcess, anonymous, self);
 
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {

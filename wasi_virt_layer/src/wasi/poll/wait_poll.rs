@@ -41,8 +41,7 @@ impl crate::poll::PollOneoff for WaitPoll {
 
         fn get_now() -> Timestamp {
             unsafe {
-                crate::transporter::non_recursive_clock_time_get(CLOCKID_REALTIME, 0)
-                    .unwrap_or(0)
+                crate::transporter::non_recursive_clock_time_get(CLOCKID_REALTIME, 0).unwrap_or(0)
             }
         }
 

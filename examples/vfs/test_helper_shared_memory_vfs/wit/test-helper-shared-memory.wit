@@ -1,0 +1,6 @@
+package example:test-helper-shared-memory;
+
+world test-helper-shared-memory {
+    export hello: func();
+}
+

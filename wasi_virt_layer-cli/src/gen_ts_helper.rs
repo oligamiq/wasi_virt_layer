@@ -260,7 +260,7 @@ mod tests {
             "__wasi_export_shared_memory_manager_VFS2",
             "other_export",
         ];
-        
+
         let detected = detect_vfs_exports(&exports.iter().map(|s| *s).collect::<Vec<_>>());
         assert_eq!(detected.len(), 2);
         assert_eq!(detected[0].vfs_type, VfsType::PseudoWasm);
@@ -304,7 +304,7 @@ mod tests {
             "__wasi_export_pseudo_wasm_VFS",
             "__wasi_export_shared_memory_manager_VFS",
         ];
-        
+
         let detected = detect_vfs_exports(&exports.iter().map(|s| *s).collect::<Vec<_>>());
         // Only 1 because both duplicates have same holder name
         // Holders: pseudo_wasm_VFS -> "VFS", shared_memory_manager_VFS -> "VFS" (same!)

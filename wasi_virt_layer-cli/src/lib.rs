@@ -6,7 +6,10 @@
 use clap::Parser;
 
 use crate::{
-    commands::{build::build, new::new, postbuild::postbuild, prebuild::prebuild, prepare_target::prepare_target},
+    commands::{
+        build::build, new::new, postbuild::postbuild, prebuild::prebuild,
+        prepare_target::prepare_target,
+    },
     fallback_command::CommandLock,
 };
 
@@ -26,6 +29,8 @@ pub mod ctrlc_handler;
 pub mod down_color;
 /// Contains fallback execution processes (managed via locks).
 pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
+/// Generate TypeScript helper code for VFS modules.
+pub mod gen_ts_helper;
 /// Internal generators for modifying and stitching Wasm structures.
 pub mod generator;
 /// Instruction scanning and rewriting utilities for Walrus IR.
@@ -36,8 +41,6 @@ pub mod test_run;
 pub mod unique_name;
 /// General utility functions for CLI logic and AST operations.
 pub mod util;
-/// Generate TypeScript helper code for VFS modules.
-pub mod gen_ts_helper;
 
 /// Central execution entrypoint for the CLI logic
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
@@ -94,9 +97,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .init();
     color_eyre::install()?;
 
-    let args = args_vec
-        .into_iter()
-        .map(Into::<std::ffi::OsString>::into);
+    let args = args_vec.into_iter().map(Into::<std::ffi::OsString>::into);
 
     let parsed_args = args::Cli::parse_from(args);
 
@@ -106,9 +107,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         args::Command::Postbuild(postbuild_args) => postbuild(postbuild_args),
         args::Command::New(new_args) => new(new_args),
         args::Command::PrepareTarget(prepare_target_args) => {
-            let output = prepare_target_args
-                .output
-                .unwrap_or_else(|| prepare_target_args.target_wasm.with_extension("prepared.wasm"));
+            let output = prepare_target_args.output.unwrap_or_else(|| {
+                prepare_target_args
+                    .target_wasm
+                    .with_extension("prepared.wasm")
+            });
             let args = commands::prepare_target::PrepareTargetHandler {
                 target_wasm: prepare_target_args.target_wasm,
                 output,

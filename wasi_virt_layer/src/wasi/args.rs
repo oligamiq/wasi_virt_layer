@@ -294,11 +294,7 @@ pub trait VirtualArgs<'a> {
     }
 
     /// Copies the command-line arguments into the provided buffers.
-    fn args_get<Wasm: WasmAccess>(
-        &'a mut self,
-        args: *mut *const u8,
-        args_buf: *mut u8,
-    ) -> Errno {
+    fn args_get<Wasm: WasmAccess>(&'a mut self, args: *mut *const u8, args_buf: *mut u8) -> Errno {
         let mut args = args;
         let mut args_buf = args_buf;
 
@@ -306,10 +302,7 @@ pub trait VirtualArgs<'a> {
             Wasm::store_le(args, args_buf as *const u8);
 
             Wasm::memcpy(args_buf, arg.as_ref().as_bytes());
-            Wasm::store_le(
-                unsafe { args_buf.add(arg.as_ref().len()) as *mut u8 },
-                0u8,
-            );
+            Wasm::store_le(unsafe { args_buf.add(arg.as_ref().len()) as *mut u8 }, 0u8);
 
             args = unsafe { args.add(1) };
             args_buf = unsafe { args_buf.add(arg.as_ref().len() + 1) };

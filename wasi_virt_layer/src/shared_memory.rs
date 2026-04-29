@@ -82,7 +82,13 @@ pub struct SharedMemoryManager {
 
 impl SharedMemoryManager {
     /// Register a new target module's memory region
-    pub fn register_target(&self, metadata: *const TargetMemoryMetadata, base: i32, limit: i32, pages: u32) -> i32 {
+    pub fn register_target(
+        &self,
+        metadata: *const TargetMemoryMetadata,
+        base: i32,
+        limit: i32,
+        pages: u32,
+    ) -> i32 {
         (self.register_target_ptr)(metadata, base, limit, pages)
     }
 
@@ -135,7 +141,8 @@ impl StandardSharedMemoryHolder {
     }
 
     pub fn get_or_panic(&self) -> &SharedMemoryManager {
-        self.get().expect("SharedMemoryManager is not initialized yet")
+        self.get()
+            .expect("SharedMemoryManager is not initialized yet")
     }
 }
 

@@ -741,7 +741,8 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
 
         get_inode!(inode = open_fd);
 
-        match lfs.path_readlink_raw_dyn_compatible(access, inode, path_ptr, path_len, buf, buf_len) {
+        match lfs.path_readlink_raw_dyn_compatible(access, inode, path_ptr, path_len, buf, buf_len)
+        {
             Ok(nread) => {
                 Wasm::store_le(buf_nread_ret, nread as Size);
                 wasip1::ERRNO_SUCCESS

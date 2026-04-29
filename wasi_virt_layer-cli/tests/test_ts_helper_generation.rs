@@ -4,7 +4,6 @@
 /// 1. TypeScript helper code is correctly generated
 /// 2. Helper exports are properly detected
 /// 3. VFS with export_pseudo_wasm! macro generates proper helpers
-
 pub mod utils;
 use eyre::Context;
 use std::fs;
@@ -28,7 +27,14 @@ fn test_vfs_export_detection() -> color_eyre::Result<()> {
 
     // Build test_helper_vfs as WASM
     let build_output = std::process::Command::new("cargo")
-        .args(["build", "-p", "test_helper_vfs", "--target", "wasm32-wasip1", "--release"])
+        .args([
+            "build",
+            "-p",
+            "test_helper_vfs",
+            "--target",
+            "wasm32-wasip1",
+            "--release",
+        ])
         .current_dir(&workspace_root)
         .output()
         .wrap_err("Failed to build test_helper_vfs")?;
@@ -53,7 +59,8 @@ fn test_vfs_export_detection() -> color_eyre::Result<()> {
 
     // Parse with walrus using default config
     let config = walrus::ModuleConfig::new();
-    let module = config.parse(&wasm_bytes)
+    let module = config
+        .parse(&wasm_bytes)
         .map_err(|e| eyre::eyre!("Failed to parse WASM module: {}", e))?;
 
     // Extract export names
@@ -67,8 +74,11 @@ fn test_vfs_export_detection() -> color_eyre::Result<()> {
 
     // We expect MY_VFS export
     let has_my_vfs = exports.iter().any(|e| e.holder_name == "MY_VFS");
-    assert!(has_my_vfs, "Should detect MY_VFS export, found: {:?}", 
-        exports.iter().map(|e| &e.holder_name).collect::<Vec<_>>());
+    assert!(
+        has_my_vfs,
+        "Should detect MY_VFS export, found: {:?}",
+        exports.iter().map(|e| &e.holder_name).collect::<Vec<_>>()
+    );
 
     println!("✓ VFS export detection works correctly");
     Ok(())
@@ -85,7 +95,14 @@ fn test_pseudo_wasm_helper_generation() -> color_eyre::Result<()> {
 
     // First, build test_helper_vfs as WASM
     let build_output = std::process::Command::new("cargo")
-        .args(["build", "-p", "test_helper_vfs", "--target", "wasm32-wasip1", "--release"])
+        .args([
+            "build",
+            "-p",
+            "test_helper_vfs",
+            "--target",
+            "wasm32-wasip1",
+            "--release",
+        ])
         .current_dir(&workspace_root)
         .output()
         .wrap_err("Failed to build test_helper_vfs")?;
@@ -99,11 +116,12 @@ fn test_pseudo_wasm_helper_generation() -> color_eyre::Result<()> {
     // Load the WASM binary
     let wasm_path = workspace_root.join("target/wasm32-wasip1/release/test_helper_vfs.wasm");
 
-    let wasm_bytes = fs::read(&wasm_path)
-        .wrap_err_with(|| format!("Failed to read WASM: {:?}", wasm_path))?;
+    let wasm_bytes =
+        fs::read(&wasm_path).wrap_err_with(|| format!("Failed to read WASM: {:?}", wasm_path))?;
 
     let config = walrus::ModuleConfig::new();
-    let module = config.parse(&wasm_bytes)
+    let module = config
+        .parse(&wasm_bytes)
         .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
 
     // Extract export names and detect VFS exports
@@ -144,7 +162,14 @@ fn test_helper_typescript_structure() -> color_eyre::Result<()> {
 
     // Build test_helper_vfs
     let build_output = std::process::Command::new("cargo")
-        .args(["build", "-p", "test_helper_vfs", "--target", "wasm32-wasip1", "--release"])
+        .args([
+            "build",
+            "-p",
+            "test_helper_vfs",
+            "--target",
+            "wasm32-wasip1",
+            "--release",
+        ])
         .current_dir(&workspace_root)
         .output()
         .wrap_err("Failed to build test_helper_vfs")?;
@@ -157,11 +182,11 @@ fn test_helper_typescript_structure() -> color_eyre::Result<()> {
     // Load and parse WASM
     let wasm_path = workspace_root.join("target/wasm32-wasip1/release/test_helper_vfs.wasm");
 
-    let wasm_bytes = fs::read(&wasm_path)
-        .wrap_err("Failed to read WASM")?;
-    
+    let wasm_bytes = fs::read(&wasm_path).wrap_err("Failed to read WASM")?;
+
     let config = walrus::ModuleConfig::new();
-    let module = config.parse(&wasm_bytes)
+    let module = config
+        .parse(&wasm_bytes)
         .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
 
     // Extract exports and generate helper
@@ -170,12 +195,7 @@ fn test_helper_typescript_structure() -> color_eyre::Result<()> {
     let helper_code = generate_ts_helper("test_helper_vfs", &vfs_exports, &[]);
 
     // Check required TypeScript patterns
-    let required_patterns = [
-        "export",
-        "async",
-        "function",
-        "registerPseudoWasmTarget",
-    ];
+    let required_patterns = ["export", "async", "function", "registerPseudoWasmTarget"];
 
     for pattern in &required_patterns {
         assert!(
@@ -207,7 +227,14 @@ fn test_minimal_helper_generation() -> color_eyre::Result<()> {
 
     // Build a WASM without VFS exports - use test_wasm
     let build_output = std::process::Command::new("cargo")
-        .args(["build", "-p", "test_wasm", "--target", "wasm32-wasip1", "--release"])
+        .args([
+            "build",
+            "-p",
+            "test_wasm",
+            "--target",
+            "wasm32-wasip1",
+            "--release",
+        ])
         .current_dir(&workspace_root)
         .output()
         .wrap_err("Failed to build test_wasm")?;
@@ -226,11 +253,11 @@ fn test_minimal_helper_generation() -> color_eyre::Result<()> {
         return Ok(());
     }
 
-    let wasm_bytes = fs::read(&wasm_path)
-        .wrap_err("Failed to read test_wasm")?;
-    
+    let wasm_bytes = fs::read(&wasm_path).wrap_err("Failed to read test_wasm")?;
+
     let config = walrus::ModuleConfig::new();
-    let module = config.parse(&wasm_bytes)
+    let module = config
+        .parse(&wasm_bytes)
         .map_err(|e| eyre::eyre!("Failed to parse test_wasm: {}", e))?;
 
     // Extract exports (should be empty)
@@ -241,12 +268,13 @@ fn test_minimal_helper_generation() -> color_eyre::Result<()> {
     let helper_code = generate_ts_helper("test_wasm", &vfs_exports, &[]);
 
     // Minimal helper should still be valid TypeScript
-    assert!(!helper_code.is_empty(), "Helper should generate even without VFS exports");
-    
+    assert!(
+        !helper_code.is_empty(),
+        "Helper should generate even without VFS exports"
+    );
+
     println!("✓ Minimal helper generated successfully for WASM without exports");
     println!("Minimal helper content:\n{}", helper_code);
 
     Ok(())
 }
-
-

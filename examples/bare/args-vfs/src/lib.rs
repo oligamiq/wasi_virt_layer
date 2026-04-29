@@ -56,12 +56,8 @@ mod fs {
     const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, 2> =
         EmbeddedFiles!([(".", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])]);
 
-    type LFS = StandardEmbeddedNormalLFS<
-        EmbeddedFilesTy,
-        WasiEmbeddedFile<&'static str>,
-        2,
-        DefaultStdIO,
-    >;
+    type LFS =
+        StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, 2, DefaultStdIO>;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, 2> =
         StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());

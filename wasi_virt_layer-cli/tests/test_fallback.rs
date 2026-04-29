@@ -1,15 +1,15 @@
 use std::sync::Mutex;
 
+use wasi_virt_layer_cli::fallback_command::FallbackCommand;
 #[cfg(feature = "fallback")]
 use wasi_virt_layer_cli::fallback_command::{check_gag, get_fallback_command};
-use wasi_virt_layer_cli::fallback_command::{FallbackCommand};
 
 #[cfg(feature = "fallback")]
 static MUTEX: Mutex<()> = Mutex::new(());
 
 #[test]
 fn test_fallback_command_integration() {
-    let mut cmd = FallbackCommand::new("non_existent_binary_12345", |_| { 0 });
+    let mut cmd = FallbackCommand::new("non_existent_binary_12345", |_| 0);
     cmd.arg("test-arg");
 
     let child = cmd.spawn().expect("Failed to spawn command");

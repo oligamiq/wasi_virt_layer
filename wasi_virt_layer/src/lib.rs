@@ -65,7 +65,9 @@ pub mod prelude {
     #[cfg(feature = "embedded-fs")]
     pub use crate::EmbeddedFiles;
 
-    pub use crate::{import_wasm, plug_args, plug_env, plug_fs, plug_poll, plug_process, plug_random};
+    pub use crate::{
+        import_wasm, plug_args, plug_env, plug_fs, plug_poll, plug_process, plug_random,
+    };
 }
 
 #[cfg(feature = "threads")]

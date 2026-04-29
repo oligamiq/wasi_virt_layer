@@ -1,7 +1,10 @@
 //! Test VFS with TypeScript helper generation
 //! Minimal VFS to test export_pseudo_wasm! macro
 
-use wasi_virt_layer::file::{PseudoWasmTrait, multiple::dynamic_wasm::{PseudoWasmSimpleBuilder, StandardPseudoWasmHolder}};
+use wasi_virt_layer::file::{
+    PseudoWasmTrait,
+    multiple::dynamic_wasm::{PseudoWasmSimpleBuilder, StandardPseudoWasmHolder},
+};
 
 wit_bindgen::generate!({
     world: "test-helper",
@@ -26,7 +29,3 @@ pub static MY_VFS: StandardPseudoWasmHolder = StandardPseudoWasmHolder::new_cons
 pub extern "C" fn __wasi_export_pseudo_wasm_MY_VFS(ptrs: PseudoWasmSimpleBuilder) {
     MY_VFS.receive_pseudo_wasm(ptrs);
 }
-
-
-
-

@@ -91,7 +91,7 @@ pub extern "C" fn compute_heavy() -> i32 {
 
     // Benchmark: transformation time
     let start = Instant::now();
-    
+
     let output_path = test_dir.join("bench_module.prepared.wasm");
     let result = Command::new(env!("CARGO_BIN_EXE_wasi_virt_layer"))
         .args(&[
@@ -113,10 +113,7 @@ pub extern "C" fn compute_heavy() -> i32 {
             eprintln!("Benchmark demonstrates transformation pipeline up to that point");
             return Ok(());
         }
-        eprintln!(
-            "prepare-target failed:\n{}",
-            stderr
-        );
+        eprintln!("prepare-target failed:\n{}", stderr);
         return Ok(());
     }
 
@@ -127,14 +124,18 @@ pub extern "C" fn compute_heavy() -> i32 {
 
     let original_size = fs::metadata(&wasm_path)?.len();
     let transformed_size = fs::metadata(&output_path)?.len();
-    let size_increase_percent = ((transformed_size as f64 - original_size as f64) / original_size as f64) * 100.0;
+    let size_increase_percent =
+        ((transformed_size as f64 - original_size as f64) / original_size as f64) * 100.0;
 
     // Print results
     println!("\n=== Shared Memory ABI Transformation Performance ===");
     println!("Original WASM size: {} bytes", original_size);
     println!("Transformed WASM size: {} bytes", transformed_size);
     println!("Size increase: {:.2}%", size_increase_percent);
-    println!("Transformation time: {:.2}ms", elapsed.as_secs_f64() * 1000.0);
+    println!(
+        "Transformation time: {:.2}ms",
+        elapsed.as_secs_f64() * 1000.0
+    );
 
     // Validate that transformation didn't significantly bloat the module
     if size_increase_percent > 50.0 {
@@ -175,7 +176,8 @@ fn bench_abi_import_efficiency() -> eyre::Result<()> {
     let module_dir = test_dir.join("import_bench");
     fs::create_dir_all(&module_dir)?;
 
-    fs::write(module_dir.join("Cargo.toml"), 
+    fs::write(
+        module_dir.join("Cargo.toml"),
         r#"
 [package]
 name = "import_bench"
@@ -184,14 +186,17 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-"#)?;
+"#,
+    )?;
 
     fs::create_dir_all(module_dir.join("src"))?;
-    fs::write(module_dir.join("src/lib.rs"), 
+    fs::write(
+        module_dir.join("src/lib.rs"),
         r#"
 #[no_mangle]
 pub extern "C" fn run() {}
-"#)?;
+"#,
+    )?;
 
     // Build
     let build_output = Command::new("cargo")
@@ -225,27 +230,20 @@ pub extern "C" fn run() {}
 
     // Count ABI imports in binary
     let output_bytes = fs::read(&output_path)?;
-    
+
     let register_count = output_bytes
         .windows(36)
-        .filter(|w| {
-            String::from_utf8_lossy(w)
-                .contains("register_shared_memory_target")
-        })
+        .filter(|w| String::from_utf8_lossy(w).contains("register_shared_memory_target"))
         .count();
 
     let grow_count = output_bytes
         .windows(24)
-        .filter(|w| {
-            String::from_utf8_lossy(w).contains("shared_memory_grow")
-        })
+        .filter(|w| String::from_utf8_lossy(w).contains("shared_memory_grow"))
         .count();
 
     let lock_count = output_bytes
         .windows(24)
-        .filter(|w| {
-            String::from_utf8_lossy(w).contains("get_lock_ptr")
-        })
+        .filter(|w| String::from_utf8_lossy(w).contains("get_lock_ptr"))
         .count();
 
     println!("\n=== ABI Import Efficiency ===");
@@ -285,7 +283,8 @@ fn bench_memory_grow_replacement() -> eyre::Result<()> {
     let module_dir = test_dir.join("grow_bench");
     fs::create_dir_all(&module_dir)?;
 
-    fs::write(module_dir.join("Cargo.toml"),
+    fs::write(
+        module_dir.join("Cargo.toml"),
         r#"
 [package]
 name = "grow_bench"
@@ -294,18 +293,21 @@ edition = "2021"
 
 [lib]
 crate-type = ["cdylib"]
-"#)?;
+"#,
+    )?;
 
     fs::create_dir_all(module_dir.join("src"))?;
     // This code should trigger memory.grow in WASM
-    fs::write(module_dir.join("src/lib.rs"),
+    fs::write(
+        module_dir.join("src/lib.rs"),
         r#"
 #[no_mangle]
 pub extern "C" fn allocate_memory(size: i32) -> *mut u8 {
     let vec = vec![0u8; size as usize];
     Box::leak(vec).as_mut_ptr()
 }
-"#)?;
+"#,
+    )?;
 
     // Build
     let build_output = Command::new("cargo")
@@ -339,15 +341,15 @@ pub extern "C" fn allocate_memory(size: i32) -> *mut u8 {
 
     // Verify memory.grow was replaced
     let output_bytes = fs::read(&output_path)?;
-    
+
     // memory.grow opcode is 0x40 in WASM
-    let memory_grow_count = output_bytes
-        .iter()
-        .filter(|&&b| b == 0x40)
-        .count();
+    let memory_grow_count = output_bytes.iter().filter(|&&b| b == 0x40).count();
 
     println!("\n=== Memory.grow Replacement Efficiency ===");
-    println!("memory.grow opcode occurrences in transformed module: {}", memory_grow_count);
+    println!(
+        "memory.grow opcode occurrences in transformed module: {}",
+        memory_grow_count
+    );
     println!("Expected: Reduced/replaced with ABI calls");
 
     // Cleanup

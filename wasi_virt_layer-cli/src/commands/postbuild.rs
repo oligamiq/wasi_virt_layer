@@ -1,8 +1,8 @@
 use crate::{
     args::{PostBuildArgs, PostBuildContext},
+    gen_ts_helper,
     generator::{self, WasmPath},
     test_run,
-    gen_ts_helper,
 };
 
 macro_rules! add_generator {
@@ -126,25 +126,27 @@ fn generate_ts_helper_file(
     use std::path::PathBuf;
 
     let out_dir = parsed_args.out_dir();
-    
+
     // Find the core WASM file (e.g., vfs_name.core.wasm)
     let core_wasm_path: PathBuf = format!("{}/{}.core.wasm", out_dir, vfs_name).into();
-    
+
     if !core_wasm_path.exists() {
-        log::debug!("Core WASM not found at {:?}, skipping TS helper generation", core_wasm_path);
+        log::debug!(
+            "Core WASM not found at {:?}, skipping TS helper generation",
+            core_wasm_path
+        );
         return Ok(());
     }
 
     // Load the core WASM and extract exports
     let wasm_bytes = fs::read(&core_wasm_path)
         .wrap_err_with(|| format!("Failed to read WASM: {:?}", core_wasm_path))?;
-    
+
     let exports = extract_wasm_exports(&wasm_bytes)?;
-    
+
     // Detect VFS exports
-    let vfs_exports = gen_ts_helper::detect_vfs_exports(
-        &exports.iter().map(|s| s.as_str()).collect::<Vec<_>>()
-    );
+    let vfs_exports =
+        gen_ts_helper::detect_vfs_exports(&exports.iter().map(|s| s.as_str()).collect::<Vec<_>>());
 
     if vfs_exports.is_empty() {
         log::debug!("No VFS exports detected, generating minimal helper");
@@ -171,16 +173,12 @@ fn generate_ts_helper_file(
 /// Extract export names from a WASM module binary
 fn extract_wasm_exports(wasm_bytes: &[u8]) -> eyre::Result<Vec<String>> {
     use walrus::Module;
-    
-    let module = Module::from_buffer(wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
-    
-    let exports = module
-        .exports
-        .iter()
-        .map(|e| e.name.clone())
-        .collect();
-    
+
+    let module =
+        Module::from_buffer(wasm_bytes).map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
+
+    let exports = module.exports.iter().map(|e| e.name.clone()).collect();
+
     Ok(exports)
 }
 /// Executes the postbuild command, transpiling a Component WASM into JavaScript.

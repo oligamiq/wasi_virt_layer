@@ -199,14 +199,17 @@ pub extern "C" fn run() {
 
     // Verify ABI functions were imported
     let output_bytes = fs::read(&output_path)?;
-    
+
     // Check for import names in the binary
-    let has_register_import = output_bytes.windows(40)
-        .any(|window| String::from_utf8_lossy(window).contains("wasip1_vfs_register_shared_memory_target"));
-    let has_grow_import = output_bytes.windows(40)
+    let has_register_import = output_bytes.windows(40).any(|window| {
+        String::from_utf8_lossy(window).contains("wasip1_vfs_register_shared_memory_target")
+    });
+    let has_grow_import = output_bytes
+        .windows(40)
         .any(|window| String::from_utf8_lossy(window).contains("wasip1_vfs_shared_memory_grow"));
-    let has_lock_import = output_bytes.windows(40)
-        .any(|window| String::from_utf8_lossy(window).contains("wasip1_vfs_shared_memory_get_lock_ptr"));
+    let has_lock_import = output_bytes.windows(40).any(|window| {
+        String::from_utf8_lossy(window).contains("wasip1_vfs_shared_memory_get_lock_ptr")
+    });
 
     // At least one import should be present (they should all be)
     if !(has_register_import || has_grow_import || has_lock_import) {
@@ -307,11 +310,13 @@ pub extern "C" fn multiply(a: i32, b: i32) -> i32 {
 
     // Verify exports are preserved
     let output_bytes = fs::read(&output_path)?;
-    
+
     // Check for export names
-    let has_add = output_bytes.windows(10)
+    let has_add = output_bytes
+        .windows(10)
         .any(|w| String::from_utf8_lossy(w).contains("add"));
-    let has_multiply = output_bytes.windows(20)
+    let has_multiply = output_bytes
+        .windows(20)
         .any(|w| String::from_utf8_lossy(w).contains("multiply"));
 
     if !(has_add || has_multiply) {

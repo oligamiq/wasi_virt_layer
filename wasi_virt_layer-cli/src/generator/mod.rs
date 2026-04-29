@@ -984,7 +984,9 @@ impl GeneratorRunner {
                     if let Ok(target_path) = target.path() {
                         if !target.is_original(target_path) {
                             std::fs::remove_file(target_path).unwrap_or_else(|e| {
-                                log::warn!("Failed to remove intermediate target file {target_path}: {e}");
+                                log::warn!(
+                                    "Failed to remove intermediate target file {target_path}: {e}"
+                                );
                             });
                         }
                     }

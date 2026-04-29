@@ -6,11 +6,11 @@
 //! 3. Injects initialization code to register with VFS
 //! 4. Replaces memory.grow instructions with ABI calls
 
-use camino::Utf8PathBuf;
 use crate::util::WalrusUtilFuncs;
+use camino::Utf8PathBuf;
 use eyre::Context;
 use std::fs;
-use walrus::{ir::*, Module, ModuleConfig, ValType};
+use walrus::{Module, ModuleConfig, ValType, ir::*};
 
 /// Arguments for the `prepare-target` command.
 #[derive(Debug, Clone)]
@@ -66,10 +66,20 @@ fn transform_for_shared_memory(module: &mut Module) -> eyre::Result<()> {
 
     // Step 2: Add globals for metadata_ptr and lock_mgr_ptr
     let (metadata_ptr_global, lock_ptr_global) = add_globals(module)?;
-    log::debug!("Added globals: metadata_ptr={:?}, lock_ptr={:?}", metadata_ptr_global, lock_ptr_global);
+    log::debug!(
+        "Added globals: metadata_ptr={:?}, lock_ptr={:?}",
+        metadata_ptr_global,
+        lock_ptr_global
+    );
 
     // Step 3: Inject initialization code to call ABI registration functions
-    inject_init_code(module, register_fn, get_lock_ptr_fn, metadata_ptr_global, lock_ptr_global)?;
+    inject_init_code(
+        module,
+        register_fn,
+        get_lock_ptr_fn,
+        metadata_ptr_global,
+        lock_ptr_global,
+    )?;
 
     // Step 4: Check if memory.grow exists and replace it
     replace_memory_grow(module, grow_fn)?;
@@ -83,10 +93,9 @@ fn add_abi_register(module: &mut Module) -> eyre::Result<walrus::FunctionId> {
     log::debug!("Adding register ABI import");
 
     // Type: (i32, i32, i32) -> i32
-    let register_type = module.types.add(
-        &[ValType::I32, ValType::I32, ValType::I32],
-        &[ValType::I32],
-    );
+    let register_type = module
+        .types
+        .add(&[ValType::I32, ValType::I32, ValType::I32], &[ValType::I32]);
 
     let (register_fn, _import_id) = module.add_import_func(
         "env",
@@ -103,13 +112,12 @@ fn add_abi_grow(module: &mut Module) -> eyre::Result<walrus::FunctionId> {
     log::debug!("Adding grow ABI import");
 
     // Type: (i32, i32) -> i32
-    let grow_type = module.types.add(&[ValType::I32, ValType::I32], &[ValType::I32]);
+    let grow_type = module
+        .types
+        .add(&[ValType::I32, ValType::I32], &[ValType::I32]);
 
-    let (grow_fn, _import_id) = module.add_import_func(
-        "env",
-        "wasip1_vfs_shared_memory_grow",
-        grow_type,
-    );
+    let (grow_fn, _import_id) =
+        module.add_import_func("env", "wasip1_vfs_shared_memory_grow", grow_type);
 
     log::debug!("Imported grow function: {:?}", grow_fn);
     Ok(grow_fn)
@@ -136,7 +144,7 @@ fn add_abi_get_lock_ptr(module: &mut Module) -> eyre::Result<walrus::FunctionId>
 /// Returns global IDs for later use in initialization code.
 fn add_globals(_module: &mut Module) -> eyre::Result<(walrus::GlobalId, walrus::GlobalId)> {
     log::debug!("Global variable creation deferred - not yet implemented");
-    
+
     // TODO: Implement proper global variable creation via walrus API
     // This requires understanding the walrus GlobalId generation pattern
     // For now, return an error indicating this phase is not yet implemented
@@ -154,7 +162,7 @@ fn inject_init_code(
     _lock_ptr_global: walrus::GlobalId,
 ) -> eyre::Result<()> {
     log::debug!("Initialization code injection deferred");
-    
+
     // TODO: Implement proper initialization code injection
     // This requires:
     // 1. Finding the _start function
@@ -164,7 +172,7 @@ fn inject_init_code(
     // For now, the globals are created but not initialized.
     // Users must manually call register() and get_lock_ptr() in their module
     // or we can implement this in the wrapper layer.
-    
+
     Ok(())
 }
 
@@ -178,7 +186,7 @@ fn replace_memory_grow(module: &mut Module, grow_fn: walrus::FunctionId) -> eyre
     // 1. Get metadata_ptr from somewhere accessible
     // 2. Push metadata_ptr before calling grow_fn
     // 3. The pages value is already on stack from memory.grow
-    
+
     // For now, we'll use a simpler approach: replace memory.grow with direct ABI calls
     // The metadata_ptr will need to be injected via wrapper functions or globals
     // This is a complex transformation that requires careful stack management
@@ -187,7 +195,7 @@ fn replace_memory_grow(module: &mut Module, grow_fn: walrus::FunctionId) -> eyre
         |instr, _| {
             if matches!(instr, Instr::MemoryGrow(_)) {
                 log::debug!("Replacing memory.grow instruction");
-                
+
                 // Simple replacement: call the grow function directly
                 // The pages argument is already on the stack, but we need metadata_ptr
                 // This is a limitation of the current approach - we'd need wrapper functions
