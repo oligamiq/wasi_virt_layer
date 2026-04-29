@@ -1,0 +1,5 @@
+package component-abi:host;
+
+world component-abi {
+  export main: func();
+}

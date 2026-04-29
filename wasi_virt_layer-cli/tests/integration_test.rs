@@ -644,6 +644,30 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests the args VFS example in single-memory mode.
+/// This validates that command-line arguments can be correctly plugged.
+#[test]
+fn test_args_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("args-vfs"),
+        Some("args"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+    )
+    .wrap_err("Failed to run args-vfs example")?;
+
+    Ok(())
+}
+
 /// Generates documentation for import/export name changes across generator stages.
 /// This test is ignored by default and should be run manually when the documentation needs to be updated.
 #[test]

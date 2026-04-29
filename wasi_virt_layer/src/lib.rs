@@ -52,6 +52,7 @@ pub mod prelude {
     pub use crate::memory::WasmAccess;
     #[cfg(feature = "threads")]
     pub use crate::plug_thread;
+    pub use crate::wasi::args::{VirtualArgs, VirtualArgsEmbeddedState};
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvEmbeddedState};
 
     #[cfg(feature = "embedded-fs")]
@@ -60,7 +61,7 @@ pub mod prelude {
     #[cfg(feature = "embedded-fs")]
     pub use crate::EmbeddedFiles;
 
-    pub use crate::{import_wasm, plug_env, plug_fs, plug_poll, plug_process, plug_random};
+    pub use crate::{import_wasm, plug_args, plug_env, plug_fs, plug_poll, plug_process, plug_random};
 }
 
 #[cfg(feature = "threads")]
@@ -134,6 +135,14 @@ pub mod __private {
     pub use wasip1;
 
     pub mod inner {
+        pub mod args {
+            #[cfg(target_os = "wasi")]
+            pub use crate::wasi::args::{
+                args_get_const_inner, args_get_embedded_inner, args_get_inner,
+                args_sizes_get_const_inner, args_sizes_get_embedded_inner, args_sizes_get_inner,
+            };
+        }
+
         pub mod env {
             #[cfg(target_os = "wasi")]
             pub use crate::wasi::env::{

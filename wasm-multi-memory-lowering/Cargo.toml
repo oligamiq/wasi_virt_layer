@@ -1,0 +1,18 @@
+[package]
+name = "wasm-multi-memory-lowering"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+description = "Lowering for multi-memory WebAssembly modules"
+rust-version.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme = "README.md"
+publish = true
+
+[dependencies]
+walrus = "0.20"
+thiserror = "1"
+
+[lib]
