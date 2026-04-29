@@ -35,6 +35,9 @@ pub mod memory;
     not(feature = "multi_memory")
 ))]
 mod shared_global;
+#[cfg(feature = "threads")]
+/// Shared memory management for zero-copy memory between VFS and target modules.
+pub mod shared_memory;
 mod transporter;
 mod utils;
 mod wasi;
