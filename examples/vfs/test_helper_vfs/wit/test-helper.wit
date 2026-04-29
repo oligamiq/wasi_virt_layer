@@ -1,0 +1,5 @@
+package example:test-helper;
+
+world test-helper {
+  export hello: func();
+}

@@ -1,0 +1,12 @@
+[package]
+name = "test_helper_vfs"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+wasi_virt_layer = { workspace = true, default-features = false, features = ["embedded-fs", "multiple-fs", "multi_memory"] }
+wit-bindgen = "0.54.0"
+
+[lib]
+crate-type = ["cdylib"]
