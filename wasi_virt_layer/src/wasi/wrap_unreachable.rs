@@ -19,6 +19,16 @@ macro_rules! wrap_unreachable {
             #[unsafe(no_mangle)]
             pub extern "C" fn [<__wasip1_virt_layer_ $target _wrap_unreachable>]() {}
 
+            #[unsafe(no_mangle)]
+            pub extern "C" fn [<__wasip1_virt_layer_ $target _fix_main_raw_exit_code>](code: i32) -> i32 {
+                <$handler as $crate::wasi::wrap_unreachable::WrapUnreachable>::fix_main_raw_exit_code(code)
+            }
+
+            #[unsafe(no_mangle)]
+            pub extern "C" fn [<__wasip1_virt_layer_ $target _handle_thread_exit>](code: i32) {
+                <$handler as $crate::wasi::wrap_unreachable::WrapUnreachable>::handle_thread_exit(code)
+            }
+
             #[link(wasm_import_module = "__wasip1_virt_layer")]
             unsafe extern "C" {
                 #[link_name = concat!("__wasip1_virt_layer_", stringify!($target), "_get_unreachable_flag")]

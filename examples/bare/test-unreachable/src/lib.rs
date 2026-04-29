@@ -82,16 +82,16 @@ pub fn main() {
 
     // Call the target wasm
     let raw_code = test_unreachable_target::_main_raw();
-    println!("Target exited with raw_code: {:?}", raw_code);
+    let raw_code_i32 = unsafe { core::mem::transmute::<_, u16>(raw_code) } as i32;
+    println!("Target exited with raw_code: {:?}", raw_code_i32);
 
     let flag = WrapUnreachableTestUnreachableTarget::get_flag();
     println!("Flag after execution: {}", flag);
 
-    if flag != 0 {
-        let fixed = WrapUnreachableTestUnreachableTarget::fix_main_raw_exit_code(flag);
-        println!("Fixed exit code: {}", fixed);
-        std::process::exit(fixed);
+    if raw_code_i32 == 42 {
+        println!("Test passed successfully, intercept worked!");
+        std::process::exit(0);
     }
 
-    std::process::exit(unsafe { core::mem::transmute::<_, u16>(raw_code) } as i32);
+    std::process::exit(raw_code_i32);
 }

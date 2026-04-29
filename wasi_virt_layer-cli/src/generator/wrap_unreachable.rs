@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use walrus::{ir::*, FunctionId, Module, ValType, ConstExpr};
+use walrus::{ir::*, FunctionId, Module, ValType, ConstExpr, ExportItem};
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     util::{WalrusUtilModule, WalrusFID, WalrusUtilExport},
@@ -31,6 +31,8 @@ impl Generator for WrapUnreachableGenerator {
         for target in &self.targets {
             let get_name = format!("__wasip1_virt_layer_{target}_get_unreachable_flag");
             let set_name = format!("__wasip1_virt_layer_{target}_set_unreachable_flag");
+            let fix_name = format!("__wasip1_virt_layer_{target}_fix_main_raw_exit_code");
+            let handle_name = format!("__wasip1_virt_layer_{target}_handle_thread_exit");
 
             if let Ok(import_get) = ("__wasip1_virt_layer", get_name.as_str()).get_fid(&module.imports) {
                 if let Ok(export_get) = get_name.as_str().get_fid(&module.exports) {
@@ -43,6 +45,20 @@ impl Generator for WrapUnreachableGenerator {
                 if let Ok(export_set) = set_name.as_str().get_fid(&module.exports) {
                     module.renew_call_fn(import_set, export_set)?;
                     module.exports.erase_with(export_set, ctx.unstable_print_debug)?;
+                }
+            }
+
+            if let Ok(import_fix) = ("__wasip1_virt_layer", fix_name.as_str()).get_fid(&module.imports) {
+                if let Ok(export_fix) = fix_name.as_str().get_fid(&module.exports) {
+                    module.renew_call_fn(import_fix, export_fix)?;
+                    module.exports.erase_with(export_fix, ctx.unstable_print_debug)?;
+                }
+            }
+
+            if let Ok(import_handle) = ("__wasip1_virt_layer", handle_name.as_str()).get_fid(&module.imports) {
+                if let Ok(export_handle) = handle_name.as_str().get_fid(&module.exports) {
+                    module.renew_call_fn(import_handle, export_handle)?;
+                    module.exports.erase_with(export_handle, ctx.unstable_print_debug)?;
                 }
             }
             
@@ -85,6 +101,63 @@ impl Generator for WrapUnreachableGenerator {
             Ok(())
         })?;
         module.exports.add(&format!("__wasip1_virt_layer_{}_set_unreachable_flag", external.name), setter);
+
+        // Import the handler functions from the VFS
+        let fix_exit_code_type = module.types.add(&[ValType::I32], &[ValType::I32]);
+        let fix_exit_code_import = module.add_import_func("__wasip1_virt_layer", format!("__wasip1_virt_layer_{}_fix_main_raw_exit_code", external.name).as_str(), fix_exit_code_type).0;
+
+        let handle_thread_exit_type = module.types.add(&[ValType::I32], &[]);
+        let handle_thread_exit_import = module.add_import_func("__wasip1_virt_layer", format!("__wasip1_virt_layer_{}_handle_thread_exit", external.name).as_str(), handle_thread_exit_type).0;
+
+        // Wrap _main_raw
+        let main_raw_export = module.exports.iter().find(|e| e.name == "_main_raw").and_then(|e| if let ExportItem::Function(f) = e.item { Some((e.id(), f)) } else { None });
+        if let Some((export_id, orig_func)) = main_raw_export {
+            let ret_local = module.locals.add(ValType::I32);
+            let new_func = module.add_func(&[], &[ValType::I32], |builder, _| {
+                let mut body = builder.func_body();
+                body.call(orig_func);
+                body.local_set(ret_local);
+                body.global_get(flag_global);
+                body.if_else(
+                    ValType::I32,
+                    |then| {
+                        then.global_get(flag_global);
+                        then.call(fix_exit_code_import);
+                    },
+                    |else_| {
+                        else_.local_get(ret_local);
+                    }
+                );
+                Ok(())
+            })?;
+            module.exports.delete(export_id);
+            module.exports.add("_main_raw", new_func);
+            module.renew_call_fn(orig_func, new_func)?;
+        }
+
+        // Wrap wasi_thread_start
+        let thread_start_export = module.exports.iter().find(|e| e.name == "wasi_thread_start").and_then(|e| if let ExportItem::Function(f) = e.item { Some((e.id(), f)) } else { None });
+        if let Some((export_id, orig_func)) = thread_start_export {
+            let new_func = module.add_func(&[ValType::I32, ValType::I32], &[], |builder, args| {
+                let mut body = builder.func_body();
+                body.local_get(args[0]);
+                body.local_get(args[1]);
+                body.call(orig_func);
+                body.global_get(flag_global);
+                body.if_else(
+                    None,
+                    |then| {
+                        then.global_get(flag_global);
+                        then.call(handle_thread_exit_import);
+                    },
+                    |_| {}
+                );
+                Ok(())
+            })?;
+            module.exports.delete(export_id);
+            module.exports.add("wasi_thread_start", new_func);
+            module.renew_call_fn(orig_func, new_func)?;
+        }
 
         // We will process every function to replace `unreachable` and hook `call`/`call_indirect`
         let func_ids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
