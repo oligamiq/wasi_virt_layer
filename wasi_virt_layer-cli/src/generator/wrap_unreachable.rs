@@ -2,6 +2,7 @@ use std::collections::HashSet;
 use walrus::{ir::*, FunctionId, Module, ValType, ConstExpr, ExportItem};
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
+    instrs::InstrRewrite as _,
     util::{WalrusUtilModule, WalrusFID, WalrusUtilExport},
 };
 
@@ -61,7 +62,7 @@ impl Generator for WrapUnreachableGenerator {
                     module.exports.erase_with(export_handle, ctx.unstable_print_debug)?;
                 }
             }
-            
+
             let export_marker = format!("__wasip1_virt_layer_{target}_wrap_unreachable");
             if let Ok(export_id) = export_marker.as_str().get_fid(&module.exports) {
                 module.exports.erase_with(export_id, ctx.unstable_print_debug)?;
@@ -109,57 +110,11 @@ impl Generator for WrapUnreachableGenerator {
         let handle_thread_exit_type = module.types.add(&[ValType::I32], &[]);
         let handle_thread_exit_import = module.add_import_func("__wasip1_virt_layer", format!("__wasip1_virt_layer_{}_handle_thread_exit", external.name).as_str(), handle_thread_exit_type).0;
 
-        // Wrap _main_raw
-        let main_raw_export = module.exports.iter().find(|e| e.name == "_main_raw").and_then(|e| if let ExportItem::Function(f) = e.item { Some((e.id(), f)) } else { None });
-        if let Some((export_id, orig_func)) = main_raw_export {
-            let ret_local = module.locals.add(ValType::I32);
-            let new_func = module.add_func(&[], &[ValType::I32], |builder, _| {
-                let mut body = builder.func_body();
-                body.call(orig_func);
-                body.local_set(ret_local);
-                body.global_get(flag_global);
-                body.if_else(
-                    ValType::I32,
-                    |then| {
-                        then.global_get(flag_global);
-                        then.call(fix_exit_code_import);
-                    },
-                    |else_| {
-                        else_.local_get(ret_local);
-                    }
-                );
-                Ok(())
-            })?;
-            module.exports.delete(export_id);
-            module.exports.add("_main_raw", new_func);
-            module.renew_call_fn(orig_func, new_func)?;
-        }
-
-        // Wrap wasi_thread_start
-        let thread_start_export = module.exports.iter().find(|e| e.name == "wasi_thread_start").and_then(|e| if let ExportItem::Function(f) = e.item { Some((e.id(), f)) } else { None });
-        if let Some((export_id, orig_func)) = thread_start_export {
-            let new_func = module.add_func(&[ValType::I32, ValType::I32], &[], |builder, args| {
-                let mut body = builder.func_body();
-                body.local_get(args[0]);
-                body.local_get(args[1]);
-                body.call(orig_func);
-                body.global_get(flag_global);
-                body.if_else(
-                    None,
-                    |then| {
-                        then.global_get(flag_global);
-                        then.call(handle_thread_exit_import);
-                    },
-                    |_| {}
-                );
-                Ok(())
-            })?;
-            module.exports.delete(export_id);
-            module.exports.add("wasi_thread_start", new_func);
-            module.renew_call_fn(orig_func, new_func)?;
-        }
-
-        // We will process every function to replace `unreachable` and hook `call`/`call_indirect`
+        // Process every EXISTING function to replace `unreachable` and hook `call`/`call_indirect`
+        // IMPORTANT: This must happen BEFORE creating wrapper functions below,
+        // so that the wrappers themselves are not processed by the call-hook loop.
+        // If the wrappers were processed, the hook after `call(orig_func)` would
+        // short-circuit with a dummy return, bypassing the fix_exit_code logic.
         let func_ids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
 
         for fid in func_ids {
@@ -211,12 +166,8 @@ impl Generator for WrapUnreachableGenerator {
             }
 
             // We must apply replacements starting from the end of each block so indices don't shift.
-            // Or we can rebuild the instructions.
-            // walrus `builder.instr_seq(seq_id)` allows us to rewrite? No, it just gives a builder.
-            // Actually, we can use `module.funcs.get_mut(fid).kind.unwrap_local_mut()` and modify `seq.instrs` directly if we are careful,
-            // but walrus has a `dfs_in_order_mut` or we can just rebuild the instruction sequences.
             // A safer way is to just replace instructions by replacing them in the `instrs` vector in reverse order.
-            
+
             // Sort by seq_id and then reverse index
             instructions_to_replace.sort_by(|a, b| b.cmp(a));
             calls_to_hook.sort_by(|a, b| b.cmp(a));
@@ -291,6 +242,86 @@ impl Generator for WrapUnreachableGenerator {
                 for (j, instr) in new_instrs.into_iter().enumerate() {
                     seq.instrs.insert(insert_idx + j, instr);
                 }
+            }
+        }
+
+        // Wrap __main_void — created AFTER the call-hook loop above so the wrapper
+        // itself is not processed (its internal call to orig_func must NOT be hooked).
+        let main_void_export = module.exports.iter().find(|e| e.name == "__main_void").and_then(|e| if let ExportItem::Function(f) = e.item { Some((e.id(), f)) } else { None });
+        if let Some((export_id, orig_func)) = main_void_export {
+            let ret_local = module.locals.add(ValType::I32);
+            let new_func = module.add_func(&[], &[ValType::I32], |builder, _| {
+                let mut body = builder.func_body();
+                body.call(orig_func);
+                body.local_set(ret_local);
+                body.global_get(flag_global);
+                body.if_else(
+                    ValType::I32,
+                    |then| {
+                        then.global_get(flag_global);
+                        then.call(fix_exit_code_import);
+                    },
+                    |else_| {
+                        else_.local_get(ret_local);
+                    }
+                );
+                Ok(())
+            })?;
+            module.exports.delete(export_id);
+            module.exports.add("__main_void", new_func);
+            // Redirect all callers of orig_func to new_func, EXCEPT the wrapper itself.
+            // We cannot use renew_call_fn because it would also rewrite the call inside
+            // new_func, creating infinite recursion.
+            let all_fids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
+            for fid in all_fids {
+                if fid == new_func {
+                    continue;
+                }
+                let local = module.funcs.get_mut(fid).kind.unwrap_local_mut();
+                local.builder_mut().func_body().rewrite(|instr, _| {
+                    if let Instr::Call(call) = instr {
+                        if call.func == orig_func {
+                            call.func = new_func;
+                        }
+                    }
+                });
+            }
+        }
+
+        // Wrap wasi_thread_start — also created after the call-hook loop.
+        let thread_start_export = module.exports.iter().find(|e| e.name == "wasi_thread_start").and_then(|e| if let ExportItem::Function(f) = e.item { Some((e.id(), f)) } else { None });
+        if let Some((export_id, orig_func)) = thread_start_export {
+            let new_func = module.add_func(&[ValType::I32, ValType::I32], &[], |builder, args| {
+                let mut body = builder.func_body();
+                body.local_get(args[0]);
+                body.local_get(args[1]);
+                body.call(orig_func);
+                body.global_get(flag_global);
+                body.if_else(
+                    None,
+                    |then| {
+                        then.global_get(flag_global);
+                        then.call(handle_thread_exit_import);
+                    },
+                    |_| {}
+                );
+                Ok(())
+            })?;
+            module.exports.delete(export_id);
+            module.exports.add("wasi_thread_start", new_func);
+            // Same pattern: redirect callers, excluding the wrapper itself.
+            for fid in module.funcs.iter_local().map(|(id, _)| id).collect::<Vec<_>>() {
+                if fid == new_func {
+                    continue;
+                }
+                let local = module.funcs.get_mut(fid).kind.unwrap_local_mut();
+                local.builder_mut().func_body().rewrite(|instr, _| {
+                    if let Instr::Call(call) = instr {
+                        if call.func == orig_func {
+                            call.func = new_func;
+                        }
+                    }
+                })?;
             }
         }
 

@@ -23,6 +23,7 @@ macro_rules! add_generator {
             check::CheckUseLibrary,
             check::CheckVFSMemoryType,
             check::CheckUnusedThreads,
+            wrap_unreachable::WrapUnreachableGenerator,
             threads::ThreadsSpawn,
             threads::ThreadsSpawnPatch,
             special_func::StartFunc,
@@ -41,7 +42,6 @@ macro_rules! add_generator {
             debug::DebugCallFunctionSmallScale,
             debug::DebugCallFunctionMain,
             patch_component::PatchComponent,
-            wrap_unreachable::WrapUnreachableGenerator,
         );
 
         $runner.checker(check::CheckUseWasiVirtLayer);
