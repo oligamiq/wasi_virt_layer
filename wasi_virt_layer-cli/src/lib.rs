@@ -6,7 +6,7 @@
 use clap::Parser;
 
 use crate::{
-    commands::{build::build, new::new, postbuild::postbuild, prebuild::prebuild},
+    commands::{build::build, new::new, postbuild::postbuild, prebuild::prebuild, prepare_target::prepare_target},
     fallback_command::CommandLock,
 };
 
@@ -103,5 +103,16 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         args::Command::Prebuild(prebuild_args) => prebuild(prebuild_args),
         args::Command::Postbuild(postbuild_args) => postbuild(postbuild_args),
         args::Command::New(new_args) => new(new_args),
+        args::Command::PrepareTarget(prepare_target_args) => {
+            let output = prepare_target_args
+                .output
+                .unwrap_or_else(|| prepare_target_args.target_wasm.with_extension("prepared.wasm"));
+            let args = commands::prepare_target::PrepareTargetHandler {
+                target_wasm: prepare_target_args.target_wasm,
+                output,
+                keep_artifacts: prepare_target_args.keep_artifacts,
+            };
+            prepare_target(args)
+        }
     }
 }
