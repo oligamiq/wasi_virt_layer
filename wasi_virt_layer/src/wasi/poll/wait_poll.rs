@@ -40,12 +40,10 @@ impl crate::poll::PollOneoff for WaitPoll {
         }
 
         fn get_now() -> Timestamp {
-            let sys_time = std::time::SystemTime::now();
-
-            sys_time
-                .duration_since(std::time::SystemTime::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos() as Timestamp
+            unsafe {
+                crate::transporter::non_recursive_clock_time_get(CLOCKID_REALTIME, 0)
+                    .unwrap_or(0)
+            }
         }
 
         // Perform the wait
