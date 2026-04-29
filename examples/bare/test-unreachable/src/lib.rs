@@ -93,5 +93,5 @@ pub fn main() {
         std::process::exit(0);
     }
 
-    std::process::exit(raw_code_i32);
+    unreachable!("This should have been intercepted by the wrap_unreachable mechanism");
 }
