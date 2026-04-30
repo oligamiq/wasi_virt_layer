@@ -13,7 +13,6 @@ pub fn gen_test_run(wasm_name: impl AsRef<str>, out_dir: impl AsRef<str>) {
         r#"
 {core}
 
-// @ts-ignore
 const root = await instantiate(undefined, {{
 	"wasip1-vfs:host/virtual-file-system-wasip1-core": {{
         Wasip1: imports,
@@ -28,25 +27,34 @@ if (inst === undefined) {{
 }}
 inst = inst as WebAssembly.Instance;
 
-wasi.start({{
-    exports: {{
-        memory: inst.exports.memory as WebAssembly.Memory,
-        _start: () => {{
-            // init only
-            console.log("[WASI main]");
-            if (root.main) {{
-                root.main();
-            }} else if (root._start) {{
-                root._start();
-            }} else if (inst.exports._start) {{
-                (inst.exports._start as Function)();
-            }} else if (inst.exports.main) {{
-                (inst.exports.main as Function)();
+try {{
+    wasi.start({{
+        exports: {{
+            memory: inst.exports.memory as WebAssembly.Memory,
+            _start: () => {{
+                // init only
+                console.log("[WASI main]");
+                if (root.main) {{
+                    root.main();
+                }} else if (root._start) {{
+                    root._start();
+                }} else if (inst.exports._start) {{
+                    (inst.exports._start as Function)();
+                }} else if (inst.exports.main) {{
+                    (inst.exports.main as Function)();
+                }}
+                console.log("[WASI main] done.");
             }}
-            console.log("[WASI main] done.");
-        }}
-    }},
-}});
+        }},
+    }});
+}} catch (e) {{
+    // Ignore proc_exit errors (exit code 0 is success)
+    if (e instanceof Error && e.message.includes("exit with exit code 0")) {{
+        // Expected behavior - normal exit
+    }} else {{
+        throw e;
+    }}
+}}
 "#
     );
 

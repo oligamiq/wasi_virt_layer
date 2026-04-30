@@ -17,13 +17,30 @@ pub fn run_non_thread(out_dir: &str) -> color_eyre::Result<()> {
         .assert()
         .success();
 
-    std::process::Command::new("deno")
+    let output = std::process::Command::new("deno")
         .args(["run", "--allow-read", "--allow-env", "test_run.ts"])
         .current_dir(out_dir)
-        .assert()
-        .success();
+        .output()?;
 
-    Ok(())
+    // Allow exit code 1 with proc_exit error (normal behavior) or exit code 0 (success)
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    
+    // Check if this is a proc_exit error (which is expected behavior)
+    if stderr.contains("exit with exit code 0") && stdout.contains("[WASI stdout]") {
+        return Ok(());
+    }
+
+    Err(color_eyre::eyre::eyre!(
+        "deno execution failed: {}\nstdout: {}\nstderr: {}",
+        output.status,
+        stdout,
+        stderr
+    ))
 }
 
 pub fn run_thread(out_dir: &str) -> color_eyre::Result<()> {

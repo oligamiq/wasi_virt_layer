@@ -1,3 +1,5 @@
+#![no_main]
+
 use wasi_virt_layer::memory::WasmAccessRaw;
 use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 use wasi_virt_layer::prelude::*;
