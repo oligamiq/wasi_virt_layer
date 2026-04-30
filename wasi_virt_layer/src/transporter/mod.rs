@@ -128,6 +128,28 @@ pub unsafe fn non_recursive_clock_time_get(
     }
 }
 
+/// Calls the WASI `clock_res_get` function using a non-recursive call.
+pub unsafe fn non_recursive_clock_res_get(
+    id: wasip1::Clockid,
+) -> Result<wasip1::Timestamp, wasip1::Errno> {
+    let mut rp0 = core::mem::MaybeUninit::<wasip1::Timestamp>::uninit();
+
+    let id = id.raw() as i32;
+    let rp0_ptr = rp0.as_mut_ptr() as i32;
+
+    let ret = crate::non_recursive_wasi_snapshot_preview1!(
+        clock_res_get(
+            id: i32,
+            rp0_ptr: i32
+        ) -> i32
+    );
+
+    match ret {
+        0 => Ok(unsafe { core::ptr::read(rp0.as_mut_ptr() as i32 as *const wasip1::Timestamp) }),
+        _ => Err(unsafe { core::mem::transmute::<u16, wasip1::Errno>(ret as u16) }),
+    }
+}
+
 impl Wasip1Transporter {
     /// Reads data from stdin into the provided buffer using a non-recursive WASI call.
     #[allow(unused_variables)]

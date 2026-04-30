@@ -57,6 +57,7 @@ pub mod prelude {
     #[cfg(feature = "threads")]
     pub use crate::plug_thread;
     pub use crate::wasi::args::{VirtualArgs, VirtualArgsEmbeddedState};
+    pub use crate::wasi::clock::{Clock, StandardClock};
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvEmbeddedState};
 
     #[cfg(feature = "embedded-fs")]
@@ -66,7 +67,7 @@ pub mod prelude {
     pub use crate::EmbeddedFiles;
 
     pub use crate::{
-        import_wasm, plug_args, plug_env, plug_fs, plug_poll, plug_process, plug_random,
+        import_wasm, plug_args, plug_clock, plug_env, plug_fs, plug_poll, plug_process, plug_random,
     };
 }
 
@@ -120,12 +121,17 @@ pub mod process {
 
 /// I/O polling and event waiting mechanisms.
 pub mod poll {
-    pub use crate::wasi::poll::{DefaultPoll, PollOneoff, WaitPoll};
+    pub use crate::wasi::poll::{DefaultPoll, PollOneoff, WaitPoll, DefaultWaitPoll};
 }
 
 /// Random number generation and virtualization.
 pub mod random {
     pub use crate::wasi::random::{PseudoRandom, Random, StandardRandom};
+}
+
+/// Clock and time operations.
+pub mod clock {
+    pub use crate::wasi::clock::{Clock, StandardClock};
 }
 
 #[doc(hidden)]

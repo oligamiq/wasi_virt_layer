@@ -1,11 +1,13 @@
 use crate::__private::wasip1::*;
+use crate::clock::Clock;
 use crate::memory::WasmAccess;
 use crate::transporter::non_recursive_sched_yield;
 
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
-pub struct WaitPoll;
+/// This version uses the provided Clock trait for time operations.
+pub struct WaitPoll<C: Clock = crate::clock::StandardClock>(std::marker::PhantomData<C>);
 
-impl crate::poll::PollOneoff for WaitPoll {
+impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
     #[inline(never)]
     fn poll_oneoff<Wasm: WasmAccess>(
         subscriptions_ptr: *const Subscription,
@@ -22,7 +24,7 @@ impl crate::poll::PollOneoff for WaitPoll {
             return ERRNO_NOTSUP;
         }
 
-        let (userdata, event_type, timeout, precision, flags) = unsafe {
+        let (userdata, event_type, timeout, _precision, flags) = unsafe {
             let base_ptr = subscriptions_ptr as *const u8;
 
             let userdata = Wasm::load_le::<u64>(base_ptr as *const u64);
@@ -39,24 +41,26 @@ impl crate::poll::PollOneoff for WaitPoll {
             return ERRNO_NOTSUP;
         }
 
-        fn get_now() -> Timestamp {
-            unsafe {
-                crate::transporter::non_recursive_clock_time_get(CLOCKID_REALTIME, 0).unwrap_or(0)
-            }
+        // Use the Clock trait to get the current time
+        fn get_now<Wasm: WasmAccess, Clock: crate::clock::Clock>() -> Timestamp {
+            let mut time_buf = 0u64;
+            let _ = Clock::clock_time_get::<Wasm>(CLOCKID_REALTIME, 0, &mut time_buf);
+            time_buf
         }
 
         // Perform the wait
+        // Note: precision is NOT subtracted from end_time. Precision is advisory only
+        // and represents the maximum tolerable imprecision, not a timeout adjustment.
         let end_time = if (flags & SUBCLOCKFLAGS_SUBSCRIPTION_CLOCK_ABSTIME) != 0 {
             timeout
         } else {
-            get_now().saturating_add(timeout)
-        }
-        .saturating_sub(precision);
+            get_now::<Wasm, C>().saturating_add(timeout)
+        };
 
         loop {
             unsafe { non_recursive_sched_yield() };
 
-            let now = get_now();
+            let now = get_now::<Wasm, C>();
 
             if now >= end_time {
                 break;
@@ -80,3 +84,6 @@ impl crate::poll::PollOneoff for WaitPoll {
         ERRNO_SUCCESS
     }
 }
+
+/// Alias for WaitPoll using the default StandardClock implementation.
+pub type DefaultWaitPoll = WaitPoll<crate::clock::StandardClock>;

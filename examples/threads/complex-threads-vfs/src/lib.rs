@@ -100,8 +100,8 @@ mod fs {
 }
 
 mod poll {
-    use wasi_virt_layer::poll::WaitPoll;
+    use wasi_virt_layer::poll::DefaultWaitPoll;
 
     use super::*;
-    plug_poll!(WaitPoll, anonymous, self);
+    plug_poll!(DefaultWaitPoll, anonymous, self);
 }

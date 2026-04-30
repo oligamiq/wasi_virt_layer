@@ -24,6 +24,10 @@ macro_rules! import_wasm {
         #[derive(Debug, Clone, Copy)]
         struct $name;
 
+        const _: () = {
+            type __NAME = $name;
+        };
+
         $crate::__private::paste::paste! {
             #[doc(hidden)]
             #[cfg(target_os = "wasi")]

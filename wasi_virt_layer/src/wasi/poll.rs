@@ -1,7 +1,7 @@
 pub mod wait_poll;
 use crate::__private::wasip1::*;
 use crate::memory::WasmAccess;
-pub use wait_poll::WaitPoll;
+pub use wait_poll::{WaitPoll, DefaultWaitPoll};
 
 /// Trait for handling the `poll_oneoff` WASI function.
 pub trait PollOneoff {
@@ -46,6 +46,10 @@ impl PollOneoff for DefaultPoll {
 #[macro_export]
 macro_rules! plug_poll {
     ($ty:ty, $($wasm:ident),*) => {
+        const _: () = {
+            type __TYPE = $ty;
+        };
+
         $crate::__private::paste::paste! {
             $(
                 #[unsafe(no_mangle)]

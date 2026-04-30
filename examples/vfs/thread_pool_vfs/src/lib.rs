@@ -102,8 +102,8 @@ const ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 };
 plug_env!(@embedded, EnvTy, test_pool_thread, self);
 
-use wasi_virt_layer::poll::WaitPoll;
-plug_poll!(WaitPoll, test_pool_thread);
+use wasi_virt_layer::poll::DefaultWaitPoll;
+plug_poll!(DefaultWaitPoll, test_pool_thread);
 
 mod fs {
     use wasi_virt_layer::file::{

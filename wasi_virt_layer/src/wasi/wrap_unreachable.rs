@@ -15,6 +15,10 @@ pub trait WrapUnreachable {
 #[macro_export]
 macro_rules! wrap_unreachable {
     ($target:ident, $handler:ty) => {
+        const _: () = {
+            type __HANDLER = $handler;
+        };
+
         $crate::__private::paste::paste! {
             #[unsafe(no_mangle)]
             pub extern "C" fn [<__wasip1_virt_layer_ $target _wrap_unreachable>]() {}

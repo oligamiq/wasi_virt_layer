@@ -1,6 +1,6 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{
-    file::*, plug_thread, poll::WaitPoll, prelude::*, process::*, thread::VirtualThreadPool,
+    file::*, plug_thread, poll::*, prelude::*, process::*, thread::VirtualThreadPool,
 };
 
 struct ComponentABI;
@@ -36,7 +36,7 @@ export!(ComponentABI);
 
 plug_thread!({ unsafe { &mut *(&raw mut THREAD_POOL) } }, anonymous, self);
 
-plug_poll!(WaitPoll, anonymous);
+plug_poll!(DefaultWaitPoll, anonymous);
 
 mod process {
     use super::*;

@@ -1,6 +1,7 @@
 use const_struct::const_struct;
 use wasi_virt_layer::file::*;
 use wasi_virt_layer::memory::WasmAccessRaw;
+use wasi_virt_layer::poll::*;
 use wasi_virt_layer::prelude::*;
 use wasi_virt_layer::process::*;
 use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
@@ -119,3 +120,7 @@ static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
     StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
 plug_fs!(&VIRTUAL_FILE_SYSTEM, unreachable_threads_target, self);
+
+plug_clock!(unreachable_threads_target);
+
+plug_poll!(DefaultWaitPoll, unreachable_threads_target);
