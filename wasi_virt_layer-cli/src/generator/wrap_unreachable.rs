@@ -346,31 +346,12 @@ fn wire_import_to_export(
     let Ok(import_fid) = (WRAP_UNREACHABLE_MODULE, name).get_fid(&module.imports) else {
         return Ok(());
     };
-    
-    // Find the matching export by name. When multiple targets exist, there should be
-    // one export per target, each with a unique name containing the target identifier.
-    let export_id = match module
-        .exports
-        .iter()
-        .find(|e| e.name == name)
-        .map(|e| e.id())
-    {
-        Some(id) => id,
-        None => return Ok(()),
-    };
-    
-    let export_item = module.exports.get(export_id);
-    let export_fid = match export_item.item {
-        ExportItem::Function(fid) => fid,
-        _ => return Ok(()),
+    let Ok(export_fid) = name.get_fid(&module.exports) else {
+        return Ok(());
     };
 
     module.renew_call_fn(import_fid, export_fid)?;
-    module.exports.delete(export_id);
-    if debug {
-        eprintln!("[wrap_unreachable] Wired import {} to export {} and removed export", 
-                  name, name);
-    }
+    module.exports.erase_with(export_fid, debug)?;
 
     Ok(())
 }
