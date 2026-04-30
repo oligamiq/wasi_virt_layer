@@ -9,7 +9,7 @@ use const_struct::const_struct;
 struct UnreachableHandler;
 
 impl WrapUnreachable for UnreachableHandler {
-    fn fix_main_raw_exit_code(code: i32) -> i32 {
+    fn fix_main_raw_exit_code<Wasm: WasmAccess>(code: i32) -> i32 {
         if code == 1 {
             println!("Unreachable occurred, rewriting exit code to 42");
             return 42;
@@ -20,7 +20,7 @@ impl WrapUnreachable for UnreachableHandler {
 
 import_wasm!(test_unreachable_target);
 
-wasi_virt_layer::wrap_unreachable!(test_unreachable_target, UnreachableHandler);
+wrap_unreachable!(UnreachableHandler, test_unreachable_target);
 
 plug_process!(StandardProcess, test_unreachable_target, self);
 

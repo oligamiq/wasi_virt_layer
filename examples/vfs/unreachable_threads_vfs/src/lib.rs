@@ -52,7 +52,7 @@ import_wasm!(unreachable_threads_target);
 struct UnreachableHandler;
 
 impl WrapUnreachable for UnreachableHandler {
-    fn fix_main_raw_exit_code(code: i32) -> i32 {
+    fn fix_main_raw_exit_code<Wasm: WasmAccess>(code: i32) -> i32 {
         if code == 1 {
             println!("Unreachable occurred, rewriting exit code to 42");
             return 42;
@@ -61,7 +61,7 @@ impl WrapUnreachable for UnreachableHandler {
     }
 }
 
-wasi_virt_layer::wrap_unreachable!(unreachable_threads_target, UnreachableHandler);
+wrap_unreachable!(UnreachableHandler, unreachable_threads_target);
 
 plug_thread!(
     { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },

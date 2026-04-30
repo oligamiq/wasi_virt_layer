@@ -68,6 +68,7 @@ pub mod prelude {
 
     pub use crate::{
         import_wasm, plug_args, plug_clock, plug_env, plug_fs, plug_poll, plug_process, plug_random,
+        wrap_unreachable,
     };
 }
 
