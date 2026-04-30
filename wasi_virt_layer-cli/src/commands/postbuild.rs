@@ -9,7 +9,7 @@ macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
             abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, threads,
+            special_func, threads, wrap_unreachable,
         };
 
         generator::add_generators_by_type!(
@@ -20,6 +20,7 @@ macro_rules! add_generator {
             check::CheckUseLibrary,
             check::CheckVFSMemoryType,
             check::CheckUnusedThreads,
+            wrap_unreachable::WrapUnreachableGenerator,
             threads::ThreadsSpawn,
             threads::ThreadsSpawnPatch,
             special_func::StartFunc,

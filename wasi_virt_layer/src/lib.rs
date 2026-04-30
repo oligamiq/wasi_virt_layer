@@ -37,7 +37,7 @@ pub mod memory;
 mod shared_global;
 mod transporter;
 mod utils;
-mod wasi;
+pub mod wasi;
 mod wit;
 
 #[cfg(not(target_os = "wasi"))]

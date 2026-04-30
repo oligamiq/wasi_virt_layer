@@ -6,6 +6,7 @@ pub mod file;
 pub mod poll;
 pub mod process;
 pub mod random;
+pub mod wrap_unreachable;
 #[cfg(feature = "threads")]
 pub mod thread;
 

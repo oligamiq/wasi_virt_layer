@@ -20,6 +20,8 @@ pub mod special_func;
 pub mod start_section;
 /// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
+/// Handles logic for rewriting unreachable instructions to prevent Wasm execution traps.
+pub mod wrap_unreachable;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
