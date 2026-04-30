@@ -3,14 +3,14 @@ use crate::memory::WasmAccess;
 /// Trait for handling process exit.
 pub trait ProcessExit {
     /// Exits the current process with the given code.
-    fn proc_exit<Wasm: WasmAccess>(code: i32) -> !;
+    fn proc_exit<Wasm: WasmAccess>(code: i32);
 }
 
 /// Default implementation of `ProcessExit`.
 pub struct StandardProcess;
 
 impl ProcessExit for StandardProcess {
-    fn proc_exit<Wasm: WasmAccess>(code: i32) -> ! {
+    fn proc_exit<Wasm: WasmAccess>(code: i32) {
         #[cfg(feature = "std")]
         {
             std::process::exit(code as i32);
@@ -38,7 +38,7 @@ macro_rules! plug_process {
                 #[cfg(target_os = "wasi")]
                 pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _proc_exit>](
                     code: i32
-                ) -> ! {
+                ) {
                     $crate::__as_t!(@as_t, $wasm);
                     <$ty as $crate::process::ProcessExit>::proc_exit::<T>(code)
                 }
