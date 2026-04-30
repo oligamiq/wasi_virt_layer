@@ -1,6 +1,5 @@
-#![no_main]
+#![cfg_attr(target_arch = "wasm32", no_main)]
 
-use wasi_virt_layer::memory::WasmAccessRaw;
 use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 use wasi_virt_layer::prelude::*;
 use wasi_virt_layer::file::*;
@@ -75,9 +74,11 @@ static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
 
 plug_fs!(&VIRTUAL_FILE_SYSTEM, test_unreachable_target);
 
-
+#[cfg(target_arch = "wasm32")]
 #[unsafe(no_mangle)]
 pub fn main() {
+    use wasi_virt_layer::memory::WasmAccessRaw;
+
     println!("Starting VFS...");
     let code = WrapUnreachableTestUnreachableTarget::get_flag();
     println!("Initial flag: {}", code);

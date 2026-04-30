@@ -16,7 +16,7 @@ impl Random for StandardRandom {
         {
             use crate::transporter::non_recursive_random_get;
             #[cfg(not(feature = "multi_memory"))]
-            let ptr = unsafe { Wasm::memory_director_mut(buf) };
+            let ptr = Wasm::memory_director_mut(buf);
             #[cfg(feature = "multi_memory")]
             let ptr = buf;
 

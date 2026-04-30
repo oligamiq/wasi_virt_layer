@@ -5,7 +5,7 @@ use crate::transporter::non_recursive_sched_yield;
 
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
 /// This version uses the provided Clock trait for time operations.
-pub struct WaitPoll<C: Clock = crate::clock::StandardClock>(std::marker::PhantomData<C>);
+pub struct WaitPoll<C: Clock = crate::clock::StandardClock>(core::marker::PhantomData<C>);
 
 impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
     #[inline(never)]
