@@ -35,6 +35,10 @@ fn has_library_import_anchor_names(export_names: &[&str]) -> bool {
 #[derive(Debug, Default)]
 pub struct CheckUseLibrary;
 
+fn normalize_name(s: &str) -> String {
+    s.replace('-', "_")
+}
+
 impl Generator for CheckUseLibrary {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         // If you're using the library, anchors should be generated automatically.
@@ -52,10 +56,11 @@ impl Generator for CheckUseLibrary {
 
         // check use import_wasm!
         for wasm_name in &ctx.target_names {
+            let normalized_name = normalize_name(wasm_name.as_ref());
             if !module
                 .exports
                 .iter()
-                .any(|export| export.name == format!("__wasip1_vfs_{wasm_name}__start_anchor"))
+                .any(|export| export.name == format!("__wasip1_vfs_{normalized_name}__start_anchor"))
             {
                 let suggests = module
                     .exports
@@ -70,7 +75,7 @@ impl Generator for CheckUseLibrary {
 
                 let best_suggest = suggests
                     .iter()
-                    .map(|s| (strsim::jaro_winkler(&s, wasm_name.as_ref()), s))
+                    .map(|s| (strsim::jaro_winkler(&s, &normalized_name), s))
                     .min_by(|(a, _), (b, _)| b.partial_cmp(a).unwrap());
 
                 let msg = if let Some((score, suggest)) = best_suggest

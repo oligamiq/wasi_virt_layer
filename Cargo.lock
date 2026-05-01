@@ -1902,6 +1902,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "test-unreachable-target1"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+]
+
+[[package]]
+name = "test-unreachable-target2"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+]
+
+[[package]]
 name = "test_helper_shared_memory_vfs"
 version = "0.2.7"
 dependencies = [
@@ -2088,6 +2102,14 @@ name = "unicode-xid"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
+
+[[package]]
+name = "unreachable-multi-target-vfs"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+ "wasi_virt_layer",
+]
 
 [[package]]
 name = "unreachable_threads_target"

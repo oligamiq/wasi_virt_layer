@@ -449,9 +449,16 @@ impl Generator for MemoryTrap {
         }
 
         for wasm in &ctx.target_names {
+            // NOTE: The import was created by the import_wasm! macro using the
+            // Rust identifier name (with underscores), but ctx.target_names has
+            // the package name (with dashes). We need to normalize to underscores
+            // to match what the macro generated.
+            let normalized_wasm = wasm.as_ref().replace('-', "_");
+            let import_name = format!("__wasip1_vfs_{normalized_wasm}_memory_trap");
+            
             if let Some(id) = (
                 UniqueName::NAMESPACE,
-                &UniqueName::Memory(&MemoryUniqueName::MemoryTrap(wasm)),
+                &import_name,
             )
                 .get_fid(&module.imports)
                 .ok()
@@ -499,8 +506,13 @@ impl Generator for MemoryTrap {
         }
 
         for wasm in &ctx.target_names {
+            // NOTE: The export was created by the memory director macro using the
+            // Rust identifier name (with underscores), but ctx.target_names has
+            // the package name (with dashes). We need to normalize to underscores
+            // to match what the macro generated.
+            let normalized_wasm = wasm.as_ref().replace('-', "_");
             let trap_export_name =
-                UniqueName::Memory(&MemoryUniqueName::MemoryTrapAnchor(wasm)).to_string();
+                format!("__wasip1_vfs_{normalized_wasm}_memory_trap_anchor");
             let trap_id = trap_export_name
                 .get_fid(&module.exports)
                 .wrap_err_with(|| {

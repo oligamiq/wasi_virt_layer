@@ -15,6 +15,10 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct Anonymous;
 
+fn normalize_name(s: &str) -> String {
+    s.replace('-', "_")
+}
+
 impl Generator for Anonymous {
     fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         // If vfs include anonymous, and there is only one target, assign it to the target.
@@ -38,7 +42,10 @@ impl Generator for Anonymous {
         let collected = ctx
             .target_names
             .iter()
-            .filter(|t| !anonymous_targets.iter().any(|at| at == t.as_ref()))
+            .filter(|t| {
+                let normalized_t = normalize_name(t.as_ref());
+                !anonymous_targets.iter().any(|at| at == &normalized_t)
+            })
             .collect::<SmallVec<[_; 1]>>();
 
         const PREFIX: &str = UniqueName::PREFIX;
@@ -70,9 +77,11 @@ impl Generator for Anonymous {
 
         // Replace VFS from `<anonymous>` to the only one target.
         let only_target = &collected[0];
+        let normalized_target = normalize_name(only_target.as_ref());
 
         // Rewrite <anonymous> to the only one target.
         const EXPORT_POSTFIXS: &[&str] = &[
+            "__start",
             "__start_anchor",
             "_memory_trap_anchor",
             "_wasi_thread_start_anchor",
@@ -80,7 +89,7 @@ impl Generator for Anonymous {
 
         for postfix in EXPORT_POSTFIXS {
             let anonymous_export_name = format!("{PREFIX}anonymous{postfix}");
-            let target_export_name = format!("{PREFIX}{only_target}{postfix}");
+            let target_export_name = format!("{PREFIX}{normalized_target}{postfix}");
             if let Some(export) = module
                 .exports
                 .iter_mut()
@@ -100,7 +109,7 @@ impl Generator for Anonymous {
                     .iter()
                     .find(|v| anonymous_suffix == **v)
                 {
-                    export.name = format!("{PREFIX}{only_target}_{f}");
+                    export.name = format!("{PREFIX}{normalized_target}_{f}");
                 }
             }
         }
@@ -110,7 +119,7 @@ impl Generator for Anonymous {
             .iter_mut()
             .find(|e| e.name == format!("{PREFIX}wasi_thread_spawn_anonymous"))
         {
-            special_anonymous_export.name = format!("{PREFIX}wasi_thread_spawn_{only_target}");
+            special_anonymous_export.name = format!("{PREFIX}wasi_thread_spawn_{normalized_target}");
         }
 
         const NAMESPACE: &str = UniqueName::NAMESPACE;
@@ -139,7 +148,7 @@ impl Generator for Anonymous {
                     .chain(EXTRA_IMPORTS)
                     .find(|v| anonymous_suffix == **v)
                 {
-                    import.name = format!("{PREFIX}{only_target}_{f}");
+                    import.name = format!("{PREFIX}{normalized_target}_{f}");
                 }
             }
         }

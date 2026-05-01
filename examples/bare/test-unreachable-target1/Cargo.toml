@@ -1,0 +1,11 @@
+[package]
+name = "test-unreachable-target1"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test_unreachable_target1"
+path = "src/main.rs"
+
+[dependencies]
+wasi = "0.11"

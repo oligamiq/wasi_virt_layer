@@ -349,12 +349,15 @@ impl Generator for StartFunc {
         ctx: &GeneratorCtx,
     ) -> eyre::Result<()> {
         for wasm in &ctx.target_names {
+            // NOTE: The import was created by the import_wasm! macro using the
+            // Rust identifier name (with underscores), but ctx.target_names has
+            // the package name (with dashes). We need to normalize to underscores
+            // to match what the macro generated.
+            let normalized_wasm = wasm.as_ref().replace('-', "_");
+            let import_name = format!("__wasip1_vfs_{normalized_wasm}__start");
+            
             module.renew_call_fn(
-                (
-                    UniqueName::NAMESPACE,
-                    &UniqueName::SpecialFunc(&SpecialFuncUniqueName::Start(wasm)),
-                )
-                    .get_fid(&module.imports)?,
+                (UniqueName::NAMESPACE, &import_name).get_fid(&module.imports)?,
                 ctx.start_func_id.as_ref().unwrap()[wasm],
                 // Export already removed by StartFuncIdVisitor
             )?;

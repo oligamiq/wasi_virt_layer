@@ -39,6 +39,9 @@ members = [
     "examples/test_wasm/test_unreachable_target",
     "examples/vfs/unreachable_threads_vfs",
     "examples/test_wasm/unreachable_threads_target",
+    "examples/bare/test-unreachable-target1",
+    "examples/bare/test-unreachable-target2",
+    "examples/vfs/unreachable-multi-target-vfs",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
