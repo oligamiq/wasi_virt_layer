@@ -93,6 +93,7 @@ impl Generator for CheckUseLibrary {
         }
 
         // Check that all import_wasm! declarations have corresponding target WASM arguments
+        // Note: `anonymous` is excluded here as it's handled separately by the `Anonymous` generator
         let declared_wasm_names = module
             .exports
             .iter()
@@ -105,6 +106,11 @@ impl Generator for CheckUseLibrary {
             .collect::<Vec<_>>();
 
         for declared_name in declared_wasm_names {
+            // Skip validation for anonymous - it's handled by the Anonymous generator
+            if declared_name == "anonymous" {
+                continue;
+            }
+
             if !ctx.target_names.iter().any(|target| {
                 normalize_name(target.as_ref()) == normalize_name(&declared_name)
             }) {
