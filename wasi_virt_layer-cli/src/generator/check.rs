@@ -92,6 +92,29 @@ impl Generator for CheckUseLibrary {
             }
         }
 
+        // Check that all import_wasm! declarations have corresponding target WASM arguments
+        let declared_wasm_names = module
+            .exports
+            .iter()
+            .filter_map(|e| {
+                e.name
+                    .strip_prefix("__wasip1_vfs_")?
+                    .strip_suffix("__start_anchor")
+                    .map(|s| s.to_string())
+            })
+            .collect::<Vec<_>>();
+
+        for declared_name in declared_wasm_names {
+            if !ctx.target_names.iter().any(|target| {
+                normalize_name(target.as_ref()) == normalize_name(&declared_name)
+            }) {
+                eyre::bail!(
+                    "WASM module `{declared_name}` is declared with `import_wasm!` macro in VFS, but not provided as a target argument. \
+                     Did you forget to specify this WASM file in the CLI arguments?"
+                );
+            }
+        }
+
         Ok(())
     }
 }
