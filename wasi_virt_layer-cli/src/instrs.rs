@@ -109,62 +109,71 @@ fn gen_next_instrs(instr: &Instr, next_instrs: &mut Vec<InstrSeqId>) {
     }
 }
 
-#[inline(never)]
 fn rewrite_inner<'a, T>(
     builder: &mut InstrSeqBuilder<'a>,
     find: &mut impl FnMut(&mut Instr, (usize, InstrSeqId)) -> T,
-    visited_instrs: &mut Vec<InstrSeqId>,
 ) -> eyre::Result<Vec<T>> {
-    let mut next_instrs = vec![];
+    let mut visited_instrs = std::collections::HashSet::new();
+    let mut work_stack = vec![builder.id()];
     let mut ret = vec![];
 
-    let id = builder.id();
-
-    for (i, (instr, _)) in builder.instrs_mut().iter_mut().enumerate() {
-        ret.push(find(instr, (i, id)));
-
-        gen_next_instrs(instr, &mut next_instrs);
-    }
-
-    for instr_seq_id in next_instrs.into_iter() {
-        if visited_instrs.contains(&instr_seq_id) {
+    while let Some(seq_id) = work_stack.pop() {
+        if visited_instrs.contains(&seq_id) {
             continue;
         }
-        visited_instrs.push(instr_seq_id);
+        visited_instrs.insert(seq_id);
 
-        let mut instr_seq = builder.instr_seq(instr_seq_id);
-        ret.extend(rewrite_inner(&mut instr_seq, find, visited_instrs)?);
+        let mut next_instrs = vec![];
+        let mut builder_mut = builder.instr_seq(seq_id);
+        let id = builder_mut.id();
+
+        for (i, (instr, _)) in builder_mut.instrs_mut().iter_mut().enumerate() {
+            ret.push(find(instr, (i, id)));
+            gen_next_instrs(instr, &mut next_instrs);
+        }
+
+        // Push child sequences in reverse order to maintain processing order
+        for instr_seq_id in next_instrs.into_iter().rev() {
+            if !visited_instrs.contains(&instr_seq_id) {
+                work_stack.push(instr_seq_id);
+            }
+        }
     }
+
     Ok(ret)
 }
 
-#[inline(never)]
 fn retain_inner<'a>(
     builder: &mut InstrSeqBuilder<'a>,
     keep: &mut impl FnMut(&Instr, (usize, InstrSeqId)) -> bool,
-    visited_instrs: &mut Vec<InstrSeqId>,
 ) -> eyre::Result<()> {
-    let mut next_instrs = vec![];
+    let mut visited_instrs = std::collections::HashSet::new();
+    let mut work_stack = vec![builder.id()];
 
-    let id = builder.id();
-
-    builder.instrs_mut().retain(|(instr, _)| {
-        let idx = keep(instr, (0, id));
-
-        gen_next_instrs(instr, &mut next_instrs);
-
-        idx
-    });
-
-    for instr_seq_id in next_instrs.into_iter() {
-        if visited_instrs.contains(&instr_seq_id) {
+    while let Some(seq_id) = work_stack.pop() {
+        if visited_instrs.contains(&seq_id) {
             continue;
         }
-        visited_instrs.push(instr_seq_id);
+        visited_instrs.insert(seq_id);
 
-        let mut instr_seq = builder.instr_seq(instr_seq_id);
-        retain_inner(&mut instr_seq, keep, visited_instrs)?;
+        let mut next_instrs = vec![];
+        let mut instr_seq = builder.instr_seq(seq_id);
+        let id = instr_seq.id();
+
+        instr_seq.instrs_mut().retain(|(instr, _)| {
+            let should_keep = keep(instr, (0, id));
+            gen_next_instrs(instr, &mut next_instrs);
+            should_keep
+        });
+
+        // Push child sequences in reverse order to maintain processing order
+        for instr_seq_id in next_instrs.into_iter().rev() {
+            if !visited_instrs.contains(&instr_seq_id) {
+                work_stack.push(instr_seq_id);
+            }
+        }
     }
+
     Ok(())
 }
 
@@ -173,16 +182,11 @@ impl<'a> InstrRewrite for InstrSeqBuilder<'a> {
         &mut self,
         mut find: impl FnMut(&mut Instr, (usize, InstrSeqId)) -> T,
     ) -> eyre::Result<Vec<T>> {
-        let mut visited_instrs = vec![];
-
-        rewrite_inner(self, &mut find, &mut visited_instrs)
-            .wrap_err_with(|| eyre::eyre!("Failed to rewrite instrs"))
+        rewrite_inner(self, &mut find).wrap_err_with(|| eyre::eyre!("Failed to rewrite instrs"))
     }
 
     fn retain(&mut self, mut keep: impl FnMut(&Instr, (usize, InstrSeqId)) -> bool) {
-        let mut visited_instrs = vec![];
-
-        retain_inner(self, &mut keep, &mut visited_instrs)
+        retain_inner(self, &mut keep)
             .wrap_err_with(|| eyre::eyre!("Failed to retain instrs"))
             .unwrap();
     }
