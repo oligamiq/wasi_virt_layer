@@ -2,7 +2,8 @@
 
 use crate::__private::wasip1::{self, Dircookie};
 use crate::memory::{
-    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _, WasmAccessName, WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon
+    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _, WasmAccessName,
+    WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon,
 };
 use crate::wasi::file::ConstDefault;
 use crate::{

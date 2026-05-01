@@ -415,7 +415,10 @@ where
         })?
     }
 
-    pub(crate) fn fd_close_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> Result<(), wasip1::Errno> {
+    pub(crate) fn fd_close_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+    ) -> Result<(), wasip1::Errno> {
         if self.remove_inode(fd).is_none() {
             return Err(wasip1::ERRNO_BADF);
         }

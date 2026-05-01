@@ -4,14 +4,20 @@ use crate::memory::{WasmAccess, WasmAccessName};
 /// Trait for handling random number generation.
 pub trait Random {
     /// Fills the given buffer with random bytes.
-    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, buf_len: usize) -> wasip1::Errno;
+    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> wasip1::Errno;
 }
 
 /// Default implementation of `Random` using host randomness.
 pub struct StandardRandom;
 
 impl Random for StandardRandom {
-    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, buf_len: usize) -> wasip1::Errno {
+    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> wasip1::Errno {
         #[cfg(target_os = "wasi")]
         {
             use crate::transporter::non_recursive_random_get;
@@ -64,7 +70,10 @@ fn next_u64() -> u64 {
 }
 
 impl Random for PseudoRandom {
-    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, buf_len: usize) -> wasip1::Errno {
+    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *mut u8,
+        buf_len: usize,
+    ) -> wasip1::Errno {
         let mut i = 0;
         while i < buf_len {
             let random_val = next_u64();

@@ -26,7 +26,10 @@ pub trait Clock {
     ///
     /// # Returns
     /// `ERRNO_SUCCESS` on success, or an error code on failure
-    fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno;
+    fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(
+        clock_id: Clockid,
+        resolution_ptr: *mut Timestamp,
+    ) -> Errno;
 }
 
 /// Default implementation of `Clock` that delegates to the underlying WASI runtime.
@@ -65,7 +68,10 @@ impl Clock for StandardClock {
         }
     }
 
-    fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno {
+    fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(
+        clock_id: Clockid,
+        resolution_ptr: *mut Timestamp,
+    ) -> Errno {
         #[cfg(target_os = "wasi")]
         {
             use crate::transporter::non_recursive_clock_res_get;

@@ -23,7 +23,10 @@ impl StdIO for DefaultStdIO {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn read_direct<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, len: usize) -> Result<Size, wasip1::Errno> {
+    fn read_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *mut u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
         use crate::transporter::Wasip1Transporter;
 
         Wasip1Transporter::read_from_stdin_direct::<Wasm>(buf, len)
@@ -45,7 +48,10 @@ impl StdIO for DefaultStdIO {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn write_direct<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+    fn write_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stdout_direct::<Wasm>(buf, len)
     }
 
@@ -63,7 +69,10 @@ impl StdIO for DefaultStdIO {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn ewrite_direct<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+    fn ewrite_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stderr_direct::<Wasm>(buf, len)
     }
 
@@ -89,7 +98,10 @@ pub trait StdIO: core::fmt::Debug {
     /// Reads data from stdin directly into WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
-    fn read_direct<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, len: usize) -> Result<Size, wasip1::Errno> {
+    fn read_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *mut u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
             use crate::utils::alloc_buff;
@@ -152,7 +164,10 @@ pub trait StdIO: core::fmt::Debug {
     /// Writes data to stdout directly from WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
-    fn write_direct<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+    fn write_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
             Self::write(&Wasm::get_array(buf, len))
@@ -197,7 +212,10 @@ pub trait StdIO: core::fmt::Debug {
     /// Writes data to stderr directly from WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
-    fn ewrite_direct<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *const u8, len: usize) -> Result<Size, wasip1::Errno> {
+    fn ewrite_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: *const u8,
+        len: usize,
+    ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
             Self::ewrite(&Wasm::get_array(buf, len))

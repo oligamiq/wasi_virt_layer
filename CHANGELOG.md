@@ -47,6 +47,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Trap Interception**: Introduced `wrap_unreachable!` macro and `WrapUnreachableGenerator` to catch Wasm `unreachable` instructions.
 - Added `PseudoRandom` implementation using Xorshift64.
+- Added `plug_random!` and `plug_sched!` macros for WASI ABI virtualization.
+- Updated CLI project templates to include `plug_random!` and `plug_sched!` by default.
+- Removed "not implemented" warnings for Random, Clock, Poll, and Sched in the CLI.
 - Support for anonymous VFS target generation.
 - `trace-fs` feature for tracing filesystem operations.
 

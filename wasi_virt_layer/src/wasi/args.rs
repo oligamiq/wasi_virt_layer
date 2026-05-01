@@ -294,7 +294,11 @@ pub trait VirtualArgs<'a> {
     }
 
     /// Copies the command-line arguments into the provided buffers.
-    fn args_get<Wasm: WasmAccess + WasmAccessName + 'static>(&'a mut self, args: *mut *const u8, args_buf: *mut u8) -> Errno {
+    fn args_get<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &'a mut self,
+        args: *mut *const u8,
+        args_buf: *mut u8,
+    ) -> Errno {
         let mut args = args;
         let mut args_buf = args_buf;
 
@@ -326,7 +330,7 @@ impl<'a, T: core::ops::DerefMut<Target = U>, U: VirtualArgs<'a> + 'a> VirtualArg
 
 /// Inner function for retrieving dynamic command-line argument sizes.
 #[cfg(target_os = "wasi")]
-pub fn args_sizes_get_inner<'a, Wasm: WasmAccess>(
+pub fn args_sizes_get_inner<'a, Wasm: WasmAccess + WasmAccessName + 'static>(
     state: &'a mut impl VirtualArgs<'a>,
     args_count: *mut Size,
     args_buf_size: *mut Size,
@@ -342,7 +346,7 @@ pub fn args_sizes_get_inner<'a, Wasm: WasmAccess>(
 /// Inner function for retrieving dynamic command-line arguments.
 #[inline]
 #[cfg(target_os = "wasi")]
-pub fn args_get_inner<'a, Wasm: WasmAccess>(
+pub fn args_get_inner<'a, Wasm: WasmAccess + WasmAccessName + 'static>(
     state: &'a mut impl VirtualArgs<'a>,
     args: *mut *const u8,
     args_buf: *mut u8,

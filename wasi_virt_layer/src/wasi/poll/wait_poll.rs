@@ -42,7 +42,8 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
         }
 
         // Use the Clock trait to get the current time
-        fn get_now<Wasm: WasmAccess + WasmAccessName + 'static, Clock: crate::clock::Clock>() -> Timestamp {
+        fn get_now<Wasm: WasmAccess + WasmAccessName + 'static, Clock: crate::clock::Clock>()
+        -> Timestamp {
             let mut time_buf = 0u64;
             let _ = Clock::clock_time_get::<Wasm>(CLOCKID_REALTIME, 0, &mut time_buf);
             time_buf

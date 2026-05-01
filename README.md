@@ -13,7 +13,7 @@ wasi_virt_layer new my_vfs_project
 ```
    This will automatically set up `Cargo.toml` with `crate-type = ["cdylib"]` and the necessary dependencies (`wasi_virt_layer`, `wit-bindgen`), as well as a basic `wit` directory and template source code.
 3. Edit your VFS implementation. Use the `import_wasm!` macro to prepare for using the target wasm module.
-4. Use the `plug!` macro series (`plug_process!`, `plug_env!`, `plug_fs!`, etc.) to connect to the wasip1 ABI, and link virtual filesystems or virtual environment variables.
+4. Use the `plug!` macro series (`plug_process!`, `plug_env!`, `plug_fs!`, `plug_random!`, `plug_sched!`, etc.) to connect to the wasip1 ABI, and link virtual filesystems or virtual environment variables.
 5. Run the build command
 ```bash
 wasi_virt_layer build <wasm_path>

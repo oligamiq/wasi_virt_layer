@@ -52,6 +52,8 @@ impl Guest for Hello {
 export!(Hello);
 
 plug_process!(StandardProcess, test_wasm, self);
+plug_random!(StandardRandom, test_wasm, self);
+plug_sched!(DefaultSched, test_wasm, self);
 
 struct VirtualEnvState {
     environ: Vec<String>,

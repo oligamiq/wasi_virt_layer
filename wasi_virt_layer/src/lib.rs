@@ -59,6 +59,10 @@ pub mod prelude {
     pub use crate::wasi::args::{VirtualArgs, VirtualArgsEmbeddedState};
     pub use crate::wasi::clock::{Clock, StandardClock};
     pub use crate::wasi::env::{VirtualEnv, VirtualEnvEmbeddedState};
+    pub use crate::wasi::poll::DefaultPoll;
+    pub use crate::wasi::process::StandardProcess;
+    pub use crate::wasi::random::{PseudoRandom, StandardRandom};
+    pub use crate::wasi::sched::DefaultSched;
 
     #[cfg(feature = "embedded-fs")]
     pub use crate::wasi::file::embedded::vfs::StandardEmbeddedFileSystem;
@@ -68,7 +72,7 @@ pub mod prelude {
 
     pub use crate::{
         import_wasm, plug_args, plug_clock, plug_env, plug_fs, plug_poll, plug_process,
-        plug_random, wrap_unreachable,
+        plug_random, plug_sched, wrap_unreachable,
     };
 }
 
@@ -133,6 +137,11 @@ pub mod random {
 /// Clock and time operations.
 pub mod clock {
     pub use crate::wasi::clock::{Clock, StandardClock};
+}
+
+/// Scheduler operations.
+pub mod sched {
+    pub use crate::wasi::sched::{DefaultSched, SchedYield};
 }
 
 #[doc(hidden)]

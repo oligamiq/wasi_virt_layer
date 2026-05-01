@@ -1,6 +1,6 @@
 pub mod wait_poll;
-use crate::{__private::wasip1::*, memory::WasmAccessName};
 use crate::memory::WasmAccess;
+use crate::{__private::wasip1::*, memory::WasmAccessName};
 pub use wait_poll::{DefaultWaitPoll, WaitPoll};
 
 /// Trait for handling the `poll_oneoff` WASI function.
@@ -45,7 +45,7 @@ impl PollOneoff for DefaultPoll {
 /// Plugs the poll ecosystem by defining necessary handlers.
 #[macro_export]
 macro_rules! plug_poll {
-    ($ty:ty, $($wasm:ident),*) => {
+    ($ty:ty, $($wasm:ident),+) => {
         const _: () = {
             type __TYPE = $ty;
         };

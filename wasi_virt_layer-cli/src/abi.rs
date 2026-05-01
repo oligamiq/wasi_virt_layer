@@ -91,20 +91,16 @@ pub mod is_valid {
         #[strum(message = "Plug Socks but this is not implemented")]
         /// Plugins for socket operations (currently unimplemented).
         PlugSocks,
-        #[strum(message = "Plug Clock but this is not implemented")]
-        /// Plugins for clock and timing operations (currently unimplemented).
+        /// Plugins for clock and timing operations.
         PlugClock,
-        #[strum(message = "Plug Random but this is not implemented")]
-        /// Plugins for random number generation (currently unimplemented).
+        /// Plugins for random number generation.
         PlugRandom,
         #[strum(message = "Plug Process is default so this message should not be shown")]
         /// Plugins for process-related operations.
         PlugProcess,
-        #[strum(message = "Plug Sched but this is not implemented")]
-        /// Plugins for scheduler operations (currently unimplemented).
+        /// Plugins for scheduler operations.
         PlugSched,
-        #[strum(message = "Plug Poll but this is not implemented")]
-        /// Plugins for polling operations (currently unimplemented).
+        /// Plugins for polling operations.
         PlugPoll,
     }
 

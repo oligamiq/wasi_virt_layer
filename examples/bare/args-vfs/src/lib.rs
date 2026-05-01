@@ -24,6 +24,8 @@ export!(ComponentABI);
 mod process {
     use super::*;
     plug_process!(StandardProcess, anonymous, self);
+    plug_random!(StandardRandom, anonymous, self);
+    plug_sched!(DefaultSched, anonymous, self);
 }
 
 mod env {
