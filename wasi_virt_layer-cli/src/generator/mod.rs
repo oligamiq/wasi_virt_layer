@@ -1511,7 +1511,7 @@ impl Generator for StartFuncIdVisitor {
             // NOTE: wasm-merge preserves the package name with dashes for some exports,
             // but the __start_anchor from the Rust macros has underscores.
             let normalized_wasm = wasm.as_ref().replace('-', "_");
-            let export_name = format!("__wasip1_vfs_{wasm}__start");
+            // let export_name = format!("__wasip1_vfs_{wasm}__start");
 
             let export = format!("__wasip1_vfs_{wasm}__start").get_fid(&module.exports)?;
             self.start_func_id
