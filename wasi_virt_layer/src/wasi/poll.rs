@@ -1,7 +1,7 @@
 pub mod wait_poll;
 use crate::__private::wasip1::*;
 use crate::memory::WasmAccess;
-pub use wait_poll::{WaitPoll, DefaultWaitPoll};
+pub use wait_poll::{DefaultWaitPoll, WaitPoll};
 
 /// Trait for handling the `poll_oneoff` WASI function.
 pub trait PollOneoff {

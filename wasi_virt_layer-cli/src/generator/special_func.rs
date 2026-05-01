@@ -355,7 +355,7 @@ impl Generator for StartFunc {
             // to match what the macro generated.
             let normalized_wasm = wasm.as_ref().replace('-', "_");
             let import_name = format!("__wasip1_vfs_{normalized_wasm}__start");
-            
+
             module.renew_call_fn(
                 (UniqueName::NAMESPACE, &import_name).get_fid(&module.imports)?,
                 ctx.start_func_id.as_ref().unwrap()[wasm],

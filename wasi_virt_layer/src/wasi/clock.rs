@@ -26,10 +26,7 @@ pub trait Clock {
     ///
     /// # Returns
     /// `ERRNO_SUCCESS` on success, or an error code on failure
-    fn clock_res_get<Wasm: WasmAccess>(
-        clock_id: Clockid,
-        resolution_ptr: *mut Timestamp,
-    ) -> Errno;
+    fn clock_res_get<Wasm: WasmAccess>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno;
 }
 
 /// Default implementation of `Clock` that delegates to the underlying WASI runtime.
@@ -46,7 +43,8 @@ impl Clock for StandardClock {
             use crate::transporter::non_recursive_clock_time_get;
 
             #[cfg(not(feature = "multi_memory"))]
-            let adjusted_ptr = unsafe { Wasm::memory_director_mut(time_ptr as *mut u8) as *mut Timestamp };
+            let adjusted_ptr =
+                unsafe { Wasm::memory_director_mut(time_ptr as *mut u8) as *mut Timestamp };
             #[cfg(feature = "multi_memory")]
             let adjusted_ptr = time_ptr;
 
@@ -67,16 +65,14 @@ impl Clock for StandardClock {
         }
     }
 
-    fn clock_res_get<Wasm: WasmAccess>(
-        clock_id: Clockid,
-        resolution_ptr: *mut Timestamp,
-    ) -> Errno {
+    fn clock_res_get<Wasm: WasmAccess>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno {
         #[cfg(target_os = "wasi")]
         {
             use crate::transporter::non_recursive_clock_res_get;
 
             #[cfg(not(feature = "multi_memory"))]
-            let adjusted_ptr = unsafe { Wasm::memory_director_mut(resolution_ptr as *mut u8) as *mut Timestamp };
+            let adjusted_ptr =
+                unsafe { Wasm::memory_director_mut(resolution_ptr as *mut u8) as *mut Timestamp };
             #[cfg(feature = "multi_memory")]
             let adjusted_ptr = resolution_ptr;
 

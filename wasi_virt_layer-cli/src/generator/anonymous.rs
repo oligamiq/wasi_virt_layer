@@ -119,7 +119,8 @@ impl Generator for Anonymous {
             .iter_mut()
             .find(|e| e.name == format!("{PREFIX}wasi_thread_spawn_anonymous"))
         {
-            special_anonymous_export.name = format!("{PREFIX}wasi_thread_spawn_{normalized_target}");
+            special_anonymous_export.name =
+                format!("{PREFIX}wasi_thread_spawn_{normalized_target}");
         }
 
         const NAMESPACE: &str = UniqueName::NAMESPACE;

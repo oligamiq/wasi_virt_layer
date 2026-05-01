@@ -57,11 +57,9 @@ impl Generator for CheckUseLibrary {
         // check use import_wasm!
         for wasm_name in &ctx.target_names {
             let normalized_name = normalize_name(wasm_name.as_ref());
-            if !module
-                .exports
-                .iter()
-                .any(|export| export.name == format!("__wasip1_vfs_{normalized_name}__start_anchor"))
-            {
+            if !module.exports.iter().any(|export| {
+                export.name == format!("__wasip1_vfs_{normalized_name}__start_anchor")
+            }) {
                 let suggests = module
                     .exports
                     .iter()

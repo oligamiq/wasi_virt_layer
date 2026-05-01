@@ -7,9 +7,9 @@ pub mod file;
 pub mod poll;
 pub mod process;
 pub mod random;
-pub mod wrap_unreachable;
 #[cfg(feature = "threads")]
 pub mod thread;
+pub mod wrap_unreachable;
 
 /// Internal helper macro for handle `self` and other identifiers.
 #[macro_export]

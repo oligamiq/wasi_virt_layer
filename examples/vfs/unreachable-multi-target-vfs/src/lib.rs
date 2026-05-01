@@ -1,8 +1,8 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![allow(non_snake_case)]
 
-use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 use wasi_virt_layer::prelude::*;
+use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 
 struct UnreachableHandler;
 
@@ -19,7 +19,11 @@ impl WrapUnreachable for UnreachableHandler {
 import_wasm!(test_unreachable_target1);
 import_wasm!(test_unreachable_target2);
 
-wrap_unreachable!(UnreachableHandler, test_unreachable_target1, test_unreachable_target2);
+wrap_unreachable!(
+    UnreachableHandler,
+    test_unreachable_target1,
+    test_unreachable_target2
+);
 
 #[cfg(target_arch = "wasm32")]
 #[unsafe(no_mangle)]
@@ -29,4 +33,3 @@ pub fn main() {
     test_unreachable_target2::_main();
     println!("Done!");
 }
-

@@ -1512,7 +1512,7 @@ impl Generator for StartFuncIdVisitor {
             // but the __start_anchor from the Rust macros has underscores.
             let normalized_wasm = wasm.as_ref().replace('-', "_");
             let export_name = format!("__wasip1_vfs_{wasm}__start");
-            
+
             let export = format!("__wasip1_vfs_{wasm}__start").get_fid(&module.exports)?;
             self.start_func_id
                 .get_or_insert_default()
@@ -1520,7 +1520,7 @@ impl Generator for StartFuncIdVisitor {
 
             // NOTE: Don't erase the __start export - it's needed for StartFunc
             // to find it as an import or to redirect calls to it.
-            
+
             // The anchor export was created by import_wasm! macro and uses underscores
             module.exports.erase_with(
                 &format!("__wasip1_vfs_{normalized_wasm}__start_anchor"),

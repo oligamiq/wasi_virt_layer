@@ -228,14 +228,17 @@ fn test_unreachable_threads_example() -> color_eyre::Result<()> {
             Some("unreachable_threads_vfs"),
             Some("unreachable_threads_target"),
             Some(false), // multi memory required for threads
-            true, // threads
+            true,        // threads
             OutDir::Random,
             false,
             &[],
         )
     };
 
-    let test_dir = Utf8PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../examples/vfs/unreachable_threads_vfs"));
+    let test_dir = Utf8PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../examples/vfs/unreachable_threads_vfs"
+    ));
     let manifest_path = test_dir.join("Cargo.toml");
     let root_manifest_path = test_dir.join("../../../Cargo.toml");
 
@@ -772,18 +775,19 @@ fn test_wrap_unreachable_multi_target() -> color_eyre::Result<()> {
     let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // The key check: we should NOT get the "exactly_one" error that was the original bug
-    if stderr.contains("got at least 2 elements when exactly one was expected") ||
-       stderr.contains("got zero elements when exactly one was expected") && 
-       stderr.contains("wrap_unreachable") {
+    if stderr.contains("got at least 2 elements when exactly one was expected")
+        || stderr.contains("got zero elements when exactly one was expected")
+            && stderr.contains("wrap_unreachable")
+    {
         return Err(color_eyre::eyre::eyre!(
             "Multi-target wrap_unreachable hit exactly_one error (the original bug):\nSTDOUT:\n{}\nSTDERR:\n{}",
             stdout,
             stderr
         ));
     }
-    
+
     // Build can fail for other reasons (e.g., missing pluggers for components), but
     // the important thing is that wrap_unreachable generator runs without the exactly_one error
     if !output.status.success() {

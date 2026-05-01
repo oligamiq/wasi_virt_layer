@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use walrus::{ir::*, ConstExpr, ExportItem, FunctionId, Module, ValType};
+use walrus::{ConstExpr, ExportItem, FunctionId, Module, ValType, ir::*};
 
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
@@ -90,7 +90,12 @@ fn push_dummy_return(
     loc: InstrLocId,
 ) {
     for ty in return_types {
-        instrs.push((Instr::Const(Const { value: dummy_value(ty) }), loc));
+        instrs.push((
+            Instr::Const(Const {
+                value: dummy_value(ty),
+            }),
+            loc,
+        ));
     }
     instrs.push((Instr::Return(Return {}), loc));
 }
@@ -113,11 +118,7 @@ fn scan_instructions(func: &walrus::LocalFunction) -> InstrScanResult {
         calls: Vec::new(),
     };
 
-    fn visit(
-        seq_id: InstrSeqId,
-        func: &walrus::LocalFunction,
-        result: &mut InstrScanResult,
-    ) {
+    fn visit(seq_id: InstrSeqId, func: &walrus::LocalFunction, result: &mut InstrScanResult) {
         for (i, (instr, _)) in func.block(seq_id).instrs.iter().enumerate() {
             match instr {
                 Instr::Unreachable(_) => result.unreachables.push((seq_id, i)),
@@ -156,8 +157,18 @@ fn patch_unreachables(
         let (_removed, loc) = seq.instrs.remove(idx);
 
         let mut new_instrs = Vec::with_capacity(return_types.len() + 3);
-        new_instrs.push((Instr::Const(Const { value: Value::I32(1) }), loc));
-        new_instrs.push((Instr::GlobalSet(GlobalSet { global: flag_global }), loc));
+        new_instrs.push((
+            Instr::Const(Const {
+                value: Value::I32(1),
+            }),
+            loc,
+        ));
+        new_instrs.push((
+            Instr::GlobalSet(GlobalSet {
+                global: flag_global,
+            }),
+            loc,
+        ));
         push_dummy_return(&mut new_instrs, return_types, loc);
 
         for (j, instr) in new_instrs.into_iter().enumerate() {
@@ -198,7 +209,12 @@ fn hook_calls(
         // Insert the check after the call.
         let seq = func.block_mut(seq_id);
         let check = [
-            (Instr::GlobalGet(GlobalGet { global: flag_global }), loc),
+            (
+                Instr::GlobalGet(GlobalGet {
+                    global: flag_global,
+                }),
+                loc,
+            ),
             (
                 Instr::IfElse(IfElse {
                     consequent: consequent_seq,
@@ -266,26 +282,22 @@ fn wrap_thread_start(
         return Ok(());
     };
 
-    let wrapper = module.add_func(
-        &[ValType::I32, ValType::I32],
-        &[],
-        |builder, args| {
-            let mut body = builder.func_body();
-            body.local_get(args[0]);
-            body.local_get(args[1]);
-            body.call(orig_func);
-            body.global_get(flag_global);
-            body.if_else(
-                None,
-                |then| {
-                    then.global_get(flag_global);
-                    then.call(handle_thread_exit_import);
-                },
-                |_| {},
-            );
-            Ok(())
-        },
-    )?;
+    let wrapper = module.add_func(&[ValType::I32, ValType::I32], &[], |builder, args| {
+        let mut body = builder.func_body();
+        body.local_get(args[0]);
+        body.local_get(args[1]);
+        body.call(orig_func);
+        body.global_get(flag_global);
+        body.if_else(
+            None,
+            |then| {
+                then.global_get(flag_global);
+                then.call(handle_thread_exit_import);
+            },
+            |_| {},
+        );
+        Ok(())
+    })?;
 
     module.exports.delete(export_id);
     module.exports.add("wasi_thread_start", wrapper);
@@ -338,11 +350,7 @@ fn redirect_callers(
 ///
 /// Silently skipped when either the import or the export is absent — not every
 /// target exports every helper.
-fn wire_import_to_export(
-    module: &mut Module,
-    name: &str,
-    debug: bool,
-) -> eyre::Result<()> {
+fn wire_import_to_export(module: &mut Module, name: &str, debug: bool) -> eyre::Result<()> {
     let Ok(import_fid) = (WRAP_UNREACHABLE_MODULE, name).get_fid(&module.imports) else {
         return Ok(());
     };
@@ -392,11 +400,7 @@ impl Generator for WrapUnreachableGenerator {
         Ok(())
     }
 
-    fn post_combine(
-        &mut self,
-        module: &mut Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
+    fn post_combine(&mut self, module: &mut Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         for target in &self.targets {
             // Wire each helper import → export.
             let helpers = helper_names_for(target, &ctx.target_names);
@@ -423,22 +427,17 @@ impl Generator for WrapUnreachableGenerator {
             return Ok(());
         }
 
-        let get_flag_name =
-            WrapUnreachableName::GetUnreachableFlag(&external.name).to_string();
-        let set_flag_name =
-            WrapUnreachableName::SetUnreachableFlag(&external.name).to_string();
+        let get_flag_name = WrapUnreachableName::GetUnreachableFlag(&external.name).to_string();
+        let set_flag_name = WrapUnreachableName::SetUnreachableFlag(&external.name).to_string();
         let fix_exit_code_name =
             WrapUnreachableName::FixMainRawExitCode(&external.name).to_string();
-        let handle_exit_name =
-            WrapUnreachableName::HandleThreadExit(&external.name).to_string();
+        let handle_exit_name = WrapUnreachableName::HandleThreadExit(&external.name).to_string();
 
         // ── 1. Per-target unreachable flag global ─────────────────────
-        let flag_global = module.globals.add_local(
-            ValType::I32,
-            true,
-            false,
-            ConstExpr::Value(Value::I32(0)),
-        );
+        let flag_global =
+            module
+                .globals
+                .add_local(ValType::I32, true, false, ConstExpr::Value(Value::I32(0)));
 
         // ── 2. Export getter / setter for the flag ────────────────────
         let getter = module.add_func(&[], &[ValType::I32], |builder, _| {
@@ -459,7 +458,11 @@ impl Generator for WrapUnreachableGenerator {
         // ── 3. Import VFS handler functions ───────────────────────────
         let fix_exit_code_ty = module.types.add(&[ValType::I32], &[ValType::I32]);
         let fix_exit_code_import = module
-            .add_import_func(WRAP_UNREACHABLE_MODULE, &fix_exit_code_name, fix_exit_code_ty)
+            .add_import_func(
+                WRAP_UNREACHABLE_MODULE,
+                &fix_exit_code_name,
+                fix_exit_code_ty,
+            )
             .0;
 
         let handle_exit_ty = module.types.add(&[ValType::I32], &[]);
@@ -473,8 +476,7 @@ impl Generator for WrapUnreachableGenerator {
         // call-hook loop. If the wrappers were processed, the hook after
         // `call(orig_func)` would short-circuit with a dummy return,
         // bypassing the fix_exit_code logic.
-        let func_ids: Vec<FunctionId> =
-            module.funcs.iter_local().map(|(id, _)| id).collect();
+        let func_ids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
 
         for fid in func_ids {
             let return_types = module

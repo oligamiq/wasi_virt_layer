@@ -1,10 +1,10 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 
-use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
-use wasi_virt_layer::prelude::*;
-use wasi_virt_layer::file::*;
-use wasi_virt_layer::process::*;
 use const_struct::const_struct;
+use wasi_virt_layer::file::*;
+use wasi_virt_layer::prelude::*;
+use wasi_virt_layer::process::*;
+use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 
 struct UnreachableHandler;
 

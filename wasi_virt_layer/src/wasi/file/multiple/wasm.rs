@@ -2,6 +2,7 @@
 
 use crate::__private::wasip1;
 use crate::memory::{WasmAccessDynCompatibleRaw, WasmAccessNameDynCompatible};
+use smallbox::SmallBox;
 
 /// A trait tuple combining `WasmAccessNameDynCompatible` and `WasmAccessDynCompatibleRaw`.
 pub trait WasmAccessDynCompatibleTuple:
@@ -16,20 +17,22 @@ impl<T: WasmAccessNameDynCompatible + WasmAccessDynCompatibleRaw> WasmAccessDynC
 
 /// A wrapper around a dynamic `WasmAccessDynCompatibleTuple`.
 #[derive(Debug)]
-pub struct WasmAccessDynCompatibleWrapper(pub alloc::boxed::Box<dyn WasmAccessDynCompatibleTuple>);
+pub struct WasmAccessDynCompatibleWrapper(
+    pub SmallBox<dyn WasmAccessDynCompatibleTuple, [usize; 24]>,
+);
 
 unsafe impl Send for WasmAccessDynCompatibleWrapper {}
 unsafe impl Sync for WasmAccessDynCompatibleWrapper {}
 
 impl AsRef<dyn WasmAccessNameDynCompatible> for WasmAccessDynCompatibleWrapper {
     fn as_ref(&self) -> &(dyn WasmAccessNameDynCompatible + 'static) {
-        self.0.as_ref()
+        &*self.0
     }
 }
 
 impl AsRef<dyn WasmAccessDynCompatibleRaw> for WasmAccessDynCompatibleWrapper {
     fn as_ref(&self) -> &(dyn WasmAccessDynCompatibleRaw + 'static) {
-        self.0.as_ref()
+        &*self.0
     }
 }
 
@@ -75,6 +78,45 @@ impl WasmAccessNameDynCompatible for WasmAccessDynCompatibleWrapper {
 impl WasmAccessDynCompatibleWrapper {
     /// Creates a new `WasmAccessDynCompatibleWrapper` from a given access tuple.
     pub fn new<T: WasmAccessDynCompatibleTuple + 'static>(access: T) -> Self {
-        Self(alloc::boxed::Box::new(access))
+        Self(smallbox::smallbox!(access))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::__self::__self;
+    use crate::wasi::file::multiple::dynamic_wasm::StandardPseudoWasmHolder;
+
+    #[test]
+    fn test_wasm_access_wrapper_allocation() {
+        // Test ZST (__self)
+        let wrapper_self = WasmAccessDynCompatibleWrapper::new(__self);
+        assert!(!wrapper_self.0.is_heap(), "__self should fit in stack");
+
+        // Test StandardPseudoWasmHolder (The largest common implementation)
+        let holder = StandardPseudoWasmHolder::new_const();
+        let wrapper_holder = WasmAccessDynCompatibleWrapper::new(holder);
+
+        // This should fit in [usize; 24]
+        assert!(
+            !wrapper_holder.0.is_heap(),
+            "StandardPseudoWasmHolder should fit in stack"
+        );
+    }
+
+    #[test]
+    fn test_size_expectations() {
+        // Ensure our stack size is reasonable
+        // [usize; 24] is 96 bytes on 32-bit, 192 bytes on 64-bit
+        let stack_size = core::mem::size_of::<[usize; 24]>();
+        let holder_size = core::mem::size_of::<StandardPseudoWasmHolder>();
+
+        assert!(
+            holder_size <= stack_size,
+            "Holder size {} should be <= stack size {}",
+            holder_size,
+            stack_size
+        );
     }
 }

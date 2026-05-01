@@ -29,7 +29,7 @@ pub fn run_non_thread(out_dir: &str) -> color_eyre::Result<()> {
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     let stdout = String::from_utf8_lossy(&output.stdout);
-    
+
     // Check if this is a proc_exit error (which is expected behavior)
     if stderr.contains("exit with exit code 0") && stdout.contains("[WASI stdout]") {
         return Ok(());
