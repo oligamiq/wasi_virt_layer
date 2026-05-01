@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] - 2026-05-02
+
+### Added
+- Introduced `plug_random!` and `plug_sched!` macros for full WASI ABI virtualization.
+- Added `WasmAccessName` trait to support dynamic module name resolution in VFS operations.
+- Added `PseudoRandom` (Xorshift64) and `StandardRandom` implementations for WASI random handling.
+- Added `DefaultSched` implementation for WASI scheduler handling.
+
+### Changed
+- Enhanced WASI file, environment, and process modules to utilize `WasmAccessName` for improved type safety and dynamic module support.
+- Updated `ProcessExit` trait to incorporate `WasmAccessName`.
+- Improved CLI templates to include `plug_random!` and `plug_sched!` by default.
+
+### Fixed
+- Standardized workspace authorship by adding `authors.workspace` to all internal crates.
+
+## [0.2.8] - 2026-05-01
+
+### Added
+- Manifest path support (`-m`, `--manifest-path`) in the CLI for more flexible build configurations.
+
+### Changed
+- Simplified internal Wasm IR manipulation by removing redundant tracking in `rewrite_inner` and `retain_inner` functions.
+
+### Fixed
+- Resolved multi-target export naming collisions in `wrap_unreachable` mechanism.
+- Fixed export wiring bugs for multi-target modules.
+
 ## [0.2.7] - 2026-05-01
 
 ### Added
