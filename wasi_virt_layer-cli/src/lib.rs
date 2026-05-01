@@ -3,7 +3,7 @@
 //!
 //! Provides commands and generator internals `wasi_virt_layer`.
 
-use clap::Parser;
+use clap::Parser as _;
 
 use crate::{
     commands::{
@@ -97,9 +97,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .init();
     color_eyre::install()?;
 
-    let args = args_vec.into_iter().map(Into::<std::ffi::OsString>::into);
-
-    let parsed_args = args::Cli::parse_from(args);
+    let parsed_args = args::Cli::parse_from(&args_vec);
 
     match parsed_args.command {
         args::Command::Build(build_args) => build(build_args),

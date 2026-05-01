@@ -22,7 +22,14 @@ pub trait PostBuildContext {
 
 /// The main command-line interface for `wasi_virt_layer-cli`.
 #[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 #[clap(propagate_version = true)]
 pub struct Cli {
     /// The command to execute.
@@ -31,6 +38,14 @@ pub struct Cli {
 }
 
 #[derive(Subcommand, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 /// Supported subcommands for the CLI.
 pub enum Command {
     /// Builds a virtualized WASM module (prebuild + postbuild combined).
@@ -46,6 +61,14 @@ pub enum Command {
 }
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 /// Arguments for the `new` command.
 pub struct NewArgs {
     /// The path where the new project will be created.
@@ -58,6 +81,14 @@ pub struct NewArgs {
 }
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 /// Arguments for the `prepare-target` command.
 pub struct PrepareTargetArgs {
     /// Path to the target WASM module (wasip1)
@@ -74,6 +105,14 @@ pub struct PrepareTargetArgs {
 }
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 /// Arguments for the `build` command.
 pub struct BuildArgs {
     /// Path to the wasip1 wasm file
@@ -196,6 +235,14 @@ impl PostBuildContext for BuildArgs {
 }
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 /// Arguments for the `prebuild` command.
 pub struct PreBuildArgs {
     /// Path to the wasip1 wasm file
@@ -291,6 +338,14 @@ impl PreBuildArgs {
 }
 
 #[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 /// Arguments for the `postbuild` command.
 pub struct PostBuildArgs {
     /// Path to the Component WASM file to transpile.
@@ -343,6 +398,14 @@ impl PostBuildContext for PostBuildArgs {
 
 /// Options for transpiling WebAssembly components into JavaScript.
 #[derive(Parser, Debug)]
+#[clap(author, version, about, long_about = None, help_template = "
+{name} {version}
+{author}
+{about}
+
+{usage-heading} {usage}
+
+{all-args}")]
 pub struct TranspileOpts {
     /// Disables generation of *.d.ts files and instead only generates *.js source files.
     #[arg(long, default_value = "false")]
