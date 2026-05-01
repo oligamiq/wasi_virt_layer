@@ -1,16 +1,16 @@
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 
 /// Trait for handling process exit.
 pub trait ProcessExit {
     /// Exits the current process with the given code.
-    fn proc_exit<Wasm: WasmAccess>(code: i32);
+    fn proc_exit<Wasm: WasmAccess + WasmAccessName>(code: i32);
 }
 
 /// Default implementation of `ProcessExit`.
 pub struct StandardProcess;
 
 impl ProcessExit for StandardProcess {
-    fn proc_exit<Wasm: WasmAccess>(code: i32) {
+    fn proc_exit<Wasm: WasmAccess + WasmAccessName>(code: i32) {
         #[cfg(feature = "std")]
         {
             std::process::exit(code as i32);
