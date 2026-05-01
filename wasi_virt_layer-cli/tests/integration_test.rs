@@ -214,6 +214,37 @@ fn test_unreachable_example() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests that a non-Rust C/C++ target Wasm can be virtualized correctly.
+/// It uses a minimal hand-written WAT fixture acting as a C compiled target
+/// that exports `_start` but not `__main_void`.
+#[test]
+fn test_c_target_wasm() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let fixture_path = Utf8PathBuf::from(THIS_FOLDER)
+        .join("fixtures")
+        .join("c_target.wasm");
+
+    // The fixture should be built by other processes (wasm-tools parse).
+    // The test runner requires the path to be absolute.
+    let _test_dir = run_wasi_virt_layer(
+        Some("ls-vfs"), // We can use ls-vfs since it uses <anonymous> target 
+        Some(fixture_path.as_str()),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+    )
+    .wrap_err("Failed to run C target Wasm example")?;
+
+    Ok(())
+}
+
 /// Tests the wrap_unreachable macro with threads enabled.
 #[test]
 fn test_unreachable_threads_example() -> color_eyre::Result<()> {

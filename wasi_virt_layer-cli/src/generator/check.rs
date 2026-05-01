@@ -229,7 +229,12 @@ impl Generator for CheckUnusedThreads {
     }
 }
 
-/// Asserts the file comes from the Rust `rustc` compiler via `bindgen` standard structures.
+/// Checks whether the file comes from the Rust `rustc` compiler.
+///
+/// If the target is not a Rust module (e.g. C/C++ compiled via LLVM/Clang),
+/// this generator emits a warning instead of failing, because C/C++ targets
+/// are supported — the CLI will synthesize the missing `__main_void` export
+/// automatically.
 #[derive(Debug, Default)]
 pub struct IsRustWasm;
 
@@ -242,15 +247,24 @@ impl Generator for IsRustWasm {
     ) -> eyre::Result<()> {
         let producers = format!("{:?}", module.producers);
 
-        if !["_start", "__main_void"]
+        let is_rust = ["Rust", "rustc"]
             .iter()
-            .all(|name| module.exports.iter().any(|e| e.name == *name))
-            || !["Rust", "rustc"]
-                .iter()
-                .all(|name| producers.contains(format!(r#""{name}""#).as_str()))
-        {
-            log::error!(
-                "This file: {} is not built by rust toolchain, or you forget to export _start or main_void function. If you use `cdylib` or `rlib`, please change to `bin` or `lib`.\nIf you use other language, create an issue.",
+            .all(|name| producers.contains(format!(r#""{name}""#).as_str()));
+
+        let has_start = module.exports.iter().any(|e| e.name == "_start");
+        let has_main_void = module.exports.iter().any(|e| e.name == "__main_void");
+
+        if !has_start {
+            eyre::bail!(
+                "Target module `{}` does not export `_start`. A WASI executable must export `_start`.",
+                external.name
+            );
+        }
+
+        if !is_rust || !has_main_void {
+            log::warn!(
+                "Target module `{}` appears to be compiled by a non-Rust toolchain (e.g. C/C++ via LLVM/Clang). \
+                 A synthetic `__main_void` wrapper will be generated automatically.",
                 external.name
             );
         }

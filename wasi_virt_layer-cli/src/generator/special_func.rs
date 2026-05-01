@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use eyre::Context as _;
 use walrus::*;
 
@@ -368,8 +370,20 @@ impl Generator for StartFunc {
 }
 
 /// Redirects early main exit functionalities to internal no-op executions seamlessly.
+///
+/// For C/C++ compiled Wasm that lacks a `__main_void` export, this generator
+/// synthesizes a wrapper: `fn __main_void() -> i32 { _start(); 0 }`.
+/// This allows the rest of the pipeline to operate uniformly regardless of
+/// the source language.
 #[derive(Debug, Default)]
-pub struct MainVoidFunc;
+pub struct MainVoidFunc {
+    /// Tracks target names where `__main_void` was synthesized (i.e. C/C++ targets).
+    /// For these targets, `post_combine` skips call-graph rewriting because `_start`
+    /// never calls `__main_void` — the relationship is reversed.
+    /// Uses `String` instead of `WasmName` to avoid holding references past
+    /// `WasmNameHolder` lifetime.
+    synthesized_targets: HashSet<String>,
+}
 
 impl Generator for MainVoidFunc {
     fn pre_target(
@@ -378,7 +392,49 @@ impl Generator for MainVoidFunc {
         _: &GeneratorCtx,
         external: &ModuleExternal,
     ) -> eyre::Result<()> {
-        let id = "__main_void".get_fid(&module.exports)?;
+        let id = match "__main_void".get_fid(&module.exports).ok() {
+            Some(id) => id,
+            None => {
+                // C/C++ Wasm: synthesize __main_void from _start.
+                log::info!(
+                    "No `__main_void` export found for target `{}`; synthesizing wrapper from `_start`.",
+                    external.name
+                );
+
+                // StartFunc runs before MainVoidFunc and renames `_start` to a
+                // unique name. Try the renamed export first, then fall back to
+                // the original `_start` name.
+                let renamed_start = UniqueName::SpecialFunc(
+                    &SpecialFuncUniqueName::Start(&external.name),
+                )
+                .to_string();
+
+                let start_fid = renamed_start
+                    .as_str()
+                    .get_fid(&module.exports)
+                    .or_else(|_| "_start".get_fid(&module.exports))
+                    .wrap_err_with(|| {
+                        eyre::eyre!(
+                            "Target `{}` has neither `__main_void` nor `_start` export",
+                            external.name
+                        )
+                    })?;
+
+                // Create: fn __main_void() -> i32 { _start(); 0 }
+                let wrapper = module
+                    .add_func(&[], &[ValType::I32], |builder, _| {
+                        builder.func_body().call(start_fid).i32_const(0);
+                        Ok(())
+                    })
+                    .wrap_err("Failed to create synthetic __main_void wrapper")?;
+
+                module.exports.add("__main_void", wrapper);
+
+                self.synthesized_targets.insert(external.name.to_string());
+
+                wrapper
+            }
+        };
 
         module
             .exports
@@ -404,6 +460,24 @@ impl Generator for MainVoidFunc {
             {
                 let main_void_func_name =
                     UniqueName::SpecialFunc(&SpecialFuncUniqueName::MainVoid(wasm)).to_string();
+
+                // For synthesized targets (C/C++), skip the call-graph rewriting.
+                // In Rust, `_start` calls `__main_void` internally, and this code
+                // replaces that call with a fake function. For C/C++ targets, our
+                // synthesized `__main_void` calls `_start` instead (reversed
+                // direction), so there are no calls to rewrite.
+                if self.synthesized_targets.contains(wasm.as_ref()) {
+                    log::info!(
+                        "Skipping main_void call-graph rewriting for synthesized target `{wasm}`."
+                    );
+                    module.connect_func_alt_with_remove_export(
+                        fid,
+                        main_void_func_name,
+                        ctx.unstable_print_debug,
+                    )?;
+                    continue;
+                }
+
                 let main_void_func_id = main_void_func_name.get_fid(&module.exports)?;
                 let start_fn_id = ctx.start_func_id.as_ref().unwrap()[wasm];
 
@@ -510,3 +584,4 @@ impl Generator for MainVoidFunc {
         Ok(())
     }
 }
+

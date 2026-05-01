@@ -27,6 +27,7 @@ if (inst === undefined) {{
 }}
 inst = inst as WebAssembly.Instance;
 
+let p;
 try {{
     wasi.start({{
         exports: {{
@@ -35,13 +36,13 @@ try {{
                 // init only
                 console.log("[WASI main]");
                 if (root.main) {{
-                    root.main();
+                    p = root.main();
                 }} else if (root._start) {{
-                    root._start();
+                    p = root._start();
                 }} else if (inst.exports._start) {{
-                    (inst.exports._start as Function)();
+                    p = (inst.exports._start as Function)();
                 }} else if (inst.exports.main) {{
-                    (inst.exports.main as Function)();
+                    p = (inst.exports.main as Function)();
                 }}
                 console.log("[WASI main] done.");
             }}
@@ -54,6 +55,16 @@ try {{
     }} else {{
         throw e;
     }}
+}}
+
+if (p) {{
+    await Promise.resolve(p).catch((e: any) => {{
+        if (e instanceof Error && e.message.includes("exit with exit code 0")) {{
+            // Expected behavior - normal exit
+        }} else {{
+            throw e;
+        }}
+    }});
 }}
 "#
     );
@@ -86,6 +97,14 @@ fn core(wasm_name: impl AsRef<str>) -> String {
 // deno run --allow-read --allow-env dist/test_run.ts
 
 import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI } from "@bjorn3/browser_wasi_shim";
+
+// Catch the leaked promise rejection from jco task wrappers on proc_exit
+globalThis.addEventListener("unhandledrejection", (e) => {
+    if (e.reason instanceof Error && e.reason.message.includes("exit with exit code 0")) {
+        e.preventDefault();
+    }
+});
+
     "#;
 
     let middle = format!(r#"import {{ instantiate }} from "./{wasm_name}.js";"#);
