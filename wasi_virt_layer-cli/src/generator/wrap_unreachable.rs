@@ -110,7 +110,7 @@ struct InstrScanResult {
     calls: Vec<(InstrSeqId, usize)>,
 }
 
-/// Recursively walks every instruction sequence within `func`, recording
+/// Walks every instruction sequence within `func`, recording
 /// positions of `unreachable` and `call` / `call_indirect` instructions.
 fn scan_instructions(func: &walrus::LocalFunction) -> InstrScanResult {
     let mut result = InstrScanResult {
@@ -118,23 +118,42 @@ fn scan_instructions(func: &walrus::LocalFunction) -> InstrScanResult {
         calls: Vec::new(),
     };
 
-    fn visit(seq_id: InstrSeqId, func: &walrus::LocalFunction, result: &mut InstrScanResult) {
+    let mut visited = HashSet::new();
+    let mut work_stack = vec![func.entry_block()];
+
+    while let Some(seq_id) = work_stack.pop() {
+        if visited.contains(&seq_id) {
+            continue;
+        }
+        visited.insert(seq_id);
+
         for (i, (instr, _)) in func.block(seq_id).instrs.iter().enumerate() {
             match instr {
                 Instr::Unreachable(_) => result.unreachables.push((seq_id, i)),
                 Instr::Call(_) | Instr::CallIndirect(_) => result.calls.push((seq_id, i)),
-                Instr::Block(b) => visit(b.seq, func, result),
-                Instr::Loop(l) => visit(l.seq, func, result),
+                Instr::Block(b) => {
+                    if !visited.contains(&b.seq) {
+                        work_stack.push(b.seq);
+                    }
+                }
+                Instr::Loop(l) => {
+                    if !visited.contains(&l.seq) {
+                        work_stack.push(l.seq);
+                    }
+                }
                 Instr::IfElse(ie) => {
-                    visit(ie.consequent, func, result);
-                    visit(ie.alternative, func, result);
+                    if !visited.contains(&ie.consequent) {
+                        work_stack.push(ie.consequent);
+                    }
+                    if !visited.contains(&ie.alternative) {
+                        work_stack.push(ie.alternative);
+                    }
                 }
                 _ => {}
             }
         }
     }
 
-    visit(func.entry_block(), func, &mut result);
     result
 }
 
@@ -350,6 +369,11 @@ fn redirect_callers(
 ///
 /// Silently skipped when either the import or the export is absent — not every
 /// target exports every helper.
+///
+/// The export is deleted by **name** rather than by function ID because, when
+/// multiple targets share the same underlying VFS handler function, the same
+/// `FunctionId` can appear in several exports simultaneously, which would
+/// cause a function-ID-based deletion to fail with "expected exactly one".
 fn wire_import_to_export(module: &mut Module, name: &str, debug: bool) -> eyre::Result<()> {
     let Ok(import_fid) = (WRAP_UNREACHABLE_MODULE, name).get_fid(&module.imports) else {
         return Ok(());
@@ -359,7 +383,22 @@ fn wire_import_to_export(module: &mut Module, name: &str, debug: bool) -> eyre::
     };
 
     module.renew_call_fn(import_fid, export_fid)?;
-    module.exports.erase_with(export_fid, debug)?;
+
+    // Delete by name: find the export whose name matches and remove it.
+    // We cannot use `erase_with(export_fid)` here because that helper
+    // searches by FunctionId and requires exactly one match — but after
+    // merging multiple targets the same function may be exported under
+    // several per-target names.
+    if !debug {
+        let export_id = module
+            .exports
+            .iter()
+            .find(|e| e.name == name)
+            .map(|e| e.id());
+        if let Some(export_id) = export_id {
+            module.exports.delete(export_id);
+        }
+    }
 
     Ok(())
 }
@@ -408,10 +447,18 @@ impl Generator for WrapUnreachableGenerator {
                 wire_import_to_export(module, name, ctx.unstable_print_debug)?;
             }
 
-            // Remove the opt-in marker export.
+            // Remove the opt-in marker export by name (not by function ID),
+            // for the same reason as in `wire_import_to_export`.
             let marker = marker_name_for(target, &ctx.target_names);
-            if let Ok(fid) = marker.as_str().get_fid(&module.exports) {
-                module.exports.erase_with(fid, ctx.unstable_print_debug)?;
+            if !ctx.unstable_print_debug {
+                let marker_eid = module
+                    .exports
+                    .iter()
+                    .find(|e| e.name == marker)
+                    .map(|e| e.id());
+                if let Some(eid) = marker_eid {
+                    module.exports.delete(eid);
+                }
             }
         }
         Ok(())

@@ -1,6 +1,5 @@
 use camino::Utf8PathBuf;
 use clap::{Parser, Subcommand};
-use compact_str::CompactString;
 use eyre::Context as _;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
@@ -89,6 +88,10 @@ pub struct BuildArgs {
     #[arg(short, long)]
     package: Option<WasmPath>,
 
+    /// Path to Cargo.toml
+    #[arg(long)]
+    pub manifest_path: Option<Utf8PathBuf>,
+
     /// Memory hints for the WASM files, used if automatic detection fails.
     #[arg(long)]
     wasm_memory_hint: Vec<isize>,
@@ -141,19 +144,32 @@ impl BuildArgs {
 
     /// Resolves and returns the path to the WASM package.
     pub fn get_package(&self) -> eyre::Result<WasmPath> {
-        Ok(self.package.clone())
-            .transpose()
-            .unwrap_or_else(|| WasmPath::with_maybe_none())
+        let mut p = Ok(self.package.clone()).transpose().unwrap_or_else(|| {
+            if let Some(ref manifest) = self.manifest_path {
+                WasmPath::with_maybe_only_manifest(manifest.clone())
+            } else {
+                WasmPath::with_maybe_none()
+            }
+        })?;
+        if let Some(ref manifest) = self.manifest_path {
+            if let WasmPath::Maybe { manifest_path, .. } = &mut p {
+                *manifest_path = manifest.clone();
+            }
+        }
+        Ok(p)
     }
 
-    /// Returns the manifest path if specified.
-    pub fn get_manifest_path(&self) -> Option<&Utf8PathBuf> {
-        self.package.as_ref().and_then(|p| p.manifest_path())
-    }
-
-    /// Retrieves the name of the package if available.
-    pub fn get_package_name(&self) -> Option<CompactString> {
-        self.package.clone().and_then(|p| p.name().ok())
+    /// Gets the list of wasm targets, applying the manifest path if specified.
+    pub fn get_wasm_paths(&self) -> Box<[WasmPath]> {
+        let mut paths = self.wasm.clone();
+        if let Some(ref manifest) = self.manifest_path {
+            for p in &mut paths {
+                if let WasmPath::Maybe { manifest_path, .. } = p {
+                    *manifest_path = manifest.clone();
+                }
+            }
+        }
+        paths.into_boxed_slice()
     }
 }
 
@@ -193,6 +209,10 @@ pub struct PreBuildArgs {
     /// Path to the primary package.
     #[arg(short, long)]
     package: Option<WasmPath>,
+
+    /// Path to Cargo.toml
+    #[arg(long)]
+    pub manifest_path: Option<Utf8PathBuf>,
 
     /// Memory hints for the WASM files, used if automatic detection fails.
     #[arg(long)]
@@ -241,9 +261,32 @@ impl PreBuildArgs {
 
     /// Resolves and returns the path to the WASM package.
     pub fn get_package(&self) -> eyre::Result<WasmPath> {
-        Ok(self.package.clone())
-            .transpose()
-            .unwrap_or_else(|| WasmPath::with_maybe_none())
+        let mut p = Ok(self.package.clone()).transpose().unwrap_or_else(|| {
+            if let Some(ref manifest) = self.manifest_path {
+                WasmPath::with_maybe_only_manifest(manifest.clone())
+            } else {
+                WasmPath::with_maybe_none()
+            }
+        })?;
+        if let Some(ref manifest) = self.manifest_path {
+            if let WasmPath::Maybe { manifest_path, .. } = &mut p {
+                *manifest_path = manifest.clone();
+            }
+        }
+        Ok(p)
+    }
+
+    /// Gets the list of wasm targets, applying the manifest path if specified.
+    pub fn get_wasm_paths(&self) -> Box<[WasmPath]> {
+        let mut paths = self.wasm.clone();
+        if let Some(ref manifest) = self.manifest_path {
+            for p in &mut paths {
+                if let WasmPath::Maybe { manifest_path, .. } = p {
+                    *manifest_path = manifest.clone();
+                }
+            }
+        }
+        paths.into_boxed_slice()
     }
 }
 

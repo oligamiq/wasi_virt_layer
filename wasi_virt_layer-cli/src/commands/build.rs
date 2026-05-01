@@ -65,7 +65,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
 
     let (mut component_runner, dwarf) = prebuild::run_prebuild_internal(
         package,
-        &parsed_args.wasm,
+        &parsed_args.get_wasm_paths(),
         parsed_args.target_memory_type,
         parsed_args.threads,
         parsed_args.dwarf,
