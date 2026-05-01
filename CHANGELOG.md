@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.10] - 2026-05-02
+
+### Added
+- **C/C++ Target Support**: Added support for non-Rust WASI modules (e.g., C/C++ via LLVM/Clang) that export `_start` but lack `__main_void`. The CLI now automatically synthesizes a `__main_void` wrapper.
+- **`import_wasm!` Validation**: The CLI now validates that every `import_wasm!` declaration in the VFS has a matching target module provided in the command-line arguments.
+- Added `test_c_target_wasm` integration test to verify non-Rust target compatibility.
+
+### Changed
+- Improved `import_wasm!` macro to provide a helpful `compile_error!` when used without arguments.
+- Enhanced Deno test runner to properly await main execution and gracefully handle promise rejections triggered by `proc_exit`.
+- Replaced hard errors with informative warnings when a target module is detected as non-Rust.
+
+### Fixed
+- Resolved call-graph rewriting issues for synthesized `__main_void` functions in C/C++ targets.
+
 ## [0.2.9] - 2026-05-02
 
 ### Added
