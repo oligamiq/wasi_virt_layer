@@ -333,7 +333,7 @@ impl<'a, T: core::ops::DerefMut<Target = U>, U: VirtualEnv<'a> + 'a> VirtualEnv<
 
 /// Inner function for retrieving dynamic environment variable sizes.
 #[cfg(target_os = "wasi")]
-pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
+pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess + WasmAccessName + 'static>(
     state: &'a mut impl VirtualEnv<'a>,
     environ_count: *mut Size,
     environ_buf_size: *mut Size,
@@ -349,7 +349,7 @@ pub fn environ_sizes_get_inner<'a, Wasm: WasmAccess>(
 /// Inner function for retrieving dynamic environment variables.
 #[inline]
 #[cfg(target_os = "wasi")]
-pub fn environ_get_inner<'a, Wasm: WasmAccess>(
+pub fn environ_get_inner<'a, Wasm: WasmAccess + WasmAccessName + 'static>(
     state: &'a mut impl VirtualEnv<'a>,
     environ: *mut *const u8,
     environ_buf: *mut u8,
