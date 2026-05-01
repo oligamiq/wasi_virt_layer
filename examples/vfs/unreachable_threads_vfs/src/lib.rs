@@ -1,5 +1,6 @@
 use const_struct::const_struct;
 use wasi_virt_layer::file::*;
+use wasi_virt_layer::memory::WasmAccessName;
 use wasi_virt_layer::memory::WasmAccessRaw;
 use wasi_virt_layer::poll::*;
 use wasi_virt_layer::prelude::*;
@@ -52,7 +53,7 @@ import_wasm!(unreachable_threads_target);
 struct UnreachableHandler;
 
 impl WrapUnreachable for UnreachableHandler {
-    fn fix_main_raw_exit_code<Wasm: WasmAccess>(code: i32) -> i32 {
+    fn fix_main_raw_exit_code<Wasm: WasmAccess + WasmAccessName + 'static>(code: i32) -> i32 {
         if code == 1 {
             println!("Unreachable occurred, rewriting exit code to 42");
             return 42;

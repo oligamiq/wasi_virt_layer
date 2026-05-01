@@ -1,7 +1,7 @@
 #![cfg(feature = "dynamic-fs")]
 
 use crate::__private::wasip1;
-use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
+use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName};
 use crate::wasi::file::{BoxedInode, DerefToStrCustom, InodeIdCommon, Wasip1LFSBaseWrapper};
 use crate::wasi::file::{DynamicLFS, Wasip1DynCompatibleLFS, Wasip1LFSBase};
 use crate::{
@@ -368,7 +368,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
         Some(current_inode)
     }
 
-    pub fn get_inode_for_path<Wasm: WasmAccess>(
+    pub fn get_inode_for_path<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_ino: &InodeId,
         path_ptr: *const u8,
@@ -399,7 +399,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
 {
     type Inode = InodeId;
 
-    fn fd_write_raw<Wasm: WasmAccess>(
+    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         data: *const u8,
@@ -420,7 +420,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
-    fn fd_write_stdout_raw<Wasm: WasmAccess>(
+    fn fd_write_stdout_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         data: *const u8,
         data_len: usize,
@@ -437,7 +437,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         }
     }
 
-    fn fd_write_stderr_raw<Wasm: WasmAccess>(
+    fn fd_write_stderr_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         data: *const u8,
         data_len: usize,
@@ -459,7 +459,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
             .unwrap_or(false)
     }
 
-    fn fd_readdir_raw<Wasm: WasmAccess>(
+    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         buf: *mut u8,
@@ -527,7 +527,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         Ok((total_written, current_cookie as u64))
     }
 
-    fn path_filestat_get_raw<Wasm: WasmAccess>(
+    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         flags: wasip1::Lookupflags,
@@ -547,7 +547,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         self.fd_filestat_get_raw::<Wasm>(&target_inode)
     }
 
-    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
@@ -564,7 +564,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
-    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         dir_path_ptr: *mut u8,
@@ -580,7 +580,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
-    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
@@ -598,7 +598,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
-    fn fd_pread_raw<Wasm: WasmAccess>(
+    fn fd_pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         buf: *mut u8,
@@ -623,7 +623,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
 
-    fn fd_read_stdin_raw<Wasm: WasmAccess>(
+    fn fd_read_stdin_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf: *mut u8,
         buf_len: usize,
@@ -642,7 +642,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         }
     }
 
-    fn path_open_raw<Wasm: WasmAccess>(
+    fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_ino: &Self::Inode,
         _: wasip1::Fdflags,
@@ -738,7 +738,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         }
     }
 
-    fn path_readlink_raw<Wasm: WasmAccess>(
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         path_ptr: *const u8,

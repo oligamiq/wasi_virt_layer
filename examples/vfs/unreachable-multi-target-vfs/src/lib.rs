@@ -1,13 +1,14 @@
 #![cfg_attr(target_arch = "wasm32", no_main)]
 #![allow(non_snake_case)]
 
+use wasi_virt_layer::memory::WasmAccessName;
 use wasi_virt_layer::prelude::*;
 use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 
 struct UnreachableHandler;
 
 impl WrapUnreachable for UnreachableHandler {
-    fn fix_main_raw_exit_code<Wasm: WasmAccess>(code: i32) -> i32 {
+    fn fix_main_raw_exit_code<Wasm: WasmAccess + WasmAccessName + 'static>(code: i32) -> i32 {
         if code == 1 {
             println!("Unreachable occurred");
             return 42;

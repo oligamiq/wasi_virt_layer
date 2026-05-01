@@ -177,7 +177,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     type Inode: InodeIdCommon;
 
     /// Writes raw data to a file.
-    fn fd_write_raw<Wasm: WasmAccess>(
+    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         data: *const u8,
@@ -185,14 +185,14 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno>;
 
     /// Writes raw data to stdout.
-    fn fd_write_stdout_raw<Wasm: WasmAccess>(
+    fn fd_write_stdout_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         data: *const u8,
         data_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
     /// Writes raw data to stderr.
-    fn fd_write_stderr_raw<Wasm: WasmAccess>(
+    fn fd_write_stderr_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         data: *const u8,
         data_len: usize,
@@ -202,7 +202,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     fn is_dir(&self, inode: &Self::Inode) -> bool;
 
     /// Reads directory entries.
-    fn fd_readdir_raw<Wasm: WasmAccess>(
+    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         buf: *mut u8,
@@ -211,7 +211,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<(Size, Dircookie), wasip1::Errno>;
 
     /// Retrieves file statistics for a path.
-    fn path_filestat_get_raw<Wasm: WasmAccess>(
+    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         flags: wasip1::Lookupflags,
@@ -220,13 +220,13 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
     /// Retrieves pre-open statistics.
-    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno>;
 
     /// Retrieves the name of a pre-opened directory.
-    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         dir_path_ptr: *mut u8,
@@ -234,13 +234,13 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<(), wasip1::Errno>;
 
     /// Retrieves file statistics for a file descriptor.
-    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno>;
 
     /// Reads data from a file descriptor into a buffer at a given offset.
-    fn fd_pread_raw<Wasm: WasmAccess>(
+    fn fd_pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         buf: *mut u8,
@@ -249,14 +249,14 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno>;
 
     /// Reads data from stdin.
-    fn fd_read_stdin_raw<Wasm: WasmAccess>(
+    fn fd_read_stdin_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
 
     /// Opens a path.
-    fn path_open_raw<Wasm: WasmAccess>(
+    fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_ino: &Self::Inode,
         dir_flags: wasip1::Fdflags,
@@ -269,7 +269,7 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
     ) -> Result<Self::Inode, wasip1::Errno>;
 
     /// Reads the contents of a symbolic link.
-    fn path_readlink_raw<Wasm: WasmAccess>(
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         path_ptr: *const u8,
@@ -521,7 +521,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
     /// this function is automatically implemented.
     /// Reads data from the file into the provided buffer at a given offset.
     #[allow(unused_variables)]
-    fn pread_raw<Wasm: WasmAccess>(
+    fn pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf_ptr: *mut u8,
         buf_len: usize,
@@ -584,7 +584,7 @@ pub trait Wasip1FileTrait: core::fmt::Debug {
 /// Trait for a virtual file system implementation.
 pub trait Wasip1FileSystem: core::fmt::Debug {
     /// Writes data to a file descriptor.
-    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -593,7 +593,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Reads directory entries from a file descriptor.
-    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         buf: *mut u8,
@@ -603,7 +603,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Retrieves file statistics for a path relative to a file descriptor.
-    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         flags: wasip1::Lookupflags,
@@ -613,14 +613,14 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Retrieves pre-open statistics for a file descriptor.
-    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         prestat: *mut wasip1::Prestat,
     ) -> wasip1::Errno;
 
     /// Retrieves the name of a pre-opened directory for a file descriptor.
-    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         dir_path_ptr: *mut u8,
@@ -628,24 +628,24 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Closes a file descriptor.
-    fn fd_close_raw<Wasm: WasmAccess + WasmAccessName>(&self, fd: Fd) -> wasip1::Errno;
+    fn fd_close_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> wasip1::Errno;
 
     /// Retrieves file statistics for a file descriptor.
-    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         filestat: *mut wasip1::Filestat,
     ) -> wasip1::Errno;
 
     /// Retrieves file descriptor statistics.
-    fn fd_fdstat_get_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_fdstat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         fdstat: *mut wasip1::Fdstat,
     ) -> wasip1::Errno;
 
     /// Reads data from a file descriptor into buffers.
-    fn fd_read_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn fd_read_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -654,7 +654,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Opens a path relative to a file descriptor.
-    fn path_open_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_fd: Fd,
         dir_flags: wasip1::Fdflags,
@@ -668,7 +668,7 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Reads the contents of a symbolic link relative to a file descriptor.
-    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName>(
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         path_ptr: *const u8,

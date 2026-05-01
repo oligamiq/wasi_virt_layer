@@ -5,6 +5,7 @@ use core::{
 };
 use std::{sync::Arc, thread::JoinHandle};
 
+use crate::memory::WasmAccessName;
 #[allow(unused_imports)]
 use crate::{__private::wasip1, memory::WasmAccess};
 
@@ -19,7 +20,7 @@ pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
 
     /// Yields the execution of the current thread.
     #[inline(always)]
-    fn sched_yield<Wasm: WasmAccess>(&mut self) -> wasip1::Errno {
+    fn sched_yield<Wasm: WasmAccess + WasmAccessName + 'static>(&mut self) -> wasip1::Errno {
         #[cfg(target_os = "wasi")]
         {
             wasip1::ERRNO_SUCCESS

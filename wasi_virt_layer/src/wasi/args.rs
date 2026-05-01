@@ -1,4 +1,4 @@
-use crate::__private::wasip1::*;
+use crate::{__private::wasip1::*, memory::WasmAccessName};
 #[cfg(target_os = "wasi")]
 use const_for::const_for;
 use const_struct::*;
@@ -294,7 +294,7 @@ pub trait VirtualArgs<'a> {
     }
 
     /// Copies the command-line arguments into the provided buffers.
-    fn args_get<Wasm: WasmAccess>(&'a mut self, args: *mut *const u8, args_buf: *mut u8) -> Errno {
+    fn args_get<Wasm: WasmAccess + WasmAccessName + 'static>(&'a mut self, args: *mut *const u8, args_buf: *mut u8) -> Errno {
         let mut args = args;
         let mut args_buf = args_buf;
 

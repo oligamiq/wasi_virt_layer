@@ -1,6 +1,6 @@
 use crate::__private::wasip1::*;
 use crate::clock::Clock;
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 use crate::transporter::non_recursive_sched_yield;
 
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
@@ -9,7 +9,7 @@ pub struct WaitPoll<C: Clock = crate::clock::StandardClock>(core::marker::Phanto
 
 impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
     #[inline(never)]
-    fn poll_oneoff<Wasm: WasmAccess>(
+    fn poll_oneoff<Wasm: WasmAccess + WasmAccessName + 'static>(
         subscriptions_ptr: *const Subscription,
         ret_event_ptr: *mut Event,
         nsubscriptions: Size,
@@ -42,7 +42,7 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
         }
 
         // Use the Clock trait to get the current time
-        fn get_now<Wasm: WasmAccess, Clock: crate::clock::Clock>() -> Timestamp {
+        fn get_now<Wasm: WasmAccess + WasmAccessName + 'static, Clock: crate::clock::Clock>() -> Timestamp {
             let mut time_buf = 0u64;
             let _ = Clock::clock_time_get::<Wasm>(CLOCKID_REALTIME, 0, &mut time_buf);
             time_buf

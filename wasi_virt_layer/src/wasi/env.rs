@@ -1,4 +1,4 @@
-use crate::__private::wasip1::*;
+use crate::{__private::wasip1::*, memory::WasmAccessName};
 #[cfg(target_os = "wasi")]
 use const_for::const_for;
 use const_struct::*;
@@ -294,7 +294,7 @@ pub trait VirtualEnv<'a> {
     }
 
     /// Copies the environment variables into the provided buffers.
-    fn environ_get<Wasm: WasmAccess>(
+    fn environ_get<Wasm: WasmAccess + WasmAccessName + 'static>(
         &'a mut self,
         environ: *mut *const u8,
         environ_buf: *mut u8,

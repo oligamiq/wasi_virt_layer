@@ -1,6 +1,6 @@
 #![cfg(feature = "embedded-fs")]
 
-use crate::__private::wasip1;
+use crate::{__private::wasip1, memory::WasmAccessName};
 use const_struct::ConstStruct;
 
 use crate::{memory::WasmAccess, wasi::file::Wasip1FileTrait};
@@ -476,7 +476,7 @@ pub trait WasiEmbeddedPrimitiveFile: core::fmt::Debug {
     /// Returns the length of the file data.
     fn len(&self) -> usize;
     /// Reads raw data from the file.
-    fn pread_raw<Wasm: WasmAccess>(
+    fn pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf_ptr: *mut u8,
         buf_len: usize,
@@ -491,7 +491,7 @@ impl<'a> WasiEmbeddedPrimitiveFile for &'a str {
     }
 
     #[inline(always)]
-    fn pread_raw<Wasm: WasmAccess>(
+    fn pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf_ptr: *mut u8,
         buf_len: usize,
@@ -508,7 +508,7 @@ impl<File: WasiEmbeddedPrimitiveFile> Wasip1FileTrait for WasiEmbeddedFile<File>
         self.file.len()
     }
 
-    fn pread_raw<Wasm: WasmAccess>(
+    fn pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf_ptr: *mut u8,
         buf_len: usize,

@@ -1,12 +1,12 @@
 pub mod wait_poll;
-use crate::__private::wasip1::*;
+use crate::{__private::wasip1::*, memory::WasmAccessName};
 use crate::memory::WasmAccess;
 pub use wait_poll::{DefaultWaitPoll, WaitPoll};
 
 /// Trait for handling the `poll_oneoff` WASI function.
 pub trait PollOneoff {
     /// Concurrently polls for events.
-    fn poll_oneoff<Wasm: WasmAccess>(
+    fn poll_oneoff<Wasm: WasmAccess + WasmAccessName + 'static>(
         subscriptions: *const Subscription,
         events: *mut Event,
         nsubscriptions: Size,
@@ -18,7 +18,7 @@ pub trait PollOneoff {
 pub struct DefaultPoll;
 
 impl PollOneoff for DefaultPoll {
-    fn poll_oneoff<Wasm: WasmAccess>(
+    fn poll_oneoff<Wasm: WasmAccess + WasmAccessName + 'static>(
         subscriptions: *const Subscription,
         events: *mut Event,
         nsubscriptions: Size,

@@ -1,17 +1,17 @@
 use crate::__private::wasip1;
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 
 /// Trait for handling random number generation.
 pub trait Random {
     /// Fills the given buffer with random bytes.
-    fn random_get<Wasm: WasmAccess>(buf: *mut u8, buf_len: usize) -> wasip1::Errno;
+    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, buf_len: usize) -> wasip1::Errno;
 }
 
 /// Default implementation of `Random` using host randomness.
 pub struct StandardRandom;
 
 impl Random for StandardRandom {
-    fn random_get<Wasm: WasmAccess>(buf: *mut u8, buf_len: usize) -> wasip1::Errno {
+    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, buf_len: usize) -> wasip1::Errno {
         #[cfg(target_os = "wasi")]
         {
             use crate::transporter::non_recursive_random_get;
@@ -64,7 +64,7 @@ fn next_u64() -> u64 {
 }
 
 impl Random for PseudoRandom {
-    fn random_get<Wasm: WasmAccess>(buf: *mut u8, buf_len: usize) -> wasip1::Errno {
+    fn random_get<Wasm: WasmAccess + WasmAccessName + 'static>(buf: *mut u8, buf_len: usize) -> wasip1::Errno {
         let mut i = 0;
         while i < buf_len {
             let random_val = next_u64();
@@ -110,27 +110,7 @@ macro_rules! plug_random {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::WasmAccessRaw;
-
-    #[derive(Debug)]
-    struct MockWasm;
-    impl WasmAccessRaw for MockWasm {
-        fn memcpy_raw(offset: *mut u8, data: *const u8, len: usize) {
-            unsafe { core::ptr::copy_nonoverlapping(data, offset, len) };
-        }
-        fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize) {
-            unsafe { core::ptr::copy_nonoverlapping(src, offset, len) };
-        }
-        #[cfg(not(feature = "multi_memory"))]
-        fn memory_director_raw(ptr: isize) -> isize {
-            ptr
-        }
-        fn _main_raw() -> wasip1::Errno {
-            wasip1::ERRNO_SUCCESS
-        }
-        fn _reset_raw() {}
-        fn _start_raw() {}
-    }
+    use crate::memory::WasmAccessFaker;
 
     #[test]
     fn test_pseudo_random_deterministic() {
@@ -147,7 +127,7 @@ mod tests {
             unsafe { PSEUDO_RANDOM_STATE = 0x123456789ABCDEF0 };
         }
 
-        PseudoRandom::random_get::<MockWasm>(buf1.as_mut_ptr(), 16);
+        PseudoRandom::random_get::<WasmAccessFaker>(buf1.as_mut_ptr(), 16);
 
         #[cfg(feature = "threads")]
         {
@@ -158,7 +138,7 @@ mod tests {
             unsafe { PSEUDO_RANDOM_STATE = 0x123456789ABCDEF0 };
         }
 
-        PseudoRandom::random_get::<MockWasm>(buf2.as_mut_ptr(), 16);
+        PseudoRandom::random_get::<WasmAccessFaker>(buf2.as_mut_ptr(), 16);
 
         assert_eq!(buf1, buf2);
         assert_ne!(buf1, [0u8; 16]);

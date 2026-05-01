@@ -7,7 +7,7 @@ use crate::wasi::file::{ConstDefault, EmbeddedLFS, InodeIdCommon};
 #[cfg(feature = "threads")]
 use parking_lot::RwLock;
 
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
@@ -260,7 +260,7 @@ where
         }
     }
 
-    pub(crate) fn fd_readdir_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_readdir_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         mut buf: *mut u8,
@@ -288,7 +288,7 @@ where
         })?
     }
 
-    pub(crate) fn fd_write_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_write_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -334,7 +334,7 @@ where
         }
     }
 
-    pub(crate) fn path_filestat_get_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn path_filestat_get_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         flags: wasip1::Lookupflags,
@@ -357,7 +357,7 @@ where
         })?
     }
 
-    pub(crate) fn fd_prestat_get_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_prestat_get_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
@@ -368,7 +368,7 @@ where
         })?
     }
 
-    pub(crate) fn fd_prestat_dir_name_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_prestat_dir_name_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         dir_path_ptr: *mut u8,
@@ -379,7 +379,7 @@ where
         })?
     }
 
-    pub(crate) fn fd_filestat_get_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_filestat_get_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
     ) -> Result<wasip1::Filestat, wasip1::Errno> {
@@ -399,7 +399,7 @@ where
         })?
     }
 
-    pub(crate) fn fd_fdstat_get_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_fdstat_get_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
     ) -> Result<wasip1::Fdstat, wasip1::Errno> {
@@ -415,7 +415,7 @@ where
         })?
     }
 
-    pub(crate) fn fd_close_raw_inner<Wasm: WasmAccess>(&self, fd: Fd) -> Result<(), wasip1::Errno> {
+    pub(crate) fn fd_close_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> Result<(), wasip1::Errno> {
         if self.remove_inode(fd).is_none() {
             return Err(wasip1::ERRNO_BADF);
         }
@@ -476,7 +476,7 @@ where
         }
     }
 
-    pub(crate) fn fd_read_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn fd_read_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -531,7 +531,7 @@ where
         }
     }
 
-    pub(crate) fn path_open_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn path_open_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_fd: Fd,
         dir_flags: wasip1::Fdflags,
@@ -558,7 +558,7 @@ where
         Ok(self.push_inode(new_inode))
     }
 
-    pub(crate) fn path_readlink_raw_inner<Wasm: WasmAccess>(
+    pub(crate) fn path_readlink_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         path_ptr: *const u8,

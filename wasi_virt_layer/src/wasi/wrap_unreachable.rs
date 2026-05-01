@@ -1,12 +1,12 @@
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 
 /// Defines callbacks for handling target execution lifecycle when `unreachable` triggers unwinding.
 pub trait WrapUnreachable {
     /// Modify the exit code returned by `_main_raw` when unwinding happens.
-    fn fix_main_raw_exit_code<Wasm: WasmAccess>(code: i32) -> i32;
+    fn fix_main_raw_exit_code<Wasm: WasmAccess + WasmAccessName + 'static>(code: i32) -> i32;
 
     /// Handle specific thread exit logic via unwinding code values.
-    fn handle_thread_exit<Wasm: WasmAccess>(code: i32) {
+    fn handle_thread_exit<Wasm: WasmAccess + WasmAccessName + 'static>(code: i32) {
         let _ = code;
         // default empty implementation
     }
@@ -16,7 +16,7 @@ pub trait WrapUnreachable {
 pub struct StandardWrapUnreachable;
 
 impl WrapUnreachable for StandardWrapUnreachable {
-    fn fix_main_raw_exit_code<Wasm: WasmAccess>(code: i32) -> i32 {
+    fn fix_main_raw_exit_code<Wasm: WasmAccess + WasmAccessName + 'static>(code: i32) -> i32 {
         code
     }
 }

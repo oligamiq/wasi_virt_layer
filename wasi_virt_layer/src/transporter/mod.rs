@@ -9,6 +9,9 @@ pub struct Wasip1Transporter;
 use crate::memory::WasmAccessDynCompatible;
 
 #[cfg(not(feature = "multi_memory"))]
+use crate::memory::WasmAccessName;
+
+#[cfg(not(feature = "multi_memory"))]
 use crate::prelude::WasmAccess;
 
 #[cfg(not(feature = "multi_memory"))]
@@ -173,7 +176,7 @@ impl Wasip1Transporter {
     /// Reads data from stdin directly into WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
-    pub fn read_from_stdin_direct<Wasm: WasmAccess>(
+    pub fn read_from_stdin_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
         buf: *mut u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -262,7 +265,7 @@ impl Wasip1Transporter {
     /// Writes data to stdout directly from WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
-    pub fn write_to_stdout_direct<Wasm: WasmAccess>(
+    pub fn write_to_stdout_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
@@ -348,7 +351,7 @@ impl Wasip1Transporter {
     /// Writes data to stderr directly from WASM memory.
     #[cfg(not(feature = "multi_memory"))]
     #[allow(unused_variables)]
-    pub fn write_to_stderr_direct<Wasm: WasmAccess>(
+    pub fn write_to_stderr_direct<Wasm: WasmAccess + WasmAccessName + 'static>(
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {

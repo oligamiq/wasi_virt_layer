@@ -3,6 +3,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::{Ciovec, Dircookie, Fd, Size};
 
+use crate::memory::WasmAccessName;
 use crate::wasi::file::trace::trace_fs;
 use crate::{
     memory::WasmAccess,
@@ -17,7 +18,7 @@ impl<LFS: EmbeddedLFS + Sync, const FLAT_LEN: usize, OpenFd: OpenFdInfo + Defaul
 where
     LFS::Inode: InodeIdCommon,
 {
-    fn fd_write_raw<Wasm: WasmAccess>(
+    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -35,7 +36,7 @@ where
         }
     }
 
-    fn fd_readdir_raw<Wasm: WasmAccess>(
+    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         buf: *mut u8,
@@ -54,7 +55,7 @@ where
         }
     }
 
-    fn path_filestat_get_raw<Wasm: WasmAccess>(
+    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         flags: wasip1::Lookupflags,
@@ -73,7 +74,7 @@ where
         }
     }
 
-    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         prestat_ptr: *mut wasip1::Prestat,
@@ -90,7 +91,7 @@ where
         }
     }
 
-    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         dir_path_ptr: *mut u8,
@@ -104,7 +105,7 @@ where
         }
     }
 
-    fn fd_close_raw<Wasm: WasmAccess>(&self, fd: Fd) -> wasip1::Errno {
+    fn fd_close_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_close: fd={fd}");
 
         match self.fd_close_raw_inner::<Wasm>(fd) {
@@ -113,7 +114,7 @@ where
         }
     }
 
-    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         filestat_ptr: *mut wasip1::Filestat,
@@ -129,7 +130,7 @@ where
         }
     }
 
-    fn fd_fdstat_get_raw<Wasm: WasmAccess>(
+    fn fd_fdstat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         fdstat_ptr: *mut wasip1::Fdstat,
@@ -145,7 +146,7 @@ where
         }
     }
 
-    fn fd_read_raw<Wasm: WasmAccess>(
+    fn fd_read_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         iovs_ptr: *const Ciovec,
@@ -163,7 +164,7 @@ where
         }
     }
 
-    fn path_open_raw<Wasm: WasmAccess>(
+    fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_fd: Fd,
         dir_flags: wasip1::Fdflags,
@@ -195,7 +196,7 @@ where
         }
     }
 
-    fn path_readlink_raw<Wasm: WasmAccess + crate::memory::WasmAccessName>(
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,
         path_ptr: *const u8,

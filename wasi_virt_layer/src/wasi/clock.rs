@@ -1,5 +1,5 @@
 use crate::__private::wasip1::*;
-use crate::memory::WasmAccess;
+use crate::memory::{WasmAccess, WasmAccessName};
 
 /// Trait for handling clock operations including time retrieval and resolution queries.
 pub trait Clock {
@@ -12,7 +12,7 @@ pub trait Clock {
     ///
     /// # Returns
     /// `ERRNO_SUCCESS` on success, or an error code on failure
-    fn clock_time_get<Wasm: WasmAccess>(
+    fn clock_time_get<Wasm: WasmAccess + WasmAccessName + 'static>(
         clock_id: Clockid,
         precision: Timestamp,
         time_ptr: *mut Timestamp,
@@ -26,14 +26,14 @@ pub trait Clock {
     ///
     /// # Returns
     /// `ERRNO_SUCCESS` on success, or an error code on failure
-    fn clock_res_get<Wasm: WasmAccess>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno;
+    fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno;
 }
 
 /// Default implementation of `Clock` that delegates to the underlying WASI runtime.
 pub struct StandardClock;
 
 impl Clock for StandardClock {
-    fn clock_time_get<Wasm: WasmAccess>(
+    fn clock_time_get<Wasm: WasmAccess + WasmAccessName + 'static>(
         clock_id: Clockid,
         precision: Timestamp,
         time_ptr: *mut Timestamp,
@@ -65,7 +65,7 @@ impl Clock for StandardClock {
         }
     }
 
-    fn clock_res_get<Wasm: WasmAccess>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno {
+    fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(clock_id: Clockid, resolution_ptr: *mut Timestamp) -> Errno {
         #[cfg(target_os = "wasi")]
         {
             use crate::transporter::non_recursive_clock_res_get;
@@ -105,7 +105,7 @@ impl Clock for StandardClock {
 /// // Using a custom Clock implementation
 /// struct CustomClock;
 /// impl Clock for CustomClock {
-///     fn clock_time_get<Wasm: WasmAccess>(
+///     fn clock_time_get<Wasm: WasmAccess + WasmAccessName + 'static>(
 ///         clock_id: wasi_virt_layer::__private::wasip1::Clockid,
 ///         precision: wasi_virt_layer::__private::wasip1::Timestamp,
 ///         time_ptr: *mut wasi_virt_layer::__private::wasip1::Timestamp,
@@ -114,7 +114,7 @@ impl Clock for StandardClock {
 ///         StandardClock::clock_time_get::<Wasm>(clock_id, precision, time_ptr)
 ///     }
 ///
-///     fn clock_res_get<Wasm: WasmAccess>(
+///     fn clock_res_get<Wasm: WasmAccess + WasmAccessName + 'static>(
 ///         clock_id: wasi_virt_layer::__private::wasip1::Clockid,
 ///         resolution_ptr: *mut wasi_virt_layer::__private::wasip1::Timestamp,
 ///     ) -> wasi_virt_layer::__private::wasip1::Errno {
@@ -167,39 +167,14 @@ macro_rules! plug_clock {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::memory::WasmAccessRaw;
-
-    #[derive(Debug)]
-    struct MockWasm;
-
-    impl WasmAccessRaw for MockWasm {
-        fn memcpy_raw(offset: *mut u8, data: *const u8, len: usize) {
-            unsafe { core::ptr::copy_nonoverlapping(data, offset, len) };
-        }
-
-        fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize) {
-            unsafe { core::ptr::copy_nonoverlapping(src, offset, len) };
-        }
-
-        #[cfg(not(feature = "multi_memory"))]
-        fn memory_director_raw(ptr: isize) -> isize {
-            ptr
-        }
-
-        fn _main_raw() -> Errno {
-            ERRNO_SUCCESS
-        }
-
-        fn _reset_raw() {}
-
-        fn _start_raw() {}
-    }
 
     #[test]
     #[cfg(not(target_os = "wasi"))]
     fn test_standard_clock_non_wasi() {
+        use crate::memory::WasmAccessFaker;
+
         let mut time_buf = 0u64;
-        let result = StandardClock::clock_time_get::<MockWasm>(
+        let result = StandardClock::clock_time_get::<WasmAccessFaker>(
             CLOCKID_REALTIME,
             1000,
             &mut time_buf as *mut u64,
@@ -211,8 +186,10 @@ mod tests {
     #[test]
     #[cfg(not(target_os = "wasi"))]
     fn test_standard_clock_res_get_non_wasi() {
+        use crate::memory::WasmAccessFaker;
+
         let mut resolution_buf = 0u64;
-        let result = StandardClock::clock_res_get::<MockWasm>(
+        let result = StandardClock::clock_res_get::<WasmAccessFaker>(
             CLOCKID_REALTIME,
             &mut resolution_buf as *mut u64,
         );

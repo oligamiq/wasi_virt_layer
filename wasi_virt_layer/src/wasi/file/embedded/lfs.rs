@@ -2,8 +2,7 @@
 
 use crate::__private::wasip1::{self, Dircookie};
 use crate::memory::{
-    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _, WasmPathAccessCommon,
-    WasmPathAccessDynCompatible, WasmPathComponentCommon,
+    WasmAccessDynCompatibleRaw, WasmAccessMemoryUtilUpper as _, WasmAccessName, WasmPathAccessCommon, WasmPathAccessDynCompatible, WasmPathComponentCommon
 };
 use crate::wasi::file::ConstDefault;
 use crate::{
@@ -99,7 +98,7 @@ impl<
     }
 
     /// Resolves a path starting from a given inode to find its inode.
-    pub fn get_inode_for_path<Wasm: WasmAccess>(
+    pub fn get_inode_for_path<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: usize,
         path_ptr: *const u8,

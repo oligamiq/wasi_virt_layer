@@ -3,7 +3,7 @@
 use crate::__private::wasip1;
 use crate::__private::wasip1::Dircookie;
 
-use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw};
+use crate::memory::{WasmAccessDynCompatible, WasmAccessDynCompatibleRaw, WasmAccessName};
 use crate::wasi::file::Wasip1LFSBaseWrapper as _;
 use crate::wasi::file::{
     BoxedInode, DerefToStrCustom, DynamicLFS, EmbeddedLFS, InodeIdCommon, Wasip1DynCompatibleLFS,
@@ -31,7 +31,7 @@ impl<
 {
     type Inode = usize;
 
-    fn fd_write_raw<Wasm: WasmAccess>(
+    fn fd_write_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         _: &Self::Inode,
         _: *const u8,
@@ -40,7 +40,7 @@ impl<
         Err(wasip1::ERRNO_PERM)
     }
 
-    fn fd_write_stdout_raw<Wasm: WasmAccess>(
+    fn fd_write_stdout_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         data: *const u8,
         data_len: usize,
@@ -59,7 +59,7 @@ impl<
         }
     }
 
-    fn fd_write_stderr_raw<Wasm: WasmAccess>(
+    fn fd_write_stderr_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         data: *const u8,
         data_len: usize,
@@ -81,7 +81,7 @@ impl<
         self.is_dir(*inode)
     }
 
-    fn fd_readdir_raw<Wasm: WasmAccess>(
+    fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         buf: *mut u8,
@@ -93,7 +93,7 @@ impl<
         })
     }
 
-    fn path_filestat_get_raw<Wasm: WasmAccess>(
+    fn path_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         _: wasip1::Lookupflags,
@@ -107,7 +107,7 @@ impl<
         Ok(self.filestat_from_inode(inode))
     }
 
-    fn fd_prestat_get_raw<Wasm: WasmAccess>(
+    fn fd_prestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
     ) -> Result<wasip1::Prestat, wasip1::Errno> {
@@ -128,7 +128,7 @@ impl<
         })
     }
 
-    fn fd_prestat_dir_name_raw<Wasm: WasmAccess>(
+    fn fd_prestat_dir_name_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         dir_path_ptr: *mut u8,
@@ -148,14 +148,14 @@ impl<
         Ok(())
     }
 
-    fn fd_filestat_get_raw<Wasm: WasmAccess>(
+    fn fd_filestat_get_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
     ) -> Result<FilestatWithoutDevice, wasip1::Errno> {
         Ok(self.filestat_from_inode(*inode))
     }
 
-    fn fd_pread_raw<Wasm: WasmAccess>(
+    fn fd_pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         buf: *mut u8,
@@ -178,7 +178,7 @@ impl<
         }
     }
 
-    fn fd_read_stdin_raw<Wasm: WasmAccess>(
+    fn fd_read_stdin_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         buf: *mut u8,
         buf_len: usize,
@@ -198,7 +198,7 @@ impl<
         }
     }
 
-    fn path_open_raw<Wasm: WasmAccess>(
+    fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_inode: &Self::Inode,
         _: wasip1::Fdflags,
@@ -237,7 +237,7 @@ impl<
         }
     }
 
-    fn path_readlink_raw<Wasm: WasmAccess>(
+    fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         inode: &Self::Inode,
         path_ptr: *const u8,
