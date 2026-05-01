@@ -10,6 +10,9 @@ use crate::__private::wasip1;
 /// Macro for importing a WebAssembly module and generating its memory access bridge.
 #[macro_export]
 macro_rules! import_wasm {
+    () => {
+        compile_error!("import_wasm! requires an argument specifying the WASM module name. Usage: import_wasm!(my_wasm)");
+    };
     (anonymous) => {
         compile_error!("This name is reserved for internal use. Please choose another name for your import.");
     };
