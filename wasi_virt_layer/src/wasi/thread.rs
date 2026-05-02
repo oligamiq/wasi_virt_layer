@@ -539,9 +539,9 @@ macro_rules! plug_thread {
                         match *self {
                             $(
                                 Self::$wasm => {
-                                    // println!("Calling wasi_thread_start in {}", self.as_name());
-                                    // println!("  thread_id: {:?}", thread_id);
-                                    // println!("  data_ptr: {:?}", ptr);
+                                    println!("Calling wasi_thread_start in {}", self.as_name());
+                                    println!("  thread_id: {:?}", thread_id);
+                                    println!("  data_ptr: {:?}", ptr);
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
                                             Some(id) => u32::from(id) as i32,

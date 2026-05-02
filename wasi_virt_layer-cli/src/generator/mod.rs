@@ -1602,7 +1602,13 @@ impl WasmPath {
     /// Computes the unique short name used during module linking and identification.
     pub fn name(&self) -> eyre::Result<CompactString> {
         match self {
-            WasmPath::Maybe { package, .. } => Ok(package.to_compact_string()),
+            WasmPath::Maybe { package, .. } => {
+                // Normalize package name by replacing hyphens with underscores
+                // This is necessary because Rust package names can have hyphens (e.g., "test-package")
+                // but they are converted to underscores in module identifiers (e.g., "test_package")
+                let normalized = package.replace('-', "_");
+                Ok(normalized.to_compact_string())
+            }
             WasmPath::Definitely(path)
             | WasmPath::Component(path)
             | WasmPath::Original { current: path, .. } => path
