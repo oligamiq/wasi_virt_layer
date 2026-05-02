@@ -7,6 +7,7 @@
 
 
 *.wasm
+!wasi_virt_layer-cli/tests/fixtures/c_target.wasm
 
 **/dist
 
