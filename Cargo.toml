@@ -42,6 +42,11 @@ members = [
     "examples/bare/test-unreachable-target1",
     "examples/bare/test-unreachable-target2",
     "examples/vfs/unreachable-multi-target-vfs",
+    "examples/multi-location-vfs",
+    "examples/mock-targets/location-1",
+    "examples/mock-targets/location-1/subdir",
+    "examples/mock-targets/location-2",
+    "examples/mock-targets/location-2/subdir",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]

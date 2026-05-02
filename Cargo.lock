@@ -1233,6 +1233,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "mock-tool-four"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+]
+
+[[package]]
+name = "mock-tool-one"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+]
+
+[[package]]
+name = "mock-tool-three"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+]
+
+[[package]]
+name = "mock-tool-two"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+]
+
+[[package]]
+name = "multi-location-vfs"
+version = "0.1.0"
+dependencies = [
+ "wasi",
+ "wasi_virt_layer",
+]
+
+[[package]]
 name = "multiple-vfs"
 version = "0.2.16"
 dependencies = [

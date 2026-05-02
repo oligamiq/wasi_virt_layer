@@ -1,0 +1,11 @@
+[package]
+name = "mock-tool-four"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "mock_tool_four"
+path = "src/main.rs"
+
+[dependencies]
+wasi = "0.11"
