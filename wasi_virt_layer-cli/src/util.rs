@@ -249,6 +249,8 @@ pub(crate) trait WalrusUtilModule {
 
     fn find_used_memory_id(&self, memory_hint: Option<usize>) -> eyre::Result<MemoryId>;
 
+    fn flatten_tables(&mut self) -> eyre::Result<()>;
+
     /// create memory anchor function
     fn create_memory_anchor(
         &mut self,
@@ -1786,6 +1788,134 @@ impl WalrusUtilModule for walrus::Module {
                 .name = format!("_____debug_left_{export}");
         } else {
             self.exports.remove(export).unwrap();
+        }
+
+        Ok(())
+    }
+
+    fn flatten_tables(&mut self) -> eyre::Result<()> {
+        let table_ids: Vec<_> = self.tables.iter().map(|t| t.id()).collect();
+        if table_ids.len() <= 1 {
+            return Ok(());
+        }
+
+        log::info!("Flattening {} tables into one...", table_ids.len());
+
+        let target_table_id = table_ids[0];
+        let mut current_offset = self.tables.get(target_table_id).initial;
+
+        let mut table_offsets = std::collections::HashMap::new();
+        table_offsets.insert(target_table_id, 0);
+
+        for &table_id in &table_ids[1..] {
+            let table = self.tables.get(table_id);
+            let table_size = table.initial;
+            let offset = current_offset;
+            table_offsets.insert(table_id, offset);
+
+            current_offset += table_size;
+        }
+
+        // 1. Move all element segments to target table
+        let elem_ids: Vec<_> = self.elements.iter().map(|e| e.id()).collect();
+        for eid in elem_ids {
+            let elem = self.elements.get_mut(eid);
+            match &mut elem.kind {
+                walrus::ElementKind::Active { table, offset } => {
+                    if let Some(&off) = table_offsets.get(table) {
+                        if off > 0 {
+                            *table = target_table_id;
+                            // Adjust the offset expression. 
+                            // Element segments typically use a single i32.const instruction.
+                            match offset {
+                                walrus::ConstExpr::Value(walrus::ir::Value::I32(val)) => {
+                                    *val += off as i32;
+                                }
+                                _ => eyre::bail!("Unsupported element offset expression type: only i32.const is supported for table flattening"),
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 2. Update instructions in all functions
+        for func in self.funcs.iter_mut() {
+            if let walrus::FunctionKind::Local(local) = &mut func.kind {
+                let mut stack = vec![local.entry_block()];
+                let mut visited = std::collections::HashSet::new();
+                
+                while let Some(seq_id) = stack.pop() {
+                    if !visited.insert(seq_id) {
+                        continue;
+                    }
+
+                    // Collect next sequences to visit
+                    {
+                        let seq = local.block(seq_id);
+                        for (instr, _) in &seq.instrs {
+                            match instr {
+                                walrus::ir::Instr::Block(b) => stack.push(b.seq),
+                                walrus::ir::Instr::Loop(l) => stack.push(l.seq),
+                                walrus::ir::Instr::IfElse(if_) => {
+                                    stack.push(if_.consequent);
+                                    stack.push(if_.alternative);
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+
+                    // Now modify instructions in the current block
+                    let instrs = &mut local.block_mut(seq_id).instrs;
+                    let mut i = 0;
+                    while i < instrs.len() {
+                        let mut injected = Vec::new();
+                        let loc = instrs[i].1;
+
+                        match &mut instrs[i].0 {
+                            walrus::ir::Instr::CallIndirect(call) => {
+                                if let Some(&off) = table_offsets.get(&call.table) {
+                                    if off > 0 {
+                                        call.table = target_table_id;
+                                        injected.push((walrus::ir::Instr::Const(walrus::ir::Const { value: walrus::ir::Value::I32(off as i32) }), loc));
+                                        injected.push((walrus::ir::Instr::Binop(walrus::ir::Binop { op: walrus::ir::BinaryOp::I32Add }), loc));
+                                    }
+                                }
+                            }
+                            walrus::ir::Instr::TableGet(table) => {
+                                if let Some(&off) = table_offsets.get(&table.table) {
+                                    if off > 0 {
+                                        table.table = target_table_id;
+                                        injected.push((walrus::ir::Instr::Const(walrus::ir::Const { value: walrus::ir::Value::I32(off as i32) }), loc));
+                                        injected.push((walrus::ir::Instr::Binop(walrus::ir::Binop { op: walrus::ir::BinaryOp::I32Add }), loc));
+                                    }
+                                }
+                            }
+                            _ => {}
+                        }
+
+                        if !injected.is_empty() {
+                            instrs.splice(i..i, injected);
+                            i += 2; 
+                        }
+                        i += 1;
+                    }
+                }
+            }
+        }
+
+        // 3. Delete other tables
+        for &table_id in &table_ids[1..] {
+            self.tables.delete(table_id);
+        }
+
+        // 4. Update target table size
+        let target_table = self.tables.get_mut(target_table_id);
+        target_table.initial = current_offset;
+        if let Some(ref mut max) = target_table.maximum {
+            *max = std::cmp::max(*max, current_offset);
         }
 
         Ok(())

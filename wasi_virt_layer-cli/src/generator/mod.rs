@@ -1060,6 +1060,8 @@ impl GeneratorRunner {
 
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
+                    // module.flatten_tables()?;
+
                     mem_id_visitor
                         .post_lower_memory(module, &self.ctx)
                         .wrap_err("Failed in post_lower_memory")?;
