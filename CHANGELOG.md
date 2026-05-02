@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.13] - 2026-05-02
+
+### Added
+- **Wasm Optimization**: Enhanced `wasm-opt` integration to explicitly enable `--enable-threads` and `--enable-multimemory` flags.
+- **Multi-memory Lowering**: Implemented shared memory tracking in `TemporaryRefugeMemory` to ensure the `shared` flag is correctly preserved during multi-memory lowering transformations.
+
+### Changed
+- **Test Fixtures**: Updated `c_target.wasm` fixtures and added `.wasm` binary attribute to `.gitattributes` to ensure proper handling of Wasm binaries in the repository.
+
+## [0.2.11] - 2026-05-02
+
+### Changed
+- **VFS Refactor**: Decoupled `fd_seek` from Local File System (LFS) traits. Centralized file descriptor cursor management and seek logic within the VFS layer (`StandardMultipleFileSystem`, `StandardEmbeddedFileSystem`, and `StandardDynamicFileSystem`).
+
+### Fixed
+- **CLI Validation**: Fixed a regression in `CheckUseLibrary` that prevented self-virtualizing modules (e.g., `self_vfs`) from passing validation when the VFS name matched a declared Wasm name.
+
 ## [0.2.10] - 2026-05-02
 
 ### Added
