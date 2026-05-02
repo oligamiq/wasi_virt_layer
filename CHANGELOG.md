@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.14] - 2026-05-02
+
+### Changed
+- **Memory Handling**: Enhanced the generator to ensure the VFS memory is imported at index 0. This is a critical requirement for compatibility with `wasm-opt` during multi-memory lowering.
+- **CLI**: Improved logging by cleaning up warning messages during thread-enabled transpilation.
+
 ## [0.2.13] - 2026-05-02
 
 ### Added
