@@ -88,7 +88,7 @@ impl TemporaryRefugeMemory {
                     if !is_first {
                         is_first = true;
                         log::warn!(
-                            r"Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is. {mem:?}"
+                            r"Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is."
                         );
                     }
 
@@ -250,6 +250,24 @@ impl Generator for TemporaryRefugeMemory {
                     Ok(())
                 })
                 .collect::<eyre::Result<Vec<_>>>()?;
+
+            // import vfs memory
+            // For lowering with wasm-opt,
+            // the VFS memory must be placed at index 0.
+            // Due to the way Walrus works, importing only this will place it at index 0.
+            match module.memories.iter().filter(|mem| mem.id() == ctx.vfs_used_memory_id.unwrap()).filter(|mem| mem.import.is_some()).count() {
+                0 => {
+                    let mem = module.memories.get_mut(ctx.vfs_used_memory_id.unwrap());
+                    let import_id = module.imports.add(
+                        "env",
+                        "memory",
+                        walrus::ImportKind::Memory(mem.id()),
+                    );
+                    mem.import = Some(import_id);
+                },
+                1 => {},
+                _ => panic!("VFS memory should be imported exactly once"),
+            }
         }
 
         Ok(())
