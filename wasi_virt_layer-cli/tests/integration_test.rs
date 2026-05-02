@@ -232,7 +232,7 @@ fn test_c_target_wasm() -> color_eyre::Result<()> {
     // The fixture should be built by other processes (wasm-tools parse).
     // The test runner requires the path to be absolute.
     let _test_dir = run_wasi_virt_layer(
-        Some("ls-vfs"), // We can use ls-vfs since it uses <anonymous> target 
+        Some("ls-vfs"), // We can use ls-vfs since it uses <anonymous> target
         Some(fixture_path.as_str()),
         Some(true),
         false,

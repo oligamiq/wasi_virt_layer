@@ -421,3 +421,50 @@ macro_rules! non_recursive_wasi_snapshot_preview1 {
     }
     };
 }
+
+pub struct UnsafeOnceCell<T> {
+    value: core::cell::UnsafeCell<Option<T>>,
+}
+
+unsafe impl<T: Sync> Sync for UnsafeOnceCell<T> {}
+unsafe impl<T: Send> Send for UnsafeOnceCell<T> {}
+
+impl<T> UnsafeOnceCell<T> {
+    /// Creates a new `UnsafeOnceCell` that is not initialized.
+    pub const fn new() -> Self {
+        Self {
+            value: core::cell::UnsafeCell::new(None),
+        }
+    }
+
+    /// Initializes the cell with the provided value. This is unsafe because it must only be called once, and the caller must ensure that no threads are accessing the cell until initialization is complete.
+    pub unsafe fn init(&self, value: T) -> Result<(), ()> {
+        unsafe {
+            if (*self.value.get()).is_some() {
+                return Err(());
+            }
+            *self.value.get() = Some(value);
+        }
+        Ok(())
+    }
+
+    /// Gets a reference to the value. This is unsafe because it assumes that the value has been initialized and will not be modified after initialization.
+    pub unsafe fn get(&self) -> &T {
+        unsafe { (*self.value.get()).as_ref().unwrap() }
+    }
+}
+
+impl<T> core::ops::Deref for UnsafeOnceCell<T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.get() }
+    }
+}
+
+impl<T: Default> UnsafeOnceCell<T> {
+    /// Initializes the cell with the default value of `T`. This is a convenience method that can be used when `T` implements `Default`.
+    pub unsafe fn init_default(&self) -> Result<(), ()> {
+        unsafe { self.init(T::default()) }
+    }
+}

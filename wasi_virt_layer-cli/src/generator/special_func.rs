@@ -404,10 +404,9 @@ impl Generator for MainVoidFunc {
                 // StartFunc runs before MainVoidFunc and renames `_start` to a
                 // unique name. Try the renamed export first, then fall back to
                 // the original `_start` name.
-                let renamed_start = UniqueName::SpecialFunc(
-                    &SpecialFuncUniqueName::Start(&external.name),
-                )
-                .to_string();
+                let renamed_start =
+                    UniqueName::SpecialFunc(&SpecialFuncUniqueName::Start(&external.name))
+                        .to_string();
 
                 let start_fid = renamed_start
                     .as_str()
@@ -584,4 +583,3 @@ impl Generator for MainVoidFunc {
         Ok(())
     }
 }
-

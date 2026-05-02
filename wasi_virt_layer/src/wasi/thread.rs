@@ -5,9 +5,9 @@ use core::{
 };
 use std::{sync::Arc, thread::JoinHandle};
 
-use crate::memory::WasmAccessName;
 #[allow(unused_imports)]
 use crate::{__private::wasip1, memory::WasmAccess};
+use crate::{memory::WasmAccessName, utils::UnsafeOnceCell};
 
 /// Trait for a virtual thread implementation.
 pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
@@ -98,30 +98,25 @@ impl<T: ThreadAccess> ThreadAccessorWrapper<T> {
 
 #[derive(Clone)]
 struct JoinPoolHandle {
-    pool: Option<Arc<parking_lot::Mutex<Vec<JoinHandle<()>>>>>,
+    pool: Arc<parking_lot::Mutex<Vec<JoinHandle<()>>>>,
+}
+
+impl Default for JoinPoolHandle {
+    fn default() -> Self {
+        JoinPoolHandle {
+            pool: Arc::new(parking_lot::Mutex::new(Vec::new())),
+        }
+    }
 }
 
 impl JoinPoolHandle {
     pub fn lock(&self) -> parking_lot::MutexGuard<'_, Vec<JoinHandle<()>>> {
-        self.pool.as_ref().unwrap().lock()
+        self.pool.lock()
     }
 
     pub fn extend<I: IntoIterator<Item = JoinHandle<()>>>(&self, iter: I) {
-        let mut guard = self.pool.as_ref().unwrap().lock();
+        let mut guard = self.pool.lock();
         guard.extend(iter);
-    }
-
-    pub const fn new_const() -> Self {
-        JoinPoolHandle { pool: None }
-    }
-
-    pub fn init(&mut self) -> bool {
-        if self.pool.is_none() {
-            self.pool = Some(Arc::new(parking_lot::Mutex::new(Vec::new())));
-            true
-        } else {
-            false
-        }
     }
 }
 
@@ -236,28 +231,32 @@ pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess> {
     max_threads: AtomicUsize,
     read_kept_workers_pool_size: AtomicUsize,
     queue: parking_lot::Mutex<Option<flume::Sender<VirtualThreadPoolMessage<ThreadAccessor>>>>,
-    queue_receiver: Option<flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>>,
-    kept_workers_pool: JoinPoolHandle,
+    queue_receiver: UnsafeOnceCell<flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>>,
+    kept_workers_pool: UnsafeOnceCell<JoinPoolHandle>,
 }
+
+unsafe impl<ThreadAccessor: ThreadAccess> Send for VirtualThreadPool<ThreadAccessor> {}
+unsafe impl<ThreadAccessor: ThreadAccess> Sync for VirtualThreadPool<ThreadAccessor> {}
 
 impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
     /// Creates a new `VirtualThreadPool` without initialization.
     pub const unsafe fn new_const(max_threads: usize) -> Self {
         VirtualThreadPool {
             max_threads: AtomicUsize::new(max_threads),
-            kept_workers_pool: JoinPoolHandle::new_const(),
+            kept_workers_pool: UnsafeOnceCell::new(),
             queue: parking_lot::Mutex::new(None),
-            queue_receiver: None,
+            queue_receiver: UnsafeOnceCell::new(),
             read_kept_workers_pool_size: AtomicUsize::new(0),
         }
     }
 
     /// Initializes the thread pool. This must be called before use.
-    pub fn init(&mut self) {
-        if self.kept_workers_pool.init() {
+    /// It is unsafe because it must only be called once, and the caller must ensure that no threads are using the pool until initialization is complete.
+    pub unsafe fn init(&self) {
+        if unsafe { self.kept_workers_pool.init_default().is_ok() } {
             let (sender, receiver) = flume::unbounded();
             *self.queue.lock() = Some(sender);
-            self.queue_receiver = Some(receiver);
+            unsafe { self.queue_receiver.init(receiver).unwrap() };
         }
     }
 
@@ -348,15 +347,10 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
 
                     let queue_receiver = self.queue_receiver.clone();
 
-                    println!("[] queue_receiver is_some(): {}", queue_receiver.is_some());
-
                     let handle = root_spawn(std::thread::Builder::new(), move || {
                         println!("[] Thread pool addition thread started.");
 
-                        VirtualThreadPoolMessage::listen_with(
-                            queue_receiver.as_ref().unwrap(),
-                            msg,
-                        );
+                        VirtualThreadPoolMessage::listen_with(&queue_receiver, msg);
                     })
                     .unwrap();
 
@@ -433,8 +427,6 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     }
 }
 
-unsafe impl<ThreadAccessor: ThreadAccess> Send for VirtualThreadPool<ThreadAccessor> {}
-unsafe impl<ThreadAccessor: ThreadAccess> Sync for VirtualThreadPool<ThreadAccessor> {}
 /// A "pool" that spawns native threads directly for each request.
 pub struct DirectThreadPool<ThreadAccessor: ThreadAccess>(
     core::marker::PhantomData<ThreadAccessor>,

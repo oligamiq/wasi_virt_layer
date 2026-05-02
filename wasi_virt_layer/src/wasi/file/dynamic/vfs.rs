@@ -610,12 +610,10 @@ where
         let new_offset = match whence {
             wasip1::WHENCE_SET => offset,
             wasip1::WHENCE_CUR => current_offset + offset,
-            wasip1::WHENCE_END => {
-                match self.lfs.fd_filestat_get_raw::<Wasm>(open_fd.inode_id()) {
-                    Ok(stat) => stat.size as i64 + offset,
-                    Err(e) => return e,
-                }
-            }
+            wasip1::WHENCE_END => match self.lfs.fd_filestat_get_raw::<Wasm>(open_fd.inode_id()) {
+                Ok(stat) => stat.size as i64 + offset,
+                Err(e) => return e,
+            },
             _ => return wasip1::ERRNO_INVAL,
         };
 

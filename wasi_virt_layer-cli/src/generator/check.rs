@@ -108,13 +108,17 @@ impl Generator for CheckUseLibrary {
         for declared_name in declared_wasm_names {
             // Skip validation for anonymous - it's handled by the Anonymous generator
             // Also skip if it's the VFS module itself (self-virtualization)
-            if declared_name == "anonymous" || normalize_name(&declared_name) == normalize_name(ctx.vfs_name.as_ref()) {
+            if declared_name == "anonymous"
+                || normalize_name(&declared_name) == normalize_name(ctx.vfs_name.as_ref())
+            {
                 continue;
             }
 
-            if !ctx.target_names.iter().any(|target| {
-                normalize_name(target.as_ref()) == normalize_name(&declared_name)
-            }) {
+            if !ctx
+                .target_names
+                .iter()
+                .any(|target| normalize_name(target.as_ref()) == normalize_name(&declared_name))
+            {
                 eyre::bail!(
                     "WASM module `{declared_name}` is declared with `import_wasm!` macro in VFS, but not provided as a target argument. \
                      Did you forget to specify this WASM file in the CLI arguments?"

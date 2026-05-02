@@ -5,7 +5,7 @@ use walrus::{ConstExpr, ExportItem, FunctionId, Module, ValType, ir::*};
 use crate::{
     generator::{Generator, GeneratorCtx, ModuleExternal},
     instrs::InstrRewrite as _,
-    util::{WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
+    util::{WalrusFID, WalrusUtilModule, WasmName},
 };
 
 // ── Naming ────────────────────────────────────────────────────────────
