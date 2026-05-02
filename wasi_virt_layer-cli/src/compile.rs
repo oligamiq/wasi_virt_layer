@@ -389,6 +389,8 @@ pub fn optimize_wasm(
             cmd.arg("-Oz");
         }
 
+        cmd.args(["--enable-threads", "--enable-multimemory"]);
+
         cmd.arg(wasm_path.as_str());
 
         cmd.args(["--output", output_path.as_str()]);

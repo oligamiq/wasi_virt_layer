@@ -41,6 +41,8 @@ pub enum MemoryUniqueName<'a> {
 pub struct TemporaryRefugeMemory {
     /// Indicates the overall tracked quantity of memory blocks actively transpiled.
     pub memory_count: usize,
+    /// Indicates if any memory had the shared flag set before multi-memory-lowering.
+    pub had_shared: bool,
 }
 
 impl TemporaryRefugeMemory {
@@ -222,6 +224,13 @@ impl Generator for TemporaryRefugeMemory {
         if ctx.target_memory_type == TargetMemoryType::Multi {
             self.ready_component_and_transpile(module, ctx)?;
         } else {
+            for mem in module.memories.iter_mut() {
+                if mem.shared {
+                    self.had_shared = true;
+                    mem.shared = false;
+                }
+            }
+
             module
                 .memories
                 .iter_mut()
@@ -253,6 +262,12 @@ impl Generator for TemporaryRefugeMemory {
     ) -> eyre::Result<()> {
         if !ctx.threads {
             return Ok(());
+        }
+
+        if self.had_shared {
+            for mem in module.memories.iter_mut() {
+                mem.shared = true;
+            }
         }
 
         self.ready_component_and_transpile(module, ctx)?;
