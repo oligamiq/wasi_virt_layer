@@ -157,6 +157,30 @@ impl Generator for ConnectWasip1ABI {
 pub struct ConnectWasip1ThreadsABI;
 
 impl Generator for ConnectWasip1ThreadsABI {
+    fn pre_target(
+        &mut self,
+        module: &mut walrus::Module,
+        _: &crate::generator::GeneratorCtx,
+        external: &crate::generator::ModuleExternal,
+    ) -> eyre::Result<()> {
+        module
+            .imports
+            .iter_mut()
+            .filter(|import| {
+                import.name == "wasi_thread_spawn"
+                    && (import.module == "wasi" || import.module == "env")
+            })
+            .for_each(|import| {
+                import.module = UniqueName::WASIP1_THREADS_ABI_MODULE.to_string();
+                import.name = UniqueName::ThreadsSpawn(&ThreadsSpawnName::WasiThreadSpawn(
+                    &external.name,
+                ))
+                .to_string();
+            });
+
+        Ok(())
+    }
+
     fn post_combine(
         &mut self,
         module: &mut walrus::Module,

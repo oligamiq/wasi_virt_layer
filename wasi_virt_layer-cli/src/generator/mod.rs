@@ -24,6 +24,7 @@ pub mod threads;
 pub mod wrap_unreachable;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
+use tempfile::tempdir;
 
 use camino::Utf8PathBuf;
 use compact_str::{CompactString, ToCompactString as _};
@@ -645,8 +646,10 @@ pub(crate) trait EndWithOpt<T> {
     fn with_opt(
         self,
         path: &mut WasmPath,
+        threads: bool,
         dwarf: bool,
         keep_build_artifacts: bool,
+        no_validation: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -656,9 +659,11 @@ pub(crate) trait EndWithOpt<T> {
         self,
         path: &mut WasmPath,
         args: &[&str],
+        threads: bool,
         require_update: bool,
         dwarf: bool,
         keep_build_artifacts: bool,
+        no_validation: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -668,8 +673,10 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
     fn with_opt(
         self,
         path: &mut WasmPath,
+        threads: bool,
         dwarf: bool,
         keep_build_artifacts: bool,
+        no_validation: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
@@ -678,7 +685,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
 
         println!("Optimizing Wasm...");
         let old_path = path.path()?.clone();
-        let new_path = compile::optimize_wasm(&old_path, &[], false, dwarf)
+        let new_path = compile::optimize_wasm(&old_path, &[], threads, false, dwarf, no_validation)
             .wrap_err("Failed to optimize Wasm")?;
 
         if !keep_build_artifacts && old_path != new_path && !path.is_original(&old_path) {
@@ -695,9 +702,11 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         self,
         path: &mut WasmPath,
         args: &[&str],
+        threads: bool,
         require_update: bool,
         dwarf: bool,
         keep_build_artifacts: bool,
+        no_validation: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
@@ -706,8 +715,9 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
 
         println!("Optimizing Wasm... with args: {}", args.iter().join(" "));
         let old_path = path.path()?.clone();
-        let new_path = compile::optimize_wasm(&old_path, args, require_update, dwarf)
-            .wrap_err("Failed to optimize Wasm")?;
+        let new_path =
+            compile::optimize_wasm(&old_path, args, threads, require_update, dwarf, no_validation)
+                .wrap_err("Failed to optimize Wasm")?;
 
         if !keep_build_artifacts && old_path != new_path && !path.is_original(&old_path) {
             std::fs::remove_file(&old_path)
@@ -855,9 +865,14 @@ impl GeneratorRunner {
     /// Primary operation chaining logic seamlessly running structural modifiers across all layered stages sequentially terminating out into WebAssembly components.
     pub fn run_layers_to_component(
         mut self,
-        out_dir: &Utf8PathBuf,
+        _out_dir: &Utf8PathBuf,
         keep_build_artifacts: bool,
     ) -> eyre::Result<ComponentRunner> {
+        let out_dir = tempdir()
+            .wrap_err("Failed to create temporary directory")?
+            .into_path();
+        let out_dir = Utf8PathBuf::from_path_buf(out_dir).unwrap();
+
         self.definitely()?;
 
         let toml_restorers = self
@@ -899,6 +914,7 @@ impl GeneratorRunner {
         );
 
         println!("Adjusting VFS Wasm...");
+        let threads = self.ctx.threads;
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
                 self.checkers
@@ -932,13 +948,14 @@ impl GeneratorRunner {
             })
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+        .with_opt(&mut self.path, threads, dwarf, keep_build_artifacts, false)?;
 
         let mut start_section_generator = Some(start_section_generator);
 
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
         for (target, target_name) in self.targets.iter_mut().zip(self.ctx.target_names.clone()) {
+            let threads = self.ctx.threads;
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
@@ -957,7 +974,7 @@ impl GeneratorRunner {
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts)
             })
-            .with_opt(target, dwarf, keep_build_artifacts)?;
+            .with_opt(target, threads, dwarf, keep_build_artifacts, false)?;
         }
 
         println!("Combining Wasm modules...");
@@ -997,9 +1014,10 @@ impl GeneratorRunner {
 
             path.set_path(output.into())
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+        .with_opt(&mut self.path, self.ctx.threads, dwarf, keep_build_artifacts, false)?;
 
         println!("Adjusting Merged Wasm...");
+        let threads = self.ctx.threads;
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
                 mem_id_visitor
@@ -1034,7 +1052,7 @@ impl GeneratorRunner {
             })
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+        .with_opt(&mut self.path, threads, dwarf, keep_build_artifacts, false)?;
 
         self.ctx.vfs_used_memory_id = None;
         self.ctx.target_used_memory_id = None;
@@ -1048,8 +1066,48 @@ impl GeneratorRunner {
             let old_path = self.path.path()?.clone();
 
             println!("Generating single memory Merged Wasm...");
-            let optimized_path =
-                compile::optimize_wasm(&old_path, &["--multi-memory-lowering"], true, dwarf)?;
+            let optimized_path = compile::optimize_wasm(
+                &old_path,
+                &["--multi-memory-lowering"],
+                self.ctx.threads,
+                true,
+                dwarf,
+                true, // no_validation
+            )?;
+
+            if self.ctx.threads {
+                let wat = std::process::Command::new("wasm-tools")
+                    .arg("print")
+                    .arg(&optimized_path)
+                    .output()
+                    .wrap_err("Failed to run wasm-tools print")?;
+                
+                if !wat.status.success() {
+                    eyre::bail!("wasm-tools print failed: {}", String::from_utf8_lossy(&wat.stderr));
+                }
+                
+                let wat_str = String::from_utf8_lossy(&wat.stdout);
+                // Fix the memory declaration in WAT.
+                // Binaryen produces: (memory (;0;) <initial> shared)
+                // We want: (memory (;0;) <initial> 16384 shared)
+                let fixed_wat = wat_str.replace(" shared)", " 16384 shared)");
+                
+                let mut child = std::process::Command::new("wasm-tools")
+                    .arg("parse")
+                    .arg("-o")
+                    .arg(&optimized_path)
+                    .stdin(std::process::Stdio::piped())
+                    .spawn()
+                    .wrap_err("Failed to spawn wasm-tools parse")?;
+                
+                use std::io::Write;
+                child.stdin.as_mut().unwrap().write_all(fixed_wat.as_bytes())?;
+                let status = child.wait().wrap_err("Failed to wait for wasm-tools parse")?;
+                
+                if !status.success() {
+                    eyre::bail!("wasm-tools parse failed");
+                }
+            }
 
             if !keep_build_artifacts {
                 std::fs::remove_file(&old_path)
@@ -1058,6 +1116,7 @@ impl GeneratorRunner {
 
             self.path.set_path(optimized_path)?;
 
+            let threads = self.ctx.threads;
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     mem_id_visitor
@@ -1080,7 +1139,7 @@ impl GeneratorRunner {
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts)
             })
-            .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+            .with_opt(&mut self.path, threads, dwarf, keep_build_artifacts, false)?;
         }
 
         println!("Translating Wasm to Component...");
@@ -1228,7 +1287,7 @@ impl ComponentRunner {
 
             Ok(core_wasm.clone())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
+        .with_opt(&mut self.path, true, dwarf, parsed_args.keep_build_artifacts(), false)?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
         self.generators.push(Box::new(mem_size_visitor));
@@ -1272,7 +1331,7 @@ impl ComponentRunner {
             })
             .wrap_run(path, dwarf, parsed_args.keep_build_artifacts())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
+        .with_opt(&mut self.path, true, dwarf, parsed_args.keep_build_artifacts(), false)?;
 
         let dwarf = {
             let new_dwarf = self.ctx.as_ref().unwrap().dwarf;
@@ -1787,7 +1846,7 @@ pub fn merge(
     vfs: &Utf8PathBuf,
     wasm: &[impl AsRef<std::path::Path>],
     output: impl AsRef<std::path::Path>,
-    _threads: bool,
+    threads: bool,
     dwarf: bool,
 ) -> eyre::Result<()> {
     let custom_section = {
@@ -1851,7 +1910,37 @@ pub fn merge(
         .wrap_err("Failed to wait for wasm-merge process")?;
 
     if !result.success {
-        return Err(eyre::eyre!("wasm-merge command failed"));
+        let out = String::from_utf8_lossy(&result.stdout);
+        let err = String::from_utf8_lossy(&result.stderr);
+        eyre::bail!("wasm-merge failed: {err}\nstdout: {out}");
+    }
+
+    // Post-process the merged file to ensure memory consistency for threads.
+    // wasm-opt (and specifically MultiMemoryLowering) is very picky about memory sharedness.
+    let mut module = walrus::Module::from_file(output.as_ref())
+        .map_err(|e| eyre::eyre!("Failed to parse merged Wasm: {e}"))?;
+    let mut changed = false;
+    for mem in module.memories.iter_mut() {
+        if threads {
+            if !mem.shared {
+                mem.shared = true;
+                changed = true;
+            }
+            if mem.maximum.is_none() {
+                // Shared memory MUST have a maximum.
+                // Use a reasonable default (1GB) if none provided.
+                mem.maximum = Some(mem.initial.max(16384));
+                changed = true;
+            }
+        } else if mem.shared {
+            mem.shared = false;
+            changed = true;
+        }
+    }
+    if changed {
+        module
+            .emit_wasm_file(output.as_ref())
+            .map_err(|e| eyre::eyre!("Failed to emit merged Wasm: {e}"))?;
     }
 
     let mut module = walrus::Module::load(output.as_ref(), dwarf)?;

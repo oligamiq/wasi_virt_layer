@@ -353,16 +353,18 @@ pub fn get_building_crate(
 
 /// Optimizes a WebAssembly module using the `wasm-opt` utility.
 pub fn optimize_wasm(
-    wasm_path: &camino::Utf8PathBuf,
+    path: &camino::Utf8PathBuf,
     add_args: &[&str],
-    require_update: bool,
+    threads: bool,
+    multi_memory: bool,
     dwarf: bool,
+    no_validation: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
     // if dwarf {
-    //     return Ok(wasm_path.clone());
+    //     return Ok(path.clone());
     // }
 
-    let mut before_path = wasm_path.clone();
+    let mut before_path = path.clone();
 
     let mut first = true;
 
@@ -379,6 +381,21 @@ pub fn optimize_wasm(
             cmd.arg("--debuginfo");
         }
 
+        if no_validation {
+            cmd.arg("-n");
+        }
+
+        if threads {
+            cmd.arg("--enable-threads");
+            cmd.arg("--enable-bulk-memory");
+        }
+
+        if add_args.contains(&"--multi-memory-lowering")
+            || add_args.contains(&"--enable-multimemory")
+        {
+            cmd.arg("--enable-multimemory");
+        }
+
         const OPTS: &[&str] = &["-O", "-O0", "-O1", "-O2", "-O3", "-O4", "-Oz", "-Os"];
 
         cmd.args(add_args.iter().filter(|&&arg| !OPTS.contains(&arg)));
@@ -389,7 +406,7 @@ pub fn optimize_wasm(
             cmd.arg("-Oz");
         }
 
-        cmd.arg(wasm_path.as_str());
+        cmd.arg(before_path.as_str());
 
         cmd.args(["--output", output_path.as_str()]);
         let command = cmd.spawn().wrap_err("Failed to spawn wasm-opt process")?;
@@ -413,7 +430,7 @@ pub fn optimize_wasm(
 
         if before_size <= after_size {
             if first {
-                if !require_update {
+                if !multi_memory {
                     std::fs::remove_file(&output_path)
                         .wrap_err("Failed to remove existing optimized WASM file")?;
                     std::fs::copy(&before_path, &output_path)

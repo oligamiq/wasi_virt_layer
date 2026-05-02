@@ -37,6 +37,7 @@ pub mod memory;
 mod shared_global;
 mod transporter;
 mod utils;
+/// Core WASI virtualization interfaces and subsystem implementations.
 pub mod wasi;
 mod wit;
 

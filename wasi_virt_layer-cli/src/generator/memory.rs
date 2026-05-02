@@ -241,6 +241,24 @@ impl Generator for TemporaryRefugeMemory {
                     Ok(())
                 })
                 .collect::<eyre::Result<Vec<_>>>()?;
+
+            for mem in module.memories.iter_mut() {
+                if ctx.threads {
+                    mem.shared = true;
+                    // Shared memory MUST have a maximum.
+                    // Use a reasonable default (1GB) or the existing maximum if it's larger.
+                    let current_max = mem.maximum.unwrap_or(0);
+                    mem.maximum = Some(current_max.max(mem.initial).max(16384));
+                } else {
+                    mem.shared = false;
+                }
+            }
+            
+            // Check imports just in case.
+            for (_i, import) in module.imports.iter().enumerate() {
+                if let walrus::ImportKind::Memory(_mid) = import.kind {
+                }
+            }
         }
 
         Ok(())

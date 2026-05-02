@@ -1,15 +1,25 @@
 // https://github.com/bytecodealliance/wasmtime/blob/cff811b55e8b715e037226f2f3c36c65676d319a/crates/wasi-preview1-component-adapter/src/lib.rs#L1655
 
+/// Command-line arguments virtualization.
 pub mod args;
+/// Clock and time operations virtualization.
 pub mod clock;
+/// Environment variables virtualization.
 pub mod env;
+/// File system and I/O virtualization.
 pub mod file;
+/// Polling and event waiting virtualization.
 pub mod poll;
+/// Process management and lifecycle virtualization.
 pub mod process;
+/// Random number generation virtualization.
 pub mod random;
+/// Scheduler and thread yielding virtualization.
 pub mod sched;
 #[cfg(feature = "threads")]
+/// Multi-threading virtualization support.
 pub mod thread;
+/// Unreachable instruction wrapping and handling.
 pub mod wrap_unreachable;
 
 /// Internal helper macro for handle `self` and other identifiers.
