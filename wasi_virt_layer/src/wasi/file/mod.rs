@@ -653,6 +653,15 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         nread: *mut Size,
     ) -> wasip1::Errno;
 
+    /// Seeks to a position in a file descriptor.
+    fn fd_seek_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset: i64,
+        whence: wasip1::Whence,
+        new_offset_ptr: *mut i64,
+    ) -> wasip1::Errno;
+
     /// Opens a path relative to a file descriptor.
     fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
@@ -797,6 +806,28 @@ macro_rules! plug_fs {
                     let state = $state;
                     $crate::__as_t!(@as_t, $wasm);
                     $crate::file::Wasip1FileSystem::fd_read_raw::<T>(state, fd, iovs_ptr, iovs_len, nread_ret)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_seek>](
+                    fd: $crate::__private::wasip1::Fd,
+                    offset: i64,
+                    whence: i8,
+                    new_offset_ptr: *mut i64,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    let whence_const = match whence as u8 {
+                        0 => $crate::__private::wasip1::WHENCE_SET,
+                        1 => $crate::__private::wasip1::WHENCE_CUR,
+                        2 => $crate::__private::wasip1::WHENCE_END,
+                        _ => {
+                            // Invalid whence value - let fd_seek_raw handle the error
+                            return $crate::__private::wasip1::ERRNO_INVAL;
+                        }
+                    };
+                    $crate::file::Wasip1FileSystem::fd_seek_raw::<T>(state, fd, offset, whence_const, new_offset_ptr)
                 }
 
                 #[unsafe(no_mangle)]

@@ -107,7 +107,8 @@ impl Generator for CheckUseLibrary {
 
         for declared_name in declared_wasm_names {
             // Skip validation for anonymous - it's handled by the Anonymous generator
-            if declared_name == "anonymous" {
+            // Also skip if it's the VFS module itself (self-virtualization)
+            if declared_name == "anonymous" || normalize_name(&declared_name) == normalize_name(ctx.vfs_name.as_ref()) {
                 continue;
             }
 

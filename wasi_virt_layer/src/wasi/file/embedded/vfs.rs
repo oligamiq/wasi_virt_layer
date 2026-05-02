@@ -534,6 +534,45 @@ where
         }
     }
 
+    pub(crate) fn fd_seek_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset: i64,
+        whence: wasip1::Whence,
+        new_offset_ptr: *mut i64,
+    ) -> Result<(), wasip1::Errno> {
+        let cursor = self.get_cursor(fd)?;
+
+        let new_offset_i64 = match whence {
+            wasip1::WHENCE_SET => offset,
+            wasip1::WHENCE_CUR => (cursor as i64)
+                .checked_add(offset)
+                .ok_or(wasip1::ERRNO_OVERFLOW)?,
+            wasip1::WHENCE_END => {
+                let size = self.with_inode_and_lfs(fd, |inode, lfs| {
+                    if lfs.is_dir(inode) {
+                        return Err(wasip1::ERRNO_ISDIR);
+                    }
+                    Ok(lfs.fd_filestat_get_raw::<Wasm>(inode)?.size)
+                })??;
+                (size as i64)
+                    .checked_add(offset)
+                    .ok_or(wasip1::ERRNO_OVERFLOW)?
+            }
+            _ => return Err(wasip1::ERRNO_INVAL),
+        };
+
+        if new_offset_i64 < 0 {
+            return Err(wasip1::ERRNO_INVAL);
+        }
+
+        Wasm::store_le(new_offset_ptr, new_offset_i64);
+        let new_offset = new_offset_i64 as usize;
+        self.set_cursor(fd, new_offset)?;
+
+        Ok(())
+    }
+
     pub(crate) fn path_open_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_fd: Fd,

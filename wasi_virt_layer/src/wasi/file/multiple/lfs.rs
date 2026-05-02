@@ -750,4 +750,38 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
             Err(e) => e,
         }
     }
+
+    fn fd_seek_raw<Wasm: WasmAccess + WasmAccessName>(
+        &self,
+        fd: Fd,
+        offset: i64,
+        whence: wasip1::Whence,
+        new_offset_ptr: *mut i64,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_seek: fd={fd}, offset={offset}, whence={:?}", whence);
+        get_access!(access = self, Wasm);
+        get_open_fd_mut!((open_fd, lfs) = self, fd);
+
+        let current_offset = open_fd.cursor() as i64;
+        let new_offset = match whence {
+            wasip1::WHENCE_SET => offset,
+            wasip1::WHENCE_CUR => current_offset + offset,
+            wasip1::WHENCE_END => {
+                get_inode!(inode = open_fd);
+                match lfs.fd_filestat_get_raw_dyn_compatible(access, inode) {
+                    Ok(stat) => stat.size as i64 + offset,
+                    Err(e) => return e,
+                }
+            }
+            _ => return wasip1::ERRNO_INVAL,
+        };
+
+        if new_offset < 0 {
+            return wasip1::ERRNO_INVAL;
+        }
+
+        open_fd.set_cursor(new_offset as usize);
+        Wasm::store_le(new_offset_ptr, new_offset);
+        wasip1::ERRNO_SUCCESS
+    }
 }

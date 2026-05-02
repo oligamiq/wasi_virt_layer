@@ -164,6 +164,21 @@ where
         }
     }
 
+    fn fd_seek_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset: i64,
+        whence: wasip1::Whence,
+        new_offset_ptr: *mut i64,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_seek: fd={fd}, offset={offset}, whence={}", whence.raw());
+
+        match self.fd_seek_raw_inner::<Wasm>(fd, offset, whence, new_offset_ptr) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
     fn path_open_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         dir_fd: Fd,
