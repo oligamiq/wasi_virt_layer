@@ -11,8 +11,7 @@ wit_bindgen::generate!({
 
 import_wasm!(<anonymous>);
 
-static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
-    unsafe { VirtualThreadPool::new_const(2) };
+static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(2) };
 
 impl Guest for ComponentABI {
     fn main() {
@@ -20,10 +19,9 @@ impl Guest for ComponentABI {
 
         // Initialize the pool before _start(), because _start() triggers
         // the guest's main() which immediately spawns threads via the pool.
-        let pool = unsafe { &mut *(&raw mut THREAD_POOL) };
-        pool.init();
-        pool.set_capacity(2);
-        pool.flush_capacity().wait();
+        unsafe { THREAD_POOL.init() };
+        THREAD_POOL.set_capacity(2);
+        THREAD_POOL.flush_capacity().wait();
 
         println!("Pool threads initialized.");
 
@@ -34,7 +32,7 @@ impl Guest for ComponentABI {
 #[cfg(not(test))]
 export!(ComponentABI);
 
-plug_thread!({ unsafe { &mut *(&raw mut THREAD_POOL) } }, anonymous, self);
+plug_thread!({ &THREAD_POOL }, anonymous, self);
 
 plug_poll!(DefaultWaitPoll, anonymous);
 

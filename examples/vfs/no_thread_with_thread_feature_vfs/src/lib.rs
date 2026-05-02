@@ -80,7 +80,7 @@ impl<ThreadAccessor: ThreadAccess> wasi_virt_layer::thread::VirtualThread<Thread
     for ThreadAlt<ThreadAccessor>
 {
     fn new_thread(
-        &mut self,
+        &self,
         _: ThreadAccessor,
         _: wasi_virt_layer::thread::ThreadRunner,
     ) -> Option<std::num::NonZero<u32>> {

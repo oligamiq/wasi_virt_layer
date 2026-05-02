@@ -1,7 +1,6 @@
 use const_struct::const_struct;
 use wasi_virt_layer::{
     file::{StandardEmbeddedFiles, WasiEmbeddedFile},
-    poll::PollOneoff,
     prelude::*,
 };
 

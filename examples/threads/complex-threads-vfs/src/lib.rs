@@ -1,6 +1,6 @@
 use const_struct::const_struct;
 use std::thread;
-use wasi_virt_layer::{file::*, plug_thread, prelude::*, process::*};
+use wasi_virt_layer::{file::*, plug_thread, prelude::*};
 
 struct ComponentABI;
 

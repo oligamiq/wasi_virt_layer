@@ -25,16 +25,14 @@ impl Guest for Starter {
     fn init(pool_size: u32) {
         println!("%%% Initializing thread pool with size {}", pool_size);
 
-        let pool = &raw mut THREAD_POOL;
-        let pool = unsafe { &mut *pool };
-        pool.init();
+        unsafe { THREAD_POOL.init() };
 
         println!("%%% Setting thread pool capacity to {}", pool_size);
 
-        pool.set_capacity(pool_size as usize);
+        THREAD_POOL.set_capacity(pool_size as usize);
 
         println!("%%% Flushing thread pool capacity...");
-        let waiter = pool.flush_capacity();
+        let waiter = THREAD_POOL.flush_capacity();
 
         println!("%%% Waiting for thread pool to initialize...");
 
@@ -82,11 +80,10 @@ const EMBEDDED_FILES: NormalFILES = EmbeddedFiles!([
     )
 ]);
 
-static mut THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
-    unsafe { VirtualThreadPool::new_const(4) };
+static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(4) };
 
 plug_thread!(
-    { unsafe { &mut *(&raw mut THREAD_POOL) } },
+    { &THREAD_POOL },
     // { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
     test_pool_thread

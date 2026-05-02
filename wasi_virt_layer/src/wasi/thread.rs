@@ -12,15 +12,11 @@ use crate::{memory::WasmAccessName, utils::UnsafeOnceCell};
 /// Trait for a virtual thread implementation.
 pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
     /// Creates a new thread and returns its ID.
-    fn new_thread(
-        &mut self,
-        accessor: ThreadAccessor,
-        runner: ThreadRunner,
-    ) -> Option<NonZero<u32>>;
+    fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>>;
 
     /// Yields the execution of the current thread.
     #[inline(always)]
-    fn sched_yield<Wasm: WasmAccess + WasmAccessName + 'static>(&mut self) -> wasip1::Errno {
+    fn sched_yield<Wasm: WasmAccess + WasmAccessName + 'static>(&self) -> wasip1::Errno {
         #[cfg(target_os = "wasi")]
         {
             wasip1::ERRNO_SUCCESS
@@ -410,11 +406,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
 impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     for VirtualThreadPool<ThreadAccessor>
 {
-    fn new_thread(
-        &mut self,
-        accessor: ThreadAccessor,
-        runner: ThreadRunner,
-    ) -> Option<NonZero<u32>> {
+    fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>> {
         static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
 
         let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -498,11 +490,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     for DirectThreadPool<ThreadAccessor>
 {
     // new thread start function call by other wasm
-    fn new_thread(
-        &mut self,
-        accessor: ThreadAccessor,
-        runner: ThreadRunner,
-    ) -> Option<NonZero<u32>> {
+    fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>> {
         static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
 
         let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
@@ -526,6 +514,13 @@ macro_rules! plug_thread {
     };
 
     (@inner, $pool:tt, $($wasm:ident),* $(,)?) => {
+        const _: () = {
+            #[allow(unused)]
+            let _ = || {
+                $pool;
+            };
+        };
+
         $crate::__private::paste::paste! {
             #[allow(non_camel_case_types)]
             #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
