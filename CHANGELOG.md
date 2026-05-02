@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.16] - 2026-05-02
+
+### Changed
+- **Thread Handling Refactor**: Updated the `VirtualThread` trait to use `&self` instead of `&mut self` for `new_thread` and `sched_yield`. This allows virtual thread implementations to be stored in `static` rather than `static mut`, improving safety and idiomatic Rust usage.
+- **Thread Pool Examples**: Refactored all thread-related examples (`pool-threads-vfs`, `thread_pool_vfs`, etc.) to use thread-safe `static` pools.
+- **`plug_thread!` Macro**: Enhanced the macro to support immutable references to thread pools and added a compile-time check to ensure the pool expression is valid.
+
+## [0.2.15] - 2026-05-02
+
+### Added
+- **`UnsafeOnceCell`**: Introduced a minimal, thread-safe `UnsafeOnceCell` in `wasi_virt_layer::utils` for safe one-time initialization of values in `static` contexts.
+
+### Changed
+- **`VirtualThreadPool`**: Refactored to use `UnsafeOnceCell` for internal state initialization, enabling its use from immutable references.
+
 ## [0.2.14] - 2026-05-02
 
 ### Changed
