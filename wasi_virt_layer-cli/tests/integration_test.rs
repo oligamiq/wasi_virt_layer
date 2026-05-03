@@ -1215,3 +1215,52 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
 
     Ok(())
 }
+
+/// Regression test for a minimal multi-target threading environment using VirtualThreadPool.
+/// This reproduces the environment in `examples/vfs/minimal_repro_virtual/run.bat`.
+#[test]
+fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let workspace_root_buf = Utf8PathBuf::from(THIS_FOLDER);
+    let workspace_root = workspace_root_buf.parent().unwrap().parent().unwrap();
+
+    // 1. Run wasi_virt_layer build
+    let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
+    let manifest_path = workspace_root.join("examples/vfs/minimal_repro_virtual/Cargo.toml");
+
+    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    cmd.current_dir(THIS_FOLDER).args([
+        "build",
+        "--manifest-path",
+        manifest_path.as_str(),
+        "test_threads",
+        "ls",
+        "-t",
+        "single",
+        "--threads",
+        "true",
+        "--out-dir",
+        &out_dir,
+    ]);
+
+    let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
+    if !output.status.success() {
+        return Err(color_eyre::eyre::eyre!(
+            "wasi_virt_layer build failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    // 2. Run with Deno
+    run_thread(&out_dir).wrap_err("Failed to run combined module with Deno")?;
+
+    let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
+
+    Ok(())
+}
