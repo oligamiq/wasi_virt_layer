@@ -1234,6 +1234,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "minimal_repro_virtual"
+version = "0.2.17"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
