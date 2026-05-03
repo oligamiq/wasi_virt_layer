@@ -10,6 +10,7 @@
 !wasi_virt_layer-cli/tests/fixtures/c_target.wasm
 
 **/dist
+dist_minimal
 
 # Python must not exist in the repository, but if it does, ignore it.
 *.py

@@ -16,6 +16,8 @@ pub enum UniqueName<'a, 'b> {
     StartAlternative(&'a StartAlternativeName),
     /// A unique name corresponding to shared global functions.
     SharedGlobalFns(&'a SharedGlobalFnsName),
+    /// A unique name corresponding to shared global functions for a specific target.
+    SharedGlobalFnsForTarget(&'a SharedGlobalFnsName, &'a str),
     /// A unique name corresponding to WASI P1 ABI function replacements.
     Wasip1ABI(&'a Wasip1ABIName<'b>),
     /// A unique name corresponding to thread spawning logic.
@@ -152,6 +154,17 @@ impl UniqueName<'_, '_> {
                         fmt!(SharedGlobalFns; "{func_name}_{n}")
                     }
                     _ => fmt!(SharedGlobalFns; "{func_name}"),
+                }
+            }
+            UniqueName::SharedGlobalFnsForTarget(func, target) => {
+                let func_name = func.as_ref();
+                let normalized_target = target.replace('-', "_");
+                let op = UniqueName::SHARED_GLOBAL_FNS;
+                match func {
+                    SharedGlobalFnsName::Locker(n) => {
+                        fmt!("{normalized_target}_{op}{func_name}_{n}")
+                    }
+                    _ => fmt!("{normalized_target}_{op}{func_name}"),
                 }
             }
             UniqueName::Wasip1ABI(t) => {

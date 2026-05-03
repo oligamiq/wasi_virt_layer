@@ -19,83 +19,11 @@ use crate::utils::InitOnce;
 
 static LOCK: std::sync::RwLock<()> = std::sync::RwLock::new(());
 
-static mut ALT_GLOBAL_VAR: i32 = 0;
-
-// It should already be in the write lock.
-/// Sets the alternative global variable for memory grow tracking.
-#[unsafe(no_mangle)]
-pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_set(v: i32) {
-    // use crate::debug::*;
-
-    // if !is_pre_init() {
-    //     out(b"set global: ");
-    //     num_to_str(v, out);
-    //     out(b"\n");
-    // }
-    unsafe { ALT_GLOBAL_VAR = v };
+pub fn lock_read() -> std::sync::RwLockReadGuard<'static, ()> {
+    LOCK.read().unwrap()
 }
 
-/// Initializes the alternative global variable once.
-#[unsafe(no_mangle)]
-pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_init_once(v: i32) {
-    static INIT: InitOnce = InitOnce::new_const();
-
-    INIT.call_once(|| {
-        // use crate::debug::*;
-        // out(b"init once global: ");
-        // num_to_str(v, out);
-        // out(b"\n");
-        unsafe { ALT_GLOBAL_VAR = v };
-    });
-}
-
-/// Returns the memory address of the alternative global variable.
-#[unsafe(no_mangle)]
-pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_pos() -> i32 {
-    &raw const ALT_GLOBAL_VAR as *const i32 as i32
-}
-
-/// Gets the alternative global variable without waiting for a lock.
-#[unsafe(no_mangle)]
-pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get_no_wait() -> i32 {
-    // use crate::debug::*;
-
-    let i = unsafe { ALT_GLOBAL_VAR };
-    // if !is_pre_init() {
-    //     out(b"get global no wait: ");
-    //     num_to_str(i, out);
-    //     out(b"\n");
-    // }
-    i
-}
-
-/// Gets the alternative global variable, waiting for a read lock.
-#[unsafe(no_mangle)]
-pub extern "C" fn __wasip1_vfs_memory_grow_global_alt_get() -> i32 {
-    // use crate::debug::*;
-
-    // out(b"waiting for read lock...\n");
-    let _guard = LOCK.read().unwrap();
-    let i = unsafe { ALT_GLOBAL_VAR };
-    // if !is_pre_init() {
-    //     out(b"get global: ");
-    //     num_to_str(i, out);
-    //     out(b"\n");
-    // }
-    core::mem::drop(_guard);
-
-    // Implementation for the 5-second panic check should be added here
-    // static TIME: std::sync::LazyLock<std::time::Instant> =
-    //     std::sync::LazyLock::new(|| std::time::Instant::now());
-
-    // if TIME.elapsed().as_secs() > 5 {
-    //     out(b"Error: Global variable read lock has been held for over 5 seconds!\n");
-    //     panic!("Global variable read lock timeout");
-    // }
-
-    // out(b"unlocked global read\n");
-    i
-}
+crate::gen_alt_global!(vfs_external_memory_manager);
 
 #[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "wasip1-vfs_single_memory")]

@@ -121,7 +121,7 @@ impl SharedGlobal {
             .filter_map(|v| v)
             .collect::<HashSet<_>>();
 
-        let lockers = used_mem_id
+        let mut lockers = used_mem_id
             .into_iter()
             .map(|mem_id| {
                 Self::gen_custom_locker(module, mem_id, ctx.unstable_print_debug)
@@ -144,55 +144,40 @@ impl SharedGlobal {
             &lockers.values().map(|(v, _)| *v).collect::<Vec<_>>(),
         )?;
 
-        let global_set_alt_without_lock =
-            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltSet)
-                .get_fid(&module.exports)?;
-        let global_init_alt_without_lock_once =
-            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltInitOnce)
-                .get_fid(&module.exports)?;
-        let global_get_alt_with_lock =
-            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltGet)
-                .get_fid(&module.exports)?;
-        let global_get_alt_without_lock =
-            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltGetNoWait)
-                .get_fid(&module.exports)?;
-
-        let global = module
+        let offset_globals = module
             .globals
             .iter()
-            .last()
-            .map(|g| g)
-            .wrap_err_with(|| eyre::eyre!("Failed to get global ID"))?;
+            .filter(|g| {
+                g.mutable
+                    && matches!(
+                        g.kind,
+                        walrus::GlobalKind::Local(walrus::ConstExpr::Value(
+                            walrus::ir::Value::I32(_)
+                        ))
+                    )
+            })
+            .map(|g| g.id())
+            .collect::<Vec<_>>();
 
-        let init = match global.kind {
-            walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(value))) => {
-                value
-            }
-            _ => unreachable!(),
-        };
+        let num_globals_expected = ctx.target_names.len() + 1;
+        if offset_globals.len() < num_globals_expected {
+            eyre::bail!(
+                "Expected at least {} offset globals, but found {}",
+                num_globals_expected,
+                offset_globals.len()
+            );
+        }
 
-        let global_id = global.id();
+        let target_globals = &offset_globals[offset_globals.len() - num_globals_expected..];
 
-        // Obtain the location within memory.
-        let global_alt_pos = UniqueName::SharedGlobalFns(&SharedGlobalFnsName::GlobalAltPos)
-            .get_fid(&module.exports)?;
-        // let global_alt_pos = module.funcs.get(global_alt_pos).kind.unwrap_local();
-        // let global_alt_pos = if let walrus::ir::Instr::Const(walrus::ir::Const {
-        //     value: walrus::ir::Value::I32(value),
-        // }) = global_alt_pos
-        //     .block(global_alt_pos.entry_block())
-        //     .instrs
-        //     .first()
-        //     .unwrap()
-        //     .0
-        // {
-        //     value
-        // } else {
-        //     unreachable!()
-        // };
-        module
-            .exports
-            .erase_with(global_alt_pos, ctx.unstable_print_debug)?;
+        let mut global_mappings = Vec::new();
+        for (i, name) in ctx.target_names.iter().enumerate() {
+            global_mappings.push((target_globals[i], name.as_ref()));
+        }
+        global_mappings.push((
+            target_globals[ctx.target_names.len()],
+            "vfs_external_memory_manager",
+        ));
 
         // check global set in start section function
         let start_id = if let Some(id) = module.start {
@@ -205,14 +190,55 @@ impl SharedGlobal {
         };
         module.start = Some(start_id);
 
-        if 0usize
-            < module
+        for (global_id, target_name) in global_mappings {
+            let global = module.globals.get(global_id);
+            let init = match global.kind {
+                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(
+                    value,
+                ))) => value,
+                _ => unreachable!(),
+            };
+
+            let global_set_alt_without_lock = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltSet,
+                target_name,
+            )
+            .get_fid(&module.exports)?;
+            let global_init_alt_without_lock_once = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltInitOnce,
+                target_name,
+            )
+            .get_fid(&module.exports)?;
+            let global_get_alt_with_lock = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltGet,
+                target_name,
+            )
+            .get_fid(&module.exports)?;
+            let global_get_alt_without_lock = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltGetNoWait,
+                target_name,
+            )
+            .get_fid(&module.exports)?;
+            let global_alt_pos = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltPos,
+                target_name,
+            )
+            .get_fid(&module.exports)?;
+
+            module
+                .exports
+                .erase_with(global_alt_pos, ctx.unstable_print_debug)?;
+
+            let replaced_sets: usize = module
                 .funcs
                 .flat_rewrite(
                     |instr, _| match instr {
                         walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
                             if *global == global_id =>
                         {
+                            *instr = walrus::ir::Instr::Call(walrus::ir::Call {
+                                func: global_init_alt_without_lock_once,
+                            });
                             1usize
                         }
                         walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
@@ -221,7 +247,6 @@ impl SharedGlobal {
                             *instr = walrus::ir::Instr::Const(walrus::ir::Const {
                                 value: walrus::ir::Value::I32(init),
                             });
-                            // println!("Rewrote global get to const i32 {init}");
                             0usize
                         }
                         _ => 0usize,
@@ -230,85 +255,83 @@ impl SharedGlobal {
                     false,
                 )?
                 .into_iter()
-                .sum()
-        {
-            eyre::bail!(
-                "The start section already contains a global set instruction. \
-                Please remove it manually and try again."
-            );
+                .sum();
+
+            if replaced_sets == 0 {
+                let start_local = module.funcs.get_mut(start_id).kind.unwrap_local_mut();
+                start_local
+                    .builder_mut()
+                    .func_body()
+                    .i32_const(init)
+                    .call(global_init_alt_without_lock_once);
+            }
+
+            // The locker is locked at the point it is called. So we can replace
+            for (_, (locker_id, _)) in lockers.iter_mut() {
+                use walrus::ir::*;
+                let new_locker =
+                    module.nested_copy_func(*locker_id, &[] as &[FunctionId], true, true)?;
+
+                module.funcs.flat_rewrite(
+                    |instr, _| match instr {
+                        Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: global_get_alt_without_lock,
+                            });
+                        }
+                        _ => {}
+                    },
+                    new_locker,
+                    true,
+                )?;
+
+                module.renew_call_fn(*locker_id, new_locker)?;
+                *locker_id = new_locker;
+            }
+
+            module
+                .funcs
+                .all_rewrite(
+                    |instr, _| match instr {
+                        walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
+                            if *global == global_id =>
+                        {
+                            *instr = walrus::ir::Instr::Call(walrus::ir::Call {
+                                func: global_set_alt_without_lock,
+                            });
+                        }
+                        walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
+                            if *global == global_id =>
+                        {
+                            *instr = walrus::ir::Instr::Call(walrus::ir::Call {
+                                func: global_get_alt_with_lock,
+                            });
+                        }
+                        _ => {}
+                    },
+                    &[] as &[walrus::FunctionId],
+                )
+                .wrap_err("Failed to rewrite global set/get")?;
+
+            module.globals.delete(global_id);
+
+            module
+                .exports
+                .erase_with(global_set_alt_without_lock, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(global_init_alt_without_lock_once, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(global_get_alt_with_lock, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(global_get_alt_without_lock, ctx.unstable_print_debug)?;
         }
 
-        let start_local = module.funcs.get_mut(start_id).kind.unwrap_local_mut();
-        start_local
-            .builder_mut()
-            .func_body()
-            .i32_const(init)
-            .call(global_init_alt_without_lock_once);
-
-        // The locker is locked at the point it is called. So we can replace
-        for (_, (locker_id, name)) in lockers {
-            // println!("Rewriting locker: {:?}", locker_id);
-            use walrus::ir::*;
-            let new_locker =
-                // module.nested_copy_func(locker_id, &[] as &[FunctionId], false, false)?;
-                module.nested_copy_func(locker_id, &[] as &[FunctionId], true, true)?;
-
-            module.funcs.flat_rewrite(
-                |instr, _| match instr {
-                    Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
-                        *instr = Instr::Call(Call {
-                            func: global_get_alt_without_lock,
-                        });
-                    }
-                    _ => {}
-                },
-                new_locker,
-                true,
-            )?;
-
-            module.renew_call_fn(locker_id, new_locker)?;
-
+        for (_, (_, name)) in lockers {
             module.exports.erase_with(&name, ctx.unstable_print_debug)?;
         }
-
-        module
-            .funcs
-            .all_rewrite(
-                |instr, _| match instr {
-                    walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
-                        if *global == global_id =>
-                    {
-                        *instr = walrus::ir::Instr::Call(walrus::ir::Call {
-                            func: global_set_alt_without_lock,
-                        });
-                    }
-                    walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
-                        if *global == global_id =>
-                    {
-                        *instr = walrus::ir::Instr::Call(walrus::ir::Call {
-                            func: global_get_alt_with_lock,
-                        });
-                    }
-                    _ => {}
-                },
-                &[] as &[walrus::FunctionId],
-            )
-            .wrap_err("Failed to rewrite global set/get")?;
-
-        module.globals.delete(global_id);
-
-        module
-            .exports
-            .erase_with(global_set_alt_without_lock, ctx.unstable_print_debug)?;
-        module
-            .exports
-            .erase_with(global_init_alt_without_lock_once, ctx.unstable_print_debug)?;
-        module
-            .exports
-            .erase_with(global_get_alt_with_lock, ctx.unstable_print_debug)?;
-        module
-            .exports
-            .erase_with(global_get_alt_without_lock, ctx.unstable_print_debug)?;
 
         Ok(())
     }

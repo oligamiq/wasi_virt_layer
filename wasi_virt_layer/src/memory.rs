@@ -1,5 +1,55 @@
 use crate::__private::wasip1;
 
+#[macro_export]
+macro_rules! gen_alt_global {
+    ($name:ident) => {
+        $crate::__private::paste::paste! {
+            $crate::if_threads! {
+                $crate::if_not_multi_memory! {
+                    #[cfg(target_arch = "wasm32")]
+                    static mut [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>]: i32 = 0;
+
+                    #[cfg(target_arch = "wasm32")]
+                    #[unsafe(no_mangle)]
+                    pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_set>](v: i32) {
+                        unsafe { [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>] = v };
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    #[unsafe(no_mangle)]
+                    pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_init_once>](v: i32) {
+                        static INIT: $crate::__private::utils::InitOnce = $crate::__private::utils::InitOnce::new_const();
+                        INIT.call_once(|| {
+                            unsafe { [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>] = v };
+                        });
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    #[unsafe(no_mangle)]
+                    pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_pos>]() -> i32 {
+                        &raw const [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>] as *const i32 as i32
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    #[unsafe(no_mangle)]
+                    pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_get_no_wait>]() -> i32 {
+                        unsafe { [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>] }
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    #[unsafe(no_mangle)]
+                    pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_get>]() -> i32 {
+                        let _guard = $crate::shared_global::lock_read();
+                        let i = unsafe { [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>] };
+                        core::mem::drop(_guard);
+                        i
+                    }
+                }
+            }
+        }
+    };
+}
+
 /// By entering the names of the files to be combined, a bridge for the combination is created.
 /// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
 /// ```
@@ -205,6 +255,8 @@ macro_rules! import_wasm {
                 }
             }
         }
+
+        $crate::gen_alt_global!($name);
     };
 }
 

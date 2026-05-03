@@ -14,6 +14,50 @@
 /// Procedural macros for generating WASIP1 boilerplate.
 pub mod wasip1_derive;
 
+#[cfg(feature = "threads")]
+#[macro_export]
+macro_rules! if_threads {
+    ($($t:tt)*) => { $($t)* }
+}
+#[cfg(not(feature = "threads"))]
+#[macro_export]
+macro_rules! if_threads {
+    ($($t:tt)*) => {};
+}
+
+#[cfg(feature = "threads")]
+#[macro_export]
+macro_rules! if_not_threads {
+    ($($t:tt)*) => {};
+}
+#[cfg(not(feature = "threads"))]
+#[macro_export]
+macro_rules! if_not_threads {
+    ($($t:tt)*) => { $($t)* }
+}
+
+#[cfg(feature = "multi_memory")]
+#[macro_export]
+macro_rules! if_multi_memory {
+    ($($t:tt)*) => { $($t)* }
+}
+#[cfg(not(feature = "multi_memory"))]
+#[macro_export]
+macro_rules! if_multi_memory {
+    ($($t:tt)*) => {};
+}
+
+#[cfg(feature = "multi_memory")]
+#[macro_export]
+macro_rules! if_not_multi_memory {
+    ($($t:tt)*) => {};
+}
+#[cfg(not(feature = "multi_memory"))]
+#[macro_export]
+macro_rules! if_not_multi_memory {
+    ($($t:tt)*) => { $($t)* }
+}
+
 #[cfg(feature = "simple-debug")]
 /// Simple, fast debugging utilities for WebAssembly execution.
 pub mod simple_debug;
@@ -34,7 +78,8 @@ pub mod memory;
     feature = "threads",
     not(feature = "multi_memory")
 ))]
-mod shared_global;
+#[doc(hidden)]
+pub mod shared_global;
 mod transporter;
 mod utils;
 pub mod wasi;
@@ -190,6 +235,7 @@ pub mod __private {
 
     pub mod utils {
         pub use crate::utils::EmbeddedArrayBuilder;
+        pub use crate::utils::InitOnce;
         #[cfg(feature = "alloc")]
         pub use crate::utils::alloc_buff;
     }
