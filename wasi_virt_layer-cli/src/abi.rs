@@ -25,15 +25,17 @@ pub mod is_valid {
                 .wrap_err_with(|| eyre::eyre!("This import is not a valid this library custom import. {name}", name = import.name))?;
             wasm_names.iter().find_map(|n| {
                 let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
+                if func_name == "thread_spawn" {
+                    return Some((n.as_ref().to_string(), Wasip1ABIPlugger::PlugThread, "thread_spawn".to_string()));
+                }
                 let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
-                Some((n.as_ref().to_string(), func))
+                Some((n.as_ref().to_string(), Wasip1ABIPlugger::from_variant(&func).unwrap(), func.to_string()))
             })
             .wrap_err("Failed to parse wasm target and WASI function name")
         })
         .filter_map(|v| v.inspect_err(|e| {
             log::error!("Invalid import: {e}");
         }).ok())
-        .map(|(wasm_name, v)| (wasm_name, Wasip1ABIPlugger::from_variant(&v).unwrap(), v))
         .fold(HashMap::<_, Vec<_>>::new(), |mut acc, (wasm_name, plugger, v)| {
             acc
                 .entry((wasm_name, plugger))
@@ -102,6 +104,8 @@ pub mod is_valid {
         PlugSched,
         /// Plugins for polling operations.
         PlugPoll,
+        /// Plugins for thread operations.
+        PlugThread,
     }
 
     use std::collections::HashMap;
@@ -168,6 +172,7 @@ pub mod is_valid {
                 Wasip1ABIPlugger::PlugProcess => Self::PLUG_PROCESS,
                 Wasip1ABIPlugger::PlugSched => Self::PLUG_SCHED,
                 Wasip1ABIPlugger::PlugPoll => Self::PLUG_POLL,
+                Wasip1ABIPlugger::PlugThread => &[],
             }
         }
 
