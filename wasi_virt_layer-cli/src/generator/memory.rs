@@ -290,6 +290,9 @@ impl Generator for TemporaryRefugeMemory {
         if self.had_shared {
             for mem in module.memories.iter_mut() {
                 mem.shared = true;
+                if mem.maximum.is_none() {
+                    mem.maximum = Some(mem.initial.max(65536));
+                }
             }
         }
 
@@ -334,6 +337,9 @@ impl Generator for TemporaryRefugeMemory {
             }
             if info.had_shared {
                 mem.shared = true;
+                if mem.maximum.is_none() {
+                    mem.maximum = Some(mem.initial.max(65536));
+                }
             }
         }
 
