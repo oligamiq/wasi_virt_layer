@@ -244,10 +244,10 @@ impl SharedGlobal {
                         walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
                             if *global == global_id =>
                         {
-                            *instr = walrus::ir::Instr::Const(walrus::ir::Const {
-                                value: walrus::ir::Value::I32(init),
+                            *instr = walrus::ir::Instr::Call(walrus::ir::Call {
+                                func: global_get_alt_with_lock,
                             });
-                            0usize
+                            1usize
                         }
                         _ => 0usize,
                     },
