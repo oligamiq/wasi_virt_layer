@@ -13,7 +13,7 @@ struct Hello;
 
 import_wasm!(test_threads);
 import_wasm!(ls);
-import_wasm!(args_target);
+import_wasm!(args);
 import_wasm!(ls2);
 
 impl Guest for Hello {
@@ -39,10 +39,10 @@ impl Guest for Hello {
         ls::_start();
         ls::_main();
 
-        println!("Running args_target...");
-        args_target::_reset();
-        args_target::_start();
-        args_target::_main();
+        println!("Running args...");
+        args::_reset();
+        args::_start();
+        args::_main();
 
         println!("Running ls2...");
         ls2::_reset();
@@ -59,11 +59,11 @@ plug_thread!(
     self,
     test_threads,
     ls,
-    args_target,
+    args,
     ls2
 );
 
-plug_process!(StandardProcess, test_threads, ls, args_target, ls2, self);
+plug_process!(StandardProcess, test_threads, ls, args, ls2, self);
 
 struct VirtualEnvState {
     environ: Vec<String>,
@@ -84,15 +84,15 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
     Mutex::new(VirtualEnvState { environ })
 });
 
-plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), test_threads, ls, args_target, ls2);
+plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), test_threads, ls, args, ls2);
 
 #[const_struct]
 const VIRTUAL_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState { args: &["repro"] };
-plug_args!(@embedded, VirtualArgsTy, test_threads, ls, args_target, ls2, self);
+plug_args!(@embedded, VirtualArgsTy, test_threads, ls, args, ls2, self);
 
-plug_clock!(StandardClock, test_threads, ls, args_target, ls2, self);
-plug_random!(StandardRandom, test_threads, ls, args_target, ls2, self);
-plug_poll!(DefaultPoll, test_threads, ls, args_target, ls2, self);
+plug_clock!(StandardClock, test_threads, ls, args, ls2, self);
+plug_random!(StandardRandom, test_threads, ls, args, ls2, self);
+plug_poll!(DefaultPoll, test_threads, ls, args, ls2, self);
 
 #[allow(dead_code)]
 mod fs {
@@ -102,7 +102,7 @@ mod fs {
 
         vfs.add_wasm::<test_threads>();
         vfs.add_wasm::<ls>();
-        vfs.add_wasm::<args_target>();
+        vfs.add_wasm::<args>();
         vfs.add_wasm::<ls2>();
 
         let lfs = StandardDynamicLFS::<DefaultStdIO>::new();
@@ -113,5 +113,5 @@ mod fs {
         vfs
     });
 
-    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_threads, ls, args_target, ls2);
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_threads, ls, args, ls2);
 }

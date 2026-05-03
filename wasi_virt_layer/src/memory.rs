@@ -4,8 +4,10 @@ use crate::__private::wasip1;
 macro_rules! gen_alt_global {
     ($name:ident) => {
         $crate::__private::paste::paste! {
-            $crate::if_threads! {
-                $crate::if_not_multi_memory! {
+            $crate::__if_feature! {
+                @not_multi_memory
+                $crate::__if_feature! {
+                    @threads
                     #[cfg(target_arch = "wasm32")]
                     static mut [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>]: i32 = 0;
 
@@ -67,10 +69,10 @@ macro_rules! import_wasm {
         compile_error!("This name is reserved for internal use. Please choose another name for your import.");
     };
     (<anonymous>) => {
-        import_wasm!(@inner, anonymous);
+        $crate::import_wasm!(@inner, anonymous);
     };
     ($name:ident) => {
-        import_wasm!(@inner, $name);
+        $crate::import_wasm!(@inner, $name);
     };
     (@inner, $name:ident) => {
         #[allow(non_camel_case_types)]
@@ -117,7 +119,31 @@ macro_rules! import_wasm {
                 unsafe { [<__wasip1_vfs_ $name __start>]() };
             }
 
-            $crate::__memory_director_import_etc!($name);
+            $crate::__if_feature! {
+                @not_multi_memory
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_anchor>](
+                    _ptr: isize,
+                ) -> isize {
+                    unsafe { [<__wasip1_vfs_ $name _memory_trap>](
+                        _ptr,
+                    ) }
+                }
+
+                #[doc(hidden)]
+                #[cfg(target_os = "wasi")]
+                #[link(wasm_import_module = "wasip1-vfs")]
+                unsafe extern "C" {
+                    #[unsafe(no_mangle)]
+                    pub fn [<__wasip1_vfs_ $name _memory_trap>](
+                        _ptr: isize,
+                    ) -> isize;
+
+                    #[unsafe(no_mangle)]
+                    pub fn [<__wasip1_vfs_ $name _memory_director>](ptr: isize) -> isize;
+                }
+            }
 
             impl $crate::__private::ConstDefault for $name {
                 const DEFAULT: Self = Self;
@@ -302,45 +328,6 @@ macro_rules! __memory_director_wasm_access {
     (@dyn, $_:ident) => {};
 
     (@embedded, $_:ident) => {};
-}
-
-/// Internal macro used to generate memory trap and director imports for WASM access.
-#[cfg(not(feature = "multi_memory"))]
-#[macro_export]
-macro_rules! __memory_director_import_etc {
-    ($name:ident) => {
-        $crate::__private::paste::paste! {
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            unsafe extern "C" fn [<__wasip1_vfs_ $name _memory_trap_anchor>](
-                _ptr: isize,
-            ) -> isize {
-                unsafe { [<__wasip1_vfs_ $name _memory_trap>](
-                    _ptr,
-                ) }
-            }
-
-            #[doc(hidden)]
-            #[cfg(target_os = "wasi")]
-            #[link(wasm_import_module = "wasip1-vfs")]
-            unsafe extern "C" {
-                #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name _memory_trap>](
-                    _ptr: isize,
-                ) -> isize;
-
-                #[unsafe(no_mangle)]
-                pub fn [<__wasip1_vfs_ $name _memory_director>](ptr: isize) -> isize;
-            }
-        }
-    };
-}
-
-/// Internal macro used to generate memory trap and director imports for WASM access (multi-memory).
-#[cfg(feature = "multi_memory")]
-#[macro_export]
-macro_rules! __memory_director_import_etc {
-    ($_:ident) => {};
 }
 
 #[unsafe(no_mangle)]

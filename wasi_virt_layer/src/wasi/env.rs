@@ -95,41 +95,11 @@ macro_rules! plug_env {
         }
     };
 
-    (@dynamic, $state:expr, $($wasm:ident),* $(,)?) => {
-        $crate::__as_t!(@through, $($wasm),* => $crate::plug_env, @inner, @dynamic, $state);
-    };
-
-    (@inner, @embedded, $ty:ty, $($wasm:ident),*) => {
+    (@inner, @dynamic, $state:expr, $($wasm:ident),*) => {
         const _: () = {
-            type __TYPE = $ty;
+            let _ = || { let _ = $state; };
         };
 
-        $crate::__private::paste::paste! {
-            $(
-                #[unsafe(no_mangle)]
-                #[cfg(target_os = "wasi")]
-                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_sizes_get>](
-                    environ_count: *mut $crate::__private::wasip1::Size,
-                    environ_buf_size: *mut $crate::__private::wasip1::Size,
-                ) -> $crate::__private::wasip1::Errno {
-                    $crate::__as_t!(@as_t, $wasm);
-                    $crate::__private::inner::env::environ_sizes_get_const_inner::<$ty, T>(environ_count, environ_buf_size)
-                }
-
-                #[cfg(target_os = "wasi")]
-                #[unsafe(no_mangle)]
-                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _environ_get>](
-                    environ: *mut *const u8,
-                    environ_buf: *mut u8,
-                ) -> $crate::__private::wasip1::Errno {
-                    $crate::__as_t!(@as_t, $wasm);
-                    $crate::__private::inner::env::environ_get_const_inner::<$ty, T>(environ, environ_buf)
-                }
-            )*
-        }
-    };
-
-    (@inner, @dynamic, $state:expr, $($wasm:ident),*) => {
         $crate::__private::paste::paste! {
             $(
                 #[cfg(target_os = "wasi")]

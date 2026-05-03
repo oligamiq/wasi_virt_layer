@@ -1,7 +1,6 @@
 use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
-use wasi_virt_layer::file::multiple::inode::BoxedInodeNormal;
 use wasi_virt_layer::file::multiple::*;
 use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
@@ -15,7 +14,12 @@ import_wasm!(test_threads);
 import_wasm!(ls);
 
 impl Guest for Hello {
-    fn world() {}
+    fn world() {
+        // println!("--- Starting ls ---");
+        ls::_reset();
+        ls::_start();
+        ls::_main();
+    }
     fn add_env(_: String) {}
     fn get_envs() -> Vec<String> {
         vec![]
@@ -25,11 +29,6 @@ impl Guest for Hello {
         test_threads::_reset();
         test_threads::_start();
         test_threads::_main();
-
-        println!("--- Starting ls ---");
-        ls::_reset();
-        ls::_start();
-        ls::_main();
     }
 }
 

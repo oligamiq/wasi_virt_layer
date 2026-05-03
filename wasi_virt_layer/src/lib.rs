@@ -14,48 +14,84 @@
 /// Procedural macros for generating WASIP1 boilerplate.
 pub mod wasip1_derive;
 
-#[cfg(feature = "threads")]
+/// Conditional compilation macros for feature-based code inclusion.
+#[cfg(all(feature = "threads", feature = "multi_memory"))]
 #[macro_export]
-macro_rules! if_threads {
-    ($($t:tt)*) => { $($t)* }
-}
-#[cfg(not(feature = "threads"))]
-#[macro_export]
-macro_rules! if_threads {
-    ($($t:tt)*) => {};
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => {
+        $($t)*
+    };
+
+    (@not_threads $($t:tt)*) => {
+    };
+
+    (@multi_memory $($t:tt)*) => {
+        $($t)*
+    };
+
+    (@not_multi_memory $($t:tt)*) => {
+    };
 }
 
-#[cfg(feature = "threads")]
+/// Conditional compilation macros for feature-based code inclusion.
+#[cfg(all(feature = "threads", not(feature = "multi_memory")))]
 #[macro_export]
-macro_rules! if_not_threads {
-    ($($t:tt)*) => {};
-}
-#[cfg(not(feature = "threads"))]
-#[macro_export]
-macro_rules! if_not_threads {
-    ($($t:tt)*) => { $($t)* }
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => {
+        $($t)*
+    };
+
+    (@not_threads $($t:tt)*) => {
+    };
+
+    (@multi_memory $($t:tt)*) => {
+
+    };
+
+    (@not_multi_memory $($t:tt)*) => {
+        $($t)*
+    };
 }
 
-#[cfg(feature = "multi_memory")]
+/// Conditional compilation macros for feature-based code inclusion.
+#[cfg(all(not(feature = "threads"), feature = "multi_memory"))]
 #[macro_export]
-macro_rules! if_multi_memory {
-    ($($t:tt)*) => { $($t)* }
-}
-#[cfg(not(feature = "multi_memory"))]
-#[macro_export]
-macro_rules! if_multi_memory {
-    ($($t:tt)*) => {};
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => {
+
+    };
+
+    (@not_threads $($t:tt)*) => {
+        $($t)*
+    };
+
+    (@multi_memory $($t:tt)*) => {
+        $($t)*
+    };
+
+    (@not_multi_memory $($t:tt)*) => {
+    };
 }
 
-#[cfg(feature = "multi_memory")]
+/// Conditional compilation macros for feature-based code inclusion.
+#[cfg(all(not(feature = "threads"), not(feature = "multi_memory")))]
 #[macro_export]
-macro_rules! if_not_multi_memory {
-    ($($t:tt)*) => {};
-}
-#[cfg(not(feature = "multi_memory"))]
-#[macro_export]
-macro_rules! if_not_multi_memory {
-    ($($t:tt)*) => { $($t)* }
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => {
+
+    };
+
+    (@not_threads $($t:tt)*) => {
+        $($t)*
+    };
+
+    (@multi_memory $($t:tt)*) => {
+
+    };
+
+    (@not_multi_memory $($t:tt)*) => {
+        $($t)*
+    };
 }
 
 #[cfg(feature = "simple-debug")]
