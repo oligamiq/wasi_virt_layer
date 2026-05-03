@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-05-04
+
+### Added
+- **New Example**: Added `minimal_repro_virtual` example demonstrating virtual environment support for WASI.
+- **Initialization Refactor**: Introduced a more robust startup sequence handling in `starts.rs`, managing various initialization phases like `init_offset_global`, `save_target_memory`, and `thread_patch`.
+- **Deep Analysis Documentation**: Added several detailed analysis reports regarding memory flow, corruption root causes, and layout diagrams (`MEMORY_CORRUPTION_ROOT_CAUSE.md`, `MEMORY_FLOW_BUG_ANALYSIS.md`, etc.).
+
+### Changed
+- **Wasm Generator Overhaul**: Refactored the internal Wasm start section generation and shared global management to better handle complex multi-threading and multi-memory scenarios.
+- **Version Bump**: Updated workspace version to 0.3.0.
+
+### Fixed
+- **Shared Global Stability**: Replaced `GlobalGet`/`GlobalSet` constant instructions with dynamic function calls to shared global handlers, ensuring correctness in multi-threaded environments after multi-memory lowering.
+
 ## [0.2.17] - 2026-05-03
 
 ### Added
