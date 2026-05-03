@@ -188,7 +188,19 @@ macro_rules! import_wasm {
                     ) };
                 }
 
-                $crate::__memory_director_wasm_access!(@dyn, $name);
+                $crate::__if_feature! {
+                    @not_multi_memory
+                    #[inline(always)]
+                    fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
+                        #[cfg(not(target_os = "wasi"))]
+                        unimplemented!("this is not supported on this architecture");
+
+                        #[cfg(target_os = "wasi")]
+                        Some(unsafe { [<__wasip1_vfs_ $name _memory_director>](
+                            ptr,
+                        ) })
+                    }
+                }
 
                 #[inline(always)]
                 fn _main_raw(&self) -> $crate::__private::wasip1::Errno
@@ -250,7 +262,19 @@ macro_rules! import_wasm {
                     ) };
                 }
 
-                $crate::__memory_director_wasm_access!(@embedded, $name);
+                $crate::__if_feature! {
+                    @not_multi_memory
+                    #[inline(always)]
+                    fn memory_director_raw(ptr: isize) -> isize {
+                        #[cfg(not(target_os = "wasi"))]
+                        unimplemented!("this is not supported on this architecture");
+
+                        #[cfg(target_os = "wasi")]
+                        unsafe { [<__wasip1_vfs_ $name _memory_director>](
+                            ptr,
+                        ) }
+                    }
+                }
 
                 #[inline(always)]
                 fn _main_raw() -> $crate::__private::wasip1::Errno
@@ -286,49 +310,7 @@ macro_rules! import_wasm {
     };
 }
 
-/// Internal macro used to generate the `memory_director_raw` method for WASM access.
-#[cfg(not(feature = "multi_memory"))]
-#[macro_export]
-macro_rules! __memory_director_wasm_access {
-    (@dyn, $name:ident) => {
-        $crate::__private::paste::paste! {
-            #[inline(always)]
-            fn memory_director_raw(&self, ptr: isize) -> Option<isize> {
-                #[cfg(not(target_os = "wasi"))]
-                unimplemented!("this is not supported on this architecture");
 
-                #[cfg(target_os = "wasi")]
-                Some(unsafe { [<__wasip1_vfs_ $name _memory_director>](
-                    ptr,
-                ) })
-            }
-        }
-    };
-
-    (@embedded, $name:ident) => {
-        $crate::__private::paste::paste! {
-            #[inline(always)]
-            fn memory_director_raw(ptr: isize) -> isize {
-                #[cfg(not(target_os = "wasi"))]
-                unimplemented!("this is not supported on this architecture");
-
-                #[cfg(target_os = "wasi")]
-                unsafe { [<__wasip1_vfs_ $name _memory_director>](
-                    ptr,
-                ) }
-            }
-        }
-    };
-}
-
-/// Internal macro used to generate the `memory_director_raw` method for WASM access (multi-memory).
-#[cfg(feature = "multi_memory")]
-#[macro_export]
-macro_rules! __memory_director_wasm_access {
-    (@dyn, $_:ident) => {};
-
-    (@embedded, $_:ident) => {};
-}
 
 #[unsafe(no_mangle)]
 #[cfg(target_os = "wasi")]
