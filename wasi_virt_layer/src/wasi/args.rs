@@ -99,7 +99,7 @@ macro_rules! plug_args {
         const _: () = {
             const _ = || {
                 let _ = $state;
-            }
+            };
         };
 
         $crate::__private::paste::paste! {
