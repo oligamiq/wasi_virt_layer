@@ -14,19 +14,19 @@ import_wasm!(mock_tool_four);
 #[unsafe(no_mangle)]
 pub fn main() {
     println!("Starting Multi-Location VFS Example");
-    
+
     // Call each tool's main function
     println!("Running mock-tool-one...");
     mock_tool_one::_main();
-    
+
     println!("Running mock-tool-two...");
     mock_tool_two::_main();
-    
+
     println!("Running mock-tool-three...");
     mock_tool_three::_main();
-    
+
     println!("Running mock-tool-four...");
     mock_tool_four::_main();
-    
+
     println!("All tools completed!");
 }

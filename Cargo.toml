@@ -48,6 +48,7 @@ members = [
     "examples/mock-targets/location-2",
     "examples/mock-targets/location-2/subdir",
     "examples/vfs/repro_multi_target_table_bug",
+    "examples/vfs/minimal_repro",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]

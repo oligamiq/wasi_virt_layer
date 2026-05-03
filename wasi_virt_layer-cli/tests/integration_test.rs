@@ -1009,7 +1009,11 @@ fn test_multi_location_build() -> color_eyre::Result<()> {
 
     // Build the mock target WASM files if not already compiled
     // THIS_FOLDER is wasi_virt_layer-cli/tests, so we go up to workspace root
-    let workspace_root = std::path::Path::new(THIS_FOLDER).parent().unwrap().parent().unwrap();
+    let workspace_root = std::path::Path::new(THIS_FOLDER)
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
     let wasm_dir = workspace_root.join("target/wasm32-wasip1/release");
     let mock_wasm_files = vec![
         wasm_dir.join("mock_tool_one.wasm"),
@@ -1021,7 +1025,10 @@ fn test_multi_location_build() -> color_eyre::Result<()> {
     // Check if all mock WASM files exist
     for wasm_file in &mock_wasm_files {
         if !wasm_file.exists() {
-            println!("Skipping test_multi_location_build: mock WASM files not found at {}", wasm_file.display());
+            println!(
+                "Skipping test_multi_location_build: mock WASM files not found at {}",
+                wasm_file.display()
+            );
             return Ok(());
         }
     }
@@ -1045,15 +1052,17 @@ fn test_multi_location_build() -> color_eyre::Result<()> {
         &out_dir,
     ]);
 
-    let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer with multi-location targets")?;
+    let output = cmd
+        .output()
+        .wrap_err("Failed to execute wasi_virt_layer with multi-location targets")?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     // The key test: we should NOT get a "package name" related error
     // (e.g., "Failed to parse package name" or module name not found errors)
     // The build may fail for other reasons (unresolved imports in the mock tools),
     // but it should fail past the package name normalization stage.
-    
-    if stderr.contains("Failed to parse package name") 
+
+    if stderr.contains("Failed to parse package name")
         || stderr.contains("Module not found")
         || stderr.contains("package name contains invalid")
         || stderr.contains("exactly_one")

@@ -1,9 +1,9 @@
+use const_struct::const_struct;
 use parking_lot::Mutex;
 use std::sync::LazyLock;
 use wasi_virt_layer::file::multiple::inode::BoxedInodeNormal;
 use wasi_virt_layer::file::multiple::*;
 use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
-use const_struct::const_struct;
 
 wit_bindgen::generate!({
     world: "hello",
@@ -87,9 +87,7 @@ static VIRTUAL_ENV: LazyLock<Mutex<VirtualEnvState>> = LazyLock::new(|| {
 plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), test_threads, ls, args_target, ls2);
 
 #[const_struct]
-const VIRTUAL_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState {
-    args: &["repro"],
-};
+const VIRTUAL_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState { args: &["repro"] };
 plug_args!(@embedded, VirtualArgsTy, test_threads, ls, args_target, ls2, self);
 
 plug_clock!(StandardClock, test_threads, ls, args_target, ls2, self);
