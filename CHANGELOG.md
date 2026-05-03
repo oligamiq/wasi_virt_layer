@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.17] - 2026-05-03
+
+### Added
+- **Utility Macros**: Introduced `if_threads!`, `if_not_threads!`, `if_multi_memory!`, and `if_not_multi_memory!` macros for better conditional compilation management in the core library.
+- **New Test Fixtures**: Added `minimal_repro` and `repro_multi_target_table_bug` examples to verify complex multi-target linking and memory management scenarios.
+
+### Changed
+- **Multi-target Threading Stability**: Fixed a critical bug where thread functionality failed when virtualizing multiple WASM modules simultaneously. This was resolved by decentralizing memory management, replacing the shared `ALT_GLOBAL_VAR` with per-module bridge functions to prevent cross-module state interference.
+- **Multi-memory Refactor**: Refactored memory director access to better support multi-memory Wasm modules.
+- **Memory Management**: Ensured that maximum memory limits are explicitly set for unshared memories in `TemporaryRefugeMemory`, improving compatibility with certain runtimes.
+- **Unique Name Generation**: Enhanced the CLI to generate target-specific unique names for shared global functions.
+
+### Fixed
+- **PlugThread Validation**: Improved error reporting when `thread_spawn` is imported by a target but the `plug_thread!` macro is missing in the VFS. The CLI now explicitly suggests using the `plug_thread!` macro.
+- **Package Name Normalization**: Fixed a linking bug where package names containing hyphens were not correctly normalized to underscores in Wasm module identifiers.
+
 ## [0.2.16] - 2026-05-02
 
 ### Changed
