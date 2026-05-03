@@ -23,9 +23,12 @@ pub fn lock_read() -> std::sync::RwLockReadGuard<'static, ()> {
     LOCK.read().unwrap()
 }
 
+pub fn lock_write() -> std::sync::RwLockWriteGuard<'static, ()> {
+    LOCK.write().unwrap()
+}
+
 crate::gen_alt_global!(vfs_external_memory_manager);
 
-#[cfg(target_arch = "wasm32")]
 #[link(wasm_import_module = "wasip1-vfs_single_memory")]
 unsafe extern "C" {
     fn __wasip1_vfs_memory_grow_alt(_: i32) -> i32;

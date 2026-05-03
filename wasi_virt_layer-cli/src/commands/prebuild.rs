@@ -8,46 +8,6 @@ use crate::{
     unique_name::UniqueName,
 };
 
-macro_rules! add_generator {
-    ($runner:expr) => {{
-        use crate::generator::{
-            abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, threads, wrap_unreachable,
-        };
-
-        generator::add_generators_by_type!(
-            $runner,
-            check::IsRustWasm,
-            producer::Producer,
-            anonymous::Anonymous,
-            check::CheckUseLibrary,
-            check::CheckVFSMemoryType,
-            check::CheckUnusedThreads,
-            wrap_unreachable::WrapUnreachableGenerator,
-            threads::ThreadsSpawn,
-            threads::ThreadsSpawnPatch,
-            special_func::StartFunc,
-            special_func::MainVoidFunc,
-            special_func::ResetFunc,
-            shared_global::SharedGlobal,
-            memory::TemporaryRefugeMemory,
-            memory::MemoryBridge,
-            memory::MemoryTrap,
-            abi_connect::ConnectWasip1ABI,
-            abi_connect::ConnectWasip1ThreadsABI,
-            abi_connect::NonRecursiveWasiABI,
-            debug::SimpleDebug,
-            debug::DebugCallMemoryGrow,
-            debug::DebugExportVFSFunctions,
-            debug::DebugCallFunctionSmallScale,
-            debug::DebugCallFunctionMain,
-            patch_component::PatchComponent,
-        );
-
-        $runner.checker(check::CheckUseWasiVirtLayer);
-    }};
-}
-
 /// Shared internal logic for the prebuild phase.
 ///
 /// Compiles VFS and target WASM modules, runs all generator stages,
@@ -163,7 +123,7 @@ pub(crate) fn run_prebuild_internal(
         wasm_memory_hints,
     )?;
 
-    add_generator!(generator);
+    crate::commands::build::add_generator!(generator);
 
     let component_runner = generator
         .run_layers_to_component(out_dir, keep_build_artifacts)

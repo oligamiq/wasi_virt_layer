@@ -8,12 +8,13 @@ macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
             abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, threads, wrap_unreachable,
+            special_func, threads, wrap_unreachable, starts,
         };
 
         generator::add_generators_by_type!(
             $runner,
             check::IsRustWasm,
+            starts::FnInStartsGeneratorFirst,
             producer::Producer,
             anonymous::Anonymous,
             check::CheckUseLibrary,
@@ -38,11 +39,14 @@ macro_rules! add_generator {
             debug::DebugCallFunctionSmallScale,
             debug::DebugCallFunctionMain,
             patch_component::PatchComponent,
+            starts::FnInStartsGeneratorLast,
         );
 
         $runner.checker(check::CheckUseWasiVirtLayer);
     }};
 }
+
+pub(crate) use add_generator;
 
 /// Executes the build command, coordinating the compilation and transformation of WASM modules.
 ///

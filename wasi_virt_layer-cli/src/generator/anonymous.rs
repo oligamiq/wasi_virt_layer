@@ -85,6 +85,12 @@ impl Generator for Anonymous {
             "__start_anchor",
             "_memory_trap_anchor",
             "_wasi_thread_start_anchor",
+            "_memory_grow_global_alt_get",
+            "_memory_grow_global_alt_get_no_wait",
+            "_memory_grow_global_alt_init_once",
+            "_memory_grow_global_alt_pos",
+            "_memory_grow_global_alt_set",
+            "_memory_grow_global_alt_set_with_lock",
         ];
 
         for postfix in EXPORT_POSTFIXS {

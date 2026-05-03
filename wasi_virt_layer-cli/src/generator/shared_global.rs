@@ -1,11 +1,10 @@
-use eyre::{Context as _, ContextCompat as _};
+use eyre::Context as _;
 use walrus::FunctionId;
 
 use crate::{
     args::TargetMemoryType,
     generator::{
         Generator,
-        start_section::{StartFnInfo, StartFnPriority, StartSource},
     },
     instrs::InstrRewrite as _,
     unique_name::UniqueName,
@@ -48,7 +47,10 @@ use crate::{
 ///     });
 /// Generator responsible for managing globally shared variables to enable multi-threading atomic modifications.
 #[derive(Debug, Default)]
-pub struct SharedGlobal;
+pub struct SharedGlobal {
+    before_globals: Option<usize>,
+    before_memories: Option<usize>,
+}
 
 /// Enum containing identifiers for alternative shared global function replacements and locker usages.
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, PartialEq, Eq, Hash)]
@@ -56,6 +58,7 @@ pub struct SharedGlobal;
 pub enum SharedGlobalFnsName {
     /// Wrapper replacing a global variable assignment internally without locking overhead.
     GlobalAltSet,
+    GlobalAltSetWithLock,
     /// Thread-safe wrapper evaluating and retrieving the global value.
     GlobalAltGet,
     /// Fast wrapper evaluating the global value bypassing thread synchronization lock operations.
@@ -91,6 +94,7 @@ impl SharedGlobalFnsName {
 
 impl SharedGlobal {
     fn post_lower_memory_inner(
+        &self,
         module: &mut walrus::Module,
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
@@ -159,36 +163,51 @@ impl SharedGlobal {
             .map(|g| g.id())
             .collect::<Vec<_>>();
 
-        let num_globals_expected = ctx.target_names.len() + 1;
-        if offset_globals.len() < num_globals_expected {
-            eyre::bail!(
-                "Expected at least {} offset globals, but found {}",
-                num_globals_expected,
-                offset_globals.len()
-            );
+        // print all globals and their initial values
+        log::info!("All mutable i32 globals:");
+        for global_id in &offset_globals {
+            let global = module.globals.get(*global_id);
+            let init = match global.kind {
+                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(value))) => value,
+                _ => unreachable!(),
+            };
+            log::info!(" - {:?}: initial value = {}", global_id, init);
         }
 
-        let target_globals = &offset_globals[offset_globals.len() - num_globals_expected..];
+        let target_globals = &offset_globals[self.before_globals.unwrap() as usize..];
 
+        // フラグなどでちゃんとマッチングをとるべきだが、
+        // 順序が関係ないので今は成り立っている
+        // todo!();
         let mut global_mappings = Vec::new();
         for (i, name) in ctx.target_names.iter().enumerate() {
             global_mappings.push((target_globals[i], name.as_ref()));
         }
-        global_mappings.push((
-            target_globals[ctx.target_names.len()],
-            "vfs_external_memory_manager",
-        ));
-
-        // check global set in start section function
-        let start_id = if let Some(id) = module.start {
-            module
-                .nested_copy_func(id, &[id], false, false)
-                .wrap_err("Failed to create start function copy")?
+        if self.before_memories.unwrap() > ctx.target_names.len() {
+            // External Memory Managerのメモリサイズが0ならば、グローバルは生成されない。
+            if target_globals.len() == ctx.target_names.len() + 1 {
+                global_mappings.push((
+                    target_globals[ctx.target_names.len()],
+                    "vfs_external_memory_manager",
+                ));
+            }
         } else {
-            // create a new start function
-            module.add_func(&[], &[], |_, _| Ok(()))?
-        };
-        module.start = Some(start_id);
+            log::warn!(
+                "The number of target globals exceeds the number of mutable i32 globals. This may lead to incorrect behavior. Please verify the target names and global variables."
+            );
+        }
+        // print all globals and their initial values
+        log::info!("Globals to be replaced:");
+        for (global_id, target_name) in &global_mappings {
+            let global = module.globals.get(*global_id);
+            let init = match global.kind {
+                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(value))) => value,
+                _ => unreachable!(),
+            };
+            log::info!(" - {}: initial value = {}", target_name, init);
+        }
+
+        let intrrupt_fn = ctx.starts.init_offset_global.get_fid(&module.exports)?;
 
         for (global_id, target_name) in global_mappings {
             let global = module.globals.get(global_id);
@@ -201,6 +220,11 @@ impl SharedGlobal {
 
             let global_set_alt_without_lock = UniqueName::SharedGlobalFnsForTarget(
                 &SharedGlobalFnsName::GlobalAltSet,
+                target_name,
+            )
+            .get_fid(&module.exports)?;
+            let global_set_alt_with_lock = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltSetWithLock,
                 target_name,
             )
             .get_fid(&module.exports)?;
@@ -229,42 +253,12 @@ impl SharedGlobal {
                 .exports
                 .erase_with(global_alt_pos, ctx.unstable_print_debug)?;
 
-            let replaced_sets: usize = module
-                .funcs
-                .flat_rewrite(
-                    |instr, _| match instr {
-                        walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
-                            if *global == global_id =>
-                        {
-                            *instr = walrus::ir::Instr::Call(walrus::ir::Call {
-                                func: global_init_alt_without_lock_once,
-                            });
-                            1usize
-                        }
-                        walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
-                            if *global == global_id =>
-                        {
-                            *instr = walrus::ir::Instr::Call(walrus::ir::Call {
-                                func: global_get_alt_with_lock,
-                            });
-                            1usize
-                        }
-                        _ => 0usize,
-                    },
-                    start_id,
-                    false,
-                )?
-                .into_iter()
-                .sum();
-
-            if replaced_sets == 0 {
-                let start_local = module.funcs.get_mut(start_id).kind.unwrap_local_mut();
-                start_local
-                    .builder_mut()
-                    .func_body()
-                    .i32_const(init)
-                    .call(global_init_alt_without_lock_once);
-            }
+            let start_local = module.funcs.get_mut(intrrupt_fn).kind.unwrap_local_mut();
+            start_local
+                .builder_mut()
+                .func_body()
+                .i32_const(init)
+                .call(global_init_alt_without_lock_once);
 
             // The locker is locked at the point it is called. So we can replace
             for (_, (locker_id, _)) in lockers.iter_mut() {
@@ -277,6 +271,11 @@ impl SharedGlobal {
                         Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
                             *instr = Instr::Call(Call {
                                 func: global_get_alt_without_lock,
+                            });
+                        }
+                        Instr::GlobalSet(GlobalSet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: global_set_alt_without_lock,
                             });
                         }
                         _ => {}
@@ -296,8 +295,13 @@ impl SharedGlobal {
                         walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
                             if *global == global_id =>
                         {
+                            // log::warn!(
+                            //     "Rewriting global set to nop for global {:?}",
+                            //     global_id,
+                            // );
+                            // *instr = walrus::ir::Instr::Drop(walrus::ir::Drop {});
                             *instr = walrus::ir::Instr::Call(walrus::ir::Call {
-                                func: global_set_alt_without_lock,
+                                func: global_set_alt_with_lock,
                             });
                         }
                         walrus::ir::Instr::GlobalGet(walrus::ir::GlobalGet { global })
@@ -309,12 +313,15 @@ impl SharedGlobal {
                         }
                         _ => {}
                     },
-                    &[] as &[walrus::FunctionId],
+                    &lockers.values().map(|(v, _)| *v).collect::<Vec<_>>(),
                 )
                 .wrap_err("Failed to rewrite global set/get")?;
 
             module.globals.delete(global_id);
 
+            module
+                .exports
+                .erase_with(global_set_alt_with_lock, ctx.unstable_print_debug)?;
             module
                 .exports
                 .erase_with(global_set_alt_without_lock, ctx.unstable_print_debug)?;
@@ -338,9 +345,31 @@ impl SharedGlobal {
 }
 
 impl Generator for SharedGlobal {
+    fn post_combine(
+            &mut self,
+            module: &mut walrus::Module,
+            _: &super::GeneratorCtx,
+        ) -> eyre::Result<()> {
+        self.before_globals = Some(module.globals.iter()
+            .filter(|g| {
+                g.mutable
+                    && matches!(
+                        g.kind,
+                        walrus::GlobalKind::Local(walrus::ConstExpr::Value(
+                            walrus::ir::Value::I32(_)
+                        ))
+                    )
+            })
+            .count());
+
+        self.before_memories = Some(module.memories.iter().count());
+
+        Ok(())
+    }
+
     fn post_lower_memory(
         &mut self,
-        _module: &mut walrus::Module,
+        module: &mut walrus::Module,
         ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
         if !matches!(ctx.target_memory_type, TargetMemoryType::Single) {
@@ -351,15 +380,7 @@ impl Generator for SharedGlobal {
             return Ok(());
         }
 
-        ctx.start_section_builder
-            .as_ref()
-            .unwrap()
-            .add_start_fn(StartFnInfo {
-                priority: StartFnPriority::AfterAll,
-                source: StartSource::Rewrite(Some(Box::new(|module, ctx| {
-                    SharedGlobal::post_lower_memory_inner(module, ctx)
-                }))),
-            });
+        self.post_lower_memory_inner(module, ctx)?;
 
         Ok(())
     }
@@ -377,6 +398,13 @@ impl SharedGlobal {
             &UniqueName::SharedGlobalFns(&SharedGlobalFnsName::MemoryGrowAlt),
         )
             .get_fid(&module.imports)?;
+
+        // print all exports
+        log::info!("Current exports:");
+        for export in module.exports.iter() {
+            log::info!(" - {}", export.name);
+        }
+
         let base_locker = UniqueName::SharedGlobalFns(&SharedGlobalFnsName::LockerBase)
             .get_fid(&module.exports)?;
 

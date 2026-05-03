@@ -5,46 +5,6 @@ use crate::{
     test_run,
 };
 
-macro_rules! add_generator {
-    ($runner:expr) => {{
-        use crate::generator::{
-            abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, threads, wrap_unreachable,
-        };
-
-        generator::add_generators_by_type!(
-            $runner,
-            check::IsRustWasm,
-            producer::Producer,
-            anonymous::Anonymous,
-            check::CheckUseLibrary,
-            check::CheckVFSMemoryType,
-            check::CheckUnusedThreads,
-            wrap_unreachable::WrapUnreachableGenerator,
-            threads::ThreadsSpawn,
-            threads::ThreadsSpawnPatch,
-            special_func::StartFunc,
-            special_func::MainVoidFunc,
-            special_func::ResetFunc,
-            shared_global::SharedGlobal,
-            memory::TemporaryRefugeMemory,
-            memory::MemoryBridge,
-            memory::MemoryTrap,
-            abi_connect::ConnectWasip1ABI,
-            abi_connect::ConnectWasip1ThreadsABI,
-            abi_connect::NonRecursiveWasiABI,
-            debug::SimpleDebug,
-            debug::DebugCallMemoryGrow,
-            debug::DebugExportVFSFunctions,
-            debug::DebugCallFunctionSmallScale,
-            debug::DebugCallFunctionMain,
-            patch_component::PatchComponent,
-        );
-
-        $runner.checker(check::CheckUseWasiVirtLayer);
-    }};
-}
-
 /// Shared internal logic for the postbuild phase.
 ///
 /// Takes a `ComponentRunner` and transpiles the Component WASM into JavaScript files,
@@ -193,7 +153,7 @@ pub fn postbuild(parsed_args: PostBuildArgs) -> eyre::Result<()> {
     }
 
     let mut component_runner = generator::ComponentRunner::new(package);
-    add_generator!(component_runner);
+    crate::commands::build::add_generator!(component_runner);
 
     run_postbuild(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 

@@ -603,13 +603,14 @@ impl Generator for SimpleDebug {
     fn post_combine(
         &mut self,
         module: &mut walrus::Module,
-        _: &crate::generator::GeneratorCtx,
+        ctx: &crate::generator::GeneratorCtx,
     ) -> eyre::Result<()> {
         if let Some(id) = "simple_debug_wasip1_vfs_pre_init"
             .get_fid(&module.exports)
             .ok()
         {
-            let start = module.funcs.get_mut(module.start.unwrap());
+            let space = ctx.starts.simple_debug_wasip1_vfs_pre_init.get_fid(&module.exports)?;
+            let start = module.funcs.get_mut(space);
             start
                 .kind
                 .unwrap_local_mut()

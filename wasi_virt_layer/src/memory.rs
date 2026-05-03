@@ -19,6 +19,14 @@ macro_rules! gen_alt_global {
 
                     #[cfg(target_arch = "wasm32")]
                     #[unsafe(no_mangle)]
+                    pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_set_with_lock>](v: i32) {
+                        let _guard = $crate::shared_global::lock_write();
+                        unsafe { [<__wasip1_vfs_ $name _ALT_GLOBAL_VAR>] = v };
+                        core::mem::drop(_guard);
+                    }
+
+                    #[cfg(target_arch = "wasm32")]
+                    #[unsafe(no_mangle)]
                     pub extern "C" fn [<__wasip1_vfs_ $name _memory_grow_global_alt_init_once>](v: i32) {
                         static INIT: $crate::__private::utils::InitOnce = $crate::__private::utils::InitOnce::new_const();
                         INIT.call_once(|| {

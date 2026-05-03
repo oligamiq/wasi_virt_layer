@@ -3,7 +3,7 @@
 use crate::{
     generator::{
         abi_connect::Wasip1ABIName, memory::MemoryUniqueName, shared_global::SharedGlobalFnsName,
-        special_func::SpecialFuncUniqueName, start_section::StartAlternativeName,
+        special_func::SpecialFuncUniqueName,
         threads::ThreadsSpawnName,
     },
     util::WasmName,
@@ -12,8 +12,6 @@ use crate::{
 /// Represents a unique, non-colliding name element within the generated WASM structure.
 #[derive(Debug, Eq, PartialEq, Hash)]
 pub enum UniqueName<'a, 'b> {
-    /// A unique name corresponding to an alternative start section.
-    StartAlternative(&'a StartAlternativeName),
     /// A unique name corresponding to shared global functions.
     SharedGlobalFns(&'a SharedGlobalFnsName),
     /// A unique name corresponding to shared global functions for a specific target.
@@ -138,15 +136,6 @@ impl UniqueName<'_, '_> {
 
     fn to_str(&self) -> String {
         match self {
-            UniqueName::StartAlternative(alt) => {
-                let alt_name = alt.as_ref();
-                match alt {
-                    StartAlternativeName::WasmName(name) | StartAlternativeName::VFS(name) => {
-                        fmt!(StartAlternative; "{alt_name}_{name}")
-                    }
-                    _ => fmt!(StartAlternative; "{alt_name}"),
-                }
-            }
             UniqueName::SharedGlobalFns(func) => {
                 let func_name = func.as_ref();
                 match func {
@@ -250,12 +239,6 @@ impl ToString for UniqueName<'_, '_> {
     }
 }
 
-impl<'a> From<&'a StartAlternativeName> for UniqueName<'_, 'a> {
-    fn from(value: &'a StartAlternativeName) -> Self {
-        UniqueName::StartAlternative(value)
-    }
-}
-
 impl<'a> From<&'a SharedGlobalFnsName> for UniqueName<'_, 'a> {
     fn from(value: &'a SharedGlobalFnsName) -> Self {
         UniqueName::SharedGlobalFns(value)
@@ -308,20 +291,6 @@ impl<'a> UniqueNameIterator<'a> for WasmName {
     }
 }
 
-impl<'a> UniqueNameIterator<'a> for StartAlternativeName {
-    type REQUIRED = WasmName;
-
-    fn iter_unique_names(require: &'a Self::REQUIRED) -> Vec<Self> {
-        let v = vec![
-            StartAlternativeName::WasmName(require.clone()),
-            StartAlternativeName::VFS(require.clone()),
-            StartAlternativeName::AfterMemoryReset,
-        ];
-        assert_eq!(v.len(), StartAlternativeName::COUNT);
-        v
-    }
-}
-
 impl<'a> UniqueNameIterator<'a> for SharedGlobalFnsName {
     type REQUIRED = usize;
 
@@ -335,6 +304,7 @@ impl<'a> UniqueNameIterator<'a> for SharedGlobalFnsName {
             SharedGlobalFnsName::Locker(*require),
             SharedGlobalFnsName::LockerBase,
             SharedGlobalFnsName::MemoryGrowAlt,
+            SharedGlobalFnsName::GlobalAltSetWithLock,
         ];
         assert_eq!(v.len(), SharedGlobalFnsName::COUNT);
         v
@@ -431,20 +401,17 @@ mod unique_name_iterator_tests {
         let require_name = "#original_name";
         let require_num = 5;
         let requires = (require_import.clone(), require_name);
-        let t2 = StartAlternativeName::iter_unique_names(&require_import);
         let t3 = SharedGlobalFnsName::iter_unique_names(&require_num);
         let t4 = Wasip1ABIName::iter_unique_names(&requires);
         let t5 = ThreadsSpawnName::iter_unique_names(&requires);
         let t6 = SpecialFuncUniqueName::iter_unique_names(&require_import);
         let t7 = MemoryUniqueName::iter_unique_names(&require_import);
-        let t2 = t2.iter().map(Into::into);
         let t3 = t3.iter().map(Into::into);
         let t4 = t4.iter().map(Into::into);
         let t5 = t5.iter().map(Into::into);
         let t6 = t6.iter().map(Into::into);
         let t7 = t7.iter().map(Into::into);
-        let t = t2
-            .chain(t3)
+        let t = t3
             .chain(t4)
             .chain(t5)
             .chain(t6)

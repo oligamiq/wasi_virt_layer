@@ -270,33 +270,20 @@ impl Generator for ThreadsSpawnPatch {
             .get_fid(&module.exports)
             .ok();
 
-        if let Some(_) = initializer {
+        if let Some(init_id) = initializer {
             module
                 .exports
-                .erase_with(initializer.unwrap(), ctx.unstable_print_debug)?;
-        }
+                .erase_with(init_id, ctx.unstable_print_debug)?;
 
-        let old_start = module.start;
-        let new_start = module.add_func(&[], &[], |builder, _| {
-            let mut body = builder.func_body();
-            if let Some(old_start) = old_start {
-                body.call(old_start);
-            }
-            if let Some(initializer) = initializer {
-                body.call(initializer);
-            }
-            Ok(())
-        })?;
-
-        module.start = Some(new_start);
-
-        if ctx.unstable_print_debug {
-            if let Some(old_start) = old_start {
-                module.exports.add(
-                    &UniqueName::ThreadsSpawn(&ThreadsSpawnName::OldStart).to_string(),
-                    old_start,
-                );
-            }
+            let init = ctx.starts.thread_patch.get_fid(&module.exports)?;
+            module
+                .funcs
+                .get_mut(init)
+                .kind
+                .unwrap_local_mut()
+                .builder_mut()
+                .func_body()
+                .call(init_id);
         }
 
         Ok(())

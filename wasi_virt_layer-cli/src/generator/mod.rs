@@ -16,12 +16,11 @@ pub mod producer;
 pub mod shared_global;
 /// Bridges custom initializers, `_start`, `main_void`, and reset routines.
 pub mod special_func;
-/// Handles re-writing of the WASM start section routines.
-pub mod start_section;
 /// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
 /// Handles logic for rewriting unreachable instructions to prevent Wasm execution traps.
 pub mod wrap_unreachable;
+pub mod starts;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
@@ -36,7 +35,6 @@ use crate::{
     compile,
     config_checker::TomlRestorers,
     fallback_command,
-    generator::start_section::StartSectionGenerator,
     unique_name::UniqueName,
     util::{
         CaminoUtilModule as _, ResultUtil, WalrusFID as _, WalrusUtilExport as _, WalrusUtilModule,
@@ -76,8 +74,7 @@ pub struct GeneratorCtx {
     pub adjust_abi: bool,
     /// Whether to keep intermediate build artifacts.
     pub keep_build_artifacts: bool,
-    /// Builder for the start section, if applicable.
-    pub start_section_builder: Option<start_section::StartSectionBuilder>,
+    pub starts: starts::FnInStarts,
 }
 
 /// Sub-context for extracting and storing component variables during execution.
@@ -214,7 +211,7 @@ impl Generator for ComponentCtxVisitor {
             target_used_global_id: _,
             start_func_id: _,
             keep_build_artifacts: _,
-            start_section_builder: _,
+            starts: _,
         } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
         module.save_info("target_names", target_names)?;
@@ -746,6 +743,8 @@ impl GeneratorRunner {
 
         let target_names = wasm_name_holder_iter.collect::<Box<_>>();
 
+        let starts = starts::FnInStarts::new(&target_names);
+
         // log targeting info
         for name in target_names.iter() {
             log::info!("Targeting module: {name}");
@@ -782,7 +781,7 @@ impl GeneratorRunner {
                 target_used_memory_id: None,
                 target_used_global_id: None,
                 start_func_id: None,
-                start_section_builder: None,
+                starts,
             },
             path,
             targets,
@@ -878,8 +877,6 @@ impl GeneratorRunner {
             vfs_global_id: None,
             global_id: None,
         };
-        let mut start_section_generator = StartSectionGenerator::default();
-
         let dwarf = self.ctx.dwarf;
 
         println!("Remove existing output directory...");
@@ -918,14 +915,6 @@ impl GeneratorRunner {
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
 
-                start_section_generator.init(
-                    module,
-                    self.ctx.vfs_name.clone(),
-                    &self.ctx.target_names,
-                );
-
-                self.ctx.start_section_builder = Some(start_section_generator.builder());
-
                 self.generators
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in run_pre_vfs")
@@ -933,8 +922,6 @@ impl GeneratorRunner {
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
         .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
-
-        let mut start_section_generator = Some(start_section_generator);
 
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
@@ -1023,13 +1010,6 @@ impl GeneratorRunner {
 
                 self.generators.post_combine(module, &self.ctx)?;
 
-                if self.ctx.target_memory_type == TargetMemoryType::Multi {
-                    start_section_generator
-                        .take()
-                        .unwrap()
-                        .build(module, &self.ctx)?;
-                }
-
                 Ok(())
             })
             .wrap_run(path, dwarf, keep_build_artifacts)
@@ -1072,11 +1052,6 @@ impl GeneratorRunner {
                     self.generators
                         .post_lower_memory(module, &self.ctx)
                         .wrap_err("Failed in run_post_lower_memory")?;
-
-                    start_section_generator
-                        .take()
-                        .unwrap()
-                        .build(module, &self.ctx)?;
 
                     Ok(())
                 })

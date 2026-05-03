@@ -65,7 +65,7 @@ impl VFSExternalMemoryManager {
     }
 
     /// Commits size configurations on the generated memory instance, optionally enabling thread sharing.
-    pub fn flush(mut self, module: &mut walrus::Module, threads: bool) -> eyre::Result<MemoryId> {
+    pub fn flush(mut self, module: &mut walrus::Module, threads: bool) -> eyre::Result<Option<MemoryId>> {
         let external_size = (0..=0x10000)
             .find(|i| *i * 64 * 1024 >= self.external_size)
             .ok_or_else(|| eyre::eyre!("Failed to find external size in 0..=0x10000"))?;
@@ -81,7 +81,13 @@ impl VFSExternalMemoryManager {
             mem.maximum = Some(mem.initial);
         }
 
-        Ok(self.mem_id)
+        if self.current_size == 0 {
+            // remove
+            module.memories.delete(self.mem_id);
+            return Ok(None);
+        }
+
+        Ok(Some(self.mem_id))
     }
 }
 
@@ -101,10 +107,9 @@ impl Generator for ResetFunc {
             .add_func(&[], &[], |_, _| Ok(()))
             .wrap_err_with(|| eyre::eyre!("Failed to add initializer function"))?;
 
-        let tmp_start_section_id = module.add_func(&[], &[], |_, _| Ok(()))?;
-
         for wasm in &ctx.target_names {
             let wasm_mem = ctx.target_used_memory_id.as_ref().unwrap()[wasm];
+            let starter = ctx.starts.flesh_target_start[wasm].get_fid(&module.exports)?;
 
             if let Some(reset) = (
                 UniqueName::NAMESPACE,
@@ -215,7 +220,7 @@ impl Generator for ResetFunc {
                                 .memory_copy(reset_area_mem_id, wasm_mem);
                         }
 
-                        body.call(tmp_start_section_id);
+                        body.call(starter);
                     })
                     .to_eyre()
                     .wrap_err_with(|| eyre::eyre!("Failed to replace reset function for {wasm}"))?;
@@ -265,37 +270,24 @@ impl Generator for ResetFunc {
             // module.exports.erase(reset_on_thread)?;
             // module.funcs.delete(reset_on_thread);
 
-            module.renew_call_fn(reset_on_thread_once, initializers)?;
+            module.replace_imported_func(reset_on_thread_once, |(builder, _)| {
+                builder.func_body().call(initializers);
+            }).to_eyre().wrap_err("Failed to replace reset_on_thread_once import")?;
 
             reset_on_thread
         } else {
             initializers
         };
 
-        let old_start = module.start.clone();
-        let new_start = module
-            .add_func(&[], &[], |builder, _| {
-                let mut body = builder.func_body();
-                body.call(init_id); // save environment
-                if let Some(old_start) = old_start {
-                    body.call(old_start);
-                }
-                Ok(())
-            })
-            .wrap_err_with(|| eyre::eyre!("Failed to add new start function"))?;
+        let save_target_memory = ctx.starts.save_target_memory.get_fid(&module.exports)?;
 
-        module.start = Some(new_start);
-
-        module.renew_call_fn(tmp_start_section_id, new_start)?;
-
-        if let Some(start) = old_start {
-            if ctx.unstable_print_debug {
-                module.exports.add(
-                    &UniqueName::SpecialFunc(&SpecialFuncUniqueName::StartInitOld).to_string(),
-                    start,
-                );
-            }
-        }
+        module
+            .funcs.get_mut(save_target_memory)
+            .kind
+            .unwrap_local_mut()
+            .builder_mut()
+            .func_body()
+            .call(init_id);
 
         // memory_init(memory, data)
         // fn(&mut self, Id<Memory>, Id<Data>)
