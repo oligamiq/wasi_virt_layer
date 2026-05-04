@@ -5,9 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2026-05-05
+
+### Added
+- **Dynamic File System Operations**: Implemented `Lfs` (Local File System) based dynamic file system operations in `wasi_virt_layer`. Added `examples/vfs/lfs_api_test_vfs` and associated integration tests to verify full CRUD operations on the virtualized file system.
+- **VFS Build Options**: Added `--features` and `--no-default-features` flags to the CLI `build` and `prebuild` commands, allowing fine-grained control over the VFS module's feature set during compilation.
+- **Concurrent Execution Support**: Refactored the CLI's command locking mechanism to support multi-lock concurrency. This allows multiple `wasi_virt_layer` instances to run in parallel while safely managing shared resources like the `target` directory.
+- **Error Reporting**: Enhanced error reporting in the `wasm-merge` utility to provide more diagnostic information when module merging fails.
+
+### Fixed
+- **Macro Logic**: Fixed edge cases in the `__if_feature!` macro evaluation to correctly handle negated feature gates (e.g., `not_trace_thread`).
+- **Compiler Warnings**: Suppressed unused type warnings in the `plug_process!` macro when certain features are disabled.
+
+### Changed
+- **Documentation**: Enhanced API documentation for `VirtualThread` and the `wrap_unreachable` macro. Updated `plug_` macro documentation with better examples and error message descriptions.
+- **Integration Tests**: Refactored several integration tests to use the new `ls2` helper module for more reliable verification of multi-module scenarios.
+
 ## [0.3.3] - 2026-05-04
 
 ### Added
+- **JS Dynamic Wasm Support**: Introduced early-stage support for dynamic Wasm module loading in JavaScript/Deno environments. This enables the virtual layer to dynamically resolve and link additional Wasm modules at runtime within a JS-hosted environment.
 - **Internal Macro Refactoring**: Redesigned the `__if_feature!` macro system into an extensible matrix-based architecture. This ensures that feature-gated logic in exported macros (like `plug_thread!`) correctly evaluates based on the library's internal configuration, preventing breakage in downstream crates while keeping the exported API surface minimal.
 - **Unified Tracing System**: Consolidated all debug and tracing output behind the `trace` feature flag and its sub-features (`trace-fs`, `trace-thread`). Unified the tracing hierarchy where `trace` enables all subsystems and `unstable_print_debug` automatically enables `trace`.
 
