@@ -8,13 +8,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.1] - 2026-05-04
 
 ### Added
-- **Dynamic Args Virtualization**: Introduced support for dynamic command-line argument virtualization via `plug_args!(@dynamic, ...)`. This allows VFS modules to inject or modify arguments at runtime before executing the target WASM.
 - **New Example**: Added `examples/vfs/dynamic_args_vfs` demonstrating the use of dynamic arguments.
 - **Test Infrastructure**: Added `examples/test_wasm/test_args` helper WASM for argument verification and `test_dynamic_args_vfs_example` integration test.
 
 ### Fixed
 - **plug_args! Macro**: Resolved a bug in the `plug_args!` macro where function definitions were duplicated and incorrect types were used in `@dynamic` mode.
 - **Macro Type Safety**: Fixed a compilation error in `plug_args!` where unnamable closure types were used in a `const` context; migrated to `let` for correct type inference.
+
+## [0.3.0] - 2026-05-04
 
 ### Added
 - **New Example**: Added `minimal_repro_virtual` example demonstrating virtual environment support for WASI.
