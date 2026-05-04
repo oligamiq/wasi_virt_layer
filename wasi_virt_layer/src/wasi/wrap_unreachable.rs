@@ -23,10 +23,21 @@ impl WrapUnreachable for StandardWrapUnreachable {
 
 /// A macro to explicitly wrap WebAssembly's unreachable instructions for a given Target module.
 /// This generates internal markers interpreted by `wasi_virt_layer-cli` during generation.
+/// If you use this macro, unreachable will no longer be invoked; instead,
+/// execution immediately unwinds back to the main function or the thread entry point.
+/// This prevents the VFS from being affected by the target’s abort.
+/// By using get_flag, you can retrieve the value (the exit_code) once the unwinding is complete and control has returned to the VFS code.
+/// The value for unreachable is 1. This value is maintained per thread.
+/// For example, if you call set_flag inside proc_exit,
+/// then at the moment control returns from the VFS code (proc_exit) back to the target code,
+/// execution will immediately unwind to main.
+/// By combining these mechanisms, you can return control to the VFS at the exact moment the target WASM performs a proc_exit,
+/// and obtain the exit code.
 #[macro_export]
 macro_rules! wrap_unreachable {
     ($handler:ty, $($wasm:ident),+) => {
         const _: () = {
+            #[allow(unused)]
             type __HANDLER = $handler;
         };
 

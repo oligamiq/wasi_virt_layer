@@ -522,6 +522,9 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 }
 
 /// Plugs the thread ecosystem by defining necessary accessor enums and hooks.
+/// Other plug_* macros can be split and used separately,
+/// but due to the internal branching logic of this macro,
+/// only one instance of this macro can be defined per VirtualThread.
 ///
 /// ```rust,no_run
 /// use wasi_virt_layer::prelude::*;
