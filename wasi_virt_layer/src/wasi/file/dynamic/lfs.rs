@@ -268,6 +268,297 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
         }
     }
 
+    fn remove_inode(&self, id: &InodeId) -> Option<Inode<AddInfo>> {
+        #[cfg(feature = "threads")]
+        {
+            self.inodes.remove(id).map(|(_, i)| i)
+        }
+        #[cfg(not(feature = "threads"))]
+        {
+            unsafe { &mut *self.inodes.get() }.remove(id)
+        }
+    }
+
+    pub fn read_file(&self, inode: InodeId) -> Result<alloc::vec::Vec<u8>, wasip1::Errno> {
+        self.read_inode(&inode, |node| {
+            if let InodeData::File(ref vec) = node.data {
+                Ok(vec.clone())
+            } else {
+                Err(wasip1::ERRNO_ISDIR)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    pub fn write_file(
+        &self,
+        inode: InodeId,
+        content: alloc::vec::Vec<u8>,
+    ) -> Result<(), wasip1::Errno> {
+        self.modify_inode(&inode, |node| {
+            if let InodeData::File(ref mut vec) = node.data {
+                *vec = content;
+                Ok(())
+            } else {
+                Err(wasip1::ERRNO_ISDIR)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    pub fn metadata(&self, inode: InodeId) -> Result<InodeMetadata<AddInfo>, wasip1::Errno>
+    where
+        AddInfo: Clone,
+    {
+        self.read_inode(&inode, |node| Ok(node.meta.clone()))
+            .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    pub fn set_metadata(
+        &self,
+        inode: InodeId,
+        metadata: InodeMetadata<AddInfo>,
+    ) -> Result<(), wasip1::Errno> {
+        self.modify_inode(&inode, |node| {
+            node.meta = metadata;
+            Ok(())
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    pub fn read_dir(
+        &self,
+        inode: InodeId,
+    ) -> Result<alloc::vec::Vec<(alloc::string::String, InodeId)>, wasip1::Errno> {
+        self.read_inode(&inode, |node| {
+            if let InodeData::Dir(ref map) = node.data {
+                Ok(map
+                    .iter()
+                    .map(|(name, id)| (alloc::string::String::from(name.as_str()), *id))
+                    .collect())
+            } else {
+                Err(wasip1::ERRNO_NOTDIR)
+            }
+        })
+        .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    pub fn remove_file(&self, parent: InodeId, name: &str) -> Result<(), wasip1::Errno> {
+        let name_small = SmallString::<[u8; 32]>::from_str(name);
+        let target_id = self
+            .read_inode(&parent, |node| {
+                if let InodeData::Dir(ref map) = node.data {
+                    map.get(&name_small).copied().ok_or(wasip1::ERRNO_NOENT)
+                } else {
+                    Err(wasip1::ERRNO_NOTDIR)
+                }
+            })
+            .unwrap_or(Err(wasip1::ERRNO_BADF))?;
+
+        let is_file = self
+            .read_inode(&target_id, |node| {
+                node.meta.filetype != wasip1::FILETYPE_DIRECTORY
+            })
+            .unwrap_or(false);
+
+        if !is_file {
+            return Err(wasip1::ERRNO_ISDIR);
+        }
+
+        self.modify_inode(&parent, |node| {
+            if let InodeData::Dir(ref mut map) = node.data {
+                map.remove(&name_small);
+            }
+        });
+
+        self.remove_inode(&target_id);
+        Ok(())
+    }
+
+    pub fn remove_dir(&self, parent: InodeId, name: &str) -> Result<(), wasip1::Errno> {
+        let name_small = SmallString::<[u8; 32]>::from_str(name);
+        let target_id = self
+            .read_inode(&parent, |node| {
+                if let InodeData::Dir(ref map) = node.data {
+                    map.get(&name_small).copied().ok_or(wasip1::ERRNO_NOENT)
+                } else {
+                    Err(wasip1::ERRNO_NOTDIR)
+                }
+            })
+            .unwrap_or(Err(wasip1::ERRNO_BADF))?;
+
+        let (is_dir, is_empty) = self
+            .read_inode(&target_id, |node| {
+                if let InodeData::Dir(ref map) = node.data {
+                    let mut empty = true;
+                    for key in map.keys() {
+                        if key.as_str() != "." && key.as_str() != ".." {
+                            empty = false;
+                            break;
+                        }
+                    }
+                    (true, empty)
+                } else {
+                    (false, false)
+                }
+            })
+            .unwrap_or((false, false));
+
+        if !is_dir {
+            return Err(wasip1::ERRNO_NOTDIR);
+        }
+        if !is_empty {
+            return Err(wasip1::ERRNO_NOTEMPTY);
+        }
+
+        self.modify_inode(&parent, |node| {
+            if let InodeData::Dir(ref mut map) = node.data {
+                map.remove(&name_small);
+            }
+        });
+
+        self.remove_inode(&target_id);
+        Ok(())
+    }
+
+    pub fn add_symlink(
+        &self,
+        parent: InodeId,
+        name: &str,
+        target: &str,
+    ) -> Result<InodeId, wasip1::Errno> {
+        let new_inode = Inode {
+            meta: InodeMetadata::new(
+                wasip1::FILETYPE_SYMBOLIC_LINK,
+                wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_PATH_READLINK,
+                AddInfo::DEFAULT,
+            ),
+            data: InodeData::Symlink(alloc::string::String::from(target)),
+        };
+        let new_id = self.allocate_inode(new_inode);
+
+        let success = self
+            .modify_inode(&parent, |node| {
+                if let InodeData::Dir(parent_map) = &mut node.data {
+                    parent_map.insert(SmallString::from_str(name), new_id);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+
+        if !success {
+            self.remove_inode(&new_id);
+            return Err(wasip1::ERRNO_NOTDIR);
+        }
+        Ok(new_id)
+    }
+
+    pub fn rename(
+        &self,
+        old_parent: InodeId,
+        old_name: &str,
+        new_parent: InodeId,
+        new_name: &str,
+    ) -> Result<(), wasip1::Errno> {
+        let old_name_small = SmallString::<[u8; 32]>::from_str(old_name);
+        let new_name_small = SmallString::<[u8; 32]>::from_str(new_name);
+
+        let target_id = self
+            .read_inode(&old_parent, |node| {
+                if let InodeData::Dir(ref map) = node.data {
+                    map.get(&old_name_small).copied().ok_or(wasip1::ERRNO_NOENT)
+                } else {
+                    Err(wasip1::ERRNO_NOTDIR)
+                }
+            })
+            .unwrap_or(Err(wasip1::ERRNO_BADF))?;
+
+        // 1. Try to insert into new parent
+        let success_insert = self
+            .modify_inode(&new_parent, |node| {
+                if let InodeData::Dir(ref mut map) = node.data {
+                    map.insert(new_name_small.clone(), target_id);
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+
+        if !success_insert {
+            return Err(wasip1::ERRNO_NOTDIR);
+        }
+
+        // 2. Remove from old parent
+        let success_remove = self
+            .modify_inode(&old_parent, |node| {
+                if let InodeData::Dir(ref mut map) = node.data {
+                    map.remove(&old_name_small).is_some()
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false);
+
+        if !success_remove {
+            // Revert insert if remove failed
+            self.modify_inode(&new_parent, |node| {
+                if let InodeData::Dir(ref mut map) = node.data {
+                    map.remove(&new_name_small);
+                }
+            });
+            return Err(wasip1::ERRNO_BADF);
+        }
+
+        // 3. Update ".." if it's a directory
+        self.modify_inode(&target_id, |node| {
+            if let InodeData::Dir(ref mut map) = node.data {
+                map.insert(SmallString::from_str(".."), new_parent);
+            }
+        });
+
+        Ok(())
+    }
+
+    pub fn get_inode_by_path_str(&self, start_inode: InodeId, path: &str) -> Option<InodeId> {
+        let mut current_inode = start_inode;
+        for component in path.split('/') {
+            if component.is_empty() || component == "." {
+                continue;
+            } else if component == ".." {
+                let parent = self
+                    .read_inode(&current_inode, |node| match &node.data {
+                        InodeData::Dir(map) => map.get(&SmallString::from_str("..")).copied(),
+                        _ => None,
+                    })
+                    .flatten();
+
+                if let Some(parent_id) = parent {
+                    current_inode = parent_id;
+                } else {
+                    return None;
+                }
+            } else {
+                let name = SmallString::<[u8; 32]>::from_str(component);
+                let child = self
+                    .read_inode(&current_inode, |node| match &node.data {
+                        InodeData::Dir(map) => map.get(&name).copied(),
+                        _ => None,
+                    })
+                    .flatten();
+
+                if let Some(child_id) = child {
+                    current_inode = child_id;
+                } else {
+                    return None;
+                }
+            }
+        }
+        Some(current_inode)
+    }
+
     fn read_preopen<F, R>(&self, inode: &InodeId, f: F) -> Option<R>
     where
         F: FnOnce(&String) -> R,

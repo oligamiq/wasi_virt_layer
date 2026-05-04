@@ -1,0 +1,19 @@
+[package]
+name = "lfs_api_test_vfs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasi_virt_layer = { path = "../../../wasi_virt_layer", features = [
+    "dynamic-fs",
+] }
+wit-bindgen = "0.36.0"
+parking_lot = "0.12"
+smallstr = "0.3.0"
+const_struct = "0.6.6"
+
+[package.metadata.wit-bindgen]
+exports = ["hello"]

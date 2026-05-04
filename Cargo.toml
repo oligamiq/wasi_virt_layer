@@ -53,6 +53,7 @@ members = [
     "examples/vfs/minimal_repro",
     "examples/vfs/minimal_repro_virtual",
     "examples/vfs/dynamic_args_vfs",
+    "examples/vfs/lfs_api_test_vfs",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]

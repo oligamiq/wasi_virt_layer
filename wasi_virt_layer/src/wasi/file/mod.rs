@@ -58,7 +58,7 @@ pub struct FilestatWithoutDevice {
 pub use const_struct::ConstDefault;
 
 /// Additional mutable info for an inode.
-pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy {
+pub trait WasiAddInfo: core::fmt::Debug + Clone + Copy + ConstDefault {
     /// Returns the access time.
     fn access_time(&self) -> Timestamp {
         0
