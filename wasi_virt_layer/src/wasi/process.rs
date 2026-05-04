@@ -37,6 +37,7 @@ impl ProcessExit for StandardProcess {
 macro_rules! plug_process {
     ($ty:ty, $($wasm:ident),+) => {
         const _ : () = {
+            #[allow(unused)]
             type __TYPE = $ty;
         };
 
