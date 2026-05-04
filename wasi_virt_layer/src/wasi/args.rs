@@ -68,31 +68,33 @@ macro_rules! plug_args {
     (@inner, @embedded, $ty:ty, $($wasm:ident),*) => {
         const _: () = {
             type __TYPE = $ty;
+
+            $crate::__private::paste::paste! {
+                $(
+                    const _: () = {
+                        $crate::__as_t!(@as_t, $wasm);
+
+                        #[unsafe(no_mangle)]
+                        #[cfg(target_os = "wasi")]
+                        pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _args_sizes_get>](
+                            __args_count: *mut $crate::__private::wasip1::Size,
+                            __args_buf_size: *mut $crate::__private::wasip1::Size,
+                        ) -> $crate::__private::wasip1::Errno {
+                            $crate::__private::inner::args::args_sizes_get_embedded_inner::<__TYPE, T>(__args_count, __args_buf_size)
+                        }
+
+                        #[cfg(target_os = "wasi")]
+                        #[unsafe(no_mangle)]
+                        pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _args_get>](
+                            __args: *mut *const u8,
+                            __args_buf: *mut u8,
+                        ) -> $crate::__private::wasip1::Errno {
+                            $crate::__private::inner::args::args_get_embedded_inner::<__TYPE, T>(__args, __args_buf)
+                        }
+                    };
+                )*
+            }
         };
-
-        $crate::__private::paste::paste! {
-            $(
-                #[unsafe(no_mangle)]
-                #[cfg(target_os = "wasi")]
-                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _args_sizes_get>](
-                    __args_count: *mut $crate::__private::wasip1::Size,
-                    __args_buf_size: *mut $crate::__private::wasip1::Size,
-                ) -> $crate::__private::wasip1::Errno {
-                    $crate::__as_t!(@as_t, $wasm);
-                    $crate::__private::inner::args::args_sizes_get_embedded_inner::<$ty, T>(__args_count, __args_buf_size)
-                }
-
-                #[cfg(target_os = "wasi")]
-                #[unsafe(no_mangle)]
-                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _args_get>](
-                    __args: *mut *const u8,
-                    __args_buf: *mut u8,
-                ) -> $crate::__private::wasip1::Errno {
-                    $crate::__as_t!(@as_t, $wasm);
-                    $crate::__private::inner::args::args_get_embedded_inner::<$ty, T>(__args, __args_buf)
-                }
-            )*
-        }
     };
 
     (@inner, @dynamic, $state:expr, $($wasm:ident),*) => {
@@ -107,23 +109,23 @@ macro_rules! plug_args {
                 #[cfg(target_os = "wasi")]
                 #[unsafe(no_mangle)]
                 pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _args_sizes_get>](
-                    args_count: *mut $crate::__private::wasip1::Size,
-                    args_buf_size: *mut $crate::__private::wasip1::Size,
+                    __args_count: *mut $crate::__private::wasip1::Size,
+                    __args_buf_size: *mut $crate::__private::wasip1::Size,
                 ) -> $crate::__private::wasip1::Errno {
                     $crate::__as_t!(@as_t, $wasm);
                     let state = $state;
-                    $crate::__private::inner::args::args_sizes_get_inner::<T>(state, args_count, args_buf_size)
+                    $crate::__private::inner::args::args_sizes_get_inner::<T>(state, __args_count, __args_buf_size)
                 }
 
                 #[cfg(target_os = "wasi")]
                 #[unsafe(no_mangle)]
                 pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _args_get>](
-                    args: *mut *const u8,
-                    args_buf: *mut u8,
+                    __args: *mut *const u8,
+                    __args_buf: *mut u8,
                 ) -> $crate::__private::wasip1::Errno {
                     $crate::__as_t!(@as_t, $wasm);
                     let state = $state;
-                    $crate::__private::inner::args::args_get_inner::<T>(state, args, args_buf)
+                    $crate::__private::inner::args::args_get_inner::<T>(state, __args, __args_buf)
                 }
             )*
         }
