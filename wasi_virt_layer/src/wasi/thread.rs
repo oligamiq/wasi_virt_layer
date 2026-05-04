@@ -132,19 +132,24 @@ impl WaitThreadJoin {
         match self {
             WaitThreadJoin::None => {}
             WaitThreadJoin::Recv(recv) => {
+                #[cfg(feature = "trace-thread")]
                 println!("Waiting for thread pool flush to complete...");
+                #[cfg(feature = "trace-thread")]
                 println!("Thread ID: {:?}", std::thread::current().id());
-                let s = recv.recv();
-                println!("Thread pool flush completed: {:?}", s);
+                let _s = recv.recv();
+                #[cfg(feature = "trace-thread")]
+                println!("Thread pool flush completed: {:?}", _s);
             }
             WaitThreadJoin::RecvN(recv, n) => {
+                #[cfg(feature = "trace-thread")]
                 println!(
                     "Waiting for thread pool flush to complete for {} threads...",
                     n
                 );
                 for _ in 0..n {
-                    let s = recv.recv();
-                    println!("Thread pool flush completed for one thread: {:?}", s);
+                    let _s = recv.recv();
+                    #[cfg(feature = "trace-thread")]
+                    println!("Thread pool flush completed for one thread: {:?}", _s);
                 }
             }
         }
@@ -172,8 +177,9 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
                 // Passing an iterator to kept_workers_pool causes the lock to hold for too long.
                 let threads = self.create_thread(count, &queue).collect::<Vec<_>>();
                 kept_workers_pool.extend(threads);
-                let s = sender.try_send(());
-                println!("Sent add thread completion signal: {:?}", s);
+                let _s = sender.try_send(());
+                #[cfg(feature = "trace-thread")]
+                println!("Sent add thread completion signal: {:?}", _s);
             }
             VirtualThreadPoolMessage::Terminate(sender, pool) => {
                 let thread_id = std::thread::current().id();
@@ -211,6 +217,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
         count: usize,
         queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>,
     ) -> impl Iterator<Item = JoinHandle<()>> {
+        #[cfg(feature = "trace-thread")]
         println!("Creating {count} threads in the thread pool...");
         core::iter::repeat_n(queue.clone(), count).map(move |queue| {
             let thread = root_spawn(std::thread::Builder::new(), move || {
@@ -301,22 +308,28 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         let mut pool = self.kept_workers_pool.lock();
 
         if current_len < max_threads {
+            #[cfg(feature = "trace-thread")]
             println!("[] Increasing thread pool size from {current_len} to {max_threads}");
 
             match {
                 self.add_queue_with(|sender| {
+                    #[cfg(feature = "trace-thread")]
                     println!(
                         "[] Requesting addition of {} threads to the thread pool...",
                         max_threads - current_len
                     );
 
                     let (send, recv) = std::sync::mpsc::sync_channel(1);
+                    #[cfg(feature = "trace-thread")]
                     println!("sender.receiver_count(): {}", sender.receiver_count());
+                    #[cfg(feature = "trace-thread")]
                     println!("sender.len(): {}", sender.len());
                     if !sender.is_empty() || sender.receiver_count() <= 1 {
+                        #[cfg(feature = "trace-thread")]
                         println!("[] Another thread is handling the addition. Skipping...");
                         return None;
                     }
+                    #[cfg(feature = "trace-thread")]
                     println!("[] Sending add thread request...");
                     Some((
                         VirtualThreadPoolMessage::AddThread(
@@ -334,6 +347,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                 None => {
                     let count = max_threads - current_len;
                     let (send, recv) = std::sync::mpsc::sync_channel(count);
+                    #[cfg(feature = "trace-thread")]
                     println!("[] count {count}");
                     let msg = VirtualThreadPoolMessage::<ThreadAccessor>::AddThread(
                         count - 1,
@@ -344,6 +358,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                     let queue_receiver = self.queue_receiver.clone();
 
                     let handle = root_spawn(std::thread::Builder::new(), move || {
+                        #[cfg(feature = "trace-thread")]
                         println!("[] Thread pool addition thread started.");
 
                         VirtualThreadPoolMessage::listen_with(&queue_receiver, msg);
@@ -535,12 +550,16 @@ macro_rules! plug_thread {
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
                     #[cfg(target_os = "wasi")]
                     {
+                        #[cfg(feature = "trace-thread")]
                         println!("$$$ Calling wasi_thread_start in {}", self.as_name());
                         match *self {
                             $(
                                 Self::$wasm => {
+                                    #[cfg(feature = "trace-thread")]
                                     println!("Calling wasi_thread_start in {}", self.as_name());
+                                    #[cfg(feature = "trace-thread")]
                                     println!("  thread_id: {:?}", thread_id);
+                                    #[cfg(feature = "trace-thread")]
                                     println!("  data_ptr: {:?}", ptr);
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
@@ -617,7 +636,9 @@ macro_rules! plug_thread {
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::$wasm;
+                    #[cfg(feature = "trace-thread")]
                     println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
+                    // #[cfg(feature = "trace-thread")]
                     // println!("  data_ptr: {:?}", data_ptr);
 
                     #[allow(unused_mut)]

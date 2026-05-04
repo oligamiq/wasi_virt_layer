@@ -555,7 +555,7 @@ mod tests {
                 )
             ]);
 
-        #[cfg(feature = "std")]
+        #[cfg(all(feature = "std", feature = "trace"))]
         println!("Files: {:#?}", EMBEDDED_FILES);
     }
 }

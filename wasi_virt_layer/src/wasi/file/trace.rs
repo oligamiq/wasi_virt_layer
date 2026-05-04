@@ -1,10 +1,10 @@
+#[cfg(feature = "trace-fs")]
 macro_rules! trace_fs {
     (
         $vfs:expr,
         $wasm:ty;
         $($arg:tt)*
     ) => {
-        #[cfg(feature = "trace-fs")]
         {
             #[cfg(feature = "std")]
             let msg = {
@@ -20,6 +20,16 @@ macro_rules! trace_fs {
 
             $crate::simple_debug::simple_debug_print(b);
         }
+    };
+}
+
+#[cfg(not(feature = "trace-fs"))]
+macro_rules! trace_fs {
+    (
+        $vfs:expr,
+        $wasm:ty;
+        $($arg:tt)*
+    ) => {
     };
 }
 

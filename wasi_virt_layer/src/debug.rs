@@ -155,10 +155,14 @@ mod call_function {
 
 #[unsafe(no_mangle)]
 unsafe extern "C" fn debug_blind_print_etc_flag() {
+    #[cfg(feature = "trace")]
     println!("debug_blind_print_etc_flag called");
+    #[cfg(feature = "trace")]
     eprintln!("This is an error message from debug_blind_print_etc_flag");
 
+    #[cfg(feature = "trace")]
     let str = format!("This is a formatted message: {}, {}", 42, "hello");
+    #[cfg(feature = "trace")]
     out(str.as_bytes());
 }
 
