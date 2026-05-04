@@ -15,84 +15,214 @@
 pub mod wasip1_derive;
 
 /// Conditional compilation macros for feature-based code inclusion.
-#[cfg(all(feature = "threads", feature = "multi_memory"))]
+#[cfg(all(feature = "threads", feature = "multi_memory", feature = "trace-thread", feature = "std"))]
 #[macro_export]
 macro_rules! __if_feature {
-    (@threads $($t:tt)*) => {
-        $($t)*
-    };
-
-    (@not_threads $($t:tt)*) => {
-    };
-
-    (@multi_memory $($t:tt)*) => {
-        $($t)*
-    };
-
-    (@not_multi_memory $($t:tt)*) => {
-    };
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
 }
 
-/// Conditional compilation macros for feature-based code inclusion.
-#[cfg(all(feature = "threads", not(feature = "multi_memory")))]
+#[cfg(all(feature = "threads", feature = "multi_memory", feature = "trace-thread", not(feature = "std")))]
 #[macro_export]
 macro_rules! __if_feature {
-    (@threads $($t:tt)*) => {
-        $($t)*
-    };
-
-    (@not_threads $($t:tt)*) => {
-    };
-
-    (@multi_memory $($t:tt)*) => {
-
-    };
-
-    (@not_multi_memory $($t:tt)*) => {
-        $($t)*
-    };
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
 }
 
-/// Conditional compilation macros for feature-based code inclusion.
-#[cfg(all(not(feature = "threads"), feature = "multi_memory"))]
+#[cfg(all(feature = "threads", feature = "multi_memory", not(feature = "trace-thread"), feature = "std"))]
 #[macro_export]
 macro_rules! __if_feature {
-    (@threads $($t:tt)*) => {
-
-    };
-
-    (@not_threads $($t:tt)*) => {
-        $($t)*
-    };
-
-    (@multi_memory $($t:tt)*) => {
-        $($t)*
-    };
-
-    (@not_multi_memory $($t:tt)*) => {
-    };
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
 }
 
-/// Conditional compilation macros for feature-based code inclusion.
-#[cfg(all(not(feature = "threads"), not(feature = "multi_memory")))]
+#[cfg(all(feature = "threads", feature = "multi_memory", not(feature = "trace-thread"), not(feature = "std")))]
 #[macro_export]
 macro_rules! __if_feature {
-    (@threads $($t:tt)*) => {
-
-    };
-
-    (@not_threads $($t:tt)*) => {
-        $($t)*
-    };
-
-    (@multi_memory $($t:tt)*) => {
-
-    };
-
-    (@not_multi_memory $($t:tt)*) => {
-        $($t)*
-    };
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
 }
+
+#[cfg(all(feature = "threads", not(feature = "multi_memory"), feature = "trace-thread", feature = "std"))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
+}
+
+#[cfg(all(feature = "threads", not(feature = "multi_memory"), feature = "trace-thread", not(feature = "std")))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
+}
+
+#[cfg(all(feature = "threads", not(feature = "multi_memory"), not(feature = "trace-thread"), feature = "std"))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
+}
+
+#[cfg(all(feature = "threads", not(feature = "multi_memory"), not(feature = "trace-thread"), not(feature = "std")))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { $($t)* };
+    (@not_threads $($t:tt)*) => { };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
+}
+
+#[cfg(all(not(feature = "threads"), feature = "multi_memory", feature = "trace-thread", feature = "std"))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
+}
+
+#[cfg(all(not(feature = "threads"), feature = "multi_memory", feature = "trace-thread", not(feature = "std")))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
+}
+
+#[cfg(all(not(feature = "threads"), feature = "multi_memory", not(feature = "trace-thread"), feature = "std"))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
+}
+
+#[cfg(all(not(feature = "threads"), feature = "multi_memory", not(feature = "trace-thread"), not(feature = "std")))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { $($t)* };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
+}
+
+#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), feature = "trace-thread", feature = "std"))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
+}
+
+#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), feature = "trace-thread", not(feature = "std")))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { $($t)* };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
+}
+
+#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), not(feature = "trace-thread"), feature = "std"))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { $($t)* };
+    (@not_std $($t:tt)*) => { };
+}
+
+#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), not(feature = "trace-thread"), not(feature = "std")))]
+#[macro_export]
+macro_rules! __if_feature {
+    (@threads $($t:tt)*) => { };
+    (@not_threads $($t:tt)*) => { $($t)* };
+    (@multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { };
+    (@trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { };
+    (@std $($t:tt)*) => { };
+    (@not_std $($t:tt)*) => { $($t)* };
+}
+
 
 #[cfg(feature = "simple-debug")]
 /// Simple, fast debugging utilities for WebAssembly execution.

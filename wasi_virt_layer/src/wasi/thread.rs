@@ -550,17 +550,17 @@ macro_rules! plug_thread {
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
                     #[cfg(target_os = "wasi")]
                     {
-                        #[cfg(feature = "trace-thread")]
-                        println!("$$$ Calling wasi_thread_start in {}", self.as_name());
+                        $crate::__if_feature!(@trace_thread
+                            println!("$$$ Calling wasi_thread_start in {}", self.as_name());
+                        );
                         match *self {
                             $(
                                 Self::$wasm => {
-                                    #[cfg(feature = "trace-thread")]
-                                    println!("Calling wasi_thread_start in {}", self.as_name());
-                                    #[cfg(feature = "trace-thread")]
-                                    println!("  thread_id: {:?}", thread_id);
-                                    #[cfg(feature = "trace-thread")]
-                                    println!("  data_ptr: {:?}", ptr);
+                                    $crate::__if_feature!(@trace_thread
+                                        println!("Calling wasi_thread_start in {}", self.as_name());
+                                        println!("  thread_id: {:?}", thread_id);
+                                        println!("  data_ptr: {:?}", ptr);
+                                    );
                                     unsafe { [<__wasip1_vfs_ $wasm _wasi_thread_start>](
                                         match thread_id {
                                             Some(id) => u32::from(id) as i32,
@@ -636,10 +636,9 @@ macro_rules! plug_thread {
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::$wasm;
-                    #[cfg(feature = "trace-thread")]
-                    println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
-                    // #[cfg(feature = "trace-thread")]
-                    // println!("  data_ptr: {:?}", data_ptr);
+                    $crate::__if_feature!(@trace_thread
+                        println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
+                    );
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;

@@ -11,9 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **New Example**: Added `examples/vfs/dynamic_args_vfs` demonstrating the use of dynamic arguments.
 - **Test Infrastructure**: Added `examples/test_wasm/test_args` helper WASM for argument verification and `test_dynamic_args_vfs_example` integration test.
 
+- **Internal Macro Refactoring**: Redesigned the `__if_feature!` macro system into an extensible matrix-based architecture. This ensures that feature-gated logic in exported macros (like `plug_thread!`) correctly evaluates based on the library's internal configuration, preventing breakage in downstream crates while keeping the exported API surface minimal.
+- **Unified Tracing System**: Consolidated all debug and tracing output behind the `trace` feature flag and its sub-features (`trace-fs`, `trace-thread`). Unified the tracing hierarchy where `trace` enables all subsystems and `unstable_print_debug` automatically enables `trace`.
+
 ### Fixed
 - **plug_args! Macro**: Resolved a bug in the `plug_args!` macro where function definitions were duplicated and incorrect types were used in `@dynamic` mode.
 - **Macro Type Safety**: Fixed a compilation error in `plug_args!` where unnamable closure types were used in a `const` context; migrated to `let` for correct type inference.
+- **Compiler Warnings**: Fixed unused variable warnings in threaded contexts when tracing features are disabled.
 
 ## [0.3.0] - 2026-05-04
 
