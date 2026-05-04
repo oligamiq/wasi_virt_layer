@@ -87,6 +87,14 @@ impl Random for PseudoRandom {
 }
 
 /// Plugs the random ecosystem by defining necessary handlers.
+///
+/// ```rust,no_run
+/// use wasi_virt_layer::prelude::*;
+///
+/// import_wasm!(test_wasm);
+///
+/// plug_random!(StandardRandom, test_wasm);
+/// ```
 #[macro_export]
 macro_rules! plug_random {
     ($ty:ty, $($wasm:ident),+) => {

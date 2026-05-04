@@ -20,6 +20,14 @@ impl SchedYield for DefaultSched {
 }
 
 /// Plugs the sched ecosystem by defining necessary handlers.
+///
+/// ```rust,no_run
+/// use wasi_virt_layer::prelude::*;
+///
+/// import_wasm!(test_wasm);
+///
+/// plug_sched!(DefaultSched, test_wasm);
+/// ```
 #[macro_export]
 macro_rules! plug_sched {
     ($ty:ty, $($wasm:ident),+) => {

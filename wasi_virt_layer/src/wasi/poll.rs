@@ -43,6 +43,14 @@ impl PollOneoff for DefaultPoll {
 }
 
 /// Plugs the poll ecosystem by defining necessary handlers.
+///
+/// ```rust,no_run
+/// use wasi_virt_layer::prelude::*;
+///
+/// import_wasm!(test_wasm);
+///
+/// plug_poll!(DefaultPoll, test_wasm);
+/// ```
 #[macro_export]
 macro_rules! plug_poll {
     ($ty:ty, $($wasm:ident),+) => {

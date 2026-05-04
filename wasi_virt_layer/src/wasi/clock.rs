@@ -102,11 +102,12 @@ impl Clock for StandardClock {
 /// Plugs the clock ecosystem by defining necessary handlers for clock operations.
 ///
 /// # Examples
-/// ```no_run
+/// ```rust,no_run
 /// use wasi_virt_layer::prelude::*;
+/// use wasi_virt_layer::memory::*;
 ///
 /// // Using the default StandardClock implementation
-/// plug_clock!(self);
+/// plug_clock!(StandardClock, self);
 ///
 /// // Using a custom Clock implementation
 /// struct CustomClock;

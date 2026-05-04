@@ -522,6 +522,15 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 }
 
 /// Plugs the thread ecosystem by defining necessary accessor enums and hooks.
+///
+/// ```rust,no_run
+/// use wasi_virt_layer::prelude::*;
+///
+/// import_wasm!(test_wasm);
+///
+/// // Example: plug a thread pool to `test_wasm`
+/// // plug_thread!({ &THREAD_POOL }, test_wasm, self);
+/// ```
 #[macro_export]
 macro_rules! plug_thread {
     ($pool:tt, $($wasm:ident),* $(,)?) => {

@@ -1852,7 +1852,9 @@ pub fn merge(
         .wrap_err("Failed to wait for wasm-merge process")?;
 
     if !result.success {
-        return Err(eyre::eyre!("wasm-merge command failed"));
+        let error_message = String::from_utf8_lossy(&result.stdout);
+
+        return Err(eyre::eyre!("wasm-merge command failed: {error_message}"));
     }
 
     let mut module = walrus::Module::load(output.as_ref(), dwarf)?;
