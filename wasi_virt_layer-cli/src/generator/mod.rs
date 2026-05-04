@@ -568,6 +568,8 @@ pub struct GeneratorRunner {
     pub path: WasmPath,
     /// The paths to the target WASM modules.
     pub targets: Box<[WasmPath]>,
+    /// Options for building the VFS module.
+    pub vfs_build_opts: args::VfsBuildOptions,
     /// The TOML restorers used to reset configuration files.
     pub toml_restorers: Option<TomlRestorers>,
     /// Memory hints for the target modules.
@@ -728,6 +730,7 @@ impl GeneratorRunner {
         adjust_abi: bool,
         keep_build_artifacts: bool,
         memory_type: TargetMemoryType,
+        vfs_build_opts: args::VfsBuildOptions,
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
     ) -> eyre::Result<Self> {
@@ -785,6 +788,7 @@ impl GeneratorRunner {
             },
             path,
             targets,
+            vfs_build_opts,
             toml_restorers: Some(toml_restorers),
             memory_hint,
             wasm_name_holder,
@@ -844,9 +848,15 @@ impl GeneratorRunner {
 
     /// Confirms mapping configurations and statically evaluates lazy initializations strictly allocating paths.
     pub fn definitely(&mut self) -> eyre::Result<()> {
-        self.path.definitely(self.ctx.threads)?;
+        self.path.definitely(self.ctx.threads, &self.vfs_build_opts)?;
         for target in &mut self.targets {
-            target.definitely(self.ctx.threads)?;
+            target.definitely(
+                self.ctx.threads,
+                &args::VfsBuildOptions {
+                    features: vec![],
+                    no_default_features: false,
+                },
+            )?;
         }
         Ok(())
     }
@@ -1510,7 +1520,7 @@ impl Generator for StartFuncIdVisitor {
 }
 
 /// Represents the resolution state and file format targeting for manipulating WebAssembly modules intelligently.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash)]
 pub enum WasmPath {
     /// Indicates the target still needs compilation through standard cargo dependencies.
     Maybe {
@@ -1703,7 +1713,11 @@ impl WasmPath {
     }
 
     /// Forcefully invokes internal compiling mechanisms translating a declarative specification down into an executable binary structurally.
-    pub fn definitely(&mut self, threads: bool) -> eyre::Result<()> {
+    pub fn definitely(
+        &mut self,
+        threads: bool,
+        vfs_build_opts: &args::VfsBuildOptions,
+    ) -> eyre::Result<()> {
         if let WasmPath::Maybe {
             manifest_path,
             package,
@@ -1718,9 +1732,13 @@ impl WasmPath {
                 compile::get_building_crate(&cargo_metadata, &Some(package.clone()))?;
             let vfs_name = building_crate.name.to_string();
 
-            let path =
-                compile::build_vfs(Some(&manifest_path.to_string()), &building_crate, threads)
-                    .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {vfs_name}"))?;
+            let path = compile::build_vfs(
+                Some(&manifest_path.to_string()),
+                &building_crate,
+                threads,
+                vfs_build_opts,
+            )
+            .wrap_err_with(|| eyre::eyre!("Failed to build VFS: {vfs_name}"))?;
             *self = WasmPath::Definitely(path);
         }
 

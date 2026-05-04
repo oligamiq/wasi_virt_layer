@@ -25,6 +25,10 @@ use alloc::collections::BTreeMap;
 use core::cell::UnsafeCell;
 
 /// A local file system that allows runtime modifications
+/// This structure implements many file operations.
+/// However, it provides direct access, and there are no functions such as `open_file` to open files.
+/// Therefore, operations on open files, such as moving the file cursor, are not possible.
+/// Conversely, by using inodes, you can directly access files at deep levels.
 pub struct StandardDynamicLFS<
     StdIo: StdIO + 'static,
     AddInfo: WasiAddInfo + 'static = DefaultAddInfo,

@@ -45,10 +45,13 @@ pub fn build_vfs(
     manifest_path: Option<&String>,
     building_crate: &cargo_metadata::Package,
     threads: bool,
+    vfs_build_opts: &crate::args::VfsBuildOptions,
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut ret = None;
 
     let mut command_base = std::process::Command::new("cargo");
+
+    let features = vfs_build_opts.features.join(",");
     let command = command_base.args({
         let mut args = vec![
             "build",
@@ -63,6 +66,15 @@ pub fn build_vfs(
             "always",
         ];
         args.push("--release");
+
+        if !vfs_build_opts.features.is_empty() {
+            args.push("--features");
+            args.push(&features);
+        }
+
+        if vfs_build_opts.no_default_features {
+            args.push("--no-default-features");
+        }
         // todo!() https://github.com/rust-lang/rust/issues/146721
         if threads {
             args.insert(0, "+nightly");
@@ -211,6 +223,30 @@ pub fn build_vfs(
             &mut before_len,
             &term,
         )?;
+
+        if let Some(status) = command.try_wait().wrap_err("Failed to try wait")? {
+            if !status.success() {
+                // Drain any remaining messages
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                process_msg(
+                    &msg_receiver,
+                    &mut last_lines,
+                    &mut before_msgs,
+                    &mut before_len,
+                    &term,
+                )?;
+                while let Some(message) = parse_receiver.try_recv().ok() {
+                    if let cargo_metadata::Message::BuildFinished(finished) = message {
+                        if !finished.success {
+                            return Err(eyre::eyre!(
+                                "Build failed with errors. Check the output above."
+                            ));
+                        }
+                    }
+                }
+                return Err(eyre::eyre!("Cargo build failed with exit code: {status}"));
+            }
+        }
 
         'inner: loop {
             if let Some(message) = parse_receiver.try_recv().ok() {

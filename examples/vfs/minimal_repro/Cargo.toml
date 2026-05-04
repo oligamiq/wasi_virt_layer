@@ -4,6 +4,10 @@ version.workspace = true
 edition.workspace = true
 publish = false
 
+[features]
+default = ["std"]
+std = ["wasi_virt_layer/std"]
+
 [dependencies]
 wit-bindgen = "0.54.0"
 parking_lot = "0.12.3"
@@ -11,7 +15,7 @@ const_struct = "0.6.4"
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["std", "alloc", "multiple-fs", "threads"]
+features = ["std", "alloc", "multiple-fs", "threads", "multi_memory"]
 
 [lib]
 crate-type = ["cdylib"]

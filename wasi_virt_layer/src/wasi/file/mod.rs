@@ -689,6 +689,10 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
 }
 
 /// Plugs the file system ecosystem by defining necessary handlers.
+/// It ensures that the provided Wasm uses the given virtual file system.
+/// If self is passed, file operations performed within the VFS will also use the virtual file system.
+/// If used properly, it can even be wrapped as a component without imports.
+/// On the other hand, if plug_fs is not applied to self, file access in the VFS will use the WASI p1 ABI to access the external file system.
 #[macro_export]
 macro_rules! plug_fs {
     ($state:expr, $($wasm:ident),* $(,)?) => {

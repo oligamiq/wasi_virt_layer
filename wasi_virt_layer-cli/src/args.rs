@@ -168,6 +168,10 @@ pub struct BuildArgs {
     /// Keep all intermediate build artifacts instead of deleting them.
     #[arg(long, default_value = "false")]
     pub keep_build_artifacts: bool,
+
+    /// Options for building the VFS module.
+    #[command(flatten)]
+    pub vfs_build_opts: VfsBuildOptions,
 }
 
 impl BuildArgs {
@@ -293,6 +297,10 @@ pub struct PreBuildArgs {
     /// Keep all intermediate build artifacts instead of deleting them.
     #[arg(long, default_value = "false")]
     pub keep_build_artifacts: bool,
+
+    /// Options for building the VFS module.
+    #[command(flatten)]
+    pub vfs_build_opts: VfsBuildOptions,
 }
 
 impl PreBuildArgs {
@@ -548,4 +556,16 @@ impl TargetMemoryType {
     pub fn is_single(&self) -> bool {
         matches!(self, TargetMemoryType::Single)
     }
+}
+
+/// Options for building the VFS module.
+#[derive(Parser, Debug, Clone)]
+pub struct VfsBuildOptions {
+    /// Space or comma separated list of features to activate for the VFS module.
+    #[arg(long, value_delimiter = ',')]
+    pub features: Vec<String>,
+
+    /// Do not activate the `default` feature of the VFS module.
+    #[arg(long)]
+    pub no_default_features: bool,
 }

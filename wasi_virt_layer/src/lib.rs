@@ -166,7 +166,7 @@ macro_rules! __if_feature {
     (@multi_memory $($t:tt)*) => { $($t)* };
     (@not_multi_memory $($t:tt)*) => { };
     (@trace_thread $($t:tt)*) => { };
-    (@not_trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
     (@std $($t:tt)*) => { };
     (@not_std $($t:tt)*) => { $($t)* };
 }
@@ -205,7 +205,7 @@ macro_rules! __if_feature {
     (@multi_memory $($t:tt)*) => { };
     (@not_multi_memory $($t:tt)*) => { $($t)* };
     (@trace_thread $($t:tt)*) => { };
-    (@not_trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
     (@std $($t:tt)*) => { $($t)* };
     (@not_std $($t:tt)*) => { };
 }
@@ -216,9 +216,9 @@ macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
     (@multi_memory $($t:tt)*) => { };
-    (@not_multi_memory $($t:tt)*) => { };
+    (@not_multi_memory $($t:tt)*) => { $($t)* };
     (@trace_thread $($t:tt)*) => { };
-    (@not_trace_thread $($t:tt)*) => { };
+    (@not_trace_thread $($t:tt)*) => { $($t)* };
     (@std $($t:tt)*) => { };
     (@not_std $($t:tt)*) => { $($t)* };
 }
@@ -313,7 +313,8 @@ pub mod file {
     #[cfg(feature = "embedded-fs")]
     pub use crate::wasi::file::embedded::{
         lfs::StandardEmbeddedNormalLFS,
-        lfs_raw::{StandardEmbeddedFiles, WasiEmbeddedFile},
+        lfs_raw::StandardEmbeddedFiles,
+        lfs_raw::WasiEmbeddedFile,
         vfs::StandardEmbeddedFileSystem,
     };
 

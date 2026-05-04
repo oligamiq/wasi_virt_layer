@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Read as _, Seek as _},
+    io::{Read as _, Seek as _, Write as _},
     path::Path,
 };
 
@@ -76,7 +76,9 @@ where
 const DISABLE_FALLBACK: bool = false;
 
 /// A file-based lock to prevent concurrent execution of commands.
-pub struct CommandLock(File);
+pub struct CommandLock {
+    locks: Vec<(File, String)>,
+}
 
 impl<F> FallbackCommand<F>
 where
@@ -218,29 +220,90 @@ pub struct FallbackOutput {
 }
 
 impl CommandLock {
-    /// Acquires the command lock.
-    pub fn acquire() -> eyre::Result<Self> {
-        let lock_path = get_temp_lock_filepath();
+    /// Acquires the command locks for the specified identifiers using a master-lock strategy to prevent deadlocks.
+    pub fn acquire(ids: &[String]) -> eyre::Result<Self> {
+        let mut sorted_ids = ids.to_vec();
+        sorted_ids.sort();
+        sorted_ids.dedup();
 
-        if let Some(parent) = Path::new(&lock_path).parent() {
-            std::fs::create_dir_all(parent).wrap_err_with(|| {
-                format!("Failed to create temp lock dir: {}", parent.display())
-            })?;
+        // 1. Ensure temp dir exists
+        let temp_dir = std::env::temp_dir().join(env!("CARGO_PKG_NAME"));
+        std::fs::create_dir_all(&temp_dir).wrap_err("Failed to create temp lock directory")?;
+
+        // 2. Acquire Master Lock to serialize acquisition phase
+        let master_path = temp_dir.join("master.lock");
+        let master_file = File::options()
+            .read(true)
+            .write(true)
+            .create(true)
+            .open(&master_path)
+            .wrap_err_with(|| format!("Failed to open master lock file: {}", master_path.display()))?;
+
+        master_file
+            .lock_exclusive()
+            .wrap_err("Failed to acquire master lock")?;
+
+        let mut locks = Vec::new();
+
+        // 3. Acquire individual locks while holding the master lock
+        for id in sorted_ids {
+            let hash = {
+                use std::hash::{Hash, Hasher};
+                let mut hasher = std::collections::hash_map::DefaultHasher::new();
+                id.hash(&mut hasher);
+                format!("{:x}", hasher.finish())
+            };
+
+            let lock_path = get_temp_lock_filepath(&hash);
+            let lock_file = File::options()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&lock_path)
+                .wrap_err_with(|| format!("Failed to open lock file: {lock_path}"))?;
+
+            if let Err(_) = lock_file.try_lock_exclusive() {
+                let mut pid_str = String::new();
+                let mut file = &lock_file;
+                let _ = file.read_to_string(&mut pid_str);
+                let pid_info = if pid_str.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (held by PID {})", pid_str.trim())
+                };
+
+                eprintln!("Waiting for command lock for {} {}...", id, pid_info);
+
+                // We are holding the master lock, so we serialize all acquisitions.
+                // If we block here, other processes waiting for DIFFERENT locks will also be blocked
+                // at the master lock. This is acceptable for a CLI tool and prevents deadlock.
+                lock_file
+                    .lock_exclusive()
+                    .wrap_err_with(|| format!("Failed to lock command file: {lock_path}"))?;
+            }
+
+            // Write current PID to the lock file
+            let mut file = &lock_file;
+            let _ = file.set_len(0);
+            let _ = file.seek(std::io::SeekFrom::Start(0));
+            let _ = write!(file, "{}", std::process::id());
+            let _ = file.flush();
+
+            locks.push((lock_file, lock_path));
         }
 
-        let lock_file = File::create(&lock_path)
-            .wrap_err_with(|| format!("Failed to create lock file: {lock_path}"))?;
-        lock_file
-            .lock_exclusive()
-            .wrap_err_with(|| format!("Failed to lock command file: {lock_path}"))?;
+        // 4. Release master lock
+        let _ = master_file.unlock();
 
-        Ok(Self(lock_file))
+        Ok(Self { locks })
     }
 }
 
 impl Drop for CommandLock {
     fn drop(&mut self) {
-        let _ = self.0.unlock();
+        for (file, _) in &mut self.locks {
+            let _ = file.unlock();
+        }
     }
 }
 
@@ -250,11 +313,7 @@ fn get_temp_filepath() -> String {
     builder.prefix(&prefix);
     builder.suffix(".log");
 
-    #[cfg(windows)]
-    let builder = builder.tempfile_in(dirs::data_local_dir().unwrap().join("Temp"));
-
-    #[cfg(unix)]
-    let builder = builder.tempfile_in("/tmp");
+    let builder = builder.tempfile_in(std::env::temp_dir());
 
     let file = builder.expect("Failed to create temp log file");
     let (_file, path) = file.keep().expect("Failed to persist temp log file");
@@ -262,22 +321,12 @@ fn get_temp_filepath() -> String {
     path.to_string_lossy().into_owned()
 }
 
-fn get_temp_lock_filepath() -> String {
-    #[cfg(windows)]
-    return dirs::data_local_dir()
-        .unwrap()
-        .join("Temp")
+fn get_temp_lock_filepath(hash: &str) -> String {
+    std::env::temp_dir()
         .join(env!("CARGO_PKG_NAME"))
-        .join("command.lock")
+        .join(format!("command_{}.lock", hash))
         .to_string_lossy()
-        .into();
-
-    #[cfg(unix)]
-    return Path::new("/tmp")
-        .join(env!("CARGO_PKG_NAME"))
-        .join("command.lock")
-        .to_string_lossy()
-        .into_owned();
+        .into_owned()
 }
 
 /// require mutex

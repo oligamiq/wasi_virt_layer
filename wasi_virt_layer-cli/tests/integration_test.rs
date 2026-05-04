@@ -1106,63 +1106,34 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
 
     let workspace_root_buf = Utf8PathBuf::from(THIS_FOLDER);
     let workspace_root = workspace_root_buf.parent().unwrap().parent().unwrap();
+    let manifest_path = workspace_root.join("examples/vfs/repro_multi_target_table_bug/Cargo.toml");
     let wasip1_release = workspace_root.join("target/wasm32-wasip1/release");
 
-    println!("Building ls and args...");
-    let status = std::process::Command::new("cargo")
-        .args(["build", "-r", "--target", "wasm32-wasip1", "-p", "ls"])
-        .status()
-        .wrap_err("Failed to build ls")?;
-    if !status.success() {
-        return Err(color_eyre::eyre::eyre!("cargo build ls failed"));
-    }
-    let status = std::process::Command::new("cargo")
-        .args(["build", "-r", "--target", "wasm32-wasip1", "-p", "args"])
-        .status()
-        .wrap_err("Failed to build args")?;
-    if !status.success() {
-        return Err(color_eyre::eyre::eyre!("cargo build args failed"));
-    }
-
-    // 2. Copy files to match repro setup
+    // Ensure ls2.wasm exists for the test, similar to examples/vfs/repro_multi_target_table_bug/run.bat
     let ls_wasm = wasip1_release.join("ls.wasm");
     let ls2_wasm = wasip1_release.join("ls2.wasm");
-    std::fs::copy(&ls_wasm, &ls2_wasm)?;
-
-    // 3. Run wasi_virt_layer build
-    let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
-    let manifest_path = workspace_root.join("examples/vfs/repro_multi_target_table_bug/Cargo.toml");
-
-    let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
-    cmd.current_dir(THIS_FOLDER).args([
-        "build",
-        "--manifest-path",
-        manifest_path.as_str(),
-        "test_threads",
-        "ls",
-        "args",
-        ls2_wasm.as_str(),
-        "-t",
-        "single",
-        "--threads",
-        "true",
-        "--out-dir",
-        &out_dir,
-    ]);
-
-    let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
-    if !output.status.success() {
-        return Err(color_eyre::eyre::eyre!(
-            "wasi_virt_layer build failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
-            String::from_utf8_lossy(&output.stdout),
-            String::from_utf8_lossy(&output.stderr)
-        ));
+    if ls_wasm.exists() {
+        let _ = std::fs::copy(&ls_wasm, &ls2_wasm);
     }
 
-    // 4. Run with Deno
-    run_thread(&out_dir).wrap_err("Failed to run combined module with Deno")?;
+    // Use the helper to run wasi_virt_layer build
+    let test_dir = run_wasi_virt_layer(
+        Some("repro_multi_target_table_bug"),
+        None,
+        Some(true), // single memory
+        true,       // threads enabled
+        OutDir::Random,
+        false,
+        &[
+            "test_threads",
+            "ls",
+            "args",
+            "ls2",
+        ],
+    )?;
 
-    let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
+    // Run the generated module with Deno/Bun
+    run_thread(&test_dir.0.to_string()).wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }

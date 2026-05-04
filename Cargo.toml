@@ -3,6 +3,7 @@ members = [
     "wasi_virt_layer-cli",
     "wasi_virt_layer",
     "examples/bare/ls",
+    "examples/bare/ls2",
     "examples/vfs/example",
     "examples/dynamic",
     "examples/test_wasm/example",

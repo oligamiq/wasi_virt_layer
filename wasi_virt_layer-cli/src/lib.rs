@@ -72,32 +72,41 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     ctrlc_handler::init();
 
-    let command_lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire()?)));
-    let cl_clone = command_lock.clone();
-    ctrlc_handler::register(move || {
-        if let Ok(mut lock) = cl_clone.lock() {
-            if let Some(l) = lock.take() {
-                drop(l);
-            }
-        }
-    });
-
-    struct MainCommandLockGuard(std::sync::Arc<std::sync::Mutex<Option<CommandLock>>>);
-    impl Drop for MainCommandLockGuard {
-        fn drop(&mut self) {
-            if let Ok(mut lock) = self.0.lock() {
-                let _ = lock.take();
-            }
-        }
-    }
-    let _command_lock_guard = MainCommandLockGuard(command_lock);
-
     env_logger::Builder::new()
         .filter_level(log::LevelFilter::Info)
         .init();
     color_eyre::install()?;
 
     let parsed_args = args::Cli::parse_from(&args_vec);
+
+    let lock_ids = get_command_lock_identifiers(&parsed_args.command);
+
+    let command_lock = if !lock_ids.is_empty() {
+        let lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire(&lock_ids)?)));
+        let cl_clone = lock.clone();
+        ctrlc_handler::register(move || {
+            if let Ok(mut lock) = cl_clone.lock() {
+                if let Some(l) = lock.take() {
+                    drop(l);
+                }
+            }
+        });
+        Some(lock)
+    } else {
+        None
+    };
+
+    struct MainCommandLockGuard(Option<std::sync::Arc<std::sync::Mutex<Option<CommandLock>>>>);
+    impl Drop for MainCommandLockGuard {
+        fn drop(&mut self) {
+            if let Some(ref lock_arc) = self.0 {
+                if let Ok(mut lock) = lock_arc.lock() {
+                    let _ = lock.take();
+                }
+            }
+        }
+    }
+    let _command_lock_guard = MainCommandLockGuard(command_lock);
 
     match parsed_args.command {
         args::Command::Build(build_args) => build(build_args),
@@ -118,4 +127,69 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             prepare_target(args)
         }
     }
+}
+
+fn get_command_lock_identifiers(command: &args::Command) -> Vec<String> {
+    let mut ids = Vec::new();
+
+    fn get_workspace_root(manifest_path: Option<&camino::Utf8PathBuf>) -> String {
+        let mut cmd = cargo_metadata::MetadataCommand::new();
+        cmd.no_deps(); // Faster, only need workspace root
+        if let Some(path) = manifest_path {
+            cmd.manifest_path(path);
+        }
+        if let Ok(metadata) = cmd.exec() {
+            return metadata.workspace_root.to_string();
+        }
+
+        // Fallback: look for Cargo.toml upwards
+        let mut curr = if let Some(path) = manifest_path {
+            path.parent().map(|p| p.to_path_buf().into_std_path_buf())
+        } else {
+            std::env::current_dir().ok()
+        };
+
+        while let Some(path) = curr {
+            if path.join("Cargo.toml").exists() {
+                return path.to_string_lossy().to_string();
+            }
+            curr = path.parent().map(|p| p.to_path_buf());
+        }
+        std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default()
+    }
+
+    match command {
+        args::Command::Build(args) => {
+            ids.push(get_workspace_root(args.manifest_path.as_ref()));
+            ids.push(args.out_dir.to_string());
+        }
+        args::Command::Prebuild(args) => {
+            ids.push(get_workspace_root(args.manifest_path.as_ref()));
+            ids.push(args.out_dir.to_string());
+        }
+        args::Command::Postbuild(args) => {
+            ids.push(args.out_dir.to_string());
+        }
+        args::Command::PrepareTarget(args) => {
+            let output = args.output.clone().unwrap_or_else(|| {
+                args.target_wasm.with_extension("prepared.wasm")
+            });
+            if let Some(parent) = output.parent() {
+                ids.push(parent.to_string());
+            }
+        }
+        args::Command::New(_) => {}
+    }
+
+    // Canonicalize all IDs if they are paths
+    ids.into_iter()
+        .map(|id| {
+            camino::Utf8PathBuf::from(&id)
+                .canonicalize_utf8()
+                .map(|p| p.to_string())
+                .unwrap_or(id)
+        })
+        .collect()
 }
