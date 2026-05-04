@@ -1,0 +1,16 @@
+[package]
+name = "dynamic_args_vfs"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.54.0"
+parking_lot = "0.12.3"
+const_struct = "0.6.4"
+
+[dependencies.wasi_virt_layer]
+path = "../../../wasi_virt_layer"
+features = ["std", "embedded-fs"]

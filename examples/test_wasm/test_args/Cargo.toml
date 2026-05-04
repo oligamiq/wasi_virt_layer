@@ -1,0 +1,8 @@
+[package]
+name = "test_args"
+version.workspace = true
+edition.workspace = true
+publish=false
+
+[dependencies]
+walkdir = "2.5.0"

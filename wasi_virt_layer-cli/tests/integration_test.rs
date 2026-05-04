@@ -1264,3 +1264,27 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
 
     Ok(())
 }
+
+/// Tests the dynamic args VFS example.
+/// This validates that command-line arguments can be dynamically provided using `@dynamic` mode.
+#[test]
+fn test_dynamic_args_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("dynamic_args_vfs"),
+        Some("test_args"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+    )
+    .wrap_err("Failed to run dynamic_args_vfs example")?;
+
+    Ok(())
+}

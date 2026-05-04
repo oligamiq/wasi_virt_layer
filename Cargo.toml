@@ -6,6 +6,7 @@ members = [
     "examples/vfs/example",
     "examples/dynamic",
     "examples/test_wasm/example",
+    "examples/test_wasm/test_args",
     "examples/vfs/rustc_vfs",
     "examples/vfs/thread_direct_vfs",
     "examples/test_wasm/test_threads",
@@ -50,6 +51,7 @@ members = [
     "examples/vfs/repro_multi_target_table_bug",
     "examples/vfs/minimal_repro",
     "examples/vfs/minimal_repro_virtual",
+    "examples/vfs/dynamic_args_vfs",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
