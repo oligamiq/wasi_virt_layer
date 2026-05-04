@@ -72,6 +72,8 @@ install deno
 - **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.
 - **CLI Arguments**: Very long argument lists might still cause issues in some environments.
 - **Self-Calling Fallback**: The tool supports a fallback mechanism for tools like `wasm-merge` and `wasm-opt` by calling itself if the binaries are not found in the PATH.
+- **Dynamic Wasm from JS**: The capability to add Wasm modules from JavaScript is currently in early development and does not work reliably.
+
 
 ## Multi-threading execution order
 - single_memory: known failures in some configurations.
