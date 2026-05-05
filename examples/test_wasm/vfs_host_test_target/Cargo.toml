@@ -1,0 +1,4 @@
+[package]
+name = "vfs_host_test_target"
+version = "0.1.0"
+edition = "2024"

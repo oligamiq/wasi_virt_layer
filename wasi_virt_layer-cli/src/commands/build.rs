@@ -8,7 +8,7 @@ macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
             abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, starts, threads, wrap_unreachable,
+            special_func, starts, threads, vfs_host, wrap_unreachable,
         };
 
         generator::add_generators_by_type!(
@@ -33,6 +33,7 @@ macro_rules! add_generator {
             abi_connect::ConnectWasip1ABI,
             abi_connect::ConnectWasip1ThreadsABI,
             abi_connect::NonRecursiveWasiABI,
+            vfs_host::ConnectVfsHost,
             debug::SimpleDebug,
             debug::DebugCallMemoryGrow,
             debug::DebugExportVFSFunctions,

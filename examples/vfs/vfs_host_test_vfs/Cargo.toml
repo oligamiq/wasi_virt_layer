@@ -1,0 +1,12 @@
+[package]
+name = "vfs_host_test_vfs"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wasi_virt_layer = { workspace = true, features = ["embedded-fs"] }
+const_struct = "0.6.4"
+parking_lot = "*"
