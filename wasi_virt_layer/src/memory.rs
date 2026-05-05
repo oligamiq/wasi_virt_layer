@@ -62,6 +62,20 @@ macro_rules! gen_alt_global {
 
 /// By entering the names of the files to be combined, a bridge for the combination is created.
 /// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
+/// 
+/// ## `wasm-merge` Module Names
+/// When manually integrating modules or defining custom imports/exports to be resolved during the 
+/// `wasm-merge` phase, the following module names are used:
+/// 
+/// - **VFS to Host**: To import actual host WASI functions (e.g., calling the real `fd_write` from within the VFS), 
+///   use the module name `__wasip1_vfs-host`. The CLI automatically renames the VFS's `wasi_snapshot_preview1` 
+///   imports to this name to prevent self-resolution during the merge.
+/// - **Target to VFS**: The VFS module is assigned the name `wasi_snapshot_preview1`. Target WASM modules 
+///   (or other external modules) importing from `wasi_snapshot_preview1` will be automatically linked to the VFS's exports.
+/// - **VFS to Target**: Each target WASM module is assigned the name `wasip1_vfs_{filename}` (where `{filename}` is 
+///   the name of the file without the `.wasm` extension, e.g., `wasip1_vfs_target`). To manually import a function 
+///   exported by a target WASM into the VFS, use this module name.
+///
 /// ```
 /// use wasi_virt_layer::prelude::*;
 ///
