@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.5] - 2026-05-05
 
 ### Added
+- **WASI Path Functions**: Added implementation for `path_create_directory`, `path_link`, `path_remove_directory`, `path_rename`, and `path_unlink_file`.
+  - Added logic for these operations in `StandardDynamicLFS`.
+  - Added delegation and routing support in VFS layers (`StandardDynamicFileSystem`, `StandardEmbeddedFileSystem`, `StandardMultipleFileSystem`).
+  - Updated `plug_fs!` macro to export these functions to the WASI ecosystem.
 - **VFS Host Communication**: Implemented import resolution for VFS functions, allowing target modules to call functions provided by the VFS (host-side virtualization). Added `vfs_host_test_vfs` example and `vfs_host_test_target`.
 - **Per-Target Feature Configuration**: Enhanced the CLI to allow per-target feature configuration. Improved feature extraction logic to better handle dependencies between target features and the virtual layer.
 
