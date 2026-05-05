@@ -751,6 +751,183 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         }
     }
 
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_create_directory: fd={fd}, path_len={path_len}");
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+        get_inode!(inode = open_fd);
+
+        match lfs.path_create_directory_raw_dyn_compatible(access, inode, path_ptr, path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_link: old_fd={old_fd}, new_fd={new_fd}");
+        get_access!(access = self, Wasm);
+
+        #[cfg(feature = "threads")]
+        let __bind_old = self.fd_map.get(&old_fd);
+        #[cfg(feature = "threads")]
+        let (old_lfs_idx, old_open_fd) = match __bind_old.as_ref() {
+            Some(entry) => entry.value(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(feature = "threads")]
+        let __bind_new = self.fd_map.get(&new_fd);
+        #[cfg(feature = "threads")]
+        let (new_lfs_idx, new_open_fd) = match __bind_new.as_ref() {
+            Some(entry) => entry.value(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let (old_lfs_idx, old_open_fd) = match unsafe { &*self.fd_map.get() }.get(&old_fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let (new_lfs_idx, new_open_fd) = match unsafe { &*self.fd_map.get() }.get(&new_fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        if old_lfs_idx != new_lfs_idx {
+            return wasip1::ERRNO_XDEV;
+        }
+
+        let lfs = &self.lfss[*old_lfs_idx];
+        get_inode!(old_inode = old_open_fd);
+        get_inode!(new_inode = new_open_fd);
+
+        match lfs.path_link_raw_dyn_compatible(
+            access,
+            old_inode,
+            old_flags,
+            old_path_ptr,
+            old_path_len,
+            new_inode,
+            new_path_ptr,
+            new_path_len,
+        ) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_remove_directory: fd={fd}, path_len={path_len}");
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+        get_inode!(inode = open_fd);
+
+        match lfs.path_remove_directory_raw_dyn_compatible(access, inode, path_ptr, path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_rename: old_fd={old_fd}, new_fd={new_fd}");
+        get_access!(access = self, Wasm);
+
+        #[cfg(feature = "threads")]
+        let __bind_old = self.fd_map.get(&old_fd);
+        #[cfg(feature = "threads")]
+        let (old_lfs_idx, old_open_fd) = match __bind_old.as_ref() {
+            Some(entry) => entry.value(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(feature = "threads")]
+        let __bind_new = self.fd_map.get(&new_fd);
+        #[cfg(feature = "threads")]
+        let (new_lfs_idx, new_open_fd) = match __bind_new.as_ref() {
+            Some(entry) => entry.value(),
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let (old_lfs_idx, old_open_fd) = match unsafe { &*self.fd_map.get() }.get(&old_fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        #[cfg(not(feature = "threads"))]
+        let (new_lfs_idx, new_open_fd) = match unsafe { &*self.fd_map.get() }.get(&new_fd) {
+            Some(entry) => entry,
+            None => return wasip1::ERRNO_BADF,
+        };
+
+        if old_lfs_idx != new_lfs_idx {
+            return wasip1::ERRNO_XDEV;
+        }
+
+        let lfs = &self.lfss[*old_lfs_idx];
+        get_inode!(old_inode = old_open_fd);
+        get_inode!(new_inode = new_open_fd);
+
+        match lfs.path_rename_raw_dyn_compatible(
+            access,
+            old_inode,
+            old_path_ptr,
+            old_path_len,
+            new_inode,
+            new_path_ptr,
+            new_path_len,
+        ) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_unlink_file: fd={fd}, path_len={path_len}");
+        get_access!(access = self, Wasm);
+        get_open_fd!((open_fd, lfs) = self, fd);
+        get_inode!(inode = open_fd);
+
+        match lfs.path_unlink_file_raw_dyn_compatible(access, inode, path_ptr, path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
     fn fd_seek_raw<Wasm: WasmAccess + WasmAccessName>(
         &self,
         fd: Fd,

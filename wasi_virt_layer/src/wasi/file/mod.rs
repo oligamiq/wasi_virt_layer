@@ -277,6 +277,53 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
+
+    /// Creates a directory.
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        dir_ino: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Creates a hard link.
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_dir_ino: &Self::Inode,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_ino: &Self::Inode,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Removes a directory.
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        dir_ino: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Renames a file or directory.
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_dir_ino: &Self::Inode,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_ino: &Self::Inode,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Unlinks a file.
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        dir_ino: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
 }
 
 /// Trait for a static or constant local file system implementation.
@@ -501,6 +548,53 @@ pub trait Wasip1DynCompatibleLFS<B: BoxedInode>: core::fmt::Debug {
         buf: *mut u8,
         buf_len: usize,
     ) -> Result<Size, wasip1::Errno>;
+
+    fn path_create_directory_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_link_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        old_dir_inode: &dyn InodeIdCommon,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_inode: &dyn InodeIdCommon,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_remove_directory_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_rename_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        old_dir_inode: &dyn InodeIdCommon,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_inode: &dyn InodeIdCommon,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_unlink_file_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
 }
 
 /// Trait for a virtual file implementation.
@@ -685,6 +779,53 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         buf: *mut u8,
         buf_len: usize,
         buf_nread: *mut Size,
+    ) -> wasip1::Errno;
+
+    /// Creates a directory.
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno;
+
+    /// Creates a hard link.
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno;
+
+    /// Removes a directory.
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno;
+
+    /// Renames a file or directory.
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno;
+
+    /// Unlinks a file.
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
     ) -> wasip1::Errno;
 }
 
@@ -879,6 +1020,73 @@ macro_rules! plug_fs {
                     let state = $state;
                     $crate::__as_t!(@as_t, $wasm);
                     $crate::file::Wasip1FileSystem::path_readlink_raw::<T>(state, fd, path_ptr, path_len, buf, buf_len, buf_nread)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_create_directory>](
+                    fd: $crate::__private::wasip1::Fd,
+                    path_ptr: *const u8,
+                    path_len: usize,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_create_directory_raw::<T>(state, fd, path_ptr, path_len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_link>](
+                    old_fd: $crate::__private::wasip1::Fd,
+                    old_flags: $crate::__private::wasip1::Lookupflags,
+                    old_path_ptr: *const u8,
+                    old_path_len: usize,
+                    new_fd: $crate::__private::wasip1::Fd,
+                    new_path_ptr: *const u8,
+                    new_path_len: usize,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_link_raw::<T>(state, old_fd, old_flags, old_path_ptr, old_path_len, new_fd, new_path_ptr, new_path_len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_remove_directory>](
+                    fd: $crate::__private::wasip1::Fd,
+                    path_ptr: *const u8,
+                    path_len: usize,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_remove_directory_raw::<T>(state, fd, path_ptr, path_len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_rename>](
+                    old_fd: $crate::__private::wasip1::Fd,
+                    old_path_ptr: *const u8,
+                    old_path_len: usize,
+                    new_fd: $crate::__private::wasip1::Fd,
+                    new_path_ptr: *const u8,
+                    new_path_len: usize,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_rename_raw::<T>(state, old_fd, old_path_ptr, old_path_len, new_fd, new_path_ptr, new_path_len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_unlink_file>](
+                    fd: $crate::__private::wasip1::Fd,
+                    path_ptr: *const u8,
+                    path_len: usize,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_unlink_file_raw::<T>(state, fd, path_ptr, path_len)
                 }
             )*
         }

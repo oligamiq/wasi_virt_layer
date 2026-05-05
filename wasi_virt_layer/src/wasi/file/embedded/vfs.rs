@@ -600,6 +600,87 @@ where
         Ok(self.push_inode(new_inode))
     }
 
+    pub(crate) fn path_create_directory_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.path_create_directory_raw::<Wasm>(inode, path_ptr, path_len)
+        })?
+    }
+
+    pub(crate) fn path_link_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        self.with_inode_and_lfs(old_fd, |old_inode, lfs| {
+            self.with_inode_and_lfs(new_fd, |new_inode, _| {
+                lfs.path_link_raw::<Wasm>(
+                    old_inode,
+                    old_flags,
+                    old_path_ptr,
+                    old_path_len,
+                    new_inode,
+                    new_path_ptr,
+                    new_path_len,
+                )
+            })?
+        })?
+    }
+
+    pub(crate) fn path_remove_directory_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.path_remove_directory_raw::<Wasm>(inode, path_ptr, path_len)
+        })?
+    }
+
+    pub(crate) fn path_rename_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        self.with_inode_and_lfs(old_fd, |old_inode, lfs| {
+            self.with_inode_and_lfs(new_fd, |new_inode, _| {
+                lfs.path_rename_raw::<Wasm>(
+                    old_inode,
+                    old_path_ptr,
+                    old_path_len,
+                    new_inode,
+                    new_path_ptr,
+                    new_path_len,
+                )
+            })?
+        })?
+    }
+
+    pub(crate) fn path_unlink_file_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.path_unlink_file_raw::<Wasm>(inode, path_ptr, path_len)
+        })?
+    }
+
     pub(crate) fn path_readlink_raw_inner<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,

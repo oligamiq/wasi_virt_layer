@@ -211,6 +211,98 @@ where
         }
     }
 
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_create_directory: fd={fd}, path_len={path_len}");
+
+        match self.path_create_directory_raw_inner::<Wasm>(fd, path_ptr, path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_link: old_fd={old_fd}, new_fd={new_fd}");
+
+        match self.path_link_raw_inner::<Wasm>(
+            old_fd,
+            old_flags,
+            old_path_ptr,
+            old_path_len,
+            new_fd,
+            new_path_ptr,
+            new_path_len,
+        ) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_remove_directory: fd={fd}, path_len={path_len}");
+
+        match self.path_remove_directory_raw_inner::<Wasm>(fd, path_ptr, path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_rename: old_fd={old_fd}, new_fd={new_fd}");
+
+        match self.path_rename_raw_inner::<Wasm>(
+            old_fd,
+            old_path_ptr,
+            old_path_len,
+            new_fd,
+            new_path_ptr,
+            new_path_len,
+        ) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "path_unlink_file: fd={fd}, path_len={path_len}");
+
+        match self.path_unlink_file_raw_inner::<Wasm>(fd, path_ptr, path_len) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
     fn path_readlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,

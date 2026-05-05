@@ -256,6 +256,58 @@ impl<
             }
         }
     }
+
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: wasip1::Lookupflags,
+        _: *const u8,
+        _: usize,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
 }
 
 impl<
@@ -585,5 +637,62 @@ impl<
                 Err(wasip1::ERRNO_INVAL)
             }
         }
+    }
+
+    fn path_create_directory_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_link_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: wasip1::Lookupflags,
+        _: *const u8,
+        _: usize,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_remove_directory_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_rename_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
+    }
+
+    fn path_unlink_file_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_PERM)
     }
 }

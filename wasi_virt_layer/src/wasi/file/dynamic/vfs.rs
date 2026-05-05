@@ -595,6 +595,104 @@ where
         }
     }
 
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        get_open_fd!(open_fd = self, fd);
+        match self
+            .lfs
+            .path_create_directory_raw::<Wasm>(open_fd.inode_id(), path_ptr, path_len)
+        {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_flags: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno {
+        get_open_fd!(old_open_fd = self, old_fd);
+        get_open_fd!(new_open_fd = self, new_fd);
+        match self.lfs.path_link_raw::<Wasm>(
+            old_open_fd.inode_id(),
+            old_flags,
+            old_path_ptr,
+            old_path_len,
+            new_open_fd.inode_id(),
+            new_path_ptr,
+            new_path_len,
+        ) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        get_open_fd!(open_fd = self, fd);
+        match self
+            .lfs
+            .path_remove_directory_raw::<Wasm>(open_fd.inode_id(), path_ptr, path_len)
+        {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_fd: Fd,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno {
+        get_open_fd!(old_open_fd = self, old_fd);
+        get_open_fd!(new_open_fd = self, new_fd);
+        match self.lfs.path_rename_raw::<Wasm>(
+            old_open_fd.inode_id(),
+            old_path_ptr,
+            old_path_len,
+            new_open_fd.inode_id(),
+            new_path_ptr,
+            new_path_len,
+        ) {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> wasip1::Errno {
+        get_open_fd!(open_fd = self, fd);
+        match self
+            .lfs
+            .path_unlink_file_raw::<Wasm>(open_fd.inode_id(), path_ptr, path_len)
+        {
+            Ok(()) => wasip1::ERRNO_SUCCESS,
+            Err(e) => e,
+        }
+    }
+
     fn fd_seek_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
         fd: Fd,

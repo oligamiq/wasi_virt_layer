@@ -1057,6 +1057,246 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         })
         .unwrap_or(Err(wasip1::ERRNO_BADF))
     }
+
+    fn path_create_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        dir_ino: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+        let components: Vec<_> = path.components().collect();
+
+        if components.is_empty() {
+            return Err(wasip1::ERRNO_NOENT);
+        }
+
+        if components.len() == 1 {
+            if let WasmPathComponent::Normal(name) = &components[0] {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for j in 0..name.len() {
+                    s.push(name.get(j) as char);
+                }
+
+                if self
+                    .get_inode_for_path::<Wasm>(dir_ino, path_ptr, path_len)
+                    .is_some()
+                {
+                    return Err(wasip1::ERRNO_EXIST);
+                }
+
+                let mut map = DirMap::new();
+                map.insert(SmallString::from_str("."), 0); // Will update
+                map.insert(SmallString::from_str(".."), *dir_ino);
+
+                let new_inode = Inode {
+                    meta: InodeMetadata::new(wasip1::FILETYPE_DIRECTORY, 0, AddInfo::default()),
+                    data: InodeData::Dir(map),
+                };
+
+                let new_id = self.allocate_inode(new_inode);
+                self.modify_inode(&new_id, |node| {
+                    if let InodeData::Dir(map) = &mut node.data {
+                        map.insert(SmallString::from_str("."), new_id);
+                    }
+                });
+
+                self.modify_inode(&dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.insert(s, new_id);
+                    }
+                });
+
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_link_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_dir_ino: &Self::Inode,
+        _: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_ino: &Self::Inode,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let new_path = WasmPathAccess::<Wasm>::new(new_path_ptr, new_path_len);
+        let new_components: Vec<_> = new_path.components().collect();
+
+        if new_components.len() == 1 {
+            if let WasmPathComponent::Normal(new_name) = &new_components[0] {
+                let mut new_s = SmallString::<[u8; 32]>::new();
+                for j in 0..new_name.len() {
+                    new_s.push(new_name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path::<Wasm>(old_dir_ino, old_path_ptr, old_path_len)
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                if self.is_dir(&inode) {
+                    return Err(wasip1::ERRNO_PERM);
+                }
+
+                self.modify_inode(&new_dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.insert(new_s, inode);
+                    }
+                });
+
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_remove_directory_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        dir_ino: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+        let components: Vec<_> = path.components().collect();
+
+        if components.len() == 1 {
+            if let WasmPathComponent::Normal(name) = &components[0] {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for j in 0..name.len() {
+                    s.push(name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path::<Wasm>(dir_ino, path_ptr, path_len)
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                if !self.is_dir(&inode) {
+                    return Err(wasip1::ERRNO_NOTDIR);
+                }
+
+                // Check if directory is empty (only "." and "..")
+                let is_empty = self
+                    .read_inode(&inode, |node| {
+                        if let InodeData::Dir(dir_map) = &node.data {
+                            dir_map.len() <= 2
+                        } else {
+                            false
+                        }
+                    })
+                    .unwrap_or(false);
+
+                if !is_empty {
+                    return Err(wasip1::ERRNO_NOTEMPTY);
+                }
+
+                self.modify_inode(&dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.remove(&s);
+                    }
+                });
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_rename_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_dir_ino: &Self::Inode,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_ino: &Self::Inode,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let old_path = WasmPathAccess::<Wasm>::new(old_path_ptr, old_path_len);
+        let old_components: Vec<_> = old_path.components().collect();
+        let new_path = WasmPathAccess::<Wasm>::new(new_path_ptr, new_path_len);
+        let new_components: Vec<_> = new_path.components().collect();
+
+        if old_components.len() == 1 && new_components.len() == 1 {
+            if let (WasmPathComponent::Normal(old_name), WasmPathComponent::Normal(new_name)) =
+                (&old_components[0], &new_components[0])
+            {
+                let mut old_s = SmallString::<[u8; 32]>::new();
+                for j in 0..old_name.len() {
+                    old_s.push(old_name.get(j) as char);
+                }
+                let mut new_s = SmallString::<[u8; 32]>::new();
+                for j in 0..new_name.len() {
+                    new_s.push(new_name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path::<Wasm>(old_dir_ino, old_path_ptr, old_path_len)
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                // Remove from old
+                self.modify_inode(&old_dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.remove(&old_s);
+                    }
+                });
+
+                // Add to new
+                self.modify_inode(&new_dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.insert(new_s, inode);
+                    }
+                });
+
+                // If it's a directory, update ".."
+                if self.is_dir(&inode) {
+                    self.modify_inode(&inode, |node| {
+                        if let InodeData::Dir(dir_map) = &mut node.data {
+                            dir_map.insert(SmallString::from_str(".."), *new_dir_ino);
+                        }
+                    });
+                }
+
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_unlink_file_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        dir_ino: &Self::Inode,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
+        let components: Vec<_> = path.components().collect();
+
+        if components.len() == 1 {
+            if let WasmPathComponent::Normal(name) = &components[0] {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for j in 0..name.len() {
+                    s.push(name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path::<Wasm>(dir_ino, path_ptr, path_len)
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                if self.is_dir(&inode) {
+                    return Err(wasip1::ERRNO_ISDIR);
+                }
+
+                self.modify_inode(&dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.remove(&s);
+                    }
+                });
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
 }
 
 impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static>
@@ -1448,6 +1688,275 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
             }
         })
         .unwrap_or(Err(wasip1::ERRNO_BADF))
+    }
+
+    fn path_create_directory_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let dir_ino = Self::downcast_inode(dir_inode);
+        let path = crate::memory::WasmPathAccessDynCompatible::new(access, path_ptr, path_len);
+        let components: Vec<_> = path.components().collect();
+
+        if components.is_empty() {
+            return Err(wasip1::ERRNO_NOENT);
+        }
+
+        if components.len() == 1 {
+            if let crate::memory::WasmPathComponentDynCompatible::Normal(name) = &components[0] {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for j in 0..name.len() {
+                    s.push(name.get(j) as char);
+                }
+
+                if self
+                    .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
+                    .is_some()
+                {
+                    return Err(wasip1::ERRNO_EXIST);
+                }
+
+                let mut map = DirMap::new();
+                map.insert(SmallString::from_str("."), 0); // Will update
+                map.insert(SmallString::from_str(".."), *dir_ino);
+
+                let new_inode = Inode {
+                    meta: InodeMetadata::new(wasip1::FILETYPE_DIRECTORY, 0, AddInfo::default()),
+                    data: InodeData::Dir(map),
+                };
+
+                let new_id = self.allocate_inode(new_inode);
+                self.modify_inode(&new_id, |node| {
+                    if let InodeData::Dir(map) = &mut node.data {
+                        map.insert(SmallString::from_str("."), new_id);
+                    }
+                });
+
+                self.modify_inode(dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.insert(s, new_id);
+                    }
+                });
+
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_link_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        old_dir_inode: &dyn InodeIdCommon,
+        _: wasip1::Lookupflags,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_inode: &dyn InodeIdCommon,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let old_dir_ino = Self::downcast_inode(old_dir_inode);
+        let new_dir_ino = Self::downcast_inode(new_dir_inode);
+        let new_path =
+            crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
+        let new_components: Vec<_> = new_path.components().collect();
+
+        if new_components.len() == 1 {
+            if let crate::memory::WasmPathComponentDynCompatible::Normal(new_name) =
+                &new_components[0]
+            {
+                let mut new_s = SmallString::<[u8; 32]>::new();
+                for j in 0..new_name.len() {
+                    new_s.push(new_name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path_dyn_compatible(
+                        access,
+                        old_dir_ino,
+                        old_path_ptr,
+                        old_path_len,
+                    )
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                if self.is_dir(&inode) {
+                    return Err(wasip1::ERRNO_PERM);
+                }
+
+                self.modify_inode(new_dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.insert(new_s, inode);
+                    }
+                });
+
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_remove_directory_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let dir_ino = Self::downcast_inode(dir_inode);
+        let path = crate::memory::WasmPathAccessDynCompatible::new(access, path_ptr, path_len);
+        let components: Vec<_> = path.components().collect();
+
+        if components.len() == 1 {
+            if let crate::memory::WasmPathComponentDynCompatible::Normal(name) = &components[0] {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for j in 0..name.len() {
+                    s.push(name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                if !self.is_dir(&inode) {
+                    return Err(wasip1::ERRNO_NOTDIR);
+                }
+
+                // Check if directory is empty (only "." and "..")
+                let is_empty = self
+                    .read_inode(&inode, |node| {
+                        if let InodeData::Dir(dir_map) = &node.data {
+                            dir_map.len() <= 2
+                        } else {
+                            false
+                        }
+                    })
+                    .unwrap_or(false);
+
+                if !is_empty {
+                    return Err(wasip1::ERRNO_NOTEMPTY);
+                }
+
+                self.modify_inode(dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.remove(&s);
+                    }
+                });
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_rename_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        old_dir_inode: &dyn InodeIdCommon,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_dir_inode: &dyn InodeIdCommon,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let old_dir_ino = Self::downcast_inode(old_dir_inode);
+        let new_dir_ino = Self::downcast_inode(new_dir_inode);
+        let old_path =
+            crate::memory::WasmPathAccessDynCompatible::new(access, old_path_ptr, old_path_len);
+        let old_components: Vec<_> = old_path.components().collect();
+        let new_path =
+            crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
+        let new_components: Vec<_> = new_path.components().collect();
+
+        if old_components.len() == 1 && new_components.len() == 1 {
+            if let (
+                crate::memory::WasmPathComponentDynCompatible::Normal(old_name),
+                crate::memory::WasmPathComponentDynCompatible::Normal(new_name),
+            ) = (&old_components[0], &new_components[0])
+            {
+                let mut old_s = SmallString::<[u8; 32]>::new();
+                for j in 0..old_name.len() {
+                    old_s.push(old_name.get(j) as char);
+                }
+                let mut new_s = SmallString::<[u8; 32]>::new();
+                for j in 0..new_name.len() {
+                    new_s.push(new_name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path_dyn_compatible(
+                        access,
+                        old_dir_ino,
+                        old_path_ptr,
+                        old_path_len,
+                    )
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                // Remove from old
+                self.modify_inode(old_dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.remove(&old_s);
+                    }
+                });
+
+                // Add to new
+                self.modify_inode(new_dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.insert(new_s, inode);
+                    }
+                });
+
+                // If it's a directory, update ".."
+                if self.is_dir(&inode) {
+                    self.modify_inode(&inode, |node| {
+                        if let InodeData::Dir(dir_map) = &mut node.data {
+                            dir_map.insert(SmallString::from_str(".."), *new_dir_ino);
+                        }
+                    });
+                }
+
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
+    }
+
+    fn path_unlink_file_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        dir_inode: &dyn InodeIdCommon,
+        path_ptr: *const u8,
+        path_len: usize,
+    ) -> Result<(), wasip1::Errno> {
+        let dir_ino = Self::downcast_inode(dir_inode);
+        let path = crate::memory::WasmPathAccessDynCompatible::new(access, path_ptr, path_len);
+        let components: Vec<_> = path.components().collect();
+
+        if components.len() == 1 {
+            if let crate::memory::WasmPathComponentDynCompatible::Normal(name) = &components[0] {
+                let mut s = SmallString::<[u8; 32]>::new();
+                for j in 0..name.len() {
+                    s.push(name.get(j) as char);
+                }
+
+                let inode = self
+                    .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
+                    .ok_or(wasip1::ERRNO_NOENT)?;
+
+                if self.is_dir(&inode) {
+                    return Err(wasip1::ERRNO_ISDIR);
+                }
+
+                self.modify_inode(dir_ino, |node| {
+                    if let InodeData::Dir(dir_map) = &mut node.data {
+                        dir_map.remove(&s);
+                    }
+                });
+                return Ok(());
+            }
+        }
+        Err(wasip1::ERRNO_NOTSUP)
     }
 
     fn pre_open_inodes(
