@@ -1,5 +1,5 @@
-use std::sync::LazyLock;
 use const_struct::const_struct;
+use std::sync::LazyLock;
 use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
 wit_bindgen::generate!({
@@ -64,18 +64,26 @@ mod fs {
             assert!(dir_entries.iter().any(|(name, _)| name == "test_dir"));
 
             // 3. rename (moving file into dir)
-            let f2 = lfs.add_file(root, "to_move.txt", b"Move me".to_vec()).unwrap();
-            lfs.rename(root, "to_move.txt", test_dir, "moved.txt").unwrap();
+            let f2 = lfs
+                .add_file(root, "to_move.txt", b"Move me".to_vec())
+                .unwrap();
+            lfs.rename(root, "to_move.txt", test_dir, "moved.txt")
+                .unwrap();
 
             // 4. get_inode_by_path_str
-            let resolved = lfs.get_inode_by_path_str(root, "test_dir/moved.txt").unwrap();
+            let resolved = lfs
+                .get_inode_by_path_str(root, "test_dir/moved.txt")
+                .unwrap();
             assert_eq!(resolved, f2);
 
             // 5. add_symlink
-            lfs.add_symlink(root, "link.txt", "test_dir/moved.txt").unwrap();
+            lfs.add_symlink(root, "link.txt", "test_dir/moved.txt")
+                .unwrap();
 
             // 6. remove_file
-            let f3 = lfs.add_file(root, "remove_me.txt", b"temp".to_vec()).unwrap();
+            let f3 = lfs
+                .add_file(root, "remove_me.txt", b"temp".to_vec())
+                .unwrap();
             lfs.remove_file(root, "remove_me.txt").unwrap();
             assert!(lfs.read_file(f3).is_err());
 

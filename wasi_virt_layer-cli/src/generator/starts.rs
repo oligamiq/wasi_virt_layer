@@ -4,7 +4,10 @@ use anyhow::Context;
 use eyre::Context as _;
 use walrus::FunctionId;
 
-use crate::{generator::Generator, util::{ResultUtil, WalrusFID, WalrusUtilExport, WalrusUtilModule as _, WasmName}};
+use crate::{
+    generator::Generator,
+    util::{ResultUtil, WalrusFID, WalrusUtilExport, WalrusUtilModule as _, WasmName},
+};
 
 #[derive(Debug)]
 /// A list of export names is displayed in the order specified. Order, etc.
@@ -52,9 +55,7 @@ pub struct FnInStarts {
 }
 
 impl FnInStarts {
-    pub fn new(
-        wasms: &[WasmName],
-    ) -> Self {
+    pub fn new(wasms: &[WasmName]) -> Self {
         let flesh_vfs_start = "__flesh_vfs_start".to_string();
         let thread_patch = "__thread_patch".to_string();
         let init_offset_global = "__init_offset_global".to_string();
@@ -117,9 +118,10 @@ impl FnInStarts {
         let mut adder = |name: &str| -> eyre::Result<()> {
             let dummy_name = format!("__{name}_dummy_holder");
             if let Some(dummy_fid) = ("__dummy", &dummy_name).get_fid(&module.imports).ok() {
-                module.replace_imported_func(dummy_fid, |(_, _)| return)
-                .to_eyre()
-                .wrap_err_with(|| format!("Failed to replace dummy import for {name}"))?;
+                module
+                    .replace_imported_func(dummy_fid, |(_, _)| return)
+                    .to_eyre()
+                    .wrap_err_with(|| format!("Failed to replace dummy import for {name}"))?;
             }
 
             let fid = name.get_fid(&module.exports)?;
@@ -148,7 +150,10 @@ impl FnInStarts {
         Ok(())
     }
 
-    fn create_dummy_start(module: &mut walrus::Module, name: impl AsRef<str>) -> eyre::Result<FunctionId> {
+    fn create_dummy_start(
+        module: &mut walrus::Module,
+        name: impl AsRef<str>,
+    ) -> eyre::Result<FunctionId> {
         // 中身が空だと統合される可能性がある
         // よって関数をimportする
         let name = name.as_ref();
@@ -156,8 +161,8 @@ impl FnInStarts {
         let type_id = module.types.add(&[], &[]);
         let (fid, _) = module.add_import_func("__dummy", &import_name, type_id);
         let empty_start = module.add_func(&[], &[], |builder, _| {
-                builder.func_body().call(fid);
-                Ok(())
+            builder.func_body().call(fid);
+            Ok(())
         })?;
         Ok(empty_start)
     }
@@ -170,7 +175,11 @@ pub struct FnInStartsGeneratorFirst;
 pub struct FnInStartsGeneratorLast;
 
 impl Generator for FnInStartsGeneratorFirst {
-    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &super::GeneratorCtx) -> eyre::Result<()> {
+    fn pre_vfs(
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &super::GeneratorCtx,
+    ) -> eyre::Result<()> {
         // remove _start from target module and save its name
         let start_fid = if let Some(fid) = module.start.take() {
             fid
@@ -186,7 +195,7 @@ impl Generator for FnInStartsGeneratorFirst {
     }
 
     fn pre_target(
-            &mut self,
+        &mut self,
         module: &mut walrus::Module,
         ctx: &super::GeneratorCtx,
         external: &super::ModuleExternal,
@@ -197,29 +206,31 @@ impl Generator for FnInStartsGeneratorFirst {
             FnInStarts::create_dummy_start(module, &ctx.starts.flesh_target_start[&external.name])?
         };
 
-        module.exports.add(&ctx.starts.flesh_target_start[&external.name], start_fid);
+        module
+            .exports
+            .add(&ctx.starts.flesh_target_start[&external.name], start_fid);
         Ok(())
     }
 }
 
 impl Generator for FnInStartsGeneratorLast {
     fn post_combine(
-            &mut self,
-            module: &mut walrus::Module,
-            ctx: &super::GeneratorCtx,
-        ) -> eyre::Result<()> {
-            if ctx.target_memory_type.is_single() {
-                return Ok(());
-            }
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &super::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        if ctx.target_memory_type.is_single() {
+            return Ok(());
+        }
 
-            ctx.starts.build(module, ctx)
+        ctx.starts.build(module, ctx)
     }
 
     fn post_lower_memory(
-            &mut self,
-            module: &mut walrus::Module,
-            ctx: &super::GeneratorCtx,
-        ) -> eyre::Result<()> {
-            ctx.starts.build(module, ctx)
+        &mut self,
+        module: &mut walrus::Module,
+        ctx: &super::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        ctx.starts.build(module, ctx)
     }
 }

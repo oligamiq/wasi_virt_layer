@@ -65,7 +65,11 @@ impl VFSExternalMemoryManager {
     }
 
     /// Commits size configurations on the generated memory instance, optionally enabling thread sharing.
-    pub fn flush(mut self, module: &mut walrus::Module, threads: bool) -> eyre::Result<Option<MemoryId>> {
+    pub fn flush(
+        mut self,
+        module: &mut walrus::Module,
+        threads: bool,
+    ) -> eyre::Result<Option<MemoryId>> {
         let external_size = (0..=0x10000)
             .find(|i| *i * 64 * 1024 >= self.external_size)
             .ok_or_else(|| eyre::eyre!("Failed to find external size in 0..=0x10000"))?;
@@ -270,9 +274,12 @@ impl Generator for ResetFunc {
             // module.exports.erase(reset_on_thread)?;
             // module.funcs.delete(reset_on_thread);
 
-            module.replace_imported_func(reset_on_thread_once, |(builder, _)| {
-                builder.func_body().call(initializers);
-            }).to_eyre().wrap_err("Failed to replace reset_on_thread_once import")?;
+            module
+                .replace_imported_func(reset_on_thread_once, |(builder, _)| {
+                    builder.func_body().call(initializers);
+                })
+                .to_eyre()
+                .wrap_err("Failed to replace reset_on_thread_once import")?;
 
             reset_on_thread
         } else {
@@ -282,7 +289,8 @@ impl Generator for ResetFunc {
         let save_target_memory = ctx.starts.save_target_memory.get_fid(&module.exports)?;
 
         module
-            .funcs.get_mut(save_target_memory)
+            .funcs
+            .get_mut(save_target_memory)
             .kind
             .unwrap_local_mut()
             .builder_mut()

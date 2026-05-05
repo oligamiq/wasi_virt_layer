@@ -237,7 +237,9 @@ impl CommandLock {
             .write(true)
             .create(true)
             .open(&master_path)
-            .wrap_err_with(|| format!("Failed to open master lock file: {}", master_path.display()))?;
+            .wrap_err_with(|| {
+                format!("Failed to open master lock file: {}", master_path.display())
+            })?;
 
         master_file
             .lock_exclusive()

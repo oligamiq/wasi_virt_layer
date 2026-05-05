@@ -1,8 +1,8 @@
 use const_struct::const_struct;
 use parking_lot::Mutex;
-use wasi_virt_layer::thread::*;
 use std::sync::LazyLock;
 use wasi_virt_layer::file::multiple::*;
+use wasi_virt_layer::thread::*;
 use wasi_virt_layer::{file::*, plug_process, prelude::*, process::StandardProcess};
 
 wit_bindgen::generate!({
@@ -40,13 +40,9 @@ impl Guest for Hello {
 #[cfg(not(test))]
 export!(Hello);
 
-static THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
-    unsafe { VirtualThreadPool::new_const(1) };
+static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(1) };
 
-plug_thread!({ &THREAD_POOL }, self,
-    test_threads,
-    ls
-);
+plug_thread!({ &THREAD_POOL }, self, test_threads, ls);
 
 plug_process!(StandardProcess, test_threads, ls, self);
 

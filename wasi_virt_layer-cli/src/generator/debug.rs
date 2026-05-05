@@ -609,7 +609,10 @@ impl Generator for SimpleDebug {
             .get_fid(&module.exports)
             .ok()
         {
-            let space = ctx.starts.simple_debug_wasip1_vfs_pre_init.get_fid(&module.exports)?;
+            let space = ctx
+                .starts
+                .simple_debug_wasip1_vfs_pre_init
+                .get_fid(&module.exports)?;
             let start = module.funcs.get_mut(space);
             start
                 .kind

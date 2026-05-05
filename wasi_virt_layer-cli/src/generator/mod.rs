@@ -16,11 +16,11 @@ pub mod producer;
 pub mod shared_global;
 /// Bridges custom initializers, `_start`, `main_void`, and reset routines.
 pub mod special_func;
+pub mod starts;
 /// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
 /// Handles logic for rewriting unreachable instructions to prevent Wasm execution traps.
 pub mod wrap_unreachable;
-pub mod starts;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
@@ -570,6 +570,8 @@ pub struct GeneratorRunner {
     pub targets: Box<[WasmPath]>,
     /// Options for building the VFS module.
     pub vfs_build_opts: args::VfsBuildOptions,
+    /// Options for building the target WASM modules.
+    pub target_vfs_build_opts: Box<[args::VfsBuildOptions]>,
     /// The TOML restorers used to reset configuration files.
     pub toml_restorers: Option<TomlRestorers>,
     /// Memory hints for the target modules.
@@ -731,6 +733,7 @@ impl GeneratorRunner {
         keep_build_artifacts: bool,
         memory_type: TargetMemoryType,
         vfs_build_opts: args::VfsBuildOptions,
+        target_vfs_build_opts: Box<[args::VfsBuildOptions]>,
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
     ) -> eyre::Result<Self> {
@@ -789,6 +792,7 @@ impl GeneratorRunner {
             path,
             targets,
             vfs_build_opts,
+            target_vfs_build_opts,
             toml_restorers: Some(toml_restorers),
             memory_hint,
             wasm_name_holder,
@@ -848,15 +852,10 @@ impl GeneratorRunner {
 
     /// Confirms mapping configurations and statically evaluates lazy initializations strictly allocating paths.
     pub fn definitely(&mut self) -> eyre::Result<()> {
-        self.path.definitely(self.ctx.threads, &self.vfs_build_opts)?;
-        for target in &mut self.targets {
-            target.definitely(
-                self.ctx.threads,
-                &args::VfsBuildOptions {
-                    features: vec![],
-                    no_default_features: false,
-                },
-            )?;
+        self.path
+            .definitely(self.ctx.threads, &self.vfs_build_opts)?;
+        for (i, target) in self.targets.iter_mut().enumerate() {
+            target.definitely(self.ctx.threads, &self.target_vfs_build_opts[i])?;
         }
         Ok(())
     }

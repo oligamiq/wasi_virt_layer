@@ -3,8 +3,7 @@
 use crate::{
     generator::{
         abi_connect::Wasip1ABIName, memory::MemoryUniqueName, shared_global::SharedGlobalFnsName,
-        special_func::SpecialFuncUniqueName,
-        threads::ThreadsSpawnName,
+        special_func::SpecialFuncUniqueName, threads::ThreadsSpawnName,
     },
     util::WasmName,
 };

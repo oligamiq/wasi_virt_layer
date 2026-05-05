@@ -18,7 +18,7 @@ fn test_lfs_api_operations() -> color_eyre::Result<()> {
         Some(true), // t-single
         false,      // threads
         OutDir::Random,
-        false,      // keep_build_artifacts
+        false, // keep_build_artifacts
         &[],
     )?;
 

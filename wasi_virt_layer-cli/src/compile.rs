@@ -72,7 +72,7 @@ pub fn build_vfs(
             args.push(&features);
         }
 
-        if vfs_build_opts.no_default_features {
+        if vfs_build_opts.no_default_features > 0 {
             args.push("--no-default-features");
         }
         // todo!() https://github.com/rust-lang/rust/issues/146721

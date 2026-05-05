@@ -3,9 +3,7 @@ use walrus::FunctionId;
 
 use crate::{
     args::TargetMemoryType,
-    generator::{
-        Generator,
-    },
+    generator::Generator,
     instrs::InstrRewrite as _,
     unique_name::UniqueName,
     util::{
@@ -168,7 +166,9 @@ impl SharedGlobal {
         for global_id in &offset_globals {
             let global = module.globals.get(*global_id);
             let init = match global.kind {
-                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(value))) => value,
+                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(
+                    value,
+                ))) => value,
                 _ => unreachable!(),
             };
             log::info!(" - {:?}: initial value = {}", global_id, init);
@@ -201,7 +201,9 @@ impl SharedGlobal {
         for (global_id, target_name) in &global_mappings {
             let global = module.globals.get(*global_id);
             let init = match global.kind {
-                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(value))) => value,
+                walrus::GlobalKind::Local(walrus::ConstExpr::Value(walrus::ir::Value::I32(
+                    value,
+                ))) => value,
                 _ => unreachable!(),
             };
             log::info!(" - {}: initial value = {}", target_name, init);
@@ -346,21 +348,25 @@ impl SharedGlobal {
 
 impl Generator for SharedGlobal {
     fn post_combine(
-            &mut self,
-            module: &mut walrus::Module,
-            _: &super::GeneratorCtx,
-        ) -> eyre::Result<()> {
-        self.before_globals = Some(module.globals.iter()
-            .filter(|g| {
-                g.mutable
-                    && matches!(
-                        g.kind,
-                        walrus::GlobalKind::Local(walrus::ConstExpr::Value(
-                            walrus::ir::Value::I32(_)
-                        ))
-                    )
-            })
-            .count());
+        &mut self,
+        module: &mut walrus::Module,
+        _: &super::GeneratorCtx,
+    ) -> eyre::Result<()> {
+        self.before_globals = Some(
+            module
+                .globals
+                .iter()
+                .filter(|g| {
+                    g.mutable
+                        && matches!(
+                            g.kind,
+                            walrus::GlobalKind::Local(walrus::ConstExpr::Value(
+                                walrus::ir::Value::I32(_)
+                            ))
+                        )
+                })
+                .count(),
+        );
 
         self.before_memories = Some(module.memories.iter().count());
 

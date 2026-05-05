@@ -1124,12 +1124,7 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
         true,       // threads enabled
         OutDir::Random,
         false,
-        &[
-            "test_threads",
-            "ls",
-            "args",
-            "ls2",
-        ],
+        &["test_threads", "ls", "args", "ls2"],
     )?;
 
     // Run the generated module with Deno/Bun

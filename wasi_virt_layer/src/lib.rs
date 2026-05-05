@@ -15,7 +15,12 @@
 pub mod wasip1_derive;
 
 /// Conditional compilation macros for feature-based code inclusion.
-#[cfg(all(feature = "threads", feature = "multi_memory", feature = "trace-thread", feature = "std"))]
+#[cfg(all(
+    feature = "threads",
+    feature = "multi_memory",
+    feature = "trace-thread",
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -28,7 +33,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(feature = "threads", feature = "multi_memory", feature = "trace-thread", not(feature = "std")))]
+#[cfg(all(
+    feature = "threads",
+    feature = "multi_memory",
+    feature = "trace-thread",
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -41,7 +51,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(feature = "threads", feature = "multi_memory", not(feature = "trace-thread"), feature = "std"))]
+#[cfg(all(
+    feature = "threads",
+    feature = "multi_memory",
+    not(feature = "trace-thread"),
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -54,7 +69,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(feature = "threads", feature = "multi_memory", not(feature = "trace-thread"), not(feature = "std")))]
+#[cfg(all(
+    feature = "threads",
+    feature = "multi_memory",
+    not(feature = "trace-thread"),
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -67,7 +87,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(feature = "threads", not(feature = "multi_memory"), feature = "trace-thread", feature = "std"))]
+#[cfg(all(
+    feature = "threads",
+    not(feature = "multi_memory"),
+    feature = "trace-thread",
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -80,7 +105,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(feature = "threads", not(feature = "multi_memory"), feature = "trace-thread", not(feature = "std")))]
+#[cfg(all(
+    feature = "threads",
+    not(feature = "multi_memory"),
+    feature = "trace-thread",
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -93,7 +123,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(feature = "threads", not(feature = "multi_memory"), not(feature = "trace-thread"), feature = "std"))]
+#[cfg(all(
+    feature = "threads",
+    not(feature = "multi_memory"),
+    not(feature = "trace-thread"),
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -106,7 +141,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(feature = "threads", not(feature = "multi_memory"), not(feature = "trace-thread"), not(feature = "std")))]
+#[cfg(all(
+    feature = "threads",
+    not(feature = "multi_memory"),
+    not(feature = "trace-thread"),
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
@@ -119,7 +159,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(not(feature = "threads"), feature = "multi_memory", feature = "trace-thread", feature = "std"))]
+#[cfg(all(
+    not(feature = "threads"),
+    feature = "multi_memory",
+    feature = "trace-thread",
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -132,7 +177,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(not(feature = "threads"), feature = "multi_memory", feature = "trace-thread", not(feature = "std")))]
+#[cfg(all(
+    not(feature = "threads"),
+    feature = "multi_memory",
+    feature = "trace-thread",
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -145,7 +195,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(not(feature = "threads"), feature = "multi_memory", not(feature = "trace-thread"), feature = "std"))]
+#[cfg(all(
+    not(feature = "threads"),
+    feature = "multi_memory",
+    not(feature = "trace-thread"),
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -158,7 +213,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(not(feature = "threads"), feature = "multi_memory", not(feature = "trace-thread"), not(feature = "std")))]
+#[cfg(all(
+    not(feature = "threads"),
+    feature = "multi_memory",
+    not(feature = "trace-thread"),
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -171,7 +231,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), feature = "trace-thread", feature = "std"))]
+#[cfg(all(
+    not(feature = "threads"),
+    not(feature = "multi_memory"),
+    feature = "trace-thread",
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -184,7 +249,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), feature = "trace-thread", not(feature = "std")))]
+#[cfg(all(
+    not(feature = "threads"),
+    not(feature = "multi_memory"),
+    feature = "trace-thread",
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -197,7 +267,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { $($t)* };
 }
 
-#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), not(feature = "trace-thread"), feature = "std"))]
+#[cfg(all(
+    not(feature = "threads"),
+    not(feature = "multi_memory"),
+    not(feature = "trace-thread"),
+    feature = "std"
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -210,7 +285,12 @@ macro_rules! __if_feature {
     (@not_std $($t:tt)*) => { };
 }
 
-#[cfg(all(not(feature = "threads"), not(feature = "multi_memory"), not(feature = "trace-thread"), not(feature = "std")))]
+#[cfg(all(
+    not(feature = "threads"),
+    not(feature = "multi_memory"),
+    not(feature = "trace-thread"),
+    not(feature = "std")
+))]
 #[macro_export]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
@@ -222,7 +302,6 @@ macro_rules! __if_feature {
     (@std $($t:tt)*) => { };
     (@not_std $($t:tt)*) => { $($t)* };
 }
-
 
 #[cfg(feature = "simple-debug")]
 /// Simple, fast debugging utilities for WebAssembly execution.
@@ -312,9 +391,7 @@ pub mod file {
 
     #[cfg(feature = "embedded-fs")]
     pub use crate::wasi::file::embedded::{
-        lfs::StandardEmbeddedNormalLFS,
-        lfs_raw::StandardEmbeddedFiles,
-        lfs_raw::WasiEmbeddedFile,
+        lfs::StandardEmbeddedNormalLFS, lfs_raw::StandardEmbeddedFiles, lfs_raw::WasiEmbeddedFile,
         vfs::StandardEmbeddedFileSystem,
     };
 

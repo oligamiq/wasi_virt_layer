@@ -20,10 +20,16 @@ fn test_vfs_features_invalid() -> color_eyre::Result<()> {
         &["--features", "non-existent-feature"],
     );
 
-    assert!(result.is_err(), "Build should fail with non-existent feature");
+    assert!(
+        result.is_err(),
+        "Build should fail with non-existent feature"
+    );
     let err_msg = format!("{}", result.unwrap_err());
-    assert!(err_msg.contains("non-existent-feature") || err_msg.contains("Build failed"),
-            "Error message should indicate build failure. Got: {}", err_msg);
+    assert!(
+        err_msg.contains("non-existent-feature") || err_msg.contains("Build failed"),
+        "Error message should indicate build failure. Got: {}",
+        err_msg
+    );
 
     Ok(())
 }

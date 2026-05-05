@@ -8,7 +8,7 @@ macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
             abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
-            special_func, threads, wrap_unreachable, starts,
+            special_func, starts, threads, wrap_unreachable,
         };
 
         generator::add_generators_by_type!(
@@ -78,6 +78,10 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         &parsed_args.out_dir,
         parsed_args.get_wasm_memory_hints(),
         &parsed_args.vfs_build_opts,
+        parsed_args
+            .target_vfs_build_opts
+            .clone()
+            .unwrap_or_else(|| Box::new([])),
     )?;
 
     postbuild::run_postbuild(&mut component_runner, &parsed_args, Some(dwarf))?;

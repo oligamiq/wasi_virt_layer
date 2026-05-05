@@ -318,8 +318,6 @@ macro_rules! import_wasm {
     };
 }
 
-
-
 #[unsafe(no_mangle)]
 #[cfg(target_os = "wasi")]
 #[cfg(feature = "multi_memory")]

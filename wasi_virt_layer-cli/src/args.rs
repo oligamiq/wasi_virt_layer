@@ -172,6 +172,10 @@ pub struct BuildArgs {
     /// Options for building the VFS module.
     #[command(flatten)]
     pub vfs_build_opts: VfsBuildOptions,
+
+    /// Options for building target Wasm modules.
+    #[arg(skip)]
+    pub target_vfs_build_opts: Option<Box<[VfsBuildOptions]>>,
 }
 
 impl BuildArgs {
@@ -301,6 +305,10 @@ pub struct PreBuildArgs {
     /// Options for building the VFS module.
     #[command(flatten)]
     pub vfs_build_opts: VfsBuildOptions,
+
+    /// Options for building target Wasm modules.
+    #[arg(skip)]
+    pub target_vfs_build_opts: Option<Box<[VfsBuildOptions]>>,
 }
 
 impl PreBuildArgs {
@@ -559,13 +567,13 @@ impl TargetMemoryType {
 }
 
 /// Options for building the VFS module.
-#[derive(Parser, Debug, Clone)]
+#[derive(Parser, Debug, Clone, Default)]
 pub struct VfsBuildOptions {
     /// Space or comma separated list of features to activate for the VFS module.
-    #[arg(long, value_delimiter = ',')]
+    #[arg(long, action = clap::ArgAction::Append)]
     pub features: Vec<String>,
 
     /// Do not activate the `default` feature of the VFS module.
-    #[arg(long)]
-    pub no_default_features: bool,
+    #[arg(long, action = clap::ArgAction::Count)]
+    pub no_default_features: u8,
 }

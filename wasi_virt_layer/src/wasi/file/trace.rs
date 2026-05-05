@@ -29,8 +29,7 @@ macro_rules! trace_fs {
         $vfs:expr,
         $wasm:ty;
         $($arg:tt)*
-    ) => {
-    };
+    ) => {};
 }
 
 pub(crate) use trace_fs;

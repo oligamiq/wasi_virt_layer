@@ -29,6 +29,8 @@ pub mod ctrlc_handler;
 pub mod down_color;
 /// Contains fallback execution processes (managed via locks).
 pub mod fallback_command; // fallback logic guarded by DISABLE_FALLBACK
+/// Extracts and associates features with their target Wasm modules based on command line order.
+pub mod feature_extractor;
 /// Generate TypeScript helper code for VFS modules.
 pub mod gen_ts_helper;
 /// Internal generators for modifying and stitching Wasm structures.
@@ -77,12 +79,43 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         .init();
     color_eyre::install()?;
 
-    let parsed_args = args::Cli::parse_from(&args_vec);
+    use clap::{CommandFactory, FromArgMatches};
+    let mut cmd = args::Cli::command();
+    let matches = cmd.get_matches_from(&args_vec);
+    let mut parsed_args = args::Cli::from_arg_matches(&matches)?;
+
+    if let Some((subcmd, sub_matches)) = matches.subcommand() {
+        match subcmd {
+            "build" => {
+                if let args::Command::Build(ref mut build_args) = parsed_args.command {
+                    let (vfs_opts, target_opts) = crate::feature_extractor::extract_features(
+                        sub_matches,
+                        build_args.wasm.len(),
+                    );
+                    build_args.vfs_build_opts = vfs_opts;
+                    build_args.target_vfs_build_opts = Some(target_opts);
+                }
+            }
+            "prebuild" => {
+                if let args::Command::Prebuild(ref mut prebuild_args) = parsed_args.command {
+                    let (vfs_opts, target_opts) = crate::feature_extractor::extract_features(
+                        sub_matches,
+                        prebuild_args.wasm.len(),
+                    );
+                    prebuild_args.vfs_build_opts = vfs_opts;
+                    prebuild_args.target_vfs_build_opts = Some(target_opts);
+                }
+            }
+            _ => {}
+        }
+    }
 
     let lock_ids = get_command_lock_identifiers(&parsed_args.command);
 
     let command_lock = if !lock_ids.is_empty() {
-        let lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire(&lock_ids)?)));
+        let lock = std::sync::Arc::new(std::sync::Mutex::new(Some(CommandLock::acquire(
+            &lock_ids,
+        )?)));
         let cl_clone = lock.clone();
         ctrlc_handler::register(move || {
             if let Ok(mut lock) = cl_clone.lock() {
@@ -173,9 +206,10 @@ fn get_command_lock_identifiers(command: &args::Command) -> Vec<String> {
             ids.push(args.out_dir.to_string());
         }
         args::Command::PrepareTarget(args) => {
-            let output = args.output.clone().unwrap_or_else(|| {
-                args.target_wasm.with_extension("prepared.wasm")
-            });
+            let output = args
+                .output
+                .clone()
+                .unwrap_or_else(|| args.target_wasm.with_extension("prepared.wasm"));
             if let Some(parent) = output.parent() {
                 ids.push(parent.to_string());
             }

@@ -92,9 +92,7 @@ const FD_COUNT: usize = 10;
 
 #[const_struct::const_struct]
 const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-    EmbeddedFiles!([
-        (".", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])
-    ]);
+    EmbeddedFiles!([(".", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])]);
 
 mod fs {
     use super::*;

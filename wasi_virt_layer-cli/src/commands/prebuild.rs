@@ -23,6 +23,7 @@ pub(crate) fn run_prebuild_internal(
     out_dir: &camino::Utf8PathBuf,
     wasm_memory_hints: Box<[Option<usize>]>,
     vfs_build_opts: &crate::args::VfsBuildOptions,
+    target_vfs_build_opts: Box<[crate::args::VfsBuildOptions]>,
 ) -> eyre::Result<(generator::ComponentRunner, bool)> {
     let vfs_package = package
         .clone()
@@ -121,6 +122,7 @@ pub(crate) fn run_prebuild_internal(
         keep_build_artifacts,
         memory_type,
         vfs_build_opts.clone(),
+        target_vfs_build_opts,
         toml_restores,
         wasm_memory_hints,
     )?;
@@ -153,6 +155,10 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         &parsed_args.out_dir,
         parsed_args.get_wasm_memory_hints(),
         &parsed_args.vfs_build_opts,
+        parsed_args
+            .target_vfs_build_opts
+            .clone()
+            .unwrap_or_else(|| Box::new([])),
     )?;
 
     let path = component_runner.path.path()?;
