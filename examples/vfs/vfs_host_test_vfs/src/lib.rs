@@ -7,11 +7,13 @@ use parking_lot::Mutex;
 // We import the target wasm
 import_wasm!(vfs_host_test_target);
 
+#[cfg(target_os = "wasi")]
 #[link(wasm_import_module = "wasip1_vfs_vfs_host_test_target")]
 unsafe extern "C" {
     fn test_user_func();
 }
 
+#[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
 pub extern "C" fn importing_test_vfs_func() {
     println!("importing_test_vfs_func called (host side)");
@@ -48,6 +50,7 @@ plug_env!(@dynamic, &mut VIRTUAL_ENV.lock(), vfs_host_test_target);
 plug_process!(vfs_host_test_target);
 
 #[unsafe(no_mangle)]
+#[cfg(target_os = "wasi")]
 fn main() {
     println!("Hello from the host!");
 
