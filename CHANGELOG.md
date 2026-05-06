@@ -5,13 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.7] - 2026-05-06
+
+### Added
+- **Enhanced WASI Path Functions**: Added delegation and routing support for path operations in all VFS layers (`StandardDynamicFileSystem`, `StandardEmbeddedFileSystem`, `StandardMultipleFileSystem`). This ensures consistent behavior across different filesystem implementations when using path-based WASI functions.
+
+### Changed
+- **Test Infrastructure**: Updated `@oligami/browser_wasi_shim-threads` to `^0.3.2` and improved worker import logic in the JS test runner.
+- **Dependencies**: Updated workspace dependencies to their latest versions.
+- **Version Bump**: Updated workspace version to 0.3.7.
+
+## [0.3.6] - 2026-05-06
+
+### Added
+- **WASI Path Functions**: Implemented core `path_create_directory`, `path_link`, `path_remove_directory`, `path_rename`, and `path_unlink_file` functions.
+  - Added low-level implementation logic in `StandardDynamicLFS`.
+  - Updated `plug_fs!` macro to export these functions, completing the standard WASI file system interface.
+
+### Changed
+- **Version Bump**: Updated workspace version to 0.3.6.
+
 ## [0.3.5] - 2026-05-05
 
 ### Added
-- **WASI Path Functions**: Added implementation for `path_create_directory`, `path_link`, `path_remove_directory`, `path_rename`, and `path_unlink_file`.
-  - Added logic for these operations in `StandardDynamicLFS`.
-  - Added delegation and routing support in VFS layers (`StandardDynamicFileSystem`, `StandardEmbeddedFileSystem`, `StandardMultipleFileSystem`).
-  - Updated `plug_fs!` macro to export these functions to the WASI ecosystem.
 - **VFS Host Communication**: Implemented import resolution for VFS functions, allowing target modules to call functions provided by the VFS (host-side virtualization). Added `vfs_host_test_vfs` example and `vfs_host_test_target`.
 - **Per-Target Feature Configuration**: Enhanced the CLI to allow per-target feature configuration. Improved feature extraction logic to better handle dependencies between target features and the virtual layer.
 
