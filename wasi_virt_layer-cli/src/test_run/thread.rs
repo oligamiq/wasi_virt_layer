@@ -331,7 +331,7 @@ fn package_json() -> &'static str {
 	"type": "module",
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@oligami/browser_wasi_shim-threads": "^0.2.2",
+		"@oligami/browser_wasi_shim-threads": "^0.3.2",
 		"@xterm/xterm": "^5.5",
 		"xterm-addon-fit": "^0.8.0"
 	},
@@ -348,7 +348,7 @@ fn worker_background_worker_ts() -> &'static str {
     r#"
 import { wait_async_polyfill } from "@oligami/browser_wasi_shim-threads";
 // @ts-ignore
-import run from "./node_modules/@oligami/browser_wasi_shim-threads/dist/worker_background_worker.min.js";
+import run from "@oligami/browser_wasi_shim-threads/worker_background_worker";
 
 import { set_fake_worker } from "./common.ts";
 
