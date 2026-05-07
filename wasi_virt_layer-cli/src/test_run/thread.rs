@@ -177,6 +177,9 @@ export const custom_instantiate = async (
 	};
 
     for (const key in root) {
+        if (typeof root[key] !== "function") {
+            continue;
+        }
         fake[key] = root[key].bind(root);
     }
 
