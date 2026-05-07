@@ -176,6 +176,10 @@ export const custom_instantiate = async (
 		},
 	};
 
+    for (const key in root) {
+        fake[key] = root[key].bind(root);
+    }
+
 	return fake;
 };
 "#;
