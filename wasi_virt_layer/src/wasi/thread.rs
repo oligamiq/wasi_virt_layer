@@ -392,29 +392,37 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
 
     /// Runs a thread runner on an available worker thread.
     pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
-        #[cfg(not(feature = "trace"))]
-        self.queue
-            .lock()
-            .as_mut()
-            .unwrap()
-            .send(VirtualThreadPoolMessage::Run(
-                runner,
-                ThreadAccessorWrapper::new(accessor),
-                thread_id,
-            ))
-            .unwrap();
+        let need_expansion = {
+            let mut sender_lock = self.queue.lock();
+            let sender = sender_lock.as_mut().expect("Thread pool queue not initialized");
+            
+            sender
+                .send(VirtualThreadPoolMessage::Run(
+                    runner,
+                    ThreadAccessorWrapper::new(accessor),
+                    thread_id,
+                ))
+                .unwrap();
+                
+            sender.len() > 0
+        };
 
-        #[cfg(feature = "trace")]
-        self.queue
-            .lock()
-            .as_mut()
-            .expect("Thread pool queue not initialized")
-            .send(VirtualThreadPoolMessage::Run(
-                runner,
-                ThreadAccessorWrapper::new(accessor),
-                thread_id,
-            ))
-            .unwrap();
+        if need_expansion {
+            let current = self.read_kept_workers_pool_size.load(Ordering::SeqCst);
+            let max = self.max_threads.load(Ordering::SeqCst);
+            if current >= max {
+                if self
+                    .max_threads
+                    .compare_exchange(max, max + 1, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    #[cfg(feature = "trace-thread")]
+                    println!("[] Automatically expanding thread pool capacity to {}", max + 1);
+                    
+                    let _ = self.flush_capacity();
+                }
+            }
+        }
     }
 }
 
