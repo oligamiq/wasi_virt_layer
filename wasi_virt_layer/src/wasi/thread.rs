@@ -720,10 +720,10 @@ mod reset_on_thread {
 #[cfg(target_os = "wasi")]
 pub mod vfs_atomic {
     use dashmap::DashMap;
-    use std::boxed::Box;
-    use std::sync::LazyLock;
-    use std::hash::BuildHasherDefault;
     use fxhash::FxHasher;
+    use std::boxed::Box;
+    use std::hash::BuildHasherDefault;
+    use std::sync::LazyLock;
 
     #[link(wasm_import_module = "wvl_atomic")]
     unsafe extern "C" {
@@ -735,24 +735,26 @@ pub mod vfs_atomic {
         pub fn __wvl_atomic_cmpxchg32_vfs(addr: *mut u32, expected: u32, new: u32) -> u32;
         pub fn __wvl_atomic_store32_vfs(addr: *mut u32, val: u32);
 
-        // Load operations on Target memory (Memory 1)
-        pub fn __wvl_atomic_load32_target(addr: *const u32) -> u32;
-        pub fn __wvl_atomic_load64_target(addr: *const u64) -> u64;
+        // Load operations on Target memory (Memory 1..N)
+        pub fn __wvl_atomic_load32_target(wasm_id: u32, addr: *const u32) -> u32;
+        pub fn __wvl_atomic_load64_target(wasm_id: u32, addr: *const u64) -> u64;
     }
 
-    static WAIT_MAP: LazyLock<DashMap<u32, Box<u32>, BuildHasherDefault<FxHasher>>> =
+    static WAIT_MAP: LazyLock<DashMap<u64, Box<u32>, BuildHasherDefault<FxHasher>>> =
         LazyLock::new(DashMap::default);
 
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn __vfs_atomic_wait32(
+        wasm_id: u32,
         relative_addr: u32,
         expected: u32,
         timeout: i64,
     ) -> i32 {
+        let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
         let (ptr, vfs_expected) = {
-            let entry = WAIT_MAP.entry(relative_addr).or_insert_with(|| Box::new(0));
+            let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             unsafe {
-                let val = __wvl_atomic_load32_target(relative_addr as *const u32);
+                let val = __wvl_atomic_load32_target(wasm_id, relative_addr as *const u32);
                 if val != expected {
                     return 1; // not-equal
                 }
@@ -766,14 +768,16 @@ pub mod vfs_atomic {
 
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn __vfs_atomic_wait64(
+        wasm_id: u32,
         relative_addr: u32,
         expected: u64,
         timeout: i64,
     ) -> i32 {
+        let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
         let (ptr, vfs_expected) = {
-            let entry = WAIT_MAP.entry(relative_addr).or_insert_with(|| Box::new(0));
+            let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             unsafe {
-                let val = __wvl_atomic_load64_target(relative_addr as *const u64);
+                let val = __wvl_atomic_load64_target(wasm_id, relative_addr as *const u64);
                 if val != expected {
                     return 1; // not-equal
                 }
@@ -786,9 +790,14 @@ pub mod vfs_atomic {
     }
 
     #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn __vfs_atomic_notify(relative_addr: u32, count: u32) -> i32 {
+    pub unsafe extern "C" fn __vfs_atomic_notify(
+        wasm_id: u32,
+        relative_addr: u32,
+        count: u32,
+    ) -> i32 {
+        let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
         let ptr = {
-            let mut entry = WAIT_MAP.entry(relative_addr).or_insert_with(|| Box::new(0));
+            let mut entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             let val_mut = entry.value_mut().as_mut();
             *val_mut = val_mut.wrapping_add(1);
             val_mut as *const u32

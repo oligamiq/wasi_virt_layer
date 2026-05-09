@@ -80,5 +80,54 @@ fn main() {
         println!("### Test 2 (ping-pong {ROUNDS} rounds): PASSED");
     }
 
+    // ── Test 3: non-zero offset + VFS activity ──────────────────
+    {
+        println!("### Test 3: non-zero offset + VFS activity...");
+
+        // By placing the condvar at the end of a large struct,
+        // we force `memory.atomic.wait32` / `notify` to use a non-zero offset.
+        struct LargeStruct {
+            started: Mutex<bool>,
+            cvar: Condvar,
+        }
+
+        let data = Arc::new(LargeStruct {
+            started: Mutex::new(false),
+            cvar: Condvar::new(),
+        });
+
+        let data_worker = Arc::clone(&data);
+        let handle = std::thread::spawn(move || {
+            // Wait for main thread to enter `cvar.wait`
+            std::thread::sleep(Duration::from_millis(1000));
+
+            // Perform some VFS activity (file I/O) to exercise the VFS heap/state
+            let filename = "atomic_vfs_test.txt";
+            println!("### Worker: writing large file to VFS...");
+            std::fs::write(filename, "A".repeat(1024 * 1024 * 50)).unwrap();
+
+            std::thread::sleep(Duration::from_millis(1000));
+
+            {
+                let mut started = data_worker.started.lock().unwrap();
+                *started = true;
+                data_worker.cvar.notify_one();
+            }
+
+            // More I/O
+            let _ = std::fs::read_to_string(filename).unwrap();
+            std::fs::remove_file(filename).unwrap();
+            println!("### Worker: signalled condvar and cleaned up I/O");
+        });
+
+        let mut started = data.started.lock().unwrap();
+        while !*started {
+            println!("### Main: entering wait (should use non-zero offset)...");
+            started = data.cvar.wait(started).unwrap();
+        }
+        handle.join().unwrap();
+        println!("### Test 3 (non-zero offset + I/O): PASSED");
+    }
+
     println!("### AtomicWait/Notify test: all passed!");
 }

@@ -32,14 +32,6 @@ export!(Starter);
 
 import_wasm!(test_atomic_wait);
 
-const FILE_COUNT: usize = 2;
-
-type F = WasiEmbeddedFile<&'static str>;
-type NormalFILES = StandardEmbeddedFiles<F, { FILE_COUNT }>;
-
-#[const_struct]
-const EMBEDDED_FILES: NormalFILES = EmbeddedFiles!([(".", [("test", F::new("test"))])]);
-
 plug_thread!(
     { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
@@ -62,12 +54,32 @@ const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 plug_env!(@embedded, VirtualEnvTy, test_atomic_wait, self);
 
 mod fs {
-    use super::*;
+    use std::sync::LazyLock;
 
-    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, F, FILE_COUNT, DefaultStdIO>;
+use super::*;
 
-    static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
-        StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
+    type LFS = StandardDynamicLFS<DefaultStdIO>;
 
-    plug_fs!(&VIRTUAL_FILE_SYSTEM, test_atomic_wait, self);
+    pub static VIRTUAL_FILE_SYSTEM: LazyLock<StandardDynamicFileSystem<LFS>> =
+        LazyLock::new(|| {
+            let lfs = StandardDynamicLFS::new();
+
+            let root_inode = lfs.add_preopen(".");
+
+            lfs.add_file(
+                root_inode,
+                "readme.txt",
+                b"Hello from the virtual filesystem!".to_vec(),
+            )
+            .unwrap();
+
+            lfs.add_file(root_inode, "data.txt", b"Some initial data".to_vec())
+                .unwrap();
+
+            let vfs = StandardDynamicFileSystem::new(lfs);
+            vfs.add_fd(root_inode, !0, !0);
+            vfs
+        });
+
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_atomic_wait, self);
 }

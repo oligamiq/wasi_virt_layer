@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.3] - 2026-05-10
+### Fixed
+- **Multi-Module Atomic Isolation**: Introduced `wasm_id` to the atomic synchronization layer to prevent wait/notify collisions between different Wasm modules sharing the same VFS.
+- **Dynamic Target Memory Dispatch**: Implemented a dynamic dispatch mechanism in `AtomicPatch` to correctly load memory values from the specific target module's memory space during atomic waits.
+### Added
+- **Expanded Atomic Tests**: Added a new test case to the `test_atomic_wait` example that verifies non-zero offset support and concurrent VFS I/O activity during atomic waits.
+
 ## [0.4.2] - 2026-05-09
 ### Fixed
 - **VFS Atomics Initialization**: Changed the `DashMap` hasher to `FxHasher` (deterministic) to prevent `random_get` calls during module initialization. This fixes failures in `module.start` where imported functions may not yet be available or are restricted.
