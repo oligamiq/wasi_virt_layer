@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-05-09
+### Added
+- **AtomicPatch Non-Zero Offset Support**: Enhanced `AtomicPatch` to support atomic instructions with non-zero offsets by dynamically generating wrapper functions. This ensures that static offsets in Wasm bytecode are correctly applied when redirecting to the VFS-managed synchronization layer.
+
 ## [0.4.0] - 2026-05-09
 ### Added
 - **AtomicPatch Synchronization**: Introduced `AtomicPatch` generator to redirect standard WebAssembly atomic instructions (`memory.atomic.wait32` and `memory.atomic.notify`) to a stable VFS-managed synchronization layer.

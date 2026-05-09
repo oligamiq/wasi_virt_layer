@@ -296,6 +296,44 @@ impl Generator for ThreadsSpawnPatch {
 #[derive(Debug, Default)]
 pub struct AtomicPatch;
 
+impl AtomicPatch {
+    /// Creates a wrapper function that adds a constant offset to the address argument,
+    /// then delegates to the base VFS import function.
+    ///
+    /// For wait32/wait64: `(addr, expected, timeout) -> (addr+offset, expected, timeout)`
+    /// For notify:        `(addr, count)             -> (addr+offset, count)`
+    fn make_offset_wrapper(
+        module: &mut walrus::Module,
+        base_func: walrus::FunctionId,
+        offset: u64,
+        params: &[walrus::ValType],
+        results: &[walrus::ValType],
+    ) -> walrus::FunctionId {
+        use walrus::ValType::{I32, I64};
+
+        let mut builder = walrus::FunctionBuilder::new(&mut module.types, params, results);
+        let args: Vec<walrus::LocalId> = params
+            .iter()
+            .map(|ty| module.locals.add(*ty))
+            .collect();
+
+        {
+            let mut body = builder.func_body();
+            // addr + offset
+            body.local_get(args[0])
+                .i32_const(offset as i32)
+                .binop(walrus::ir::BinaryOp::I32Add);
+            // remaining args
+            for arg in &args[1..] {
+                body.local_get(*arg);
+            }
+            body.call(base_func);
+        }
+
+        builder.finish(args, &mut module.funcs)
+    }
+}
+
 impl Generator for AtomicPatch {
     fn pre_target(
         &mut self,
@@ -309,6 +347,7 @@ impl Generator for AtomicPatch {
 
         use walrus::ValType::{I32, I64};
 
+        // Import base VFS atomic functions (offset=0 cases)
         let wait32_ty = module.types.add(&[I32, I32, I64], &[I32]);
         let (wait32_import, _) = module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_wait32", wait32_ty);
 
@@ -318,6 +357,71 @@ impl Generator for AtomicPatch {
         let notify_ty = module.types.add(&[I32, I32], &[I32]);
         let (notify_import, _) = module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_notify", notify_ty);
 
+        // --- Pass 1: Collect unique non-zero offsets via DFS visitor ---
+        let mut wait32_offsets = std::collections::BTreeSet::new();
+        let mut wait64_offsets = std::collections::BTreeSet::new();
+        let mut notify_offsets = std::collections::BTreeSet::new();
+
+        {
+            struct OffsetCollector<'a> {
+                wait32: &'a mut std::collections::BTreeSet<u64>,
+                wait64: &'a mut std::collections::BTreeSet<u64>,
+                notify: &'a mut std::collections::BTreeSet<u64>,
+            }
+
+            impl<'instr> walrus::ir::Visitor<'instr> for OffsetCollector<'_> {
+                fn start_instr_seq(&mut self, seq: &'instr walrus::ir::InstrSeq) {
+                    for (instr, _) in seq.instrs.iter() {
+                        match instr {
+                            walrus::ir::Instr::AtomicWait(w) if w.arg.offset != 0 => {
+                                if w.sixty_four {
+                                    self.wait64.insert(w.arg.offset);
+                                } else {
+                                    self.wait32.insert(w.arg.offset);
+                                }
+                            }
+                            walrus::ir::Instr::AtomicNotify(n) if n.arg.offset != 0 => {
+                                self.notify.insert(n.arg.offset);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+
+            for (_fid, func) in module.funcs.iter_local() {
+                let entry = func.entry_block();
+                let mut visitor = OffsetCollector {
+                    wait32: &mut wait32_offsets,
+                    wait64: &mut wait64_offsets,
+                    notify: &mut notify_offsets,
+                };
+                walrus::ir::dfs_in_order(&mut visitor, func, entry);
+            }
+        }
+
+        // --- Create wrapper functions for each unique non-zero offset ---
+        let mut wait32_map: std::collections::HashMap<u64, walrus::FunctionId> = std::collections::HashMap::new();
+        let mut wait64_map: std::collections::HashMap<u64, walrus::FunctionId> = std::collections::HashMap::new();
+        let mut notify_map: std::collections::HashMap<u64, walrus::FunctionId> = std::collections::HashMap::new();
+
+        for offset in wait32_offsets {
+            let fid = Self::make_offset_wrapper(module, wait32_import, offset, &[I32, I32, I64], &[I32]);
+            log::info!("Created wait32 wrapper for offset {offset}");
+            wait32_map.insert(offset, fid);
+        }
+        for offset in wait64_offsets {
+            let fid = Self::make_offset_wrapper(module, wait64_import, offset, &[I32, I64, I64], &[I32]);
+            log::info!("Created wait64 wrapper for offset {offset}");
+            wait64_map.insert(offset, fid);
+        }
+        for offset in notify_offsets {
+            let fid = Self::make_offset_wrapper(module, notify_import, offset, &[I32, I32], &[I32]);
+            log::info!("Created notify wrapper for offset {offset}");
+            notify_map.insert(offset, fid);
+        }
+
+        // --- Pass 2: Rewrite all atomic.wait/notify to calls ---
         for (_fid, func) in module.funcs.iter_local_mut() {
             let mut builder = func.builder_mut();
             let mut body = builder.func_body();
@@ -325,20 +429,29 @@ impl Generator for AtomicPatch {
             body.rewrite(|instr, _pos| {
                 let new_instr = match instr {
                     walrus::ir::Instr::AtomicWait(w) => {
-                        if w.arg.offset != 0 {
-                            log::warn!("AtomicWait with non-zero offset is not supported yet! offset: {}", w.arg.offset);
-                        }
                         if !w.sixty_four {
-                            Some(walrus::ir::Instr::Call(walrus::ir::Call { func: wait32_import }))
+                            let target = if w.arg.offset == 0 {
+                                wait32_import
+                            } else {
+                                wait32_map[&w.arg.offset]
+                            };
+                            Some(walrus::ir::Instr::Call(walrus::ir::Call { func: target }))
                         } else {
-                            Some(walrus::ir::Instr::Call(walrus::ir::Call { func: wait64_import }))
+                            let target = if w.arg.offset == 0 {
+                                wait64_import
+                            } else {
+                                wait64_map[&w.arg.offset]
+                            };
+                            Some(walrus::ir::Instr::Call(walrus::ir::Call { func: target }))
                         }
                     }
                     walrus::ir::Instr::AtomicNotify(n) => {
-                        if n.arg.offset != 0 {
-                            log::warn!("AtomicNotify with non-zero offset is not supported yet! offset: {}", n.arg.offset);
-                        }
-                        Some(walrus::ir::Instr::Call(walrus::ir::Call { func: notify_import }))
+                        let target = if n.arg.offset == 0 {
+                            notify_import
+                        } else {
+                            notify_map[&n.arg.offset]
+                        };
+                        Some(walrus::ir::Instr::Call(walrus::ir::Call { func: target }))
                     }
                     _ => None
                 };
@@ -350,6 +463,7 @@ impl Generator for AtomicPatch {
 
         Ok(())
     }
+
 
     fn post_combine(
         &mut self,
