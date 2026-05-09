@@ -722,6 +722,8 @@ pub mod vfs_atomic {
     use dashmap::DashMap;
     use std::boxed::Box;
     use std::sync::LazyLock;
+    use std::hash::BuildHasherDefault;
+    use fxhash::FxHasher;
 
     #[link(wasm_import_module = "wvl_atomic")]
     unsafe extern "C" {
@@ -738,7 +740,8 @@ pub mod vfs_atomic {
         pub fn __wvl_atomic_load64_target(addr: *const u64) -> u64;
     }
 
-    static WAIT_MAP: LazyLock<DashMap<u32, Box<u32>>> = LazyLock::new(DashMap::new);
+    static WAIT_MAP: LazyLock<DashMap<u32, Box<u32>, BuildHasherDefault<FxHasher>>> =
+        LazyLock::new(DashMap::default);
 
     #[unsafe(no_mangle)]
     pub unsafe extern "C" fn __vfs_atomic_wait32(

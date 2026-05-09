@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.2] - 2026-05-09
+### Fixed
+- **VFS Atomics Initialization**: Changed the `DashMap` hasher to `FxHasher` (deterministic) to prevent `random_get` calls during module initialization. This fixes failures in `module.start` where imported functions may not yet be available or are restricted.
+
 ## [0.4.1] - 2026-05-09
 ### Added
 - **AtomicPatch Non-Zero Offset Support**: Enhanced `AtomicPatch` to support atomic instructions with non-zero offsets by dynamically generating wrapper functions. This ensures that static offsets in Wasm bytecode are correctly applied when redirecting to the VFS-managed synchronization layer.
