@@ -395,7 +395,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         let need_expansion = {
             let mut sender_lock = self.queue.lock();
             let sender = sender_lock.as_mut().expect("Thread pool queue not initialized");
-            
+
             sender
                 .send(VirtualThreadPoolMessage::Run(
                     runner,
@@ -403,7 +403,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                     thread_id,
                 ))
                 .unwrap();
-                
+
             sender.len() > 0
         };
 
@@ -418,7 +418,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                 {
                     #[cfg(feature = "trace-thread")]
                     println!("[] Automatically expanding thread pool capacity to {}", max + 1);
-                    
+
                     let _ = self.flush_capacity();
                 }
             }
@@ -716,3 +716,81 @@ mod reset_on_thread {
         });
     }
 }
+
+#[cfg(target_os = "wasi")]
+pub mod vfs_atomic {
+    use dashmap::DashMap;
+    use std::boxed::Box;
+    use std::sync::LazyLock;
+
+    #[link(wasm_import_module = "wvl_atomic")]
+    unsafe extern "C" {
+        // Wait and notify on VFS memory (Memory 0)
+        pub fn __wvl_atomic_wait32_vfs(addr: *const u32, expected: u32, timeout: i64) -> i32;
+        pub fn __wvl_atomic_notify_vfs(addr: *const u32, count: u32) -> i32;
+
+        // Lock operations on VFS memory (Memory 0)
+        pub fn __wvl_atomic_cmpxchg32_vfs(addr: *mut u32, expected: u32, new: u32) -> u32;
+        pub fn __wvl_atomic_store32_vfs(addr: *mut u32, val: u32);
+
+        // Load operations on Target memory (Memory 1)
+        pub fn __wvl_atomic_load32_target(addr: *const u32) -> u32;
+        pub fn __wvl_atomic_load64_target(addr: *const u64) -> u64;
+    }
+
+    static WAIT_MAP: LazyLock<DashMap<u32, Box<u32>>> = LazyLock::new(DashMap::new);
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn __vfs_atomic_wait32(
+        relative_addr: u32,
+        expected: u32,
+        timeout: i64,
+    ) -> i32 {
+        let (ptr, vfs_expected) = {
+            let entry = WAIT_MAP.entry(relative_addr).or_insert_with(|| Box::new(0));
+            unsafe {
+                let val = __wvl_atomic_load32_target(relative_addr as *const u32);
+                if val != expected {
+                    return 1; // not-equal
+                }
+                let ptr = &**entry.value() as *const u32;
+                let vfs_expected = *ptr;
+                (ptr, vfs_expected)
+            }
+        };
+        unsafe { __wvl_atomic_wait32_vfs(ptr, vfs_expected, timeout) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn __vfs_atomic_wait64(
+        relative_addr: u32,
+        expected: u64,
+        timeout: i64,
+    ) -> i32 {
+        let (ptr, vfs_expected) = {
+            let entry = WAIT_MAP.entry(relative_addr).or_insert_with(|| Box::new(0));
+            unsafe {
+                let val = __wvl_atomic_load64_target(relative_addr as *const u64);
+                if val != expected {
+                    return 1; // not-equal
+                }
+                let ptr = &**entry.value() as *const u32;
+                let vfs_expected = *ptr;
+                (ptr, vfs_expected)
+            }
+        };
+        unsafe { __wvl_atomic_wait32_vfs(ptr, vfs_expected, timeout) }
+    }
+
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn __vfs_atomic_notify(relative_addr: u32, count: u32) -> i32 {
+        let ptr = {
+            let mut entry = WAIT_MAP.entry(relative_addr).or_insert_with(|| Box::new(0));
+            let val_mut = entry.value_mut().as_mut();
+            *val_mut = val_mut.wrapping_add(1);
+            val_mut as *const u32
+        };
+        unsafe { __wvl_atomic_notify_vfs(ptr, count) }
+    }
+}
+

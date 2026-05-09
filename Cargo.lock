@@ -133,6 +133,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic_wait_vfs"
+version = "0.3.9"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "autocfg"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2042,6 +2051,10 @@ version = "0.3.9"
 dependencies = [
  "walkdir",
 ]
+
+[[package]]
+name = "test_atomic_wait"
+version = "0.3.9"
 
 [[package]]
 name = "test_helper_shared_memory_vfs"

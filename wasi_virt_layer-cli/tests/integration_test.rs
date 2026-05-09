@@ -1297,3 +1297,60 @@ fn test_vfs_host_import_resolution() -> color_eyre::Result<()> {
 
     Ok(())
 }
+
+/// Tests that `Atomics.wait` / `Atomics.notify` are correctly redirected to VFS memory
+/// via the `AtomicPatch` generator when multi-memory lowering is active.
+///
+/// The test target (`test_atomic_wait`) uses `std::sync::Condvar` and `Mutex` which
+/// compile down to `memory.atomic.wait32` / `memory.atomic.notify` instructions.
+/// Without `AtomicPatch`, the memory offset shift caused by multi-memory lowering
+/// would corrupt the wait address, causing the condvar handshake to hang or panic.
+#[test]
+fn test_atomic_wait_vfs() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let run = || -> color_eyre::Result<TestDir> {
+        run_wasi_virt_layer(
+            Some("atomic_wait_vfs"),
+            Some("test_atomic_wait"),
+            Some(false), // multi memory — forces memory lowering
+            true,        // threads
+            OutDir::Random,
+            false,
+            &[],
+            None,
+        )
+    };
+
+    let test_dir = Utf8PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../examples/vfs/atomic_wait_vfs"
+    ));
+    let manifest_path = test_dir.join("Cargo.toml");
+    let root_manifest_path = test_dir.join("../../../Cargo.toml");
+
+    let original = std::fs::read_to_string(&manifest_path)
+        .wrap_err("Failed to read Cargo.toml for feature checking")?;
+
+    let checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
+        "threads",
+        &manifest_path,
+        &root_manifest_path,
+        UniqueName::CRATE_NAME,
+    );
+    checker.set(true)?;
+
+    let res = run();
+
+    let _resetter = Resetter {
+        manifest_path: &manifest_path,
+        original,
+    };
+
+    res.wrap_err("Failed to run atomic_wait_vfs — AtomicPatch may not be working correctly")?;
+    Ok(())
+}

@@ -23,6 +23,7 @@ macro_rules! add_generator {
             wrap_unreachable::WrapUnreachableGenerator,
             threads::ThreadsSpawn,
             threads::ThreadsSpawnPatch,
+            threads::AtomicPatch,
             special_func::StartFunc,
             special_func::MainVoidFunc,
             special_func::ResetFunc,
