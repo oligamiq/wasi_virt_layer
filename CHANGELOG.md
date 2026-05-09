@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-05-09
+### Added
+- **AtomicPatch Synchronization**: Introduced `AtomicPatch` generator to redirect standard WebAssembly atomic instructions (`memory.atomic.wait32` and `memory.atomic.notify`) to a stable VFS-managed synchronization layer.
+  - Implemented `vfs_atomic` module in `wasi/thread.rs` using `LazyLock` and `dashmap::DashMap` for efficient and scalable thread coordination.
+  - Added `test_atomic_wait` target and `atomic_wait_vfs` example to verify `std::sync::Condvar` behavior in virtualized environments.
+- **Integration Tests**: Added `test_atomic_wait_vfs` to the integration test suite to ensure correct atomic instruction rewriting during multi-memory lowering.
+
+### Fixed
+- **Atomics Multi-Memory Race**: Resolved a critical issue where memory growth or offset shifts in multi-memory lowering would invalidate atomic wait addresses, causing synchronization primitives (like `Mutex` and `Condvar`) to hang or trap.
+
+### Changed
+- **Version Bump**: Updated workspace version to 0.4.0.
+
 ## [0.3.9] - 2026-05-09
 
 ### Added
