@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.9] - 2026-05-09
+
+### Added
+- **WaitPoll Example**: Added `wait_poll_vfs` example and `test_wait_poll` integration test to verify blocking sleep behavior in virtualized environments.
+
+### Fixed
+- **WaitPoll Clock ID**: `WaitPoll` now correctly respects the `clock_id` from WASI subscriptions instead of hardcoding `CLOCKID_REALTIME`. This fixes issues where `std::thread::sleep` (which typically uses `CLOCKID_MONOTONIC`) would return immediately or panic.
+- **WaitPoll Memory Corruption**: Resolved a critical memory corruption issue in `WaitPoll` by using `crate::__self::__self` for local buffer operations, preventing incorrect pointer redirection by target-specific memory directors.
+
+### Changed
+- **StandardClock Refactoring**: Refactored `StandardClock` to use the safer `Wasm::store_le` API for memory writes, removing manual `memory_director_mut` calls and `unsafe` pointer operations.
+- **Test Infrastructure**: Increased `test_wait_poll` execution timeout to 30 seconds to ensure reliability on slower CI/CD environments.
+- **Version Bump**: Updated workspace version to 0.3.9.
+
 ## [0.3.8] - 2026-05-07
 
 ### Added
