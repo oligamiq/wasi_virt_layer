@@ -45,15 +45,9 @@ impl Clock for StandardClock {
         {
             use crate::transporter::non_recursive_clock_time_get;
 
-            #[cfg(not(feature = "multi_memory"))]
-            let adjusted_ptr =
-                unsafe { Wasm::memory_director_mut(time_ptr as *mut u8) as *mut Timestamp };
-            #[cfg(feature = "multi_memory")]
-            let adjusted_ptr = time_ptr;
-
             match unsafe { non_recursive_clock_time_get(clock_id, precision) } {
                 Ok(timestamp) => {
-                    unsafe { core::ptr::write(adjusted_ptr, timestamp) };
+                    Wasm::store_le(time_ptr, timestamp);
                     ERRNO_SUCCESS
                 }
                 Err(e) => e,
@@ -76,15 +70,9 @@ impl Clock for StandardClock {
         {
             use crate::transporter::non_recursive_clock_res_get;
 
-            #[cfg(not(feature = "multi_memory"))]
-            let adjusted_ptr =
-                unsafe { Wasm::memory_director_mut(resolution_ptr as *mut u8) as *mut Timestamp };
-            #[cfg(feature = "multi_memory")]
-            let adjusted_ptr = resolution_ptr;
-
             match unsafe { non_recursive_clock_res_get(clock_id) } {
                 Ok(resolution) => {
-                    unsafe { core::ptr::write(adjusted_ptr, resolution) };
+                    Wasm::store_le(resolution_ptr, resolution);
                     ERRNO_SUCCESS
                 }
                 Err(e) => e,

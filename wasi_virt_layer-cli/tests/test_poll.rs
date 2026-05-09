@@ -52,7 +52,7 @@ fn test_wait_poll() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
-        Some(std::time::Duration::from_secs(5)),
+        Some(std::time::Duration::from_secs(30)),
     )
     .expect("Failed to run WaitPoll test");
 

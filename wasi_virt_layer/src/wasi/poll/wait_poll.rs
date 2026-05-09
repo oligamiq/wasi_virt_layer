@@ -23,16 +23,17 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
             return ERRNO_NOTSUP;
         }
 
-        let (userdata, event_type, timeout, _precision, flags) = unsafe {
+        let (userdata, event_type, clock_id, timeout, _precision, flags) = unsafe {
             let base_ptr = subscriptions_ptr as *const u8;
 
             let userdata = Wasm::load_le::<u64>(base_ptr as *const u64);
             let event_type = Wasm::load_le::<u8>(base_ptr.add(8) as *const u8);
+            let clock_id = Wasm::load_le::<Clockid>(base_ptr.add(16) as *const Clockid);
             let timeout = Wasm::load_le::<Timestamp>(base_ptr.add(24) as *const Timestamp);
             let precision = Wasm::load_le::<Timestamp>(base_ptr.add(32) as *const Timestamp);
             let flags = Wasm::load_le::<Subclockflags>(base_ptr.add(40) as *const Subclockflags);
 
-            (userdata, event_type, timeout, precision, flags)
+            (userdata, event_type, clock_id, timeout, precision, flags)
         };
 
         // TODO: For now, we only support clock subscriptions.
@@ -41,10 +42,11 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
         }
 
         // Use the Clock trait to get the current time
-        fn get_now<Wasm: WasmAccess + WasmAccessName + 'static, Clock: crate::clock::Clock>()
-        -> Timestamp {
+        // We use crate::__self::__self to ensure we don't use the memory director
+        // for our own local buffer.
+        fn get_now<Clock: crate::clock::Clock>(clock_id: Clockid) -> Timestamp {
             let mut time_buf = 0u64;
-            let _ = Clock::clock_time_get::<Wasm>(CLOCKID_REALTIME, 0, &mut time_buf);
+            let _ = Clock::clock_time_get::<crate::__self::__self>(clock_id, 0, &mut time_buf);
             time_buf
         }
 
@@ -54,13 +56,13 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
         let end_time = if (flags & SUBCLOCKFLAGS_SUBSCRIPTION_CLOCK_ABSTIME) != 0 {
             timeout
         } else {
-            get_now::<Wasm, C>().saturating_add(timeout)
+            get_now::<C>(clock_id).saturating_add(timeout)
         };
 
         loop {
             unsafe { crate::transporter::non_recursive_sched_yield() };
 
-            let now = get_now::<Wasm, C>();
+            let now = get_now::<C>(clock_id);
 
             if now >= end_time {
                 break;
@@ -78,10 +80,8 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
             },
         };
 
-        unsafe {
-            Wasm::store_le(ret_event_ptr, event);
-            Wasm::store_le(ret_stored_events_ptr, 1);
-        }
+        Wasm::store_le(ret_event_ptr, event);
+        Wasm::store_le(ret_stored_events_ptr, 1);
 
         ERRNO_SUCCESS
     }
