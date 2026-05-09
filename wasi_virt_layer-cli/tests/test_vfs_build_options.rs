@@ -18,6 +18,7 @@ fn test_vfs_features_invalid() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &["--features", "non-existent-feature"],
+        None,
     );
 
     assert!(

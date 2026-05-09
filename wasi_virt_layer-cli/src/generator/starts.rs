@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use anyhow::Context;
 use eyre::Context as _;
 use walrus::FunctionId;
 

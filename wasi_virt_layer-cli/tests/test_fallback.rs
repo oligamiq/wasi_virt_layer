@@ -1,3 +1,4 @@
+#[cfg(feature = "fallback")]
 use std::sync::Mutex;
 
 use wasi_virt_layer_cli::fallback_command::FallbackCommand;

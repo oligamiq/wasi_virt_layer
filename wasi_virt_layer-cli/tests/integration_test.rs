@@ -136,6 +136,7 @@ fn build_normal(single: bool) -> color_eyre::Result<TestDir> {
         OutDir::Default,
         false, // keep_build_artifacts
         &[],
+        None,
     )
 }
 
@@ -150,6 +151,7 @@ fn build_out_dir() -> color_eyre::Result<TestDir> {
         OutDir::Path(&format!("{THIS_FOLDER}/tmp/dist")),
         false, // keep_build_artifacts
         &[],
+        None,
     )
 }
 
@@ -164,6 +166,7 @@ fn build_threads(single: bool) -> color_eyre::Result<TestDir> {
         OutDir::Random,
         false, // keep_build_artifacts
         &[],
+        None,
     )
 }
 
@@ -185,6 +188,7 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
+        None,
     )
     .wrap_err("Failed to run self-rw-vfs example")?;
 
@@ -208,6 +212,7 @@ fn test_unreachable_example() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
+        None,
     )
     .wrap_err("Failed to run test-unreachable example")?;
 
@@ -239,6 +244,7 @@ fn test_c_target_wasm() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
+        None,
     )
     .wrap_err("Failed to run C target Wasm example")?;
 
@@ -263,6 +269,7 @@ fn test_unreachable_threads_example() -> color_eyre::Result<()> {
             OutDir::Random,
             false,
             &[],
+            None,
         )
     };
 
@@ -276,7 +283,7 @@ fn test_unreachable_threads_example() -> color_eyre::Result<()> {
     let original = std::fs::read_to_string(&manifest_path)
         .wrap_err("Failed to read Cargo.toml for feature checking")?;
 
-    let mut checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
+    let checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
         "threads",
         &manifest_path,
         &root_manifest_path,
@@ -311,6 +318,7 @@ fn test_self_vfs_example() -> color_eyre::Result<()> {
         OutDir::Random,
         true,
         &[],
+        None,
     )
     .wrap_err("Failed to run self-vfs example")?;
 
@@ -421,6 +429,7 @@ fn all_features_without_threads() -> color_eyre::Result<()> {
             OutDir::Random,
             false, // keep_build_artifacts
             &[],
+            None,
         )
     };
 
@@ -464,6 +473,7 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
             OutDir::Random,
             false, // keep_build_artifacts
             &[],
+            None,
         )
     };
 
@@ -505,6 +515,7 @@ fn test_no_thread_with_thread_feature_vfs() -> color_eyre::Result<()> {
             OutDir::Random,
             false, // keep_build_artifacts
             &[],
+            None,
         )
     };
 
@@ -532,6 +543,7 @@ fn test_anonymous_with_threads() -> color_eyre::Result<()> {
             OutDir::Random,
             false,
             &[],
+            None,
         )
     };
 
@@ -545,7 +557,7 @@ fn test_anonymous_with_threads() -> color_eyre::Result<()> {
     let original = std::fs::read_to_string(&manifest_path)
         .wrap_err("Failed to read Cargo.toml for feature checking")?;
 
-    let mut checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
+    let checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
         "threads",
         &manifest_path,
         &root_manifest_path,
@@ -582,6 +594,7 @@ fn test_threading_vfs_with_non_threading_wasm() -> color_eyre::Result<()> {
             OutDir::Random,
             false,
             &[],
+            None,
         )
     };
 
@@ -595,7 +608,7 @@ fn test_threading_vfs_with_non_threading_wasm() -> color_eyre::Result<()> {
     let original = std::fs::read_to_string(&manifest_path)
         .wrap_err("Failed to read Cargo.toml for feature checking")?;
 
-    let mut checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
+    let checker = wasi_virt_layer_cli::config_checker::FeatureChecker::new(
         "threads",
         &manifest_path,
         &root_manifest_path,
@@ -636,6 +649,7 @@ fn test_concurrency() -> color_eyre::Result<()> {
                 OutDir::Random,
                 false,
                 &[],
+                None,
             )
         }));
     }
@@ -671,6 +685,7 @@ fn test_long_arguments() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &other_args,
+        None,
     );
 
     res.wrap_err("Failed with long arguments")?;
@@ -695,6 +710,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
         OutDir::Random,
         true, // keep_build_artifacts
         &[],
+        None,
     )
     .wrap_err("Failed to run with keep_build_artifacts = true")?;
 
@@ -726,6 +742,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
         OutDir::Random,
         false, // keep_build_artifacts
         &[],
+        None,
     )
     .wrap_err("Failed to run with keep_build_artifacts = false")?;
 
@@ -771,6 +788,7 @@ fn test_args_vfs_example() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
+        None,
     )
     .wrap_err("Failed to run args-vfs example")?;
 
@@ -970,6 +988,7 @@ fn doc_gen_imports_exports() -> color_eyre::Result<()> {
                 OutDir::Random,
                 true, // keep_build_artifacts is crucial
                 &[],
+                None,
             )
         };
 
@@ -1106,7 +1125,6 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
 
     let workspace_root_buf = Utf8PathBuf::from(THIS_FOLDER);
     let workspace_root = workspace_root_buf.parent().unwrap().parent().unwrap();
-    let manifest_path = workspace_root.join("examples/vfs/repro_multi_target_table_bug/Cargo.toml");
     let wasip1_release = workspace_root.join("target/wasm32-wasip1/release");
 
     // Ensure ls2.wasm exists for the test, similar to examples/vfs/repro_multi_target_table_bug/run.bat
@@ -1125,10 +1143,11 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &["test_threads", "ls", "args", "ls2"],
+        None,
     )?;
 
     // Run the generated module with Deno/Bun
-    run_thread(&test_dir.0.to_string()).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }
@@ -1175,7 +1194,7 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     }
 
     // 3. Run with Deno
-    run_thread(&out_dir).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&out_dir, std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
 
@@ -1224,7 +1243,7 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     }
 
     // 2. Run with Deno
-    run_thread(&out_dir).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&out_dir, std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
 
@@ -1249,6 +1268,7 @@ fn test_dynamic_args_vfs_example() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
+        None,
     )
     .wrap_err("Failed to run dynamic_args_vfs example")?;
 
@@ -1272,6 +1292,7 @@ fn test_vfs_host_import_resolution() -> color_eyre::Result<()> {
         OutDir::Random,
         true,
         &[],
+        None,
     )?;
 
     Ok(())

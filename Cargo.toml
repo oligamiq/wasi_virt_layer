@@ -56,6 +56,8 @@ members = [
     "examples/vfs/lfs_api_test_vfs",
     "examples/vfs/vfs_host_test_vfs",
     "examples/test_wasm/vfs_host_test_target",
+    "examples/test_wasm/test_poll",
+    "examples/vfs/wait_poll_vfs",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]

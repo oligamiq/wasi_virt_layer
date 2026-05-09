@@ -1,7 +1,6 @@
 use std::{
     fs::File,
     io::{Read as _, Seek as _, Write as _},
-    path::Path,
 };
 
 use eyre::Context as _;

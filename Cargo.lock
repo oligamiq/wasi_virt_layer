@@ -2069,6 +2069,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_poll"
+version = "0.3.8"
+
+[[package]]
 name = "test_pool_thread"
 version = "0.3.8"
 
@@ -2296,6 +2300,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "09ac3b126d3914f9849036f826e054cbabdc8519970b8998ddaf3b5bd3c65f11"
 dependencies = [
  "libc",
+]
+
+[[package]]
+name = "wait_poll_vfs"
+version = "0.3.8"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
 ]
 
 [[package]]

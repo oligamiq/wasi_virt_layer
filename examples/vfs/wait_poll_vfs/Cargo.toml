@@ -1,0 +1,16 @@
+[package]
+name = "wait_poll_vfs"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[dependencies]
+wasi_virt_layer = { workspace = true, features = [
+    "std",
+    "alloc",
+    "embedded-fs",
+] }
+const_struct = "0.6.4"
+
+[lib]
+crate-type = ["cdylib"]

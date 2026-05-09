@@ -3,8 +3,6 @@
 //!
 //! Provides commands and generator internals `wasi_virt_layer`.
 
-use clap::Parser as _;
-
 use crate::{
     commands::{
         build::build, new::new, postbuild::postbuild, prebuild::prebuild,
@@ -80,7 +78,7 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
     color_eyre::install()?;
 
     use clap::{CommandFactory, FromArgMatches};
-    let mut cmd = args::Cli::command();
+    let cmd = args::Cli::command();
     let matches = cmd.get_matches_from(&args_vec);
     let mut parsed_args = args::Cli::from_arg_matches(&matches)?;
 

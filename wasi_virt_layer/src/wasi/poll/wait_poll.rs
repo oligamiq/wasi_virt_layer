@@ -1,7 +1,6 @@
 use crate::__private::wasip1::*;
 use crate::clock::Clock;
 use crate::memory::{WasmAccess, WasmAccessName};
-use crate::transporter::non_recursive_sched_yield;
 
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
 /// This version uses the provided Clock trait for time operations.
@@ -59,7 +58,7 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
         };
 
         loop {
-            unsafe { non_recursive_sched_yield() };
+            unsafe { crate::transporter::non_recursive_sched_yield() };
 
             let now = get_now::<Wasm, C>();
 
@@ -79,8 +78,10 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
             },
         };
 
-        Wasm::store_le(ret_event_ptr, event);
-        Wasm::store_le(ret_stored_events_ptr, 1);
+        unsafe {
+            Wasm::store_le(ret_event_ptr, event);
+            Wasm::store_le(ret_stored_events_ptr, 1);
+        }
 
         ERRNO_SUCCESS
     }

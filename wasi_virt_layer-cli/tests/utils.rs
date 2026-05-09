@@ -10,40 +10,54 @@ use wait_timeout::ChildExt;
 pub const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
 
-pub fn run_non_thread(out_dir: &str) -> color_eyre::Result<()> {
+pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
     std::process::Command::new("deno")
         .args(["add", "npm:@bjorn3/browser_wasi_shim"])
         .current_dir(out_dir)
         .assert()
         .success();
 
-    let output = std::process::Command::new("deno")
+    let mut child = std::process::Command::new("deno")
         .args(["run", "--allow-read", "--allow-env", "test_run.ts"])
         .current_dir(out_dir)
-        .output()?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()?;
 
-    // Allow exit code 1 with proc_exit error (normal behavior) or exit code 0 (success)
-    if output.status.success() {
-        return Ok(());
-    }
+    let msg = match child.wait_timeout(timeout)? {
+        Some(status) => {
+            if status.success() {
+                return Ok(());
+            }
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let stdout = String::from_utf8_lossy(&output.stdout);
+            let mut stdout = String::new();
+            let mut stderr = String::new();
 
-    // Check if this is a proc_exit error (which is expected behavior)
-    if stderr.contains("exit with exit code 0") && stdout.contains("[WASI stdout]") {
-        return Ok(());
-    }
+            if let Some(mut out) = child.stdout.take() {
+                let _ = out.read_to_string(&mut stdout);
+            }
+            if let Some(mut err) = child.stderr.take() {
+                let _ = err.read_to_string(&mut stderr);
+            }
 
-    Err(color_eyre::eyre::eyre!(
-        "deno execution failed: {}\nstdout: {}\nstderr: {}",
-        output.status,
-        stdout,
-        stderr
-    ))
+            // Check if this is a proc_exit error (which is expected behavior)
+            if stderr.contains("exit with exit code 0") && stdout.contains("[WASI stdout]") {
+                return Ok(());
+            }
+
+            format!("deno execution failed: {}\nstdout: {}\nstderr: {}", status, stdout, stderr)
+        }
+        None => {
+            child.kill()?;
+            let code = child.wait()?.code();
+            format!("Process timed out after {:?} and was killed. Exit code: {:?}", timeout, code)
+        }
+    };
+
+    Err(color_eyre::eyre::eyre!(msg))
 }
 
-pub fn run_thread(out_dir: &str) -> color_eyre::Result<()> {
+pub fn run_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
     let bun_or_npm = if std::process::Command::new("bun")
         .arg("--version")
         .output()
@@ -67,7 +81,7 @@ pub fn run_thread(out_dir: &str) -> color_eyre::Result<()> {
         .stderr(Stdio::piped())
         .spawn()?;
 
-    let msg = match child.wait_timeout(Duration::from_secs(120))? {
+    let msg = match child.wait_timeout(timeout)? {
         Some(status) => {
             if status.success() {
                 return Ok(());
@@ -77,7 +91,7 @@ pub fn run_thread(out_dir: &str) -> color_eyre::Result<()> {
         None => {
             child.kill()?;
             let code = child.wait()?.code();
-            format!("Process timed out and was killed. Exit code: {:?}", code)
+            format!("Process timed out after {:?} and was killed. Exit code: {:?}", timeout, code)
         }
     };
 
@@ -169,6 +183,7 @@ pub fn run_wasi_virt_layer(
     out_dir: OutDir,
     keep_build_artifacts: bool,
     other_args: &[&str],
+    timeout: Option<Duration>,
 ) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
     cmd.arg("build");
@@ -236,10 +251,16 @@ pub fn run_wasi_virt_layer(
 
         println!("Output directory: {final_dist_path}");
 
-        if threads {
-            run_thread(&final_dist_path)?;
+        let execution_timeout = timeout.unwrap_or(if threads {
+            Duration::from_secs(120)
         } else {
-            run_non_thread(&final_dist_path)?;
+            Duration::from_secs(60)
+        });
+
+        if threads {
+            run_thread(&final_dist_path, execution_timeout)?;
+        } else {
+            run_non_thread(&final_dist_path, execution_timeout)?;
         }
 
         println!("Test run successful");
