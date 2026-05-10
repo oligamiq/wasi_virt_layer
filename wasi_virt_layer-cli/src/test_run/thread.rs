@@ -88,6 +88,7 @@ export { set_fake_worker };
 fn custom_instantiate_ts(wasm_name: &str) -> String {
     let pre = format!(
         r#"
+import type {{ WASIFarmAnimal }} from "@oligami/browser_wasi_shim-threads";
 import {{ type ImportObject, instantiate }} from "./{wasm_name}.js";
 "#
     );
@@ -110,6 +111,11 @@ export const custom_instantiate = async (
 	memory: {
 		[key: string]: WebAssembly.Memory;
 	},
+    /// By specifying a farm number, you can synchronously call the `unknown_fn` function of that farm.
+    /// This is used when you want to use custom imports with WIT.
+    call_unknown_fn: (idx: number, unknown: unknown) => unknown = (idx, unknown) => {
+        console.warn("call_unknown_fn is not set", idx, unknown);
+    },
 ): Promise<WebAssembly.Instance> => {
 	const imports = {};
 	for (const key in wasiImport) {
@@ -187,7 +193,7 @@ export const custom_instantiate = async (
 };
 "#;
 
-    format!("{}{}", pre.trim(), post.trim())
+    format!("{}\n{}", pre.trim(), post.trim())
 }
 
 fn test_run_ts() -> &'static str {
@@ -281,7 +287,9 @@ import { custom_instantiate } from "./inst.ts";
 
 await set_fake_worker();
 
-globalThis.onmessage = (event) => {
+let animal: WASIFarmAnimal | undefined = undefined;
+
+globalThis.onmessage = async (event) => {
 	thread_spawn_on_worker(
 		event.data,
 		async (
@@ -300,8 +308,18 @@ globalThis.onmessage = (event) => {
 				imports.wasi_snapshot_preview1,
 				imports.wasi,
 				imports.env,
+                (idx, unknown) => {
+                    if (!animal) {
+                        console.warn("Animal is not set yet", idx, unknown);
+                        return;
+                    }
+                    animal.call_unknown_fn(idx, unknown);
+                },
 			);
 		},
+		(new_animal) => {
+			animal = new_animal;
+		}
 	);
 };
 "#
@@ -337,14 +355,14 @@ fn package_json() -> &'static str {
 	},
 	"type": "module",
 	"dependencies": {
-		"@bjorn3/browser_wasi_shim": "^0.4.2",
-		"@oligami/browser_wasi_shim-threads": "^0.3.2",
+		"@bjorn3/browser_wasi_shim": "^0.4",
+		"@oligami/browser_wasi_shim-threads": "^0.3",
 		"@xterm/xterm": "^5.5",
 		"xterm-addon-fit": "^0.8.0"
 	},
 	"devDependencies": {
 		"ts-node": "^10.9.2",
-		"vite": "^7.1.7"
+		"vite": "^8.0"
 	}
 }
 "#
