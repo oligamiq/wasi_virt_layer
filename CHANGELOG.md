@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.5] - 2026-05-10
+### Added
+- **Optimized `WaitPoll` Performance**: Replaced the busy-wait loop in `poll_oneoff` with a non-blocking `Atomics.wait`-based mechanism.
+- **`PollWait` Generator**: Added a new CLI generator that automatically replaces `__wvl_poll_atomic_wait` imports with `memory.atomic.wait32` when threads are enabled, ensuring efficient thread suspension.
+- **Improved Test Infrastructure**: Refactored `lfs_api_test_vfs` to build its target from source, eliminating the need for pre-built artifacts and increasing test reliability.
+
 ## [0.4.3] - 2026-05-10
 ### Fixed
 - **Multi-Module Atomic Isolation**: Introduced `wasm_id` to the atomic synchronization layer to prevent wait/notify collisions between different Wasm modules sharing the same VFS.
