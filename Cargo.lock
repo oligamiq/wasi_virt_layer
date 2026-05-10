@@ -1308,6 +1308,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mkdir_vfs"
+version = "0.4.4"
+dependencies = [
+ "parking_lot",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "mock-tool-four"
 version = "0.1.0"
 dependencies = [
@@ -2071,6 +2080,10 @@ dependencies = [
  "wasi_virt_layer",
  "wit-bindgen 0.54.0",
 ]
+
+[[package]]
+name = "test_mkdir"
+version = "0.1.0"
 
 [[package]]
 name = "test_new_bare"
