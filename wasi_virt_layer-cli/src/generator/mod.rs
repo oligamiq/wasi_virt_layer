@@ -22,6 +22,8 @@ pub mod threads;
 /// Handles logic for rewriting unreachable instructions to prevent Wasm execution traps.
 pub mod wrap_unreachable;
 pub mod vfs_host;
+/// Generates the atomic wait implementation for `WaitPoll` timeout handling.
+pub mod poll;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 

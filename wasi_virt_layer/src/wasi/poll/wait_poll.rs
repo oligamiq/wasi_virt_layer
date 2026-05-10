@@ -2,6 +2,17 @@ use crate::__private::wasip1::*;
 use crate::clock::Clock;
 use crate::memory::{WasmAccess, WasmAccessName};
 
+#[cfg(target_os = "wasi")]
+#[link(wasm_import_module = "wvl_poll")]
+unsafe extern "C" {
+    pub fn __wvl_poll_atomic_wait(addr: *mut u32, expected: u32, timeout: i64) -> i32;
+}
+
+#[cfg(not(target_os = "wasi"))]
+pub unsafe extern "C" fn __wvl_poll_atomic_wait(_addr: *mut u32, _expected: u32, _timeout: i64) -> i32 {
+    2 // timed out dummy return
+}
+
 /// A simple implementation of `poll_oneoff` that performs a blocking sleep/yield.
 /// This version uses the provided Clock trait for time operations.
 pub struct WaitPoll<C: Clock = crate::clock::StandardClock>(core::marker::PhantomData<C>);
@@ -59,14 +70,19 @@ impl<C: Clock> crate::poll::PollOneoff for WaitPoll<C> {
             get_now::<C>(clock_id).saturating_add(timeout)
         };
 
+        let mut dummy = 0;
         loop {
-            unsafe { crate::transporter::non_recursive_sched_yield() };
-
             let now = get_now::<C>(clock_id);
 
             if now >= end_time {
                 break;
             }
+
+            unsafe {
+                let timeout_ns = end_time.saturating_sub(now);
+                __wvl_poll_atomic_wait(&mut dummy, 0, timeout_ns as i64);
+                crate::transporter::non_recursive_sched_yield();
+            };
         }
 
         // Write an event to the out buffer

@@ -10,11 +10,11 @@ fn test_lfs_api_operations() -> color_eyre::Result<()> {
     }
 
     // Build and run the lfs_api_test_vfs with a simple target
-    // The target is examples/test_wasm/example/test_wasm_opt.wasm
+    // The target is the test_wasm package, built from source by cargo.
     // We use -p lfs_api_test_vfs to specify the VFS package
     run_wasi_virt_layer(
         Some("lfs_api_test_vfs"),
-        Some("../../examples/test_wasm/example/test_wasm_opt.wasm"),
+        Some("test_wasm"),
         Some(true), // t-single
         false,      // threads
         OutDir::Random,

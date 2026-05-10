@@ -8,39 +8,39 @@ wit_bindgen::generate!({
 
 struct Hello;
 
-import_wasm!(test_wasm_opt);
+import_wasm!(test_wasm);
 
 impl Guest for Hello {
     fn world() {
-        test_wasm_opt::_reset();
-        test_wasm_opt::_start();
-        test_wasm_opt::_main();
+        test_wasm::_reset();
+        test_wasm::_start();
+        test_wasm::_main();
     }
     fn add_env(_: String) {}
     fn get_envs() -> Vec<String> {
         vec![]
     }
     fn main() {
-        test_wasm_opt::_reset();
-        test_wasm_opt::_start();
-        test_wasm_opt::_main();
+        test_wasm::_reset();
+        test_wasm::_start();
+        test_wasm::_main();
     }
 }
 
 #[cfg(not(test))]
 export!(Hello);
 
-plug_process!(StandardProcess, test_wasm_opt, self);
-plug_clock!(StandardClock, test_wasm_opt, self);
-plug_random!(StandardRandom, test_wasm_opt, self);
-plug_poll!(DefaultPoll, test_wasm_opt, self);
+plug_process!(StandardProcess, test_wasm, self);
+plug_clock!(StandardClock, test_wasm, self);
+plug_random!(StandardRandom, test_wasm, self);
+plug_poll!(DefaultPoll, test_wasm, self);
 
 #[const_struct]
 const HOST_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     environ: &["HOME=~/"],
 };
 
-plug_env!(@embedded, HostEnvTy, test_wasm_opt, self);
+plug_env!(@embedded, HostEnvTy, test_wasm, self);
 
 mod fs {
     use super::*;
@@ -100,5 +100,5 @@ mod fs {
             vfs
         });
 
-    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_wasm_opt);
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_wasm);
 }
