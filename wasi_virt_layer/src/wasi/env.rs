@@ -16,6 +16,11 @@ use crate::memory::WasmAccess;
 /// @dynamic if using dynamic env.
 /// @embedded is faster and small than @dynamic.
 ///
+/// **Note:** Rust's standard library (`std::env`) for WASI typically reads environment variables
+/// only once at startup. Consequently, even when using `@dynamic` mode, any changes made to
+/// environment variables in the VFS will not be reflected in the Rust target module unless
+/// the module is re-initialized (e.g., by calling `_reset()` followed by `_start()`).
+///
 /// ```rust
 /// // @embedded
 /// import_wasm!(test_wasm);
