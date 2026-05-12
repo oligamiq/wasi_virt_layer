@@ -7,7 +7,7 @@ use crate::{
 macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
-            abi_connect, anonymous, check, debug, memory, patch_component, producer, shared_global,
+            abi_connect, anonymous, check, debug, memory, multi_memory_lowering, patch_component, producer, shared_global,
             special_func, starts, threads, vfs_host, wrap_unreachable, poll,
         };
 
@@ -28,6 +28,7 @@ macro_rules! add_generator {
             special_func::StartFunc,
             special_func::MainVoidFunc,
             special_func::ResetFunc,
+            multi_memory_lowering::MultiMemoryLowering,
             shared_global::SharedGlobal,
             memory::TemporaryRefugeMemory,
             memory::MemoryBridge,

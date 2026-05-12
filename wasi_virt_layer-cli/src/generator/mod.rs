@@ -24,6 +24,8 @@ pub mod wrap_unreachable;
 pub mod vfs_host;
 /// Generates the atomic wait implementation for `WaitPoll` timeout handling.
 pub mod poll;
+/// Reimplementation of binaryen's `--multi-memory-lowering` pass using walrus.
+pub mod multi_memory_lowering;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
