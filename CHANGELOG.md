@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.6] - 2026-05-12
+### Added
+- **Native Multi-Memory Lowering**: Replaced the external dependency on `wasm-opt --multi-memory-lowering` with a native, robust implementation using `walrus`. This pass correctly handles memory merging, data segment offsetting, and instruction rewriting without requiring external tools.
+- **Thread-Safe Memory Instrumentation**: Implemented deep instruction rewriting to inject thread-safe synchronization points (`lock_read_acquire`/`release` and `lock_write_acquire`/`release`) and dynamic memory offset tracking for all load, store, and atomic operations in multi-threaded environments.
+- **Robust `memory.grow` & `memory.size` Handling**: Added specialized helper functions that handle dynamic memory shifting and offset global updates during `memory.grow`, ensuring memory consistency across all integrated Wasm modules.
+
 ## [0.4.5] - 2026-05-10
 ### Added
 - **Optimized `WaitPoll` Performance**: Replaced the busy-wait loop in `poll_oneoff` with a non-blocking `Atomics.wait`-based mechanism.
