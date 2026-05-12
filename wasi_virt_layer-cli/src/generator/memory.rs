@@ -563,16 +563,15 @@ impl Generator for MemoryTrap {
                 .exports
                 .erase_with(trap_id, ctx.unstable_print_debug)?;
 
-            let trap_body = module.funcs.get_mut(trap_id).kind.unwrap_local_mut();
-            let trap_body = trap_body.block_mut(trap_body.entry_block());
+            let mut current_trap_id = trap_id;
+            let mut store_found = None;
 
-            // Remove the fake value instruction
-            // Optimization may have significantly altered the content,
-            // but I'll put it off for now.
-            let (store_index, store_info) = trap_body
-                .iter()
-                .enumerate()
-                .find_map(|(i, (instr, _))| {
+            loop {
+                let current_body = module.funcs.get(current_trap_id).kind.unwrap_local();
+                let block = current_body.block(current_body.entry_block());
+
+                let mut next_call = None;
+                for (i, (instr, _)) in block.iter().enumerate() {
                     if let walrus::ir::Instr::Store(walrus::ir::Store {
                         kind: walrus::ir::StoreKind::I32_8 { atomic: false },
                         memory,
@@ -580,21 +579,40 @@ impl Generator for MemoryTrap {
                     }) = instr
                     {
                         if *memory != ctx.vfs_used_memory_id.unwrap() {
-                            return Some(Err(eyre::eyre!(
+                            store_found = Some(Err(eyre::eyre!(
                                 "Unexpected memory ID: expected {:?}, got {:?}",
                                 ctx.vfs_used_memory_id.unwrap(),
                                 *memory
                             )));
+                        } else {
+                            store_found = Some(Ok((current_trap_id, i, arg.clone())));
                         }
-                        Some(Ok((i, arg.to_owned())))
-                    } else {
-                        None
+                        break;
+                    } else if let walrus::ir::Instr::Call(call) = instr {
+                        next_call = Some(call.func);
                     }
-                })
-                .wrap_err_with(|| eyre::eyre!("Failed to find store instruction"))??;
-            trap_body.remove(store_index + 1);
-            trap_body.remove(store_index);
-            trap_body.remove(store_index - 1);
+                }
+
+                if store_found.is_some() {
+                    break;
+                }
+
+                if let Some(callee) = next_call {
+                    current_trap_id = callee;
+                } else {
+                    store_found = Some(Err(eyre::eyre!("Failed to find store instruction")));
+                    break;
+                }
+            }
+
+            let (actual_trap_id, store_index, store_info) = store_found.unwrap()?;
+
+            let actual_trap_body = module.funcs.get_mut(actual_trap_id).kind.unwrap_local_mut();
+            let actual_trap_block = actual_trap_body.block_mut(actual_trap_body.entry_block());
+
+            actual_trap_block.remove(store_index + 1);
+            actual_trap_block.remove(store_index);
+            actual_trap_block.remove(store_index - 1);
 
             if let Some(id) = (
                 UniqueName::NAMESPACE,

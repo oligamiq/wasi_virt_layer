@@ -2066,6 +2066,13 @@ name = "test_atomic_wait"
 version = "0.4.5"
 
 [[package]]
+name = "test_clap"
+version = "0.4.5"
+dependencies = [
+ "clap",
+]
+
+[[package]]
 name = "test_helper_shared_memory_vfs"
 version = "0.4.5"
 dependencies = [
