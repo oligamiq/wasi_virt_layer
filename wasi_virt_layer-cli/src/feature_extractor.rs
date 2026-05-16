@@ -26,10 +26,32 @@ pub fn extract_features(
         .map(|i| i.cloned().collect())
         .unwrap_or_default();
 
-    let no_default_indices: Vec<usize> = matches
-        .indices_of("no_default_features")
-        .map(|i| i.collect())
-        .unwrap_or_default();
+    let no_default_indices: Vec<usize> = if matches.get_count("no_default_features") > 0 {
+        matches
+            .indices_of("no_default_features")
+            .map(|i| i.collect())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let no_opt_indices: Vec<usize> = if matches.get_count("no_opt") > 0 {
+        matches
+            .indices_of("no_opt")
+            .map(|i| i.collect())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let no_opt_all_indices: Vec<usize> = if matches.get_count("no_opt_all") > 0 {
+        matches
+            .indices_of("no_opt_all")
+            .map(|i| i.collect())
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
 
     // Distribute features
     for (idx, val) in features_indices
@@ -67,6 +89,42 @@ pub fn extract_features(
             target_opts[w_i].no_default_features += 1;
         } else {
             vfs_opts.no_default_features += 1;
+        }
+    }
+
+    // Distribute no_opt
+    for idx in no_opt_indices {
+        let mut target_wasm_idx = None;
+        for (w_i, w_idx) in wasm_indices.iter().enumerate() {
+            if *w_idx < idx {
+                target_wasm_idx = Some(w_i);
+            } else {
+                break;
+            }
+        }
+
+        if let Some(w_i) = target_wasm_idx {
+            target_opts[w_i].no_opt += 1;
+        } else {
+            vfs_opts.no_opt += 1;
+        }
+    }
+
+    // Distribute no_opt_all
+    for idx in no_opt_all_indices {
+        let mut target_wasm_idx = None;
+        for (w_i, w_idx) in wasm_indices.iter().enumerate() {
+            if *w_idx < idx {
+                target_wasm_idx = Some(w_i);
+            } else {
+                break;
+            }
+        }
+
+        if let Some(w_i) = target_wasm_idx {
+            target_opts[w_i].no_opt_all += 1;
+        } else {
+            vfs_opts.no_opt_all += 1;
         }
     }
 

@@ -576,4 +576,12 @@ pub struct VfsBuildOptions {
     /// Do not activate the `default` feature of the VFS module.
     #[arg(long, action = clap::ArgAction::Count)]
     pub no_default_features: u8,
+
+    /// Disable optimization for this specific module.
+    #[arg(long, action = clap::ArgAction::Count)]
+    pub no_opt: u8,
+
+    /// Disable all optimizations for this module and subsequent merged modules.
+    #[arg(long, action = clap::ArgAction::Count)]
+    pub no_opt_all: u8,
 }

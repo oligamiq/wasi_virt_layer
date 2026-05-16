@@ -653,6 +653,7 @@ pub(crate) trait EndWithOpt<T> {
         path: &mut WasmPath,
         dwarf: bool,
         keep_build_artifacts: bool,
+        skip_opt: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -665,6 +666,7 @@ pub(crate) trait EndWithOpt<T> {
         require_update: bool,
         dwarf: bool,
         keep_build_artifacts: bool,
+        skip_opt: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -676,11 +678,17 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         path: &mut WasmPath,
         dwarf: bool,
         keep_build_artifacts: bool,
+        skip_opt: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
     {
         let result = (self)(path).wrap_err("Failed to run with with_opt")?;
+
+        if skip_opt {
+            println!("Skipping Wasm optimization...");
+            return Ok(result);
+        }
 
         println!("Optimizing Wasm...");
         let old_path = path.path()?.clone();
@@ -704,11 +712,17 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         require_update: bool,
         dwarf: bool,
         keep_build_artifacts: bool,
+        skip_opt: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
     {
         let result = (self)(path).wrap_err("Failed to run with with_opt_args")?;
+
+        if skip_opt {
+            println!("Skipping Wasm optimization...");
+            return Ok(result);
+        }
 
         println!("Optimizing Wasm... with args: {}", args.iter().join(" "));
         let old_path = path.path()?.clone();
@@ -910,6 +924,7 @@ impl GeneratorRunner {
         );
 
         println!("Adjusting VFS Wasm...");
+        let skip_vfs_opt = self.vfs_build_opts.no_opt > 0 || self.vfs_build_opts.no_opt_all > 0;
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
                 self.checkers
@@ -935,11 +950,12 @@ impl GeneratorRunner {
             })
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_vfs_opt)?;
 
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
-        for (target, target_name) in self.targets.iter_mut().zip(self.ctx.target_names.clone()) {
+        for (i, (target, target_name)) in self.targets.iter_mut().zip(self.ctx.target_names.clone()).enumerate() {
+            let skip_target_opt = self.target_vfs_build_opts[i].no_opt > 0 || self.target_vfs_build_opts[i].no_opt_all > 0;
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
@@ -958,8 +974,11 @@ impl GeneratorRunner {
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts)
             })
-            .with_opt(target, dwarf, keep_build_artifacts)?;
+            .with_opt(target, dwarf, keep_build_artifacts, skip_target_opt)?;
         }
+
+        let skip_all_opt = self.vfs_build_opts.no_opt_all > 0
+            || self.target_vfs_build_opts.iter().any(|opts| opts.no_opt_all > 0);
 
         println!("Combining Wasm modules...");
         self.ctx.vfs_used_memory_id = None;
@@ -998,7 +1017,7 @@ impl GeneratorRunner {
 
             path.set_path(output.into())
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
 
         println!("Adjusting Merged Wasm...");
         (|path: &mut WasmPath| {
@@ -1028,7 +1047,7 @@ impl GeneratorRunner {
             })
             .wrap_run(path, dwarf, keep_build_artifacts)
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
 
         self.ctx.vfs_used_memory_id = None;
         self.ctx.target_used_memory_id = None;
@@ -1042,8 +1061,12 @@ impl GeneratorRunner {
             let old_path = self.path.path()?.clone();
 
             println!("Generating single memory Merged Wasm...");
+            let mut opt_args = vec!["--multi-memory-lowering"];
+            if skip_all_opt {
+                opt_args.push("-O0");
+            }
             let optimized_path =
-                compile::optimize_wasm(&old_path, &["--multi-memory-lowering"], true, dwarf)?;
+                compile::optimize_wasm(&old_path, &opt_args, true, dwarf)?;
 
             if !keep_build_artifacts {
                 std::fs::remove_file(&old_path)
@@ -1071,7 +1094,7 @@ impl GeneratorRunner {
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts)
             })
-            .with_opt(&mut self.path, dwarf, keep_build_artifacts)?;
+            .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
         }
 
         println!("Translating Wasm to Component...");
@@ -1219,7 +1242,7 @@ impl ComponentRunner {
 
             Ok(core_wasm.clone())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), false)?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
         self.generators.push(Box::new(mem_size_visitor));
@@ -1263,7 +1286,7 @@ impl ComponentRunner {
             })
             .wrap_run(path, dwarf, parsed_args.keep_build_artifacts())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts())?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), false)?;
 
         let dwarf = {
             let new_dwarf = self.ctx.as_ref().unwrap().dwarf;
