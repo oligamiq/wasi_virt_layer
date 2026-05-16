@@ -1058,26 +1058,14 @@ impl GeneratorRunner {
         self.ctx.start_func_id = None;
 
         if self.ctx.target_memory_type == TargetMemoryType::Single {
-            let old_path = self.path.path()?.clone();
-
-            println!("Generating single memory Merged Wasm...");
-            let mut opt_args = vec!["--multi-memory-lowering"];
-            if skip_all_opt {
-                opt_args.push("-O0");
-            }
-            let optimized_path =
-                compile::optimize_wasm(&old_path, &opt_args, true, dwarf)?;
-
-            if !keep_build_artifacts {
-                std::fs::remove_file(&old_path)
-                    .wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
-            }
-
-            self.path.set_path(optimized_path)?;
+            println!("Generating single memory Merged Wasm (walrus lowering)...");
 
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
-                    // module.flatten_tables()?;
+                    // Run walrus-based multi-memory lowering
+                    let mut mml = multi_memory_lowering::MultiMemoryLowering::new();
+                    mml.lower_memory(module, &self.ctx)
+                        .wrap_err("Failed in MultiMemoryLowering")?;
 
                     mem_id_visitor
                         .post_lower_memory(module, &self.ctx)

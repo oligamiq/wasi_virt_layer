@@ -159,7 +159,6 @@ impl MultiMemoryLowering {
         Ok(())
     }
 
-    /// Computes the parameters for the combined memory.
     fn compute_combined_params(
         module: &Module,
     ) -> eyre::Result<(u64, Option<u64>, bool, Option<(String, String)>)> {
@@ -185,7 +184,13 @@ impl MultiMemoryLowering {
             }
         }
 
-        let max = if has_max { Some(total_max) } else { None };
+        // Cap at 65536 pages (4GB) – the Wasm spec maximum for 32-bit memories.
+        // When merging multiple memories the sum of their max pages can exceed this.
+        let max = if has_max {
+            Some(total_max.min(65536))
+        } else {
+            None
+        };
         Ok((total_initial, max, is_shared, import_info))
     }
 
@@ -487,6 +492,17 @@ impl MultiMemoryLowering {
         }
     }
 
+    /// Returns the ValType associated with the LoadKind.
+    fn load_kind_val_type(kind: &LoadKind) -> ValType {
+        match kind {
+            LoadKind::I32 { .. } | LoadKind::I32_8 { .. } | LoadKind::I32_16 { .. } => ValType::I32,
+            LoadKind::I64 { .. } | LoadKind::I64_8 { .. } | LoadKind::I64_16 { .. } | LoadKind::I64_32 { .. } => ValType::I64,
+            LoadKind::F32 => ValType::F32,
+            LoadKind::F64 => ValType::F64,
+            LoadKind::V128 => ValType::V128,
+        }
+    }
+
     /// Returns the ValType associated with the AtomicWidth.
     fn atomic_width_val_type(width: &AtomicWidth) -> ValType {
         match width {
@@ -575,23 +591,63 @@ impl MultiMemoryLowering {
                             new_instrs.push((instr.clone(), loc));
                         }
                     }
-                    Instr::Load(Load { memory, .. }) => {
+                    Instr::Load(Load { memory, kind, .. }) => {
                         let idx = memory_idx_map.get(memory).copied().unwrap_or(0);
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
+                                let tmp_addr = get_tmp1(ValType::I32);
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
+
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
                                 new_instrs.push((instr.clone(), loc));
+
+                                let tmp_val = get_tmp2(Self::load_kind_val_type(kind));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_val }), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
                                     }
                                 }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_val }), loc));
+                                continue;
+                            }
+                        }
+                        new_instrs.push((instr.clone(), loc));
+                    }
+                    Instr::LoadSimd(LoadSimd { memory, .. }) => {
+                        let idx = memory_idx_map.get(memory).copied().unwrap_or(0);
+                        if idx > 0 {
+                            if let Some(Some(offset_gid)) = offset_globals.get(idx) {
+                                let tmp_addr = get_tmp1(ValType::I32);
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
+
+                                if threads {
+                                    if let Some(acq) = lock_acquire {
+                                        new_instrs.push((Instr::Call(Call { func: acq }), loc));
+                                    }
+                                }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
+                                new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
+                                new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
+                                new_instrs.push((instr.clone(), loc));
+
+                                let tmp_val = get_tmp1(ValType::V128);
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_val }), loc));
+
+                                if threads {
+                                    if let Some(rel) = lock_release {
+                                        new_instrs.push((Instr::Call(Call { func: rel }), loc));
+                                    }
+                                }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_val }), loc));
                                 continue;
                             }
                         }
@@ -601,19 +657,23 @@ impl MultiMemoryLowering {
                         let idx = memory_idx_map.get(memory).copied().unwrap_or(0);
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
-                                let val_type = Self::store_kind_val_type(kind);
-                                let tmp1 = get_tmp1(val_type);
+                                let tmp_val = get_tmp1(Self::store_kind_val_type(kind));
+                                let tmp_addr = get_tmp2(ValType::I32);
                                 
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_val }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
+
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_val }), loc));
                                 new_instrs.push((instr.clone(), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
@@ -624,28 +684,37 @@ impl MultiMemoryLowering {
                         }
                         new_instrs.push((instr.clone(), loc));
                     }
+
                     Instr::AtomicRmw(AtomicRmw { memory, width, .. }) => {
                         let idx = memory_idx_map.get(memory).copied().unwrap_or(0);
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
-                                let val_type = Self::atomic_width_val_type(width);
-                                let tmp1 = get_tmp1(val_type);
+                                let tmp_val = get_tmp1(Self::atomic_width_val_type(width));
+                                let tmp_addr = get_tmp2(ValType::I32);
                                 
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_val }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
+
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_val }), loc));
                                 new_instrs.push((instr.clone(), loc));
+
+                                let tmp_res = tmp_val;
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_res }), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
                                     }
                                 }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_res }), loc));
                                 continue;
                             }
                         }
@@ -656,26 +725,35 @@ impl MultiMemoryLowering {
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
                                 let val_type = Self::atomic_width_val_type(width);
-                                let tmp1 = get_tmp1(val_type);
-                                let tmp2 = get_tmp2(val_type);
+                                let tmp_repl = get_tmp1(val_type);
+                                let tmp_exp = get_tmp2(val_type);
+                                let tmp_addr = get_tmp3(ValType::I32);
                                 
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_repl }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_exp }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
+
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp2 }), loc));
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp1 }), loc));
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp2 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_exp }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_repl }), loc));
                                 new_instrs.push((instr.clone(), loc));
+
+                                let tmp_res = tmp_repl;
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_res }), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
                                     }
                                 }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_res }), loc));
                                 continue;
                             }
                         }
@@ -688,32 +766,32 @@ impl MultiMemoryLowering {
                         let dst_off = offset_globals.get(dst_idx).copied().flatten();
                         
                         if src_off.is_some() || dst_off.is_some() {
-                            let tmp1 = get_tmp1(ValType::I32);
-                            let tmp2 = get_tmp2(ValType::I32);
-                            let tmp3 = get_tmp3(ValType::I32);
+                            let tmp_len = get_tmp1(ValType::I32);
+                            let tmp_src = get_tmp2(ValType::I32);
+                            let tmp_dst = get_tmp3(ValType::I32);
                             
+                            new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_len }), loc));
+                            new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_src }), loc));
+                            new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_dst }), loc));
+
                             if threads {
                                 if let Some(acq) = lock_acquire {
                                     new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                 }
                             }
-                            new_instrs.push((Instr::LocalSet(LocalSet { local: tmp3 }), loc));
-                            new_instrs.push((Instr::LocalSet(LocalSet { local: tmp2 }), loc));
-                            new_instrs.push((Instr::LocalSet(LocalSet { local: tmp1 }), loc));
-
-                            new_instrs.push((Instr::LocalGet(LocalGet { local: tmp1 }), loc));
+                            new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_dst }), loc));
                             if let Some(d_off) = dst_off {
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: d_off }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
                             }
 
-                            new_instrs.push((Instr::LocalGet(LocalGet { local: tmp2 }), loc));
+                            new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_src }), loc));
                             if let Some(s_off) = src_off {
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: s_off }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
                             }
 
-                            new_instrs.push((Instr::LocalGet(LocalGet { local: tmp3 }), loc));
+                            new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_len }), loc));
                             new_instrs.push((instr.clone(), loc));
 
                             if threads {
@@ -729,27 +807,27 @@ impl MultiMemoryLowering {
                         let idx = memory_idx_map.get(memory).copied().unwrap_or(0);
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
-                                let tmp1 = get_tmp1(ValType::I32);
-                                let tmp2 = get_tmp2(ValType::I32);
-                                let tmp3 = get_tmp3(ValType::I32);
+                                let tmp_len = get_tmp1(ValType::I32);
+                                let tmp_val = get_tmp2(ValType::I32);
+                                let tmp_dst = get_tmp3(ValType::I32);
                                 
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_len }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_val }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_dst }), loc));
+
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp3 }), loc));
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp2 }), loc));
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp1 }), loc));
-
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_dst }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
 
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp2 }), loc));
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp3 }), loc));
-
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_val }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_len }), loc));
                                 new_instrs.push((instr.clone(), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
@@ -764,27 +842,27 @@ impl MultiMemoryLowering {
                         let idx = memory_idx_map.get(memory).copied().unwrap_or(0);
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
-                                let tmp1 = get_tmp1(ValType::I32);
-                                let tmp2 = get_tmp2(ValType::I32);
-                                let tmp3 = get_tmp3(ValType::I32);
+                                let tmp_len = get_tmp1(ValType::I32);
+                                let tmp_src = get_tmp2(ValType::I32);
+                                let tmp_dst = get_tmp3(ValType::I32);
                                 
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_len }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_src }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_dst }), loc));
+
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp3 }), loc));
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp2 }), loc));
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp1 }), loc));
-
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp1 }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_dst }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
 
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp2 }), loc));
-                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp3 }), loc));
-
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_src }), loc));
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_len }), loc));
                                 new_instrs.push((instr.clone(), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
@@ -805,27 +883,34 @@ impl MultiMemoryLowering {
                                 } else {
                                     get_tmp1(ValType::I32)
                                 };
+                                let tmp_addr = get_tmp2(ValType::I32);
+
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_timeout }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_expected }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
 
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_timeout }), loc));
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_expected }), loc));
-
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
 
                                 new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_expected }), loc));
                                 new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_timeout }), loc));
-
                                 new_instrs.push((instr.clone(), loc));
+
+                                let tmp_res = get_tmp3(ValType::I32);
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_res }), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
                                     }
                                 }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_res }), loc));
                                 continue;
                             }
                         }
@@ -836,25 +921,32 @@ impl MultiMemoryLowering {
                         if idx > 0 {
                             if let Some(Some(offset_gid)) = offset_globals.get(idx) {
                                 let tmp_count = get_tmp1(ValType::I32);
+                                let tmp_addr = get_tmp2(ValType::I32);
+
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_count }), loc));
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_addr }), loc));
 
                                 if threads {
                                     if let Some(acq) = lock_acquire {
                                         new_instrs.push((Instr::Call(Call { func: acq }), loc));
                                     }
                                 }
-                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_count }), loc));
-
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_addr }), loc));
                                 new_instrs.push((Instr::GlobalGet(GlobalGet { global: *offset_gid }), loc));
                                 new_instrs.push((Instr::Binop(Binop { op: BinaryOp::I32Add }), loc));
 
                                 new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_count }), loc));
-
                                 new_instrs.push((instr.clone(), loc));
+
+                                let tmp_res = tmp_count;
+                                new_instrs.push((Instr::LocalSet(LocalSet { local: tmp_res }), loc));
+
                                 if threads {
                                     if let Some(rel) = lock_release {
                                         new_instrs.push((Instr::Call(Call { func: rel }), loc));
                                     }
                                 }
+                                new_instrs.push((Instr::LocalGet(LocalGet { local: tmp_res }), loc));
                                 continue;
                             }
                         }
@@ -894,9 +986,20 @@ impl MultiMemoryLowering {
             module.exports.delete(eid);
         }
 
+        // Remove memory imports
+        let import_ids: Vec<_> = module
+            .imports
+            .iter()
+            .filter(|i| matches!(i.kind, walrus::ImportKind::Memory(_)))
+            .map(|i| i.id())
+            .collect();
+        for iid in import_ids {
+            module.imports.delete(iid);
+        }
+
         // Remove old memories
-        for mid in mem_ids {
-            module.memories.delete(mid);
+        for mid in &mem_ids {
+            module.memories.delete(*mid);
         }
 
         // Add combined memory
@@ -910,9 +1013,13 @@ impl MultiMemoryLowering {
             module.imports.add(&mod_name, &base_name, combined);
         }
         
-        // Also fix up memory grow and size helper functions that used dummy mem id
-        for fid in self.memory_grow_fns.iter().chain(self.memory_size_fns.iter()) {
-            if let walrus::FunctionKind::Local(func) = &mut module.funcs.get_mut(*fid).kind {
+        // Fix up ALL functions: all memory references must point to the combined memory.
+        // rewrite_instructions already adjusted offsets for non-zero memories but left
+        // the MemoryId fields unchanged. Those old IDs are now deleted, so we need to
+        // remap every memory reference to the new combined memory.
+        let all_local_fids: Vec<_> = module.funcs.iter_local().map(|(id, _)| id).collect();
+        for fid in all_local_fids {
+            if let walrus::FunctionKind::Local(func) = &mut module.funcs.get_mut(fid).kind {
                 let mut seq_ids = vec![func.entry_block()];
                 let mut visited = std::collections::HashSet::new();
 
@@ -938,10 +1045,60 @@ impl MultiMemoryLowering {
                             Instr::Cmpxchg(m) => m.memory = combined,
                             Instr::AtomicWait(m) => m.memory = combined,
                             Instr::AtomicNotify(m) => m.memory = combined,
+                            Instr::LoadSimd(m) => m.memory = combined,
+                            Instr::AtomicFence(_) => {},
                             _ => {}
                         }
                     }
                 }
+            }
+        }
+        
+        // Debug Validation: check if any instruction still refers to a dead memory
+        let all_local_fids: Vec<_> = module.funcs.iter_local().map(|(id, _)| id).collect();
+        for fid in all_local_fids {
+            if let walrus::FunctionKind::Local(func) = &module.funcs.get(fid).kind {
+                let mut seq_ids = vec![func.entry_block()];
+                let mut visited = std::collections::HashSet::new();
+
+                while let Some(seq_id) = seq_ids.pop() {
+                    if !visited.insert(seq_id) { continue; }
+                    let seq = func.block(seq_id);
+                    for (instr, _) in &seq.instrs {
+                        match instr {
+                            Instr::Block(b) => seq_ids.push(b.seq),
+                            Instr::Loop(l) => seq_ids.push(l.seq),
+                            Instr::IfElse(ie) => { seq_ids.push(ie.consequent); seq_ids.push(ie.alternative); }
+                            Instr::BrIf(bi) => seq_ids.push(bi.block),
+                            Instr::Br(b) => seq_ids.push(b.block),
+                            Instr::BrTable(bt) => { seq_ids.push(bt.default); seq_ids.extend(&bt.blocks); }
+                            Instr::MemorySize(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in MemorySize"); } },
+                            Instr::MemoryGrow(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in MemoryGrow"); } },
+                            Instr::MemoryInit(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in MemoryInit"); } },
+                            Instr::MemoryFill(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in MemoryFill"); } },
+                            Instr::Load(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in Load"); } },
+                            Instr::Store(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in Store"); } },
+                            Instr::AtomicRmw(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in AtomicRmw"); } },
+                            Instr::Cmpxchg(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in Cmpxchg"); } },
+                            Instr::AtomicWait(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in AtomicWait"); } },
+                            Instr::AtomicNotify(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in AtomicNotify"); } },
+                            Instr::LoadSimd(m) => { if mem_ids.contains(&m.memory) { panic!("Leaked MemoryId in LoadSimd"); } },
+                            Instr::MemoryCopy(m) => {
+                                if mem_ids.contains(&m.src) { panic!("Leaked src in MemoryCopy"); }
+                                if mem_ids.contains(&m.dst) { panic!("Leaked dst in MemoryCopy"); }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+        // Patch data segments to point to the combined memory
+        let data_ids: Vec<_> = module.data.iter().map(|d| d.id()).collect();
+        for did in data_ids {
+            let data = module.data.get_mut(did);
+            if let DataKind::Active { memory, .. } = &mut data.kind {
+                *memory = combined;
             }
         }
 

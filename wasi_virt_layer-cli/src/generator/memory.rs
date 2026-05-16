@@ -532,26 +532,9 @@ impl Generator for MemoryTrap {
                     .to_eyre()
                     .wrap_err_with(|| eyre::eyre!("Failed to replace memory_trap"))?;
             }
-        }
 
-        Ok(())
-    }
-
-    fn post_lower_memory(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        if matches!(ctx.target_memory_type, TargetMemoryType::Multi) {
-            return Ok(());
-        }
-
-        for wasm in &ctx.target_names {
-            // NOTE: The export was created by the memory director macro using the
-            // Rust identifier name (with underscores), but ctx.target_names has
-            // the package name (with dashes). We need to normalize to underscores
-            // to match what the macro generated.
-            let normalized_wasm = wasm.as_ref().replace('-', "_");
+            // --- Merged post_lower_memory logic ---
+            let wasm_mem = ctx.target_used_memory_id.as_ref().unwrap()[wasm];
             let trap_export_name = format!("__wasip1_vfs_{normalized_wasm}_memory_trap_anchor");
             let trap_id = trap_export_name
                 .get_fid(&module.exports)
@@ -578,10 +561,10 @@ impl Generator for MemoryTrap {
                         arg,
                     }) = instr
                     {
-                        if *memory != ctx.vfs_used_memory_id.unwrap() {
+                        if *memory != wasm_mem {
                             store_found = Some(Err(eyre::eyre!(
                                 "Unexpected memory ID: expected {:?}, got {:?}",
-                                ctx.vfs_used_memory_id.unwrap(),
+                                wasm_mem,
                                 *memory
                             )));
                         } else {
