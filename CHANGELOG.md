@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.7] - 2026-05-16
+### Added
+- **CLI Development Mode**: Added a new `--dev` flag to the `build` and `prebuild` commands. This flag skips WebAssembly optimizations (bypassing `wasm-opt`), significantly speeding up the development cycle.
+- **Enhanced Test Infrastructure**: Updated the internal test runner to use `--dev` mode by default for all existing integration tests, ensuring all features are verified in unoptimized builds. Added explicit optimized test paths (`test_build_multi_opt`, `test_build_single_opt`) to maintain production pipeline reliability.
+
+### Fixed
+- **Unoptimized Memory Lowering Bug**: Resolved a critical issue in the native `multi_memory_lowering` pass where recreated memory imports were not correctly associated with their memory IDs in Walrus. This fix ensures that `wit-component` translation succeeds even when optimizations are disabled.
+
 ## [0.4.6] - 2026-05-12
 ### Added
 - **Native Multi-Memory Lowering**: Replaced the external dependency on `wasm-opt --multi-memory-lowering` with a native, robust implementation using `walrus`. This pass correctly handles memory merging, data segment offsetting, and instruction rewriting without requiring external tools.
