@@ -144,6 +144,11 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         eyre::bail!("prebuild does not accept Component WASM files. Use postbuild instead.");
     }
 
+    let mut vfs_build_opts = parsed_args.vfs_build_opts.clone();
+    if parsed_args.dev {
+        vfs_build_opts.no_opt_all = vfs_build_opts.no_opt_all.saturating_add(1);
+    }
+
     let (component_runner, dwarf) = run_prebuild_internal(
         package,
         &parsed_args.get_wasm_paths(),
@@ -154,7 +159,7 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         parsed_args.keep_build_artifacts,
         &parsed_args.out_dir,
         parsed_args.get_wasm_memory_hints(),
-        &parsed_args.vfs_build_opts,
+        &vfs_build_opts,
         parsed_args
             .target_vfs_build_opts
             .clone()

@@ -1010,7 +1010,8 @@ impl MultiMemoryLowering {
         }
 
         if let Some((mod_name, base_name)) = import_info {
-            module.imports.add(&mod_name, &base_name, combined);
+            let import_id = module.imports.add(&mod_name, &base_name, combined);
+            module.memories.get_mut(combined).import = Some(import_id);
         }
         
         // Fix up ALL functions: all memory references must point to the combined memory.

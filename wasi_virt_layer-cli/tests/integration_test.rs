@@ -1379,3 +1379,75 @@ fn test_multiple_calls_vfs() -> color_eyre::Result<()> {
 
     Ok(())
 }
+
+/// Tests the build process for both normal and threaded VFS in "multi" memory mode with optimization.
+#[test]
+fn test_build_multi_opt() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let _test_dir_normal = run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(false),
+        false,
+        OutDir::Default,
+        false,
+        &["--run-with-opt"],
+        None,
+    ).wrap_err("Failed to build normal multi (opt)")?;
+    println!("Normal multi build done (opt).");
+    
+    let _test_dir_threads = run_wasi_virt_layer(
+        Some("threads_vfs"),
+        Some("test_threads"),
+        Some(false),
+        true,
+        OutDir::Random,
+        false,
+        &["--run-with-opt"],
+        None,
+    ).wrap_err("Failed to build threads multi (opt)")?;
+    println!("Threads multi build done (opt).");
+
+    Ok(())
+}
+
+/// Tests the build process for both normal and threaded VFS in "single" memory mode with optimization.
+#[test]
+fn test_build_single_opt() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let _test_dir_normal = run_wasi_virt_layer(
+        Some("example_vfs"),
+        Some("test_wasm"),
+        Some(true),
+        false,
+        OutDir::Default,
+        false,
+        &["--run-with-opt"],
+        None,
+    ).wrap_err("Failed to build normal single (opt)")?;
+    println!("Normal single build done (opt).");
+    
+    let _test_dir_threads = run_wasi_virt_layer(
+        Some("threads_vfs"),
+        Some("test_threads"),
+        Some(true),
+        true,
+        OutDir::Random,
+        false,
+        &["--run-with-opt"],
+        None,
+    ).wrap_err("Failed to build threads single (opt)")?;
+    println!("Threads single build done (opt).");
+
+    Ok(())
+}

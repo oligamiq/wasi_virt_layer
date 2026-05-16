@@ -169,6 +169,10 @@ pub struct BuildArgs {
     #[arg(long, default_value = "false")]
     pub keep_build_artifacts: bool,
 
+    /// Enable development mode (skips Wasm optimization).
+    #[arg(long, default_value = "false")]
+    pub dev: bool,
+
     /// Options for building the VFS module.
     #[command(flatten)]
     pub vfs_build_opts: VfsBuildOptions,
@@ -301,6 +305,10 @@ pub struct PreBuildArgs {
     /// Keep all intermediate build artifacts instead of deleting them.
     #[arg(long, default_value = "false")]
     pub keep_build_artifacts: bool,
+
+    /// Enable development mode (skips Wasm optimization).
+    #[arg(long, default_value = "false")]
+    pub dev: bool,
 
     /// Options for building the VFS module.
     #[command(flatten)]

@@ -215,8 +215,22 @@ pub fn run_wasi_virt_layer(
     let final_dist_path = format!("{out_dir_path}/dist");
     cmd.args(["--out-dir", &final_dist_path]);
 
-    if !other_args.is_empty() {
-        cmd.args(other_args);
+    let mut use_dev = true;
+    let mut filtered_args = Vec::new();
+    for &arg in other_args {
+        if arg == "--run-with-opt" {
+            use_dev = false;
+        } else {
+            filtered_args.push(arg);
+        }
+    }
+
+    if use_dev {
+        cmd.arg("--dev");
+    }
+
+    if !filtered_args.is_empty() {
+        cmd.args(filtered_args);
     }
 
     let cmd_line = {
