@@ -1,0 +1,20 @@
+[package]
+name = "multiple_calls_vfs"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[features]
+default = ["std"]
+std = ["wasi_virt_layer/std"]
+
+[dependencies]
+wit-bindgen = "0.54.0"
+const_struct = "0.6.4"
+
+[dependencies.wasi_virt_layer]
+workspace = true
+features = ["std", "alloc", "multiple-fs"]
+
+[lib]
+crate-type = ["cdylib"]

@@ -22,6 +22,7 @@ members = [
     "examples/bare/ls-vfs",
     "examples/bare/args",
     "examples/bare/args-vfs",
+    "examples/vfs/multiple_calls_vfs",
     "examples/threads/ls-threads",
     "examples/threads/ls-threads-vfs",
     "examples/multiple-vfs",

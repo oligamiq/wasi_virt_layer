@@ -1,0 +1,5 @@
+package example:multiple-calls-vfs;
+
+world init {
+    export start: func();
+}

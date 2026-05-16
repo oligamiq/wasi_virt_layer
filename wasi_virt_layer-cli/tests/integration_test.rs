@@ -1354,3 +1354,28 @@ fn test_atomic_wait_vfs() -> color_eyre::Result<()> {
     res.wrap_err("Failed to run atomic_wait_vfs — AtomicPatch may not be working correctly")?;
     Ok(())
 }
+
+#[test]
+fn test_multiple_calls_vfs() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let test_dir = run_wasi_virt_layer(
+        Some("multiple_calls_vfs"),
+        Some("test_wasm"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )?;
+
+    // Run the generated module with Deno
+    run_non_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(30)).wrap_err("Failed to run combined module with Deno")?;
+
+    Ok(())
+}

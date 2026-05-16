@@ -1363,6 +1363,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "multiple_calls_vfs"
+version = "0.4.6"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
