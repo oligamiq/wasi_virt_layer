@@ -248,6 +248,82 @@ pub trait Wasip1LFSBase: core::fmt::Debug {
         offset: usize,
     ) -> Result<Size, wasip1::Errno>;
 
+    /// Writes data to a file descriptor from a buffer at a given offset.
+    fn fd_pwrite_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        buf: *const u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    /// Provides advice on how a file will be accessed.
+    fn fd_advise_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        offset: u64,
+        len: u64,
+        advice: wasip1::Advice,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Allocates space for a file.
+    fn fd_allocate_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        offset: u64,
+        len: u64,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Synchronizes the data of a file to disk.
+    fn fd_datasync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Synchronizes the data and metadata of a file to disk.
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Sets the size of a file.
+    fn fd_filestat_set_size_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        size: u64,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Sets the timestamps of a file.
+    fn fd_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Sets the timestamps of a file or directory at a path.
+    fn path_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno>;
+
+    /// Creates a symbolic link.
+    fn path_symlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        inode: &Self::Inode,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
+
     /// Reads data from stdin.
     fn fd_read_stdin_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
@@ -595,12 +671,131 @@ pub trait Wasip1DynCompatibleLFS<B: BoxedInode>: core::fmt::Debug {
         path_ptr: *const u8,
         path_len: usize,
     ) -> Result<(), wasip1::Errno>;
+
+    fn fd_pwrite_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        data: *const u8,
+        data_len: usize,
+        offset: usize,
+    ) -> Result<Size, wasip1::Errno>;
+
+    fn fd_advise_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        offset: u64,
+        len: u64,
+        advice: wasip1::Advice,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_allocate_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        offset: u64,
+        len: u64,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_datasync_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_sync_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_filestat_set_size_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        size: u64,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn fd_filestat_set_times_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_filestat_set_times_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno>;
+
+    fn path_symlink_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        inode: &dyn InodeIdCommon,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> Result<(), wasip1::Errno>;
 }
 
 /// Trait for a virtual file implementation.
 pub trait Wasip1FileTrait: core::fmt::Debug {
     /// Returns the size of the file.
     fn size(&self) -> usize;
+
+    /// Writes data to the file from the provided buffer at a given offset.
+    fn pwrite(&self, buf: &[u8], offset: usize) -> Result<usize, wasip1::Errno>;
+
+    /// Writes data to the file from the provided buffer at a given offset.
+    fn pwrite_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        buf_ptr: *const u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<usize, wasip1::Errno>;
+
+    /// Writes data to the file from the provided buffer at a given offset compatible with dynamic dispatch.
+    fn pwrite_raw_dyn_compatible(
+        &self,
+        access: &dyn WasmAccessDynCompatibleRaw,
+        buf_ptr: *const u8,
+        buf_len: usize,
+        offset: usize,
+    ) -> Result<usize, wasip1::Errno>;
+
+    /// Provides advice on how a file will be accessed.
+    fn advise(&self, offset: u64, len: u64, advice: wasip1::Advice) -> Result<(), wasip1::Errno>;
+
+    /// Allocates space for a file.
+    fn allocate(&self, offset: u64, len: u64) -> Result<(), wasip1::Errno>;
+
+    /// Synchronizes the data of a file to disk.
+    fn datasync(&self) -> Result<(), wasip1::Errno>;
+
+    /// Synchronizes the data and metadata of a file to disk.
+    fn sync(&self) -> Result<(), wasip1::Errno>;
+
+    /// Sets the size of a file.
+    fn filestat_set_size(&self, size: u64) -> Result<(), wasip1::Errno>;
+
+    /// Sets the timestamps of a file.
+    fn filestat_set_times(
+        &self,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno>;
 
     /// Reads data from the file into the provided buffer.
     /// Returns the number of bytes read.
@@ -686,6 +881,112 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         nwritten: *mut Size,
     ) -> wasip1::Errno;
 
+    /// Writes data to a file descriptor from a buffer at a given offset.
+    fn fd_pwrite_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+        offset: u64,
+        nwritten: *mut Size,
+    ) -> wasip1::Errno;
+
+    /// Provides advice on how a file will be accessed.
+    fn fd_advise_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset: u64,
+        len: u64,
+        advice: wasip1::Advice,
+    ) -> wasip1::Errno;
+
+    /// Allocates space for a file.
+    fn fd_allocate_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset: u64,
+        len: u64,
+    ) -> wasip1::Errno;
+
+    /// Synchronizes the data of a file to disk.
+    fn fd_datasync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+    ) -> wasip1::Errno;
+
+    /// Synchronizes the data and metadata of a file to disk.
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+    ) -> wasip1::Errno;
+
+    /// Gets the current offset of a file descriptor.
+    fn fd_tell_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset_ret: *mut u64,
+    ) -> wasip1::Errno;
+
+    /// Sets the flags of a file descriptor.
+    fn fd_fdstat_set_flags_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        flags: wasip1::Fdflags,
+    ) -> wasip1::Errno;
+
+    /// Sets the rights of a file descriptor.
+    fn fd_fdstat_set_rights_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        fs_rights_base: wasip1::Rights,
+        fs_rights_inheriting: wasip1::Rights,
+    ) -> wasip1::Errno;
+
+    /// Sets the size of a file.
+    fn fd_filestat_set_size_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        size: u64,
+    ) -> wasip1::Errno;
+
+    /// Sets the timestamps of a file.
+    fn fd_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> wasip1::Errno;
+
+    /// Sets the timestamps of a file or directory at a path.
+    fn path_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        flags: wasip1::Lookupflags,
+        path_ptr: *const u8,
+        path_len: usize,
+        atim: wasip1::Timestamp,
+        mtim: wasip1::Timestamp,
+        fst_flags: wasip1::Fstflags,
+    ) -> wasip1::Errno;
+
+    /// Creates a symbolic link.
+    fn path_symlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        old_path_ptr: *const u8,
+        old_path_len: usize,
+        fd: Fd,
+        new_path_ptr: *const u8,
+        new_path_len: usize,
+    ) -> wasip1::Errno;
+
+    /// Renumbers a file descriptor.
+    fn fd_renumber_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        to: Fd,
+    ) -> wasip1::Errno;
+
     /// Reads directory entries from a file descriptor.
     fn fd_readdir_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
         &self,
@@ -744,6 +1045,16 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
         fd: Fd,
         iovs_ptr: *const Ciovec,
         iovs_len: usize,
+        nread: *mut Size,
+    ) -> wasip1::Errno;
+
+    /// Reads data from a file descriptor into buffers at a given offset.
+    fn fd_pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+        offset: u64,
         nread: *mut Size,
     ) -> wasip1::Errno;
 
@@ -1087,6 +1398,178 @@ macro_rules! plug_fs {
                     let state = $state;
                     $crate::__as_t!(@as_t, $wasm);
                     $crate::file::Wasip1FileSystem::path_unlink_file_raw::<T>(state, fd, path_ptr, path_len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_pread>](
+                    fd: $crate::__private::wasip1::Fd,
+                    iovs_ptr: *const $crate::__private::wasip1::Ciovec,
+                    iovs_len: usize,
+                    offset: u64,
+                    nread_ret: *mut $crate::__private::wasip1::Size,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_pread_raw::<T>(state, fd, iovs_ptr, iovs_len, offset, nread_ret)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_pwrite>](
+                    fd: $crate::__private::wasip1::Fd,
+                    iovs_ptr: *const $crate::__private::wasip1::Ciovec,
+                    iovs_len: usize,
+                    offset: u64,
+                    nwritten_ret: *mut $crate::__private::wasip1::Size,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_pwrite_raw::<T>(state, fd, iovs_ptr, iovs_len, offset, nwritten_ret)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_advise>](
+                    fd: $crate::__private::wasip1::Fd,
+                    offset: u64,
+                    len: u64,
+                    advice: $crate::__private::wasip1::Advice,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_advise_raw::<T>(state, fd, offset, len, advice)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_allocate>](
+                    fd: $crate::__private::wasip1::Fd,
+                    offset: u64,
+                    len: u64,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_allocate_raw::<T>(state, fd, offset, len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_datasync>](
+                    fd: $crate::__private::wasip1::Fd,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_datasync_raw::<T>(state, fd)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_sync>](
+                    fd: $crate::__private::wasip1::Fd,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_sync_raw::<T>(state, fd)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_tell>](
+                    fd: $crate::__private::wasip1::Fd,
+                    offset_ret: *mut u64,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_tell_raw::<T>(state, fd, offset_ret)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_fdstat_set_flags>](
+                    fd: $crate::__private::wasip1::Fd,
+                    flags: $crate::__private::wasip1::Fdflags,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_fdstat_set_flags_raw::<T>(state, fd, flags)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_fdstat_set_rights>](
+                    fd: $crate::__private::wasip1::Fd,
+                    fs_rights_base: $crate::__private::wasip1::Rights,
+                    fs_rights_inheriting: $crate::__private::wasip1::Rights,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_fdstat_set_rights_raw::<T>(state, fd, fs_rights_base, fs_rights_inheriting)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_filestat_set_size>](
+                    fd: $crate::__private::wasip1::Fd,
+                    size: u64,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_filestat_set_size_raw::<T>(state, fd, size)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_filestat_set_times>](
+                    fd: $crate::__private::wasip1::Fd,
+                    atim: $crate::__private::wasip1::Timestamp,
+                    mtim: $crate::__private::wasip1::Timestamp,
+                    fst_flags: $crate::__private::wasip1::Fstflags,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_filestat_set_times_raw::<T>(state, fd, atim, mtim, fst_flags)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_filestat_set_times>](
+                    fd: $crate::__private::wasip1::Fd,
+                    flags: $crate::__private::wasip1::Lookupflags,
+                    path_ptr: *const u8,
+                    path_len: usize,
+                    atim: $crate::__private::wasip1::Timestamp,
+                    mtim: $crate::__private::wasip1::Timestamp,
+                    fst_flags: $crate::__private::wasip1::Fstflags,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_filestat_set_times_raw::<T>(state, fd, flags, path_ptr, path_len, atim, mtim, fst_flags)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _path_symlink>](
+                    old_path_ptr: *const u8,
+                    old_path_len: usize,
+                    fd: $crate::__private::wasip1::Fd,
+                    new_path_ptr: *const u8,
+                    new_path_len: usize,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::path_symlink_raw::<T>(state, old_path_ptr, old_path_len, fd, new_path_ptr, new_path_len)
+                }
+
+                #[unsafe(no_mangle)]
+                #[cfg(target_os = "wasi")]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _fd_renumber>](
+                    fd: $crate::__private::wasip1::Fd,
+                    to: $crate::__private::wasip1::Fd,
+                ) -> $crate::__private::wasip1::Errno {
+                    let state = $state;
+                    $crate::__as_t!(@as_t, $wasm);
+                    $crate::file::Wasip1FileSystem::fd_renumber_raw::<T>(state, fd, to)
                 }
             )*
         }

@@ -516,6 +516,58 @@ impl<File: WasiEmbeddedPrimitiveFile> Wasip1FileTrait for WasiEmbeddedFile<File>
     ) -> Result<usize, wasip1::Errno> {
         self.file.pread_raw::<Wasm>(buf_ptr, buf_len, offset)
     }
+
+    fn pwrite(&self, _buf: &[u8], _offset: usize) -> Result<usize, wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn pwrite_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _buf_ptr: *const u8,
+        _buf_len: usize,
+        _offset: usize,
+    ) -> Result<usize, wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn pwrite_raw_dyn_compatible(
+        &self,
+        _access: &dyn crate::memory::WasmAccessDynCompatibleRaw,
+        _buf_ptr: *const u8,
+        _buf_len: usize,
+        _offset: usize,
+    ) -> Result<usize, wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn advise(&self, _offset: u64, _len: u64, _advice: wasip1::Advice) -> Result<(), wasip1::Errno> {
+        Ok(())
+    }
+
+    fn allocate(&self, _offset: u64, _len: u64) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn datasync(&self) -> Result<(), wasip1::Errno> {
+        Ok(())
+    }
+
+    fn sync(&self) -> Result<(), wasip1::Errno> {
+        Ok(())
+    }
+
+    fn filestat_set_size(&self, _size: u64) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn filestat_set_times(
+        &self,
+        _atim: wasip1::Timestamp,
+        _mtim: wasip1::Timestamp,
+        _fst_flags: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
 }
 
 #[cfg(test)]

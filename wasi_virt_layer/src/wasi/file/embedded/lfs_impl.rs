@@ -308,6 +308,94 @@ impl<
     ) -> Result<(), wasip1::Errno> {
         Err(wasip1::ERRNO_PERM)
     }
+
+    fn fd_pwrite_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+        _: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn fd_advise_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: u64,
+        _: u64,
+        _: wasip1::Advice,
+    ) -> Result<(), wasip1::Errno> {
+        // Advice is always a no-op even on read-only filesystems
+        Ok(())
+    }
+
+    fn fd_allocate_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: u64,
+        _: u64,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn fd_datasync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+    ) -> Result<(), wasip1::Errno> {
+        // No-op on read-only filesystem
+        Ok(())
+    }
+
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+    ) -> Result<(), wasip1::Errno> {
+        // No-op on read-only filesystem
+        Ok(())
+    }
+
+    fn fd_filestat_set_size_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: u64,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn fd_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: wasip1::Timestamp,
+        _: wasip1::Timestamp,
+        _: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn path_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: wasip1::Lookupflags,
+        _: *const u8,
+        _: usize,
+        _: wasip1::Timestamp,
+        _: wasip1::Timestamp,
+        _: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn path_symlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _: &Self::Inode,
+        _: *const u8,
+        _: usize,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
 }
 
 impl<
@@ -694,5 +782,99 @@ impl<
         _: usize,
     ) -> Result<(), wasip1::Errno> {
         Err(wasip1::ERRNO_PERM)
+    }
+
+    fn fd_pwrite_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+        _: usize,
+    ) -> Result<wasip1::Size, wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn fd_advise_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: u64,
+        _: u64,
+        _: wasip1::Advice,
+    ) -> Result<(), wasip1::Errno> {
+        Ok(())
+    }
+
+    fn fd_allocate_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: u64,
+        _: u64,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn fd_datasync_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+    ) -> Result<(), wasip1::Errno> {
+        Ok(())
+    }
+
+    fn fd_sync_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+    ) -> Result<(), wasip1::Errno> {
+        Ok(())
+    }
+
+    fn fd_filestat_set_size_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: u64,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn fd_filestat_set_times_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: wasip1::Timestamp,
+        _: wasip1::Timestamp,
+        _: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn path_filestat_set_times_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: wasip1::Lookupflags,
+        _: *const u8,
+        _: usize,
+        _: wasip1::Timestamp,
+        _: wasip1::Timestamp,
+        _: wasip1::Fstflags,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
+    }
+
+    fn path_symlink_raw_dyn_compatible(
+        &self,
+        _: &dyn WasmAccessDynCompatibleRaw,
+        _: &dyn InodeIdCommon,
+        _: *const u8,
+        _: usize,
+        _: *const u8,
+        _: usize,
+    ) -> Result<(), wasip1::Errno> {
+        Err(wasip1::ERRNO_ROFS)
     }
 }

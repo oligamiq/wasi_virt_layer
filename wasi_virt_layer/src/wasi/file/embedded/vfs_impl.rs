@@ -322,4 +322,206 @@ where
             Err(e) => e,
         }
     }
+
+    fn fd_pread_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        iovs_ptr: *const Ciovec,
+        iovs_len: usize,
+        offset: u64,
+        nread_ret: *mut Size,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_pread: fd={fd}, iovs_len={iovs_len}, offset={offset}");
+
+        match fd {
+            0 => wasip1::ERRNO_SPIPE,
+            1 | 2 => wasip1::ERRNO_BADF,
+            fd => {
+                match self.with_inode_and_lfs(fd, |inode, lfs| {
+                    let iovs_vec = Wasm::as_array(iovs_ptr, iovs_len);
+                    let mut total_read = 0;
+                    let mut current_offset = offset as usize;
+
+                    for iovs in iovs_vec {
+                        let nread = lfs.fd_pread_raw::<Wasm>(
+                            inode,
+                            iovs.buf as *mut u8,
+                            iovs.buf_len,
+                            current_offset,
+                        )?;
+                        if nread == 0 {
+                            break;
+                        }
+                        total_read += nread;
+                        current_offset += nread;
+                        if nread < iovs.buf_len as usize {
+                            break;
+                        }
+                    }
+                    Ok(total_read)
+                }) {
+                    Ok(Ok(n)) => {
+                        Wasm::store_le(nread_ret, n as Size);
+                        wasip1::ERRNO_SUCCESS
+                    }
+                    Ok(Err(e)) => e,
+                    Err(e) => e,
+                }
+            }
+        }
+    }
+
+    fn fd_pwrite_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _iovs_ptr: *const Ciovec,
+        _iovs_len: usize,
+        _offset: u64,
+        _nwritten: *mut Size,
+    ) -> wasip1::Errno {
+        wasip1::ERRNO_ROFS
+    }
+
+    fn fd_advise_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset: u64,
+        len: u64,
+        advice: wasip1::Advice,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_advise: fd={fd}, offset={offset}, len={len}, advice={advice:?}");
+
+        match self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.fd_advise_raw::<Wasm>(inode, offset, len, advice)
+        }) {
+            Ok(Ok(())) => wasip1::ERRNO_SUCCESS,
+            Ok(Err(e)) => e,
+            Err(e) => e,
+        }
+    }
+
+    fn fd_allocate_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _offset: u64,
+        _len: u64,
+    ) -> wasip1::Errno {
+        wasip1::ERRNO_ROFS
+    }
+
+    fn fd_datasync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_datasync: fd={fd}");
+
+        match self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.fd_datasync_raw::<Wasm>(inode)
+        }) {
+            Ok(Ok(())) => wasip1::ERRNO_SUCCESS,
+            Ok(Err(e)) => e,
+            Err(e) => e,
+        }
+    }
+
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_sync: fd={fd}");
+
+        match self.with_inode_and_lfs(fd, |inode, lfs| {
+            lfs.fd_sync_raw::<Wasm>(inode)
+        }) {
+            Ok(Ok(())) => wasip1::ERRNO_SUCCESS,
+            Ok(Err(e)) => e,
+            Err(e) => e,
+        }
+    }
+
+    fn fd_tell_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        fd: Fd,
+        offset_ret: *mut u64,
+    ) -> wasip1::Errno {
+        trace_fs!(self, Wasm; "fd_tell: fd={fd}");
+
+        match self.get_cursor(fd) {
+            Ok(cursor) => {
+                Wasm::store_le(offset_ret, cursor as u64);
+                wasip1::ERRNO_SUCCESS
+            }
+            Err(e) => e,
+        }
+    }
+
+    fn fd_fdstat_set_flags_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _flags: wasip1::Fdflags,
+    ) -> wasip1::Errno {
+        // Embedded FS doesn't store per-fd flags in a mutable way
+        wasip1::ERRNO_SUCCESS
+    }
+
+    fn fd_fdstat_set_rights_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _fs_rights_base: wasip1::Rights,
+        _fs_rights_inheriting: wasip1::Rights,
+    ) -> wasip1::Errno {
+        // Embedded FS uses max rights, set_rights can only narrow which is fine
+        wasip1::ERRNO_SUCCESS
+    }
+
+    fn fd_filestat_set_size_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _size: u64,
+    ) -> wasip1::Errno {
+        wasip1::ERRNO_ROFS
+    }
+
+    fn fd_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _atim: wasip1::Timestamp,
+        _mtim: wasip1::Timestamp,
+        _fst_flags: wasip1::Fstflags,
+    ) -> wasip1::Errno {
+        wasip1::ERRNO_ROFS
+    }
+
+    fn path_filestat_set_times_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _flags: wasip1::Lookupflags,
+        _path_ptr: *const u8,
+        _path_len: usize,
+        _atim: wasip1::Timestamp,
+        _mtim: wasip1::Timestamp,
+        _fst_flags: wasip1::Fstflags,
+    ) -> wasip1::Errno {
+        wasip1::ERRNO_ROFS
+    }
+
+    fn path_symlink_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _old_path_ptr: *const u8,
+        _old_path_len: usize,
+        _fd: Fd,
+        _new_path_ptr: *const u8,
+        _new_path_len: usize,
+    ) -> wasip1::Errno {
+        wasip1::ERRNO_ROFS
+    }
+
+    fn fd_renumber_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
+        &self,
+        _fd: Fd,
+        _to: Fd,
+    ) -> wasip1::Errno {
+        // Embedded FS doesn't support renumbering
+        wasip1::ERRNO_NOSYS
+    }
 }

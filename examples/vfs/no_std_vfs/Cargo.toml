@@ -17,7 +17,7 @@ publish = false
 wasi_virt_layer = { workspace = true, default-features = false, features = [
     "embedded-fs",
     "multi_memory",
-    "unstable_print_debug", "std",
+    "unstable_print_debug", "std", "alloc",
 ] }
 const_struct = "0.6.4"
 wit-bindgen = "0.54.0"

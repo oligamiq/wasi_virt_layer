@@ -747,6 +747,7 @@ pub const FDFLAGS_RSYNC: Fdflags = 1 << 3;
 /// may also synchronously update the file's metadata.
 pub const FDFLAGS_SYNC: Fdflags = 1 << 4;
 
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug)]
 /// File descriptor statistics.

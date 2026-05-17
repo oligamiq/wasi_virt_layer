@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.9] - 2026-05-17
+### Added
+- **Full WASI Snapshot Preview 1 Compliance**: Extended `Wasip1FileTrait` (and `Wasip1LFSBase` / `Wasip1FileSystem`) to include all missing Snapshot Preview 1 filesystem operations, such as `pwrite`, `pwrite_raw`, `advise`, `allocate`, `datasync`, `sync`, `filestat_set_size`, and `filestat_set_times`.
+- **WasiEmbeddedFile Implementation**: Added complete implementations for all missing methods inside the read-only `WasiEmbeddedFile`. Mutating methods now correctly return `ERRNO_ROFS` (Read-Only File System), while `advise` and `sync` gracefully return `Ok(())`.
+
+### Fixed
+- **Compiler and Parsing Failures**:
+  - Restored trailing cursor updates and successfully closed blocks in `fd_seek_raw` within `multiple/lfs.rs`, resolving "unclosed delimiter" compilation failures in downstream VFS test modules.
+  - Corrected `u64` vs `i64` type discrepancies inside `fd_seek_raw`'s invocation of `Wasm::store_le`.
+  - Cleaned up type aliasing duplicate definitions for `Advice` and `Fstflags` to prevent Rust compilation conflicts.
+- **Robust Path Traversal**: Added missing `RootDir` variants to path resolution component matchers in `StandardDynamicLFS` to safely handle directory transitions up to root.
+
 ## [0.4.8] - 2026-05-17
 ### Added
 - **Integrated Shared Global Management**: Consolidated the thread-safe memory management pipeline by merging `SharedGlobal` functionality directly into `MultiMemoryLowering`. This handles replacement of mutable offset globals with VFS shared-memory-backed equivalents, eliminating the separate `post_lower_memory` pass and improving pipeline cohesion.
