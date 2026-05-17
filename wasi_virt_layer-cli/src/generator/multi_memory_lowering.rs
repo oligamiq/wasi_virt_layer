@@ -10,14 +10,19 @@
 
 use std::collections::HashMap;
 
-use eyre::OptionExt as _;
+use eyre::{Context as _, OptionExt as _};
 use walrus::{
     ir::*, ConstExpr, DataKind, FunctionId, GlobalId, MemoryId, Module, ValType,
 };
 
 use crate::{
-    generator::{Generator, GeneratorCtx},
-    util::WalrusUtilModule as _,
+    generator::{shared_global::SharedGlobalFnsName, Generator, GeneratorCtx},
+    instrs::InstrRewrite as _,
+    unique_name::UniqueName,
+    util::{
+        ResultUtil, WalrusFID as _, WalrusUtilExport as _, WalrusUtilFuncs as _,
+        WalrusUtilModule as _,
+    },
 };
 
 /// Information about the combined memory after lowering.
@@ -117,6 +122,15 @@ impl MultiMemoryLowering {
             combined_memory: combined_id,
             offset_globals,
         });
+
+        // 8. Replace offset globals with shared-memory alternatives (threads only)
+        if ctx.threads {
+            self.replace_globals_with_shared_alt(module, ctx)
+                .wrap_err("Failed to replace offset globals with shared alternatives")?;
+        }
+
+        // 9. Clean up VFS base locker and memory_grow_alt import
+        self.cleanup_vfs_locker(module, ctx)?;
 
         Ok(())
     }
@@ -538,6 +552,9 @@ impl MultiMemoryLowering {
         let get_tmp2 = |val_type: ValType| match val_type {
             ValType::I32 => tmp_i32[1],
             ValType::I64 => tmp_i64[1],
+            ValType::F32 => tmp_f32,
+            ValType::F64 => tmp_f64,
+            ValType::V128 => tmp_v128,
             _ => unreachable!(),
         };
         let get_tmp3 = |val_type: ValType| match val_type {
@@ -1104,6 +1121,260 @@ impl MultiMemoryLowering {
         }
 
         Ok(combined)
+    }
+
+    // -----------------------------------------------------------------------
+    // Shared-global integration (formerly in SharedGlobal generator)
+    // ---------------------------------------------------------------------------
+
+    /// Replaces mutable offset globals with shared-memory-backed alternatives
+    /// provided by the VFS's `gen_alt_global!` macro.
+    ///
+    /// This is necessary in threaded mode because Wasm globals are thread-local
+    /// in shared-memory modules. The VFS exports per-target functions that store
+    /// the offset value in shared linear memory with appropriate locking.
+    fn replace_globals_with_shared_alt(
+        &self,
+        module: &mut Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        let result = self.result.as_ref().ok_or_eyre(
+            "replace_globals_with_shared_alt called before lowering",
+        )?;
+
+        // Build mapping: (GlobalId, target_name) for each offset global
+        let mut global_mappings: Vec<(GlobalId, &str)> = Vec::new();
+        for (i, og) in result.offset_globals.iter().enumerate() {
+            if let Some(gid) = og {
+                if i <= ctx.target_names.len() {
+                    // i=1 → target_names[0], i=2 → target_names[1], ...
+                    global_mappings.push((*gid, ctx.target_names[i - 1].as_ref()));
+                } else {
+                    // Extra memory beyond targets = external memory manager
+                    global_mappings.push((*gid, "vfs_external_memory_manager"));
+                }
+            }
+        }
+
+        if global_mappings.is_empty() {
+            return Ok(());
+        }
+
+        log::info!("Replacing {} offset globals with shared alternatives:", global_mappings.len());
+
+        // Get the __init_offset_global start function
+        let init_fn = ctx.starts.init_offset_global.get_fid(&module.exports)?;
+
+        // Collect grow/size function IDs to distinguish lock contexts
+        let grow_fn_set: std::collections::HashSet<FunctionId> =
+            self.memory_grow_fns.iter().copied().collect();
+        let size_fn_set: std::collections::HashSet<FunctionId> =
+            self.memory_size_fns.iter().copied().collect();
+
+        for (global_id, target_name) in &global_mappings {
+            let global_id = *global_id;
+
+            // Read initial value before deletion
+            let init_value = match module.globals.get(global_id).kind {
+                walrus::GlobalKind::Local(ConstExpr::Value(Value::I32(v))) => v,
+                _ => eyre::bail!("Offset global is not a mutable i32 local"),
+            };
+
+            log::info!(" - {}: initial value = {}", target_name, init_value);
+
+            // Resolve VFS alt functions for this target
+            let alt_set = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltSet,
+                target_name,
+            )
+            .get_fid(&module.exports)
+            .wrap_err_with(|| format!("Missing GlobalAltSet for {target_name}"))?;
+
+            let alt_set_with_lock = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltSetWithLock,
+                target_name,
+            )
+            .get_fid(&module.exports)
+            .wrap_err_with(|| format!("Missing GlobalAltSetWithLock for {target_name}"))?;
+
+            let alt_init_once = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltInitOnce,
+                target_name,
+            )
+            .get_fid(&module.exports)
+            .wrap_err_with(|| format!("Missing GlobalAltInitOnce for {target_name}"))?;
+
+            let alt_get_with_lock = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltGet,
+                target_name,
+            )
+            .get_fid(&module.exports)
+            .wrap_err_with(|| format!("Missing GlobalAltGet for {target_name}"))?;
+
+            let alt_get_no_wait = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltGetNoWait,
+                target_name,
+            )
+            .get_fid(&module.exports)
+            .wrap_err_with(|| format!("Missing GlobalAltGetNoWait for {target_name}"))?;
+
+            let alt_pos = UniqueName::SharedGlobalFnsForTarget(
+                &SharedGlobalFnsName::GlobalAltPos,
+                target_name,
+            )
+            .get_fid(&module.exports)
+            .wrap_err_with(|| format!("Missing GlobalAltPos for {target_name}"))?;
+
+            // Erase the position helper export (not needed at runtime)
+            module
+                .exports
+                .erase_with(alt_pos, ctx.unstable_print_debug)?;
+
+            // Add initialization call to __init_offset_global
+            let init_local = module.funcs.get_mut(init_fn).kind.unwrap_local_mut();
+            init_local
+                .builder_mut()
+                .func_body()
+                .i32_const(init_value)
+                .call(alt_init_once);
+
+            // Rewrite global.get/set in grow functions (already hold write lock → no-lock)
+            for grow_fid in &self.memory_grow_fns {
+                module.funcs.flat_rewrite(
+                    |instr, _| match instr {
+                        Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: alt_get_no_wait,
+                            });
+                        }
+                        Instr::GlobalSet(GlobalSet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: alt_set,
+                            });
+                        }
+                        _ => {}
+                    },
+                    *grow_fid,
+                    true,
+                )?;
+            }
+
+            // Rewrite global.get in size functions (no lock held → use with-lock)
+            for size_fid in &self.memory_size_fns {
+                module.funcs.flat_rewrite(
+                    |instr, _| match instr {
+                        Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: alt_get_with_lock,
+                            });
+                        }
+                        Instr::GlobalSet(GlobalSet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: alt_set_with_lock,
+                            });
+                        }
+                        _ => {}
+                    },
+                    *size_fid,
+                    true,
+                )?;
+            }
+
+            // Rewrite global.get/set everywhere else (with-lock variants)
+            // Exclude grow_fns and size_fns which were already handled above.
+            let exclude: Vec<FunctionId> = grow_fn_set
+                .iter()
+                .chain(size_fn_set.iter())
+                .copied()
+                .collect();
+
+            module
+                .funcs
+                .all_rewrite(
+                    |instr, _| match instr {
+                        Instr::GlobalSet(GlobalSet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: alt_set_with_lock,
+                            });
+                        }
+                        Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
+                            *instr = Instr::Call(Call {
+                                func: alt_get_with_lock,
+                            });
+                        }
+                        _ => {}
+                    },
+                    &exclude,
+                )
+                .wrap_err("Failed to rewrite global set/get")?;
+
+            // Delete the original global
+            module.globals.delete(global_id);
+
+            // Clean up VFS alt function exports (they are internal implementation details)
+            module
+                .exports
+                .erase_with(alt_set_with_lock, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(alt_set, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(alt_init_once, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(alt_get_with_lock, ctx.unstable_print_debug)?;
+            module
+                .exports
+                .erase_with(alt_get_no_wait, ctx.unstable_print_debug)?;
+        }
+
+        Ok(())
+    }
+
+    /// Removes the VFS base locker function and the `__wasip1_vfs_memory_grow_alt`
+    /// import. These are no longer needed since `MultiMemoryLowering` creates its
+    /// own grow functions with integrated write-lock support.
+    fn cleanup_vfs_locker(
+        &self,
+        module: &mut Module,
+        ctx: &GeneratorCtx,
+    ) -> eyre::Result<()> {
+        // Remove the __wasip1_vfs_memory_grow_alt import
+        if let Some(alt_id) = (
+            "wasip1-vfs_single_memory",
+            &UniqueName::SharedGlobalFns(&SharedGlobalFnsName::MemoryGrowAlt),
+        )
+            .get_fid(&module.imports)
+            .ok()
+        {
+            let combined = self
+                .result
+                .as_ref()
+                .map(|r| r.combined_memory)
+                .unwrap_or_else(|| module.memories.iter().next().unwrap().id());
+
+            // Replace the imported function with actual memory.grow
+            module
+                .replace_imported_func(alt_id, |(builder, args)| {
+                    builder.func_body().local_get(args[0]).memory_grow(combined);
+                })
+                .to_eyre()
+                .wrap_err("Failed to replace memory_grow_alt import")?;
+        }
+
+        // Remove the base locker export (it's now unused)
+        if let Some(base_locker) =
+            UniqueName::SharedGlobalFns(&SharedGlobalFnsName::LockerBase)
+                .get_fid(&module.exports)
+                .ok()
+        {
+            module
+                .exports
+                .erase_with(base_locker, ctx.unstable_print_debug)?;
+        }
+
+        Ok(())
     }
 }
 

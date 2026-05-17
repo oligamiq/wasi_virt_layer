@@ -23,6 +23,8 @@ members = [
     "examples/bare/args",
     "examples/bare/args-vfs",
     "examples/vfs/multiple_calls_vfs",
+    "examples/vfs/repro_float_load",
+    "examples/vfs/repro_float_load/example",
     "examples/threads/ls-threads",
     "examples/threads/ls-threads-vfs",
     "examples/multiple-vfs",
@@ -69,7 +71,7 @@ default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]
-version = "0.4.7"
+version = "0.4.8"
 edition = "2024"
 description = ""
 rust-version = "1.89.0"

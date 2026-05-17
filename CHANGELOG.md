@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.8] - 2026-05-17
+### Added
+- **Integrated Shared Global Management**: Consolidated the thread-safe memory management pipeline by merging `SharedGlobal` functionality directly into `MultiMemoryLowering`. This handles replacement of mutable offset globals with VFS shared-memory-backed equivalents, eliminating the separate `post_lower_memory` pass and improving pipeline cohesion.
+
+### Fixed
+- **Double-Locking Hazard**: Resolved a potential deadlock issue where the `SharedGlobal` generator wrapped memory growth with its own write lock, nesting under `MultiMemoryLowering`'s already locked grow functions. Now, `MultiMemoryLowering` manages the locking directly and safely using optimized `_no_wait` and `_with_lock` variants.
+- **Float and Vector Local Support**: Fixed a Walrus lowering crash (`internal error: entered unreachable code`) by expanding type support for float (`f32`, `f64`) and vector (`v128`) instruction rewrites inside the temporary local allocation helper of `MultiMemoryLowering`.
+
 ## [0.4.7] - 2026-05-16
 ### Added
 - **CLI Development Mode**: Added a new `--dev` flag to the `build` and `prebuild` commands. This flag skips WebAssembly optimizations (bypassing `wasm-opt`), significantly speeding up the development cycle.

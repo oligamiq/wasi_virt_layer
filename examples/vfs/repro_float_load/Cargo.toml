@@ -1,0 +1,19 @@
+[package]
+name = "repro-float-load"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = ["std"]
+std = ["wasi_virt_layer/std"]
+
+[dependencies]
+wit-bindgen = "0.54.0"
+const_struct = "0.6.4"
+
+[dependencies.wasi_virt_layer]
+path = "../../../wasi_virt_layer"
+features = ["std", "alloc", "multiple-fs"]
+
+[lib]
+crate-type = ["cdylib"]
