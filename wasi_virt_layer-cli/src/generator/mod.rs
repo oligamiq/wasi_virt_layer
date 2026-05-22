@@ -79,6 +79,10 @@ pub struct GeneratorCtx {
     pub adjust_abi: bool,
     /// Whether to keep intermediate build artifacts.
     pub keep_build_artifacts: bool,
+    /// Whether the VFS module is a library (has no start section / `_start` export).
+    /// Detected during `pre_vfs`; when `true`, the VFS start slot in the
+    /// combined start chain is skipped entirely.
+    pub vfs_is_library: bool,
     pub starts: starts::FnInStarts,
 }
 
@@ -216,6 +220,7 @@ impl Generator for ComponentCtxVisitor {
             target_used_global_id: _,
             start_func_id: _,
             keep_build_artifacts: _,
+            vfs_is_library: _,
             starts: _,
         } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
@@ -806,6 +811,7 @@ impl GeneratorRunner {
                 target_used_memory_id: None,
                 target_used_global_id: None,
                 start_func_id: None,
+                vfs_is_library: false,
                 starts,
             },
             path,
@@ -940,6 +946,16 @@ impl GeneratorRunner {
 
                 self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id;
 
+                // Detect VFS library mode: if the VFS module has no start section,
+                // it is a library and has no initialization entry point.
+                self.ctx.vfs_is_library = module.start.is_none();
+                if self.ctx.vfs_is_library {
+                    log::info!(
+                        "VFS module `{}` has no start section — treating as a library.",
+                        self.ctx.vfs_name
+                    );
+                }
+
                 component_ctx_visitor
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
@@ -955,7 +971,7 @@ impl GeneratorRunner {
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
         for (i, (target, target_name)) in self.targets.iter_mut().zip(self.ctx.target_names.clone()).enumerate() {
-            let skip_target_opt = self.target_vfs_build_opts[i].no_opt > 0 || self.target_vfs_build_opts[i].no_opt_all > 0;
+            let skip_target_opt = self.vfs_build_opts.no_opt_all > 0 || self.target_vfs_build_opts[i].no_opt > 0 || self.target_vfs_build_opts[i].no_opt_all > 0;
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
@@ -1230,7 +1246,7 @@ impl ComponentRunner {
 
             Ok(core_wasm.clone())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), false)?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), parsed_args.dev())?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
         self.generators.push(Box::new(mem_size_visitor));
@@ -1274,7 +1290,7 @@ impl ComponentRunner {
             })
             .wrap_run(path, dwarf, parsed_args.keep_build_artifacts())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), false)?;
+        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), parsed_args.dev())?;
 
         let dwarf = {
             let new_dwarf = self.ctx.as_ref().unwrap().dwarf;

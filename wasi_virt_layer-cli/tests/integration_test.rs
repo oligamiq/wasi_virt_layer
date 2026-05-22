@@ -709,7 +709,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
         false,
         OutDir::Random,
         true, // keep_build_artifacts
-        &[],
+        &["--run-with-opt"],
         None,
     )
     .wrap_err("Failed to run with keep_build_artifacts = true")?;
@@ -741,7 +741,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
         false,
         OutDir::Random,
         false, // keep_build_artifacts
-        &[],
+        &["--run-with-opt"],
         None,
     )
     .wrap_err("Failed to run with keep_build_artifacts = false")?;

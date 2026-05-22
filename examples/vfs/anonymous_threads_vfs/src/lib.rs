@@ -82,6 +82,7 @@ const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     ],
 };
 plug_env!(@embedded, VirtualEnvTy, anonymous, self);
+wasi_virt_layer::plug_clock!(wasi_virt_layer::clock::StandardClock, anonymous, self);
 
 #[cfg(test)]
 mod tests {

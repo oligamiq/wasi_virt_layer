@@ -18,6 +18,8 @@ pub trait PostBuildContext {
         component: &[u8],
         name: impl AsRef<str>,
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error>;
+    /// Returns whether to skip Wasm optimization (dev mode).
+    fn dev(&self) -> bool;
 }
 
 /// The main command-line interface for `wasi_virt_layer-cli`.
@@ -244,6 +246,10 @@ impl PostBuildContext for BuildArgs {
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
         self.transpile_opts.transpile_to_js(component, name)
     }
+
+    fn dev(&self) -> bool {
+        self.dev
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -396,6 +402,10 @@ pub struct PostBuildArgs {
     /// Keep all intermediate build artifacts instead of deleting them.
     #[arg(long, default_value = "false")]
     pub keep_build_artifacts: bool,
+
+    /// Enable development mode (skips Wasm optimization).
+    #[arg(long, default_value = "false")]
+    pub dev: bool,
 }
 
 impl PostBuildContext for PostBuildArgs {
@@ -417,6 +427,10 @@ impl PostBuildContext for PostBuildArgs {
         name: impl AsRef<str>,
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error> {
         self.transpile_opts.transpile_to_js(component, name)
+    }
+
+    fn dev(&self) -> bool {
+        self.dev
     }
 }
 
@@ -489,14 +503,14 @@ impl TranspileOpts {
             js_component_bindgen::TranspileOpts {
                 name: name.as_ref().to_string(),
                 no_typescript: self.no_typescript,
-                instantiation: self.instantiation.clone().0,
+                instantiation_mode: self.instantiation.clone().0,
                 import_bindings: self.import_bindings.clone(),
                 map: if !self.map.is_empty() {
                     Some(self.map.iter().cloned().collect())
                 } else {
                     None
                 },
-                no_nodejs_compat: self.no_nodejs_compat,
+                nodejs_compat_disabled: self.no_nodejs_compat,
                 base64_cutoff: self.base64_cutoff,
                 tla_compat: self.tla_compat,
                 valid_lifting_optimization: self.valid_lifting_optimization,

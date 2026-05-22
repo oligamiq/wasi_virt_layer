@@ -135,7 +135,10 @@ impl FnInStarts {
 
             Ok(())
         };
-        adder(&self.flesh_vfs_start)?;
+        // When VFS is a library there is no VFS start function to call.
+        if !ctx.vfs_is_library {
+            adder(&self.flesh_vfs_start)?;
+        }
         adder(&self.thread_patch)?;
         adder(&self.init_offset_global)?;
         adder(&self.save_target_memory)?;
@@ -179,7 +182,15 @@ impl Generator for FnInStartsGeneratorFirst {
         module: &mut walrus::Module,
         ctx: &super::GeneratorCtx,
     ) -> eyre::Result<()> {
-        // remove _start from target module and save its name
+        if ctx.vfs_is_library {
+            // Library VFS: no start section exists. Skip the flesh_vfs_start
+            // slot entirely; only initialize the remaining start chain slots
+            // (thread_patch, init_offset_global, etc.) that later generators fill.
+            ctx.starts.init(module, ctx)?;
+            return Ok(());
+        }
+
+        // Executable VFS: extract the existing start section and save it.
         let start_fid = if let Some(fid) = module.start.take() {
             fid
         } else {

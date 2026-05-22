@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.10] - 2026-05-22
+### Fixed
+- **Development Mode Optimization**: Fixed an issue where the `--dev` flag did not completely skip `wasm-opt` for target Wasm modules. Ensure target Wasm optimizations are fully bypassed when using `--dev`.
+- **Test Compatibility**: Updated VFS test modules (`threads_vfs`, `anonymous_threads_vfs`, `no_thread_with_thread_feature_vfs`) to include `plug_clock!` to satisfy unmodified target import constraints during unoptimized testing.
+
 ## [0.4.9] - 2026-05-17
 ### Added
 - **Full WASI Snapshot Preview 1 Compliance**: Extended `Wasip1FileTrait` (and `Wasip1LFSBase` / `Wasip1FileSystem`) to include all missing Snapshot Preview 1 filesystem operations, such as `pwrite`, `pwrite_raw`, `advise`, `allocate`, `datasync`, `sync`, `filestat_set_size`, and `filestat_set_times`.

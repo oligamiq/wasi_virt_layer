@@ -64,6 +64,7 @@ const ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 };
 
 plug_env!(@embedded, EnvTy, test_wasm);
+wasi_virt_layer::plug_clock!(wasi_virt_layer::clock::StandardClock, test_wasm);
 
 struct ThreadAlt<ThreadAccessor: ThreadAccess> {
     _marker: core::marker::PhantomData<ThreadAccessor>,

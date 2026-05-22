@@ -20,3 +20,5 @@ dist_minimal
 _debug_*.wat
 
 .worktrees/
+
+.antigravitycli/

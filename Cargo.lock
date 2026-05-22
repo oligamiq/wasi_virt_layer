@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "anonymous_threads_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -106,11 +106,11 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "args"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "args-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -134,7 +134,7 @@ dependencies = [
 
 [[package]]
 name = "atomic_wait_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -143,9 +143,9 @@ dependencies = [
 
 [[package]]
 name = "autocfg"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
+checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "backtrace"
@@ -202,6 +202,31 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cdeb9d870516001442e364c5220d3574d2da8dc765554b4a617230d33fa58ef5"
 dependencies = [
  "objc2",
+]
+
+[[package]]
+name = "bon"
+version = "3.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f47dbe92550676ee653353c310dfb9cf6ba17ee70396e1f7cf0a2020ad49b2fe"
+dependencies = [
+ "bon-macros",
+ "rustversion",
+]
+
+[[package]]
+name = "bon-macros"
+version = "3.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "519bd3116aeeb42d5372c29d982d16d0170d3d4a5ed85fc7dd91642ffff3c67c"
+dependencies = [
+ "darling",
+ "ident_case",
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "rustversion",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -295,7 +320,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "changeable-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -408,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "complex-threads-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -642,6 +667,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "darling"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "25ae13da2f202d56bd7f91c25fba009e7717a1e4a1cc98a76d844b65ae912e9d"
+dependencies = [
+ "darling_core",
+ "darling_macro",
+]
+
+[[package]]
+name = "darling_core"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9865a50f7c335f53564bb694ef660825eb8610e0a53d3e11bf1b0d3df31e03b0"
+dependencies = [
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "darling_macro"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ac3984ec7bd6cfa798e62b4a642426a5be0e68f9401cfc2a01e3fa9ea2fcdb8d"
+dependencies = [
+ "darling_core",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "dashmap"
 version = "7.0.0-rc2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -706,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -715,7 +774,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm-multiple"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -734,9 +793,9 @@ dependencies = [
 
 [[package]]
 name = "either"
-version = "1.15.0"
+version = "1.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
+checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 
 [[package]]
 name = "embedded-io"
@@ -801,7 +860,7 @@ version = "0.1.0"
 
 [[package]]
 name = "example_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1068,6 +1127,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "ident_case"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9e0384b61958566e926dc50660321d12159025e767c18e043daf26b70104c39"
+
+[[package]]
 name = "indenter"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1142,12 +1207,13 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen"
-version = "1.18.0"
+version = "1.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df9efc9350e0947880f0f8dc266fcf67b36b8f20c10909e021008ef1cd4bcfac"
+checksum = "e1b09529fb283dd0071942133db7e36b7c68b0ef610a94af4579e1782ed88c7e"
 dependencies = [
  "anyhow",
  "base64",
+ "bon",
  "heck 0.5.0",
  "log",
  "semver",
@@ -1196,7 +1262,7 @@ dependencies = [
 
 [[package]]
 name = "lib_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1256,15 +1322,15 @@ checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
 
 [[package]]
 name = "ls"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "ls-threads"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "ls-threads-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1274,7 +1340,7 @@ dependencies = [
 
 [[package]]
 name = "ls-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1283,7 +1349,7 @@ dependencies = [
 
 [[package]]
 name = "ls2"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "memchr"
@@ -1293,7 +1359,7 @@ checksum = "f8ca58f447f06ed17d5fc4043ce1b10dd205e060fb3ce5b979b8ed8e59ff3f79"
 
 [[package]]
 name = "minimal_repro"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1303,7 +1369,7 @@ dependencies = [
 
 [[package]]
 name = "minimal_repro_virtual"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1322,7 +1388,7 @@ dependencies = [
 
 [[package]]
 name = "mkdir_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -1367,7 +1433,7 @@ dependencies = [
 
 [[package]]
 name = "multiple-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "parking_lot",
  "smallstr",
@@ -1377,7 +1443,7 @@ dependencies = [
 
 [[package]]
 name = "multiple_calls_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1398,7 +1464,7 @@ dependencies = [
 
 [[package]]
 name = "no_std_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1407,7 +1473,7 @@ dependencies = [
 
 [[package]]
 name = "no_thread_with_thread_feature_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1520,7 +1586,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pool-threads-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1708,7 +1774,7 @@ dependencies = [
 
 [[package]]
 name = "repro_multi_target_table_bug"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1724,7 +1790,7 @@ checksum = "b50b8869d9fc858ce7266cce0194bd74df58b9d0e3f6df3a9fc8eb470d95c09d"
 
 [[package]]
 name = "rustc_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1779,7 +1845,7 @@ checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
 name = "self-rw-threads-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1789,7 +1855,7 @@ dependencies = [
 
 [[package]]
 name = "self-rw-vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1799,11 +1865,11 @@ dependencies = [
 
 [[package]]
 name = "self_rw_example"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "self_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1853,9 +1919,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.149"
+version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
+checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
  "itoa",
  "memchr",
@@ -1913,11 +1979,11 @@ dependencies = [
 
 [[package]]
 name = "spawn_vfs_and_body_example"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "spawn_vfs_and_body_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2087,18 +2153,18 @@ dependencies = [
 
 [[package]]
 name = "test_args"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "walkdir",
 ]
 
 [[package]]
 name = "test_atomic_wait"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "test_helper_shared_memory_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "wasi_virt_layer",
  "wit-bindgen 0.54.0",
@@ -2106,7 +2172,7 @@ dependencies = [
 
 [[package]]
 name = "test_helper_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "wasi_virt_layer",
  "wit-bindgen 0.54.0",
@@ -2114,7 +2180,7 @@ dependencies = [
 
 [[package]]
 name = "test_lib"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "test_mkdir"
@@ -2122,7 +2188,7 @@ version = "0.1.0"
 
 [[package]]
 name = "test_new_bare"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2131,15 +2197,15 @@ dependencies = [
 
 [[package]]
 name = "test_poll"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "test_pool_thread"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "test_threads"
-version = "0.4.9"
+version = "0.4.10"
 
 [[package]]
 name = "test_unreachable_target"
@@ -2147,7 +2213,7 @@ version = "0.1.0"
 
 [[package]]
 name = "test_wasm"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "walkdir",
 ]
@@ -2194,7 +2260,7 @@ dependencies = [
 
 [[package]]
 name = "thread_direct_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2203,7 +2269,7 @@ dependencies = [
 
 [[package]]
 name = "thread_pool_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2212,7 +2278,7 @@ dependencies = [
 
 [[package]]
 name = "threads_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -2259,7 +2325,7 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tree"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2365,7 +2431,7 @@ dependencies = [
 
 [[package]]
 name = "wait_poll_vfs"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2383,9 +2449,9 @@ dependencies = [
 
 [[package]]
 name = "walrus"
-version = "0.26.1"
+version = "0.26.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e151599d689dac80e85c66a7cfa6ffd1b2ab79220517f9161040a87a5041aee3"
+checksum = "1fdd11e7cc2c5c875228bb82c1b41ff1444ab2c3aed74e9e4c845652b0349302"
 dependencies = [
  "anyhow",
  "gimli 0.32.3",
@@ -2429,7 +2495,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi_virt_layer"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "backtrace",
  "const_for",
@@ -2448,7 +2514,7 @@ dependencies = [
 
 [[package]]
 name = "wasi_virt_layer-cli"
-version = "0.4.9"
+version = "0.4.10"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2612,12 +2678,12 @@ dependencies = [
 
 [[package]]
 name = "wasm-encoder"
-version = "0.249.0"
+version = "0.250.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "69830ccbbf41c55eb585991659fb70867ef628193af3a495f09a6956f7615e59"
+checksum = "2271adb766023046af314460f1fae02cc34ea16d736d93404d3b65be44270923"
 dependencies = [
  "leb128fmt",
- "wasmparser 0.249.0",
+ "wasmparser 0.250.0",
 ]
 
 [[package]]
@@ -2800,9 +2866,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.249.0"
+version = "0.250.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30538cae9a794215f490b532df01c557e2e2bfac92569482554acd0992a102ea"
+checksum = "071d99cdfb8111603ed05500506c3298a940b58d609dd0259d3981785dd33556"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -2867,22 +2933,22 @@ dependencies = [
 
 [[package]]
 name = "wast"
-version = "249.0.0"
+version = "250.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2474a321bf9ae2808e9fa23ac4ec2b27300e70985e30bcb5a38d43b76bfc901a"
+checksum = "69e9294a1f0204aeb5c47e95165517f43ef3cc895918c4f3e939380d4c290f4a"
 dependencies = [
  "bumpalo",
  "leb128fmt",
  "memchr",
  "unicode-width",
- "wasm-encoder 0.249.0",
+ "wasm-encoder 0.250.0",
 ]
 
 [[package]]
 name = "wat"
-version = "1.249.0"
+version = "1.250.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28af699d0a9c7e4e250b7b8e36167ae5215fbb4b7ae526bb4ce7b234ba0afc90"
+checksum = "0a549ed329a70e444e0f7796391ab2a87d0aef30ddde9f60e16e429224fafd02"
 dependencies = [
  "wast",
 ]

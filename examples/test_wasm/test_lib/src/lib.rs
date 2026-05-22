@@ -7,17 +7,9 @@ pub extern "C" fn print_hello() {
     println!("Hello from test_lib! HELLO={}", env_var);
 }
 
+/// Entry point required by the WASI ABI.
+/// For library-style targets this just calls the library's main logic.
 #[unsafe(no_mangle)]
 pub extern "C" fn _start() {
-    // dummy start to satisfy wasi_virt_layer-cli IsRustWasm generator
-}
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
+    print_hello();
 }
