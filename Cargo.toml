@@ -64,14 +64,16 @@ members = [
     "examples/test_wasm/test_atomic_wait",
     "examples/vfs/atomic_wait_vfs",
     "examples/test_wasm/test_mkdir",
-    "examples/vfs/mkdir_vfs", "examples/test_wasm/test_lib", "examples/vfs/lib_vfs",
+    "examples/vfs/mkdir_vfs",
+    "examples/test_wasm/test_lib",
+    "examples/vfs/lib_vfs",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]
-version = "0.4.10"
+version = "0.4.11"
 edition = "2024"
 description = ""
 rust-version = "1.89.0"
