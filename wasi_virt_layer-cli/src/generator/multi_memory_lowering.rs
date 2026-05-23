@@ -1290,7 +1290,7 @@ impl MultiMemoryLowering {
 
             module
                 .funcs
-                .all_rewrite(
+                .par_all_rewrite(
                     |instr, _| match instr {
                         Instr::GlobalSet(GlobalSet { global }) if *global == global_id => {
                             *instr = Instr::Call(Call {

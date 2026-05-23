@@ -191,7 +191,7 @@ fn replace_memory_grow(module: &mut Module, grow_fn: walrus::FunctionId) -> eyre
     // The metadata_ptr will need to be injected via wrapper functions or globals
     // This is a complex transformation that requires careful stack management
 
-    module.funcs.all_rewrite(
+    module.funcs.par_all_rewrite(
         |instr, _| {
             if matches!(instr, Instr::MemoryGrow(_)) {
                 log::debug!("Replacing memory.grow instruction");

@@ -25,7 +25,7 @@ macro_rules! get_instr {
 
 /// readjust is broken but check is not broken I think.
 pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result<bool> {
-    let mut changed = 0;
+    let changed = std::sync::atomic::AtomicUsize::new(0);
 
     let debugger = "debug_call_function_start".get_fid(&module.exports)?;
 
@@ -33,10 +33,15 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
 
     let excludes = gen_exclude_set(module).wrap_err("Failed to generate exclude set")?;
 
-    module
+    let funcs: Vec<(walrus::FunctionId, &mut walrus::LocalFunction)> = module
         .funcs
         .iter_local_mut()
         .filter(|(func, _)| !excludes.contains(func))
+        .collect();
+
+    use rayon::prelude::*;
+    funcs
+        .into_par_iter()
         .try_for_each(|(fid, func)| {
             use walrus::ir::*;
 
@@ -82,7 +87,7 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                             || (*func == finalize && seq_id != entry_id && pos != len - 1))
                     {
                         *instr = Instr::Drop(Drop {});
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                         // eprintln!("### pos: {pos}, seq: {seq_id:?}, removed unwanted call");
                     }
                 })?;
@@ -119,19 +124,19 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                         // eprintln!("pos: {pos}, seq: {seq:?}, added both");
                         seq.const_at(pos + 2, Value::I32(fid));
                         seq.call_at(pos + 3, caller);
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     (None, Some(_)) => {
                         // eprintln!("pos: {pos}, seq: {seq:?}, added before");
                         seq.instrs_mut().remove(pos);
                         seq.const_at(pos, Value::I32(fid));
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     (Some(_), None) => {
                         // eprintln!("pos: {pos}, seq: {seq:?}, added after");
                         seq.instrs_mut().remove(pos + 1);
                         seq.call_at(pos + 1, caller);
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
                 eyre::Ok(())
@@ -154,19 +159,19 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
                         // eprintln!("pos: {pos}, seq: {seq:?}, added both");
                         seq.const_at(pos, Value::I32(fid));
                         seq.call_at(pos + 1, caller);
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     (None, Some(_)) => {
                         // eprintln!("pos: {pos}, seq: {seq:?}, added before");
                         seq.instrs_mut().remove(pos);
                         seq.const_at(pos, Value::I32(fid));
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                     (Some(_), None) => {
                         // eprintln!("pos: {pos}, seq: {seq:?}, added after");
                         seq.instrs_mut().remove(pos + 1);
                         seq.call_at(pos + 1, caller);
-                        changed += 1;
+                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     }
                 }
                 eyre::Ok(())
@@ -177,9 +182,10 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
             eyre::Ok(())
         })?;
 
-    eprintln!("Readjusted debug_call_function, changes made: {changed}");
+    let final_changed = changed.into_inner();
+    eprintln!("Readjusted debug_call_function, changes made: {final_changed}");
 
-    Ok(changed != 0)
+    Ok(final_changed != 0)
 }
 
 const EXCLUDE_NAMES: &[&str] = &[
@@ -344,10 +350,15 @@ pub fn generate_debug_call_function_last(module: &mut walrus::Module) -> eyre::R
             .map(|(i, fid)| (fid, i + import_count))
             .collect();
 
-        module
+        let funcs: Vec<(walrus::FunctionId, &mut walrus::LocalFunction)> = module
             .funcs
             .iter_local_mut()
             .filter(|(func, _)| !excludes.contains(func))
+            .collect();
+            
+        use rayon::prelude::*;
+        funcs
+            .into_par_iter()
             .try_for_each(|(fid, func)| {
                 let fid = fids_with_size
                     .get(&fid)

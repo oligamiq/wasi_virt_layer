@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.12] - 2026-05-23
+### Changed
+- **Parallelized Wasm Processing**: Introduced `rayon` to parallelize Wasm modification and generation steps (e.g., rewriting multi-memory, shared globals, atomic waits, unreachable wrappers, etc.) inside the CLI for single-module processing. This significantly improves transpilation speed for large Wasm modules without increasing memory overhead via parallel target generation.
+
 ## [0.4.10] - 2026-05-22
 ### Fixed
 - **Development Mode Optimization**: Fixed an issue where the `--dev` flag did not completely skip `wasm-opt` for target Wasm modules. Ensure target Wasm optimizations are fully bypassed when using `--dev`.

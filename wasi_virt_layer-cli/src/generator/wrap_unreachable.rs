@@ -525,15 +525,22 @@ impl Generator for WrapUnreachableGenerator {
         // bypassing the fix_exit_code logic.
         let func_ids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
 
-        for fid in func_ids {
-            let return_types = module
-                .types
-                .get(module.funcs.get(fid).ty())
-                .results()
-                .to_vec();
+        use rayon::prelude::*;
+        let mut scan_results: Vec<(FunctionId, Vec<ValType>, InstrScanResult)> = func_ids
+            .par_iter()
+            .map(|&fid| {
+                let return_types = module
+                    .types
+                    .get(module.funcs.get(fid).ty())
+                    .results()
+                    .to_vec();
 
-            let mut scan = scan_instructions(module.funcs.get(fid).kind.unwrap_local());
+                let scan = scan_instructions(module.funcs.get(fid).kind.unwrap_local());
+                (fid, return_types, scan)
+            })
+            .collect();
 
+        for (fid, return_types, mut scan) in scan_results {
             let func_mut = module.funcs.get_mut(fid).kind.unwrap_local_mut();
             patch_unreachables(func_mut, &mut scan.unreachables, flag_global, &return_types);
             hook_calls(func_mut, &mut scan.calls, flag_global, &return_types);

@@ -425,9 +425,10 @@ impl Generator for AtomicPatch {
         }
 
         // --- Pass 2: Rewrite all atomic.wait/notify to calls ---
-        for (_fid, func) in module.funcs.iter_local_mut() {
-            let mut builder = func.builder_mut();
-            let mut body = builder.func_body();
+        let funcs: Vec<(walrus::FunctionId, &mut walrus::LocalFunction)> = module.funcs.iter_local_mut().collect();
+        use rayon::prelude::*;
+        funcs.into_par_iter().try_for_each(|(_fid, func)| {
+            let mut body = func.builder_mut().func_body();
             
             body.rewrite(|instr, _pos| {
                 let new_instr = match instr {
@@ -450,7 +451,9 @@ impl Generator for AtomicPatch {
                     *instr = n;
                 }
             }).map_err(|e| eyre::eyre!("{e}"))?;
-        }
+            
+            eyre::Ok(())
+        })?;
 
         Ok(())
     }

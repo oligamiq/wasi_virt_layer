@@ -180,6 +180,31 @@ pub(crate) trait WalrusUtilFuncs {
     ) -> eyre::Result<Vec<T>>
     where
         Self: Sized;
+
+    fn par_flat_read<T: Send>(
+        &self,
+        find: impl Fn(&ir::Instr, (usize, InstrSeqId)) -> T + Sync + Send,
+        fid: impl Borrow<FunctionId>,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
+
+    fn par_all_rewrite<T: Send>(
+        &mut self,
+        find: impl Fn(&mut ir::Instr, (usize, InstrSeqId)) -> T + Sync + Send,
+        exclude: &[impl Borrow<FunctionId> + Sync],
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
+
+    fn par_flat_rewrite<T: Send>(
+        &mut self,
+        find: impl Fn(&mut ir::Instr, (usize, InstrSeqId)) -> T + Sync + Send,
+        fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized;
 }
 
 #[allow(dead_code)]
@@ -2066,6 +2091,43 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
             .collect()
     }
 
+    fn par_flat_read<T: Send>(
+        &self,
+        find: impl Fn(&ir::Instr, (usize, InstrSeqId)) -> T + Sync + Send,
+        fid: impl Borrow<FunctionId>,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        use rayon::prelude::*;
+        let children = self.find_children_with(fid, false)?;
+        
+        let funcs: Vec<&walrus::LocalFunction> = children.iter()
+            .filter_map(|fid| {
+                if let walrus::FunctionKind::Local(loc) = &self.get(*fid).kind {
+                    Some(loc)
+                } else {
+                    None
+                }
+            })
+            .collect();
+            
+        funcs.into_par_iter()
+            .map(|func| {
+                let mut results = vec![];
+                func.read(&mut |instr: &walrus::ir::Instr, loc: (usize, InstrSeqId)| -> Result<(), eyre::Error> {
+                    results.push(find(instr, loc));
+                    Ok(())
+                }).unwrap();
+                results
+            })
+            .collect::<Vec<Vec<T>>>()
+            .into_iter()
+            .flatten()
+            .map(Ok)
+            .collect::<eyre::Result<Vec<T>>>()
+    }
+
     fn all_rewrite<T>(
         &mut self,
         mut find: impl FnMut(&mut ir::Instr, (usize, InstrSeqId)) -> T,
@@ -2083,6 +2145,53 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
             .map(|fid| self.rewrite(&mut find, fid))
             .flatten_ok()
             .collect()
+    }
+
+    fn par_all_rewrite<T: Send>(
+        &mut self,
+        find: impl Fn(&mut ir::Instr, (usize, InstrSeqId)) -> T + Sync + Send,
+        exclude: &[impl Borrow<FunctionId> + Sync],
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        use rayon::prelude::*;
+        let exclude = exclude.iter().map(|e| *e.borrow()).collect::<Vec<_>>();
+        
+        let funcs: Vec<(FunctionId, &mut walrus::LocalFunction)> = self.iter_local_mut()
+            .filter(|(fid, _)| !exclude.contains(fid))
+            .collect();
+            
+        funcs.into_par_iter()
+            .map(|(_, func)| {
+                func.builder_mut().func_body().rewrite(|instr, loc| find(instr, loc))
+            })
+            .collect::<eyre::Result<Vec<Vec<T>>>>()
+            .map(|res| res.into_iter().flatten().collect())
+    }
+
+    fn par_flat_rewrite<T: Send>(
+        &mut self,
+        find: impl Fn(&mut ir::Instr, (usize, InstrSeqId)) -> T + Sync + Send,
+        fid: impl Borrow<FunctionId>,
+        allow_call_indirect: bool,
+    ) -> eyre::Result<Vec<T>>
+    where
+        Self: Sized,
+    {
+        use rayon::prelude::*;
+        let children = self.find_children_with(fid, allow_call_indirect)?;
+        
+        let funcs: Vec<(FunctionId, &mut walrus::LocalFunction)> = self.iter_local_mut()
+            .filter(|(fid, _)| children.contains(fid))
+            .collect();
+            
+        funcs.into_par_iter()
+            .map(|(_, func)| {
+                func.builder_mut().func_body().rewrite(|instr, loc| find(instr, loc))
+            })
+            .collect::<eyre::Result<Vec<Vec<T>>>>()
+            .map(|res| res.into_iter().flatten().collect())
     }
 }
 

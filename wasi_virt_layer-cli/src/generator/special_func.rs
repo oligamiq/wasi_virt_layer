@@ -510,7 +510,7 @@ impl Generator for MainVoidFunc {
                 if call_main_void == 0 {
                     let call_count = module
                         .funcs
-                        .flat_read(
+                        .par_flat_read(
                             |instr, _| {
                                 if let walrus::ir::Instr::Call(c) = instr {
                                     if c.func == main_void_func_id { 1 } else { 0 }
@@ -549,7 +549,7 @@ impl Generator for MainVoidFunc {
                         module.nested_copy_func(start_fn_id, &[start_fn_id], true, true)?;
                     module
                         .funcs
-                        .flat_rewrite(
+                        .par_flat_rewrite(
                             |instr, _| {
                                 if let walrus::ir::Instr::Call(c) = instr {
                                     if c.func == main_void_func_id {

@@ -135,7 +135,7 @@ impl SharedGlobal {
         Self::remove_gen_custom_locker_base(module, ctx.unstable_print_debug)
             .wrap_err("Failed to remove base locker function")?;
 
-        module.funcs.all_rewrite(
+        module.funcs.par_all_rewrite(
             |instr, _| {
                 if let Instr::MemoryGrow(MemoryGrow { memory, .. }) = instr {
                     *instr = Instr::Call(Call {
@@ -268,7 +268,7 @@ impl SharedGlobal {
                 let new_locker =
                     module.nested_copy_func(*locker_id, &[] as &[FunctionId], true, true)?;
 
-                module.funcs.flat_rewrite(
+                module.funcs.par_flat_rewrite(
                     |instr, _| match instr {
                         Instr::GlobalGet(GlobalGet { global }) if *global == global_id => {
                             *instr = Instr::Call(Call {
@@ -292,7 +292,7 @@ impl SharedGlobal {
 
             module
                 .funcs
-                .all_rewrite(
+                .par_all_rewrite(
                     |instr, _| match instr {
                         walrus::ir::Instr::GlobalSet(walrus::ir::GlobalSet { global })
                             if *global == global_id =>
