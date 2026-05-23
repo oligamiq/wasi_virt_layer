@@ -41,6 +41,8 @@ pub mod test_run;
 pub mod unique_name;
 /// General utility functions for CLI logic and AST operations.
 pub mod util;
+/// Streaming Wasm module modification engine.
+// pub mod wasm_stream;
 
 /// Central execution entrypoint for the CLI logic
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
