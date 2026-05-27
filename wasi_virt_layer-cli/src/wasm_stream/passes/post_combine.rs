@@ -61,7 +61,7 @@ impl StreamPass for PostCombineStreamPass {
                         for i in group?.into_iter() {
                             let (_, import) = i?;
                             if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
-                                let is_special = import.module == "wasip1-vfs" && import.name.starts_with("__wasip1_vfs_") && (
+                                let is_special = (import.module == "wasip1-vfs" && import.name.starts_with("__wasip1_vfs_") && (
                                     import.name.ends_with("_memory_copy_from") ||
                                     import.name.ends_with("_memory_copy_to") ||
                                     import.name.ends_with("_memory_trap") ||
@@ -70,7 +70,7 @@ impl StreamPass for PostCombineStreamPass {
                                     import.name.ends_with("__main_void") ||
                                     import.name.ends_with("_wasi_thread_start") ||
                                     import.name.ends_with("_reset_on_thread_once")
-                                );
+                                )) || (import.module == "wasip1-vfs_single_memory" && import.name == "__wasip1_vfs_memory_grow_alt");
                                 
                                 if is_special {
                                     info.dropped_imports.insert(func_import_count, import.name.to_string());
@@ -206,44 +206,76 @@ impl StreamPass for PostCombineStreamPass {
             func_map,
         };
         
-        let mut type_mem_copy = 0;
-        let mut type_void_void = 0;
-        let mut type_void_i32 = 0;
-        let mut type_i32_i32_void = 0;
+        let mut type_mem_copy = None;
+        let mut type_void_void = None;
+        let mut type_void_i32 = None;
+        let mut type_i32_i32_void = None;
+        let mut type_i32_i32 = None;
         let mut has_start_section_emitted = false;
         
         let mut data_section_opt = None;
         let mut is_after_code = false;
-        let mut custom_sections_after_code = Vec::new();
+        let mut custom_sections_after_code: Vec<(String, Vec<u8>)> = Vec::new();
         
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             match payload? {
                 wasmparser::Payload::TypeSection(s) => {
+                    let mut type_count = 0;
                     for ty in s {
                         let ty = ty?;
-                        for sub_ty in ty.into_types() {
-                            let func_ty = sub_ty.unwrap_func();
-                            let enc_params = func_ty.params().iter().copied().map(|t| crate::wasm_stream::translator::translate_val_type(t)).collect::<Vec<_>>();
-                            let enc_results = func_ty.results().iter().copied().map(|t| crate::wasm_stream::translator::translate_val_type(t)).collect::<Vec<_>>();
-                            type_section.ty().function(enc_params, enc_results);
+                        for sub_ty in ty.clone().into_types() {
+                            if let wasmparser::CompositeInnerType::Func(f) = &sub_ty.composite_type.inner {
+                                if f.params() == [wasmparser::ValType::I32, wasmparser::ValType::I32, wasmparser::ValType::I32] && f.results().is_empty() {
+                                    type_mem_copy = Some(type_count);
+                                } else if f.params().is_empty() && f.results().is_empty() {
+                                    type_void_void = Some(type_count);
+                                } else if f.params().is_empty() && f.results() == [wasmparser::ValType::I32] {
+                                    type_void_i32 = Some(type_count);
+                                } else if f.params() == [wasmparser::ValType::I32, wasmparser::ValType::I32] && f.results().is_empty() {
+                                    type_i32_i32_void = Some(type_count);
+                                } else if f.params() == [wasmparser::ValType::I32] && f.results() == [wasmparser::ValType::I32] {
+                                    type_i32_i32 = Some(type_count);
+                                }
+                            }
                         }
+                        if ty.is_explicit_rec_group() {
+                            let rec_types = ty.into_types().map(|sub_ty| {
+                                crate::wasm_stream::translator::translate_sub_type(&sub_ty, &rebinder)
+                            }).collect::<Vec<_>>();
+                            type_section.ty().rec(rec_types);
+                        } else {
+                            for sub_ty in ty.into_types() {
+                                type_section.ty().subtype(&crate::wasm_stream::translator::translate_sub_type(&sub_ty, &rebinder));
+                            }
+                        }
+                        type_count += 1;
                     }
                     
-                    type_mem_copy = type_count;
-                    type_section.ty().function(vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32, wasm_encoder::ValType::I32], vec![]);
-                    type_count += 1;
-                    
-                    type_void_void = type_count;
-                    type_section.ty().function(vec![], vec![]);
-                    type_count += 1;
-                    
-                    type_void_i32 = type_count;
-                    type_section.ty().function(vec![], vec![wasm_encoder::ValType::I32]);
-                    type_count += 1;
-                    
-                    type_i32_i32_void = type_count;
-                    type_section.ty().function(vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32], vec![]);
-                    type_count += 1;
+                    if type_mem_copy.is_none() {
+                        type_mem_copy = Some(type_count);
+                        type_section.ty().function(vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32, wasm_encoder::ValType::I32], vec![]);
+                        type_count += 1;
+                    }
+                    if type_void_void.is_none() {
+                        type_void_void = Some(type_count);
+                        type_section.ty().function(vec![], vec![]);
+                        type_count += 1;
+                    }
+                    if type_void_i32.is_none() {
+                        type_void_i32 = Some(type_count);
+                        type_section.ty().function(vec![], vec![wasm_encoder::ValType::I32]);
+                        type_count += 1;
+                    }
+                    if type_i32_i32_void.is_none() {
+                        type_i32_i32_void = Some(type_count);
+                        type_section.ty().function(vec![wasm_encoder::ValType::I32, wasm_encoder::ValType::I32], vec![]);
+                        type_count += 1;
+                    }
+                    if type_i32_i32.is_none() {
+                        type_i32_i32 = Some(type_count);
+                        type_section.ty().function(vec![wasm_encoder::ValType::I32], vec![wasm_encoder::ValType::I32]);
+                        type_count += 1;
+                    }
                     
                     module.section(&type_section);
                 }
@@ -263,9 +295,9 @@ impl StreamPass for PostCombineStreamPass {
                                 idx += 1;
                             } else {
                                 let entity = match import.ty {
-                                    wasmparser::TypeRef::Table(t) => EntityType::Table(crate::wasm_stream::translator::translate_table_type(t)),
+                                    wasmparser::TypeRef::Table(t) => EntityType::Table(crate::wasm_stream::translator::translate_table_type(t, &rebinder)),
                                     wasmparser::TypeRef::Memory(t) => EntityType::Memory(crate::wasm_stream::translator::translate_memory_type(t)),
-                                    wasmparser::TypeRef::Global(g) => EntityType::Global(crate::wasm_stream::translator::translate_global_type(g)),
+                                    wasmparser::TypeRef::Global(g) => EntityType::Global(crate::wasm_stream::translator::translate_global_type(g, &rebinder)),
                                     wasmparser::TypeRef::Tag(t) => EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t)),
                                     _ => unimplemented!(),
                                 };
@@ -287,23 +319,25 @@ impl StreamPass for PostCombineStreamPass {
                     for orig_idx in &dropped_func_original_indices {
                         let name = info.dropped_imports.get(orig_idx).unwrap();
                         if name.contains("memory_copy") {
-                            function_section.function(type_mem_copy);
+                            function_section.function(type_mem_copy.unwrap());
+                        } else if name.ends_with("_memory_grow_alt") {
+                            function_section.function(type_i32_i32.unwrap());
                         } else if name.ends_with("___main_void") {
-                            function_section.function(type_void_i32);
+                            function_section.function(type_void_i32.unwrap());
                         } else if name.ends_with("_wasi_thread_start") {
-                            function_section.function(type_i32_i32_void);
+                            function_section.function(type_i32_i32_void.unwrap());
                         } else {
-                            function_section.function(type_void_void);
+                            function_section.function(type_void_void.unwrap());
                         }
                     }
-                    function_section.function(type_void_void); // start
+                    function_section.function(type_void_void.unwrap()); // start
                     
                     module.section(&function_section);
                 }
                 wasmparser::Payload::TableSection(s) => {
                     let mut tables = wasm_encoder::TableSection::new();
                     for table in s {
-                        tables.table(crate::wasm_stream::translator::translate_table_type(table?.ty));
+                        tables.table(crate::wasm_stream::translator::translate_table_type(table?.ty, &rebinder));
                     }
                     module.section(&tables);
                 }
@@ -324,7 +358,7 @@ impl StreamPass for PostCombineStreamPass {
                             instrs.push(crate::wasm_stream::translator::translate(&op, &rebinder));
                         }
                         let init_expr = wasm_encoder::ConstExpr::extended(instrs);
-                        global_section.global(crate::wasm_stream::translator::translate_global_type(global.ty), &init_expr);
+                        global_section.global(crate::wasm_stream::translator::translate_global_type(global.ty, &rebinder), &init_expr);
                     }
                     module.section(&global_section);
                 }
@@ -405,7 +439,7 @@ impl StreamPass for PostCombineStreamPass {
                     let mut locals = Vec::new();
                     for local in body.get_locals_reader()? {
                         let local = local?;
-                        locals.push((local.0, crate::wasm_stream::translator::translate_val_type(local.1)));
+                        locals.push((local.0, crate::wasm_stream::translator::translate_val_type(local.1, &rebinder)));
                     }
                     let mut func = wasm_encoder::Function::new(locals);
                     for op in body.get_operators_reader()? {
@@ -438,9 +472,12 @@ impl StreamPass for PostCombineStreamPass {
                 }
                 wasmparser::Payload::CustomSection(s) => {
                     if is_after_code {
-                        custom_sections_after_code.push(s.data().to_vec());
+                        custom_sections_after_code.push((s.name().to_string(), s.data().to_vec()));
                     } else {
-                        module.section(&RawSection { id: 0, data: s.data() });
+                        module.section(&wasm_encoder::CustomSection {
+                            name: s.name().into(),
+                            data: std::borrow::Cow::Borrowed(s.data()),
+                        });
                     }
                 }
                 _ => {} // Other sections we pass through or ignore
@@ -468,6 +505,10 @@ impl StreamPass for PostCombineStreamPass {
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if name.ends_with("_memory_trap") {
                 func.instruction(&wasm_encoder::Instruction::Unreachable);
+                func.instruction(&wasm_encoder::Instruction::End);
+            } else if name.ends_with("_memory_grow_alt") {
+                func.instruction(&wasm_encoder::Instruction::LocalGet(0));
+                func.instruction(&wasm_encoder::Instruction::MemoryGrow(0));
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if name.ends_with("__start") || name.ends_with("__main_void") {
                 let target_name = if name.ends_with("__start") {
@@ -522,8 +563,11 @@ impl StreamPass for PostCombineStreamPass {
         if let Some(ds) = data_section_opt {
             module.section(&ds);
         }
-        for custom_data in custom_sections_after_code {
-            module.section(&RawSection { id: 0, data: &custom_data });
+        for (name, custom_data) in custom_sections_after_code {
+            module.section(&wasm_encoder::CustomSection {
+                name: name.into(),
+                data: std::borrow::Cow::Borrowed(&custom_data),
+            });
         }
         
         let finished = module.finish();

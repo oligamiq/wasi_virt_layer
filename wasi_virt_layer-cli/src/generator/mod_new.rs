@@ -8,6 +8,7 @@ pub mod check;
 pub mod debug;
 /// Generates and bridges memory copy, trap, and related VFS interactions.
 pub mod memory;
+pub mod memory_post_components;
 /// Routines for stripping or patching unused WASM components.
 pub mod patch_component;
 /// Embeds module metadata.
@@ -973,7 +974,21 @@ impl GeneratorRunner {
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in run_pre_vfs")
             })
-            .wrap_run(path, dwarf, keep_build_artifacts, None)
+            .wrap_run(path, dwarf, keep_build_artifacts, {
+                let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
+                use crate::wasm_stream::passes::{starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass};
+                pipeline.add_pass(Box::new(StartsPreStreamPass::new(true, self.ctx.vfs_is_library, "__flesh_vfs_start".to_string())));
+                if !self.ctx.vfs_is_library {
+                    pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
+                        "__thread_patch".to_string(),
+                        "__init_offset_global".to_string(),
+                        "__save_target_memory".to_string(),
+                        "__simple_debug_wasip1_vfs_pre_init".to_string(),
+                    ])));
+                }
+                pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(None)));
+                Some(pipeline)
+            })
         })
         .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_vfs_opt)?;
 
@@ -997,7 +1012,16 @@ impl GeneratorRunner {
                         .pre_target(module, &self.ctx, &external)
                         .wrap_err("Failed in run_pre_target")
                 })
-                .wrap_run(path, dwarf, keep_build_artifacts, None)
+                .wrap_run(path, dwarf, keep_build_artifacts, {
+                    let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
+                    use crate::wasm_stream::passes::{starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass};
+                    let export_name = format!("__flesh_{}_start", external.name);
+                    pipeline.add_pass(Box::new(StartsPreStreamPass::new(false, false, export_name.clone())));
+                    pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![export_name])));
+                    let new_memory_name = crate::generator::UniqueName::Memory(&crate::generator::MemoryUniqueName::Memory(&external.name)).to_string();
+                    pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(Some(new_memory_name))));
+                    Some(pipeline)
+                })
             })
             .with_opt(target, dwarf, keep_build_artifacts, skip_target_opt)?;
         }
@@ -1848,8 +1872,7 @@ pub fn merge(
         .arg("--output")
         .arg(output.as_ref().as_os_str().to_str().unwrap())
         // .arg("--rename-export-conflicts")
-        .arg("--enable-multimemory")
-        .arg("--enable-threads");
+        .arg("--all-features");
 
     let result = merge_cmd
         .spawn()
@@ -1863,7 +1886,9 @@ pub fn merge(
         .wrap_err("Failed to wait for wasm-merge process")?;
 
     if !result.success {
-        let error_message = String::from_utf8_lossy(&result.stdout);
+        let stdout = String::from_utf8_lossy(&result.stdout);
+        let stderr = String::from_utf8_lossy(&result.stderr);
+        let error_message = format!("stdout: {stdout}\nstderr: {stderr}");
 
         return Err(eyre::eyre!("wasm-merge command failed: {error_message}"));
     }

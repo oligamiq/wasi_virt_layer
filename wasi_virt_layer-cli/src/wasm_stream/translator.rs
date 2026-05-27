@@ -21,9 +21,9 @@ pub fn translate_memory_type(t: wasmparser::MemoryType) -> wasm_encoder::MemoryT
     }
 }
 
-pub fn translate_table_type(t: wasmparser::TableType) -> wasm_encoder::TableType {
+pub fn translate_table_type<R: Rebind>(t: wasmparser::TableType, rebinder: &R) -> wasm_encoder::TableType {
     wasm_encoder::TableType {
-        element_type: translate_ref_type(t.element_type),
+        element_type: translate_ref_type(t.element_type, rebinder),
         minimum: t.initial,
         maximum: t.maximum,
         shared: t.shared,
@@ -31,9 +31,9 @@ pub fn translate_table_type(t: wasmparser::TableType) -> wasm_encoder::TableType
     }
 }
 
-pub fn translate_global_type(t: wasmparser::GlobalType) -> wasm_encoder::GlobalType {
+pub fn translate_global_type<R: Rebind>(t: wasmparser::GlobalType, rebinder: &R) -> wasm_encoder::GlobalType {
     wasm_encoder::GlobalType {
-        val_type: translate_val_type(t.content_type),
+        val_type: translate_val_type(t.content_type, rebinder),
         mutable: t.mutable,
         shared: false,
     }
@@ -50,15 +50,66 @@ pub fn translate_tag_type(t: wasmparser::TagType) -> wasm_encoder::TagType {
 
 
 
-pub fn translate_ref_type(r: wasmparser::RefType) -> wasm_encoder::RefType {
-    match r {
-        wasmparser::RefType::FUNCREF => wasm_encoder::RefType::FUNCREF,
-        wasmparser::RefType::EXTERNREF => wasm_encoder::RefType::EXTERNREF,
-        wasmparser::RefType::EXNREF => wasm_encoder::RefType::EXNREF,
-        wasmparser::RefType::ANYREF => wasm_encoder::RefType::ANYREF,
-        wasmparser::RefType::EQREF => wasm_encoder::RefType::EQREF,
-        wasmparser::RefType::I31REF => wasm_encoder::RefType::I31REF,
-        _ => unimplemented!(),
+pub fn translate_ref_type<R: Rebind>(r: wasmparser::RefType, rebinder: &R) -> wasm_encoder::RefType {
+    wasm_encoder::RefType {
+        nullable: r.is_nullable(),
+        heap_type: translate_heap_type(r.heap_type(), rebinder),
+    }
+}
+
+pub fn translate_heap_type<R: Rebind>(h: wasmparser::HeapType, rebinder: &R) -> wasm_encoder::HeapType {
+    match h {
+        wasmparser::HeapType::Abstract { shared, ty } => wasm_encoder::HeapType::Abstract {
+            shared,
+            ty: translate_abstract_heap_type(ty),
+        },
+        wasmparser::HeapType::Concrete(wasmparser::UnpackedIndex::Module(idx)) => {
+            wasm_encoder::HeapType::Concrete(rebinder.ty(idx))
+        }
+        wasmparser::HeapType::Concrete(_) => unimplemented!("Concrete heap type other than Module not supported yet"),
+        wasmparser::HeapType::Exact(wasmparser::UnpackedIndex::Module(idx)) => {
+            wasm_encoder::HeapType::Exact(rebinder.ty(idx))
+        }
+        wasmparser::HeapType::Exact(_) => unimplemented!("Exact heap type other than Module not supported yet"),
+    }
+}
+
+pub fn translate_sub_type<R: Rebind>(sub_ty: &wasmparser::SubType, rebinder: &R) -> wasm_encoder::SubType {
+    let composite_type = match &sub_ty.composite_type.inner {
+        wasmparser::CompositeInnerType::Func(f) => {
+            let params = f.params().iter().copied().map(|t| translate_val_type(t, rebinder)).collect::<Vec<_>>();
+            let results = f.results().iter().copied().map(|t| translate_val_type(t, rebinder)).collect::<Vec<_>>();
+            wasm_encoder::CompositeType {
+                inner: wasm_encoder::CompositeInnerType::Func(wasm_encoder::FuncType::new(params, results)),
+                shared: sub_ty.composite_type.shared,
+                descriptor: sub_ty.composite_type.descriptor_idx.map(|idx| rebinder.ty(idx.as_module_index().unwrap())),
+                describes: sub_ty.composite_type.describes_idx.map(|idx| rebinder.ty(idx.as_module_index().unwrap())),
+            }
+        }
+        _ => unimplemented!("translate_sub_type: {:?}", sub_ty),
+    };
+    wasm_encoder::SubType {
+        is_final: sub_ty.is_final,
+        supertype_idx: sub_ty.supertype_idx.map(|idx| rebinder.ty(idx.as_module_index().unwrap())),
+        composite_type,
+    }
+}
+
+pub fn translate_abstract_heap_type(t: wasmparser::AbstractHeapType) -> wasm_encoder::AbstractHeapType {
+    match t {
+        wasmparser::AbstractHeapType::Func => wasm_encoder::AbstractHeapType::Func,
+        wasmparser::AbstractHeapType::Extern => wasm_encoder::AbstractHeapType::Extern,
+        wasmparser::AbstractHeapType::Any => wasm_encoder::AbstractHeapType::Any,
+        wasmparser::AbstractHeapType::None => wasm_encoder::AbstractHeapType::None,
+        wasmparser::AbstractHeapType::NoExtern => wasm_encoder::AbstractHeapType::NoExtern,
+        wasmparser::AbstractHeapType::NoFunc => wasm_encoder::AbstractHeapType::NoFunc,
+        wasmparser::AbstractHeapType::Eq => wasm_encoder::AbstractHeapType::Eq,
+        wasmparser::AbstractHeapType::Struct => wasm_encoder::AbstractHeapType::Struct,
+        wasmparser::AbstractHeapType::Array => wasm_encoder::AbstractHeapType::Array,
+        wasmparser::AbstractHeapType::I31 => wasm_encoder::AbstractHeapType::I31,
+        wasmparser::AbstractHeapType::Exn => wasm_encoder::AbstractHeapType::Exn,
+        wasmparser::AbstractHeapType::NoExn => wasm_encoder::AbstractHeapType::NoExn,
+        _ => unimplemented!("translate_abstract_heap_type: {:?}", t),
     }
 }
 
@@ -301,7 +352,7 @@ pub fn translate<'a, R: Rebind>(op: &wasmparser::Operator<'a>, rebinder: &R) -> 
         wasmparser::Operator::TableInit { elem_index, table } => Instruction::TableInit { table: rebinder.table(*table), elem_index: rebinder.elem(*elem_index) },
         wasmparser::Operator::ElemDrop { elem_index } => Instruction::ElemDrop(rebinder.elem(*elem_index)),
         wasmparser::Operator::TableCopy { dst_table, src_table } => Instruction::TableCopy { src_table: rebinder.table(*src_table), dst_table: rebinder.table(*dst_table) },
-        wasmparser::Operator::TypedSelect { ty } => Instruction::TypedSelect(translate_val_type(*ty)),
+        wasmparser::Operator::TypedSelect { ty } => Instruction::TypedSelect(translate_val_type(*ty, rebinder)),
         wasmparser::Operator::TypedSelectMulti { tys } => unimplemented!("TypedSelectMulti: GC types not supported"),
         wasmparser::Operator::RefNull { hty } => unimplemented!("RefNull not supported"),
         wasmparser::Operator::RefIsNull  => Instruction::RefIsNull,
@@ -681,11 +732,11 @@ pub fn translate<'a, R: Rebind>(op: &wasmparser::Operator<'a>, rebinder: &R) -> 
         wasmparser::Operator::ArrayAtomicRmwXchg { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwXchg"),
         wasmparser::Operator::ArrayAtomicRmwCmpxchg { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwCmpxchg"),
         wasmparser::Operator::RefI31Shared  => unimplemented!("RefI31Shared"),
-        wasmparser::Operator::CallRef { type_index } => unimplemented!("CallRef"),
-        wasmparser::Operator::ReturnCallRef { type_index } => unimplemented!("ReturnCallRef"),
+        wasmparser::Operator::CallRef { type_index } => Instruction::CallRef(rebinder.ty(*type_index)),
+        wasmparser::Operator::ReturnCallRef { type_index } => Instruction::ReturnCallRef(rebinder.ty(*type_index)),
         wasmparser::Operator::RefAsNonNull  => unimplemented!("RefAsNonNull"),
-        wasmparser::Operator::BrOnNull { relative_depth } => unimplemented!("BrOnNull"),
-        wasmparser::Operator::BrOnNonNull { relative_depth } => unimplemented!("BrOnNonNull"),
+        wasmparser::Operator::BrOnNull { relative_depth } => Instruction::BrOnNull(*relative_depth),
+        wasmparser::Operator::BrOnNonNull { relative_depth } => Instruction::BrOnNonNull(*relative_depth),
         wasmparser::Operator::ContNew { cont_type_index } => unimplemented!("ContNew"),
         wasmparser::Operator::ContBind { argument_index, result_index } => unimplemented!("ContBind"),
         wasmparser::Operator::Suspend { tag_index } => unimplemented!("Suspend"),
@@ -701,21 +752,21 @@ pub fn translate<'a, R: Rebind>(op: &wasmparser::Operator<'a>, rebinder: &R) -> 
     }
 }
 
-pub fn translate_val_type(ty: wasmparser::ValType) -> wasm_encoder::ValType {
+pub fn translate_val_type<R: Rebind>(ty: wasmparser::ValType, rebinder: &R) -> wasm_encoder::ValType {
     match ty {
         wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
         wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
         wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
         wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
         wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-        wasmparser::ValType::Ref(_) => unimplemented!("Ref types not supported"),
+        wasmparser::ValType::Ref(r) => wasm_encoder::ValType::Ref(translate_ref_type(r, rebinder)),
     }
 }
 
 pub fn translate_block_type<R: Rebind>(bty: wasmparser::BlockType, rebinder: &R) -> wasm_encoder::BlockType {
     match bty {
         wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,
-        wasmparser::BlockType::Type(ty) => wasm_encoder::BlockType::Result(translate_val_type(ty)),
+        wasmparser::BlockType::Type(ty) => wasm_encoder::BlockType::Result(translate_val_type(ty, rebinder)),
         wasmparser::BlockType::FuncType(idx) => wasm_encoder::BlockType::FunctionType(rebinder.ty(idx)),
     }
 }

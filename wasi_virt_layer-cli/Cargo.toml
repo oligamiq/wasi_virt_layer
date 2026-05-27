@@ -13,6 +13,11 @@ publish = true
 name = "wasi_virt_layer"
 path = "src/main.rs"
 
+# [[bin]]
+# name = "gen_translator"
+# path = "src/bin/gen_translator.rs"
+# test = false
+
 [dependencies]
 anyhow = "1.0.102"
 camino = "1.2.2"
@@ -58,8 +63,8 @@ ctrlc = { version = "3.5.2", features = ["termination"] }
 bitvec = "1.0"
 smallvec = { version = "1.15.1", features = ["union", "const_generics"] }
 rayon = "1.12.0"
-wasmparser = "0.250.0"
-wasm-encoder = "0.250.0"
+wasmparser = "0.248.0"
+wasm-encoder = "0.248.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [

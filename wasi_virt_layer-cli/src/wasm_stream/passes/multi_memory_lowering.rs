@@ -46,8 +46,20 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         for i in group?.into_iter() {
                             let (_, i) = i?;
                             match i.ty {
-                                TypeRef::Func(_) => imported_funcs += 1,
+                                TypeRef::Func(_) | TypeRef::FuncExact(_) => imported_funcs += 1,
                                 TypeRef::Global(_) => global_count += 1,
+                                TypeRef::Memory(m) => {
+                                    memory_count += 1;
+                                    memory_initials.push(m.initial);
+                                    total_initial += m.initial;
+                                    if let Some(max) = m.maximum {
+                                        let cur_max = max_pages.unwrap_or(0);
+                                        max_pages = Some(std::cmp::min(cur_max + max, 65536));
+                                    }
+                                    if memory_count == 1 {
+                                        is_shared = m.shared;
+                                    }
+                                }
                                 _ => {}
                             }
                         }
@@ -135,6 +147,8 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let final_size_type_idx = size_type_idx.unwrap_or(types.len() as u32);
         let final_grow_type_idx = grow_type_idx.unwrap_or(if size_type_idx.is_none() { types.len() as u32 + 1 } else { types.len() as u32 });
 
+        let mut emitted_memory = false;
+
         for payload in Parser::new(0).parse_all(input_wasm) {
             let payload = payload?;
             match payload {
@@ -143,30 +157,14 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                     // We must re-encode types to append
                     for t in s {
                         let t = t?;
-                        // For simplicity, we assume we only have Func types in this module.
-                        // We can use translator
-                        for sub_ty in t.into_types() {
-                            match &sub_ty.composite_type.inner {
-                                wasmparser::CompositeInnerType::Func(f) => {
-                                    let params: Vec<_> = f.params().iter().map(|p| match p {
-                                        wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
-                                        wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
-                                        wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
-                                        wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
-                                        wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-                                        _ => unimplemented!(),
-                                    }).collect();
-                                    let results: Vec<_> = f.results().iter().map(|p| match p {
-                                        wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
-                                        wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
-                                        wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
-                                        wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
-                                        wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-                                        _ => unimplemented!(),
-                                    }).collect();
-                                    type_sec.ty().function(params, results);
-                                }
-                                _ => unimplemented!(),
+                        if t.is_explicit_rec_group() {
+                            let rec_types = t.into_types().map(|sub_ty| {
+                                crate::wasm_stream::translator::translate_sub_type(&sub_ty, &crate::wasm_stream::translator::DefaultRebinder)
+                            }).collect::<Vec<_>>();
+                            type_sec.ty().rec(rec_types);
+                        } else {
+                            for sub_ty in t.into_types() {
+                                type_sec.ty().subtype(&crate::wasm_stream::translator::translate_sub_type(&sub_ty, &crate::wasm_stream::translator::DefaultRebinder));
                             }
                         }
                     }
@@ -178,30 +176,64 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                     }
                     encoder.section(&type_sec);
                 }
+                Payload::ImportSection(s) => {
+                    let mut imports = wasm_encoder::ImportSection::new();
+                    for group in s {
+                        for i in group?.into_iter() {
+                            let (_, i) = i?;
+                            match i.ty {
+                                TypeRef::Func(_) | TypeRef::FuncExact(_) | TypeRef::Global(_) | TypeRef::Table(_) | TypeRef::Tag(_) => {
+                                    let entity = match i.ty {
+                                        TypeRef::Func(idx) | TypeRef::FuncExact(idx) => wasm_encoder::EntityType::Function(idx),
+                                        TypeRef::Table(t) => wasm_encoder::EntityType::Table(crate::wasm_stream::translator::translate_table_type(t, &crate::wasm_stream::translator::DefaultRebinder)),
+                                        TypeRef::Global(g) => wasm_encoder::EntityType::Global(crate::wasm_stream::translator::translate_global_type(g, &crate::wasm_stream::translator::DefaultRebinder)),
+                                        TypeRef::Tag(t) => wasm_encoder::EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t)),
+                                        _ => unreachable!(),
+                                    };
+                                    imports.import(i.module, i.name, entity);
+                                }
+                                TypeRef::Memory(_) => {
+                                    // Drop memory imports (they are merged into locally defined memory)
+                                }
+                            }
+                        }
+                    }
+                    if !imports.is_empty() {
+                        encoder.section(&imports);
+                    }
+                }
                 Payload::MemorySection(_) => {
-                    let mut mem_section = wasm_encoder::MemorySection::new();
-                    mem_section.memory(wasm_encoder::MemoryType {
-                        minimum: total_initial,
-                        maximum: max_pages,
-                        memory64: false,
-                        shared: is_shared,
-                        page_size_log2: None,
-                    });
-                    encoder.section(&mem_section);
+                    if !emitted_memory {
+                        emitted_memory = true;
+                        let mut mem_section = wasm_encoder::MemorySection::new();
+                        mem_section.memory(wasm_encoder::MemoryType {
+                            minimum: total_initial,
+                            maximum: max_pages,
+                            memory64: false,
+                            shared: is_shared,
+                            page_size_log2: None,
+                        });
+                        encoder.section(&mem_section);
+                    }
                 }
                 Payload::GlobalSection(s) => {
+                    if !emitted_memory {
+                        emitted_memory = true;
+                        let mut mem_section = wasm_encoder::MemorySection::new();
+                        mem_section.memory(wasm_encoder::MemoryType {
+                            minimum: total_initial,
+                            maximum: max_pages,
+                            memory64: false,
+                            shared: is_shared,
+                            page_size_log2: None,
+                        });
+                        encoder.section(&mem_section);
+                    }
                     let mut global_sec = wasm_encoder::GlobalSection::new();
                     for item in s {
                         let g = item?;
                         let ty = wasm_encoder::GlobalType {
-                            val_type: match g.ty.content_type {
-                                wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
-                                wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
-                                wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
-                                wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
-                                wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-                                _ => unimplemented!(),
-                            },
+                            val_type: crate::wasm_stream::translator::translate_val_type(g.ty.content_type, &crate::wasm_stream::translator::DefaultRebinder),
                             mutable: g.ty.mutable,
                             shared: g.ty.shared,
                         };
@@ -303,14 +335,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         for _ in 0..locals_reader.get_count() {
                             let (count, ty) = locals_reader.read()?;
                             original_locals_count += count;
-                            let enc_ty = match ty {
-                                wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
-                                wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
-                                wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
-                                wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
-                                wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-                                _ => unimplemented!("Unsupported local type {:?}", ty),
-                            };
+                            let enc_ty = crate::wasm_stream::translator::translate_val_type(ty, &crate::wasm_stream::translator::DefaultRebinder);
                             locals.push((count, enc_ty));
                         }
                         
@@ -322,6 +347,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         let tmp_f32 = tmp_base + 4;
                         let tmp_f64 = tmp_base + 5;
                         let tmp_v128 = tmp_base + 6;
+                        let tmp_i64_2 = tmp_base + 7;
 
                         locals.push((1, wasm_encoder::ValType::I32)); // tmp_addr
                         locals.push((1, wasm_encoder::ValType::I32)); // tmp_i32
@@ -330,6 +356,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         locals.push((1, wasm_encoder::ValType::F32)); // tmp_f32
                         locals.push((1, wasm_encoder::ValType::F64)); // tmp_f64
                         locals.push((1, wasm_encoder::ValType::V128)); // tmp_v128
+                        locals.push((1, wasm_encoder::ValType::I64)); // tmp_i64_2
 
                         let mut func = Function::new(locals);
                         let mut reader = func_body.get_operators_reader()?;
@@ -405,58 +432,78 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                     }
                                 }
                                 _ => {
-                                    if let Some((idx, is_store, val_ty)) = crate::wasm_stream::mem_info::memory_op_info(&op) {
-                                        if idx > 0 {
-                                            let offset_idx = orig_global_count + idx - 1;
-                                            
-                                            if !is_store {
-                                                func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_addr));
-                                                if threads {
-                                                    if let Some(acq) = lock_acquire_fn { func.instruction(&wasm_encoder::Instruction::Call(acq)); }
+                                    if let Some(info) = crate::wasm_stream::mem_info::memory_op_info(&op) {
+                                        if info.memory > 0 {
+                                            let offset_idx = orig_global_count + info.memory - 1;
+
+                                            // Helper closure-like mapping for temp locals.
+                                            // For two-operand cases we need distinct temp slots
+                                            // per type.  The "second slot" indices:
+                                            //   i32 -> tmp_i32_2, i64 -> tmp_i64_2
+                                            // (f32/f64/v128 never appear as second operand in
+                                            //  practice, but we panic if they do.)
+                                            let tmp_for = |ty: wasm_encoder::ValType, secondary: bool| -> u32 {
+                                                if !secondary {
+                                                    match ty {
+                                                        wasm_encoder::ValType::I32 => tmp_i32,
+                                                        wasm_encoder::ValType::I64 => tmp_i64,
+                                                        wasm_encoder::ValType::F32 => tmp_f32,
+                                                        wasm_encoder::ValType::F64 => tmp_f64,
+                                                        wasm_encoder::ValType::V128 => tmp_v128,
+                                                        _ => unreachable!(),
+                                                    }
+                                                } else {
+                                                    match ty {
+                                                        wasm_encoder::ValType::I32 => tmp_i32_2,
+                                                        wasm_encoder::ValType::I64 => tmp_i64_2,
+                                                        _ => unreachable!("secondary temp for {:?}", ty),
+                                                    }
                                                 }
-                                                func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_addr));
-                                                func.instruction(&wasm_encoder::Instruction::GlobalGet(offset_idx));
-                                                func.instruction(&wasm_encoder::Instruction::I32Add);
-                                                
-                                            } else {
-                                                let tmp_val = match val_ty {
-                                                    wasm_encoder::ValType::I32 => tmp_i32,
-                                                    wasm_encoder::ValType::I64 => tmp_i64,
-                                                    wasm_encoder::ValType::F32 => tmp_f32,
-                                                    wasm_encoder::ValType::F64 => tmp_f64,
-                                                    wasm_encoder::ValType::V128 => tmp_v128,
-                                                    _ => unreachable!(),
-                                                };
-                                                func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_val));
-                                                func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_addr));
-                                                if threads {
-                                                    if let Some(acq) = lock_acquire_fn { func.instruction(&wasm_encoder::Instruction::Call(acq)); }
-                                                }
-                                                func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_addr));
-                                                func.instruction(&wasm_encoder::Instruction::GlobalGet(offset_idx));
-                                                func.instruction(&wasm_encoder::Instruction::I32Add);
-                                                func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_val));
+                                            };
+
+                                            // Save value operands (top-of-stack first, i.e.
+                                            // in reverse order of value_operands).
+                                            // Stack before: [... addr val0 val1]
+                                            //   LocalSet(tmp_for(val1, secondary=true))
+                                            //   LocalSet(tmp_for(val0, secondary=false))
+                                            //   LocalSet(tmp_addr)
+                                            let n = info.value_operands.len();
+                                            for (i, ty) in info.value_operands.iter().enumerate().rev() {
+                                                let secondary = i > 0; // first operand uses primary, rest use secondary
+                                                func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_for(*ty, secondary)));
                                             }
-                                            
+                                            func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_addr));
+
+                                            // Acquire lock if threaded
+                                            if threads {
+                                                if let Some(acq) = lock_acquire_fn { func.instruction(&wasm_encoder::Instruction::Call(acq)); }
+                                            }
+
+                                            // Push adjusted address
+                                            func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_addr));
+                                            func.instruction(&wasm_encoder::Instruction::GlobalGet(offset_idx));
+                                            func.instruction(&wasm_encoder::Instruction::I32Add);
+
+                                            // Restore value operands in original order
+                                            for (i, ty) in info.value_operands.iter().enumerate() {
+                                                let secondary = i > 0;
+                                                func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_for(*ty, secondary)));
+                                            }
+
+                                            // Emit the instruction with memory index 0
                                             let mut enc_op = crate::wasm_stream::translator::translate(&op, &crate::wasm_stream::translator::DefaultRebinder);
                                             crate::wasm_stream::mem_info::clear_memory_index(&mut enc_op);
                                             func.instruction(&enc_op);
-                                            
+
+                                            // Release lock if threaded
                                             if threads {
                                                 if let Some(rel) = lock_release_fn {
-                                                    // if load, we need to save result, call release, push result
-                                                    if !is_store {
-                                                        let tmp_val = match val_ty {
-                                                            wasm_encoder::ValType::I32 => tmp_i32,
-                                                            wasm_encoder::ValType::I64 => tmp_i64,
-                                                            wasm_encoder::ValType::F32 => tmp_f32,
-                                                            wasm_encoder::ValType::F64 => tmp_f64,
-                                                            wasm_encoder::ValType::V128 => tmp_v128,
-                                                            _ => unreachable!(),
-                                                        };
-                                                        func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_val));
+                                                    // If there's a result, save it, release, restore
+                                                    if let Some(res_ty) = info.result_type {
+                                                        let tmp_res = tmp_for(res_ty, false);
+                                                        func.instruction(&wasm_encoder::Instruction::LocalSet(tmp_res));
                                                         func.instruction(&wasm_encoder::Instruction::Call(rel));
-                                                        func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_val));
+                                                        func.instruction(&wasm_encoder::Instruction::LocalGet(tmp_res));
                                                     } else {
                                                         func.instruction(&wasm_encoder::Instruction::Call(rel));
                                                     }
@@ -466,7 +513,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         }
                                     }
                                     let mut enc_op = crate::wasm_stream::translator::translate(&op, &crate::wasm_stream::translator::DefaultRebinder);
-                                    if let Some((_, _, _)) = crate::wasm_stream::mem_info::memory_op_info(&op) {
+                                    if crate::wasm_stream::mem_info::memory_op_info(&op).is_some() {
                                         crate::wasm_stream::mem_info::clear_memory_index(&mut enc_op);
                                     }
                                     func.instruction(&enc_op);
@@ -584,6 +631,12 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                     }
 
                     encoder.section(&new_code_sec);
+                }
+                Payload::CustomSection(c) => {
+                    encoder.section(&wasm_encoder::CustomSection {
+                        name: c.name().into(),
+                        data: std::borrow::Cow::Borrowed(c.data()),
+                    });
                 }
                 _ => {
                     if let Some((id, range)) = payload.as_section() {

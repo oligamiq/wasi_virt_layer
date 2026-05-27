@@ -66,7 +66,10 @@ impl StreamPass for StartsPreStreamPass {
                     module.section(&exports);
                 }
                 wasmparser::Payload::CustomSection(s) => {
-                    module.section(&RawSection { id: 0, data: s.data() });
+                    module.section(&wasm_encoder::CustomSection {
+                        name: s.name().into(),
+                        data: std::borrow::Cow::Borrowed(s.data()),
+                    });
                 }
                 _ => {
                     if let Some((id, range)) = payload.as_section() {

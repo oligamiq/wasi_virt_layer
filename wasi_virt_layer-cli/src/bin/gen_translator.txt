@@ -93,7 +93,11 @@ fn main() {
                 } else if stringify!($op) == "RefTest" || stringify!($op) == "RefTestNull" || stringify!($op) == "RefCast" || stringify!($op) == "RefCastNull" || stringify!($op) == "BrOnCast" || stringify!($op) == "BrOnCastFail" {
                     println!("unimplemented!(\"Wasm GC cast not supported\"),");
                 } else if stringify!($op) == "RefNull" {
-                    println!("unimplemented!(\"RefNull not supported\"),");
+                    println!("Instruction::RefNull(translate_heap_type(*hty)),");
+                } else if stringify!($op) == "CallRef" {
+                    println!("Instruction::CallRef(rebinder.ty(*type_index)),");
+                } else if stringify!($op) == "ReturnCallRef" {
+                    println!("Instruction::ReturnCallRef(rebinder.ty(*type_index)),");
                 } else if args.contains(&"memarg") {
                     println!("Instruction::{}(translate_memarg(memarg, rebinder)),", stringify!($op));
                 // Unsupported proposals: shared-everything-threads struct/array atomics,

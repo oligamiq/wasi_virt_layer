@@ -82,28 +82,37 @@ impl StreamPass for SharedGlobalStreamPass {
                     for (i, target_name) in self.target_names.iter().enumerate() {
                         let g_id = orig_global_count + i as u32;
                         
-                        let get_fn = get_alt(&format!("__wasip1_vfs_shared_global_fns_global_alt_get_with_lock_{}", target_name)).unwrap_or(0);
-                        let set_fn = get_alt(&format!("__wasip1_vfs_shared_global_fns_global_alt_set_with_lock_{}", target_name)).unwrap_or(0);
-                        let init_fn = get_alt(&format!("__wasip1_vfs_shared_global_fns_global_alt_init_once_{}", target_name)).unwrap_or(0);
+                        let normalized_target = target_name.replace('-', "_");
+                        let prefix = format!("__wasip1_vfs_{normalized_target}_memory_grow_");
                         
-                        global_mappings.insert(g_id, (get_fn, set_fn));
-                        if init_fn > 0 {
-                            init_once_funcs.push(init_fn);
+                        let get_fn_name = format!("{}global_alt_get_with_lock", prefix);
+                        let set_fn_name = format!("{}global_alt_set_with_lock", prefix);
+                        let init_fn_name = format!("{}global_alt_init_once", prefix);
+
+                        let get_fn = get_alt(&get_fn_name).ok();
+                        let set_fn = get_alt(&set_fn_name).ok();
+                        let init_fn = get_alt(&init_fn_name).ok();
+                        
+                        if let (Some(get_fn), Some(set_fn)) = (get_fn, set_fn) {
+                            global_mappings.insert(g_id, (get_fn, set_fn));
+                        }
+                        if let Some(init_fn) = init_fn {
+                            init_once_funcs.push((g_id, init_fn));
                         }
                     }
 
                     // find lockers
                     let mut lockers = HashMap::new();
                     for (name, (kind, idx)) in &exports {
-                        if *kind == wasmparser::ExternalKind::Func && name.starts_with("__wasip1_vfs_shared_global_fns_locker_") {
-                            let mem_id_str = &name["__wasip1_vfs_shared_global_fns_locker_".len()..];
+                        if *kind == wasmparser::ExternalKind::Func && name.starts_with("__wasip1_vfs_memory_grow_locker_") {
+                            let mem_id_str = &name["__wasip1_vfs_memory_grow_locker_".len()..];
                             if let Ok(mem_id) = mem_id_str.parse::<u32>() {
                                 lockers.insert(mem_id, *idx);
                             }
                         }
                     }
 
-                    let reader = wasmparser::BinaryReader::new(&input_wasm[range.start..range.start + size as usize], range.start);
+                    let reader = wasmparser::BinaryReader::new(&input_wasm[range.start..range.end], range.start);
                     let s = wasmparser::CodeSectionReader::new(reader)?;
                     let new_code_sec = par_process_code_section(s, |i, func_body| {
                         let fid = imported_func_count + i as u32;
@@ -112,14 +121,7 @@ impl StreamPass for SharedGlobalStreamPass {
                         let mut locals_reader = func_body.get_locals_reader()?;
                         for _ in 0..locals_reader.get_count() {
                             let (count, ty) = locals_reader.read()?;
-                            let enc_ty = match ty {
-                                wasmparser::ValType::I32 => wasm_encoder::ValType::I32,
-                                wasmparser::ValType::I64 => wasm_encoder::ValType::I64,
-                                wasmparser::ValType::F32 => wasm_encoder::ValType::F32,
-                                wasmparser::ValType::F64 => wasm_encoder::ValType::F64,
-                                wasmparser::ValType::V128 => wasm_encoder::ValType::V128,
-                                _ => unimplemented!(),
-                            };
+                            let enc_ty = crate::wasm_stream::translator::translate_val_type(ty, &crate::wasm_stream::translator::DefaultRebinder);
                             locals.push((count, enc_ty));
                         }
 
@@ -127,7 +129,8 @@ impl StreamPass for SharedGlobalStreamPass {
                         
                         // If this is the start function, prepend init_once calls
                         if Some(fid) == start_func_id {
-                            for init_fn in &init_once_funcs {
+                            for (g_id, init_fn) in &init_once_funcs {
+                                func.instruction(&Instruction::GlobalGet(*g_id));
                                 func.instruction(&Instruction::Call(*init_fn));
                             }
                         }
@@ -165,6 +168,12 @@ impl StreamPass for SharedGlobalStreamPass {
                         Ok(func)
                     })?;
                     encoder.section(&new_code_sec);
+                }
+                wasmparser::Payload::CustomSection(c) => {
+                    encoder.section(&wasm_encoder::CustomSection {
+                        name: c.name().into(),
+                        data: std::borrow::Cow::Borrowed(c.data()),
+                    });
                 }
                 _ => {
                     if let Some((id, range)) = payload.as_section() {

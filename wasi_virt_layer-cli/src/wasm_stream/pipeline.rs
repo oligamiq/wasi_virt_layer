@@ -57,10 +57,16 @@ impl Pipeline {
 
     pub fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
         let mut current_wasm = input_wasm.to_vec();
+        println!("PIPELINE RUN IS EXECUTING!");
         
-        for (idx, pass) in self.passes.iter_mut().enumerate() {
-            current_wasm = pass.run(&current_wasm)
-                .wrap_err_with(|| format!("Failed in pass #{idx}"))?;
+        let mut i = 0;
+        for pass in &mut self.passes {
+            println!("RUNNING PASS #{}", i);
+            current_wasm = pass.run(&current_wasm).wrap_err_with(|| format!("Failed in pass #{i}"))?;
+            let dbg_name = format!("debug_pass_{}_{}.wasm", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_micros(), i);
+            println!("WRITING {}", dbg_name);
+            std::fs::write(&dbg_name, &current_wasm).unwrap();
+            i += 1;
         }
         
         Ok(current_wasm)
