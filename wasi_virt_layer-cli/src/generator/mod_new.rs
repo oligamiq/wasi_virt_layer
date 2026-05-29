@@ -1127,7 +1127,6 @@ impl GeneratorRunner {
 
         println!("Translating Wasm to Component...");
         let old_path = self.path.path()?.clone();
-        std::fs::copy(&old_path, "debug_before_component.wasm").unwrap();
         let component = compile::wasm_to_component(&old_path, &self.ctx.target_names)
             .wrap_err("Failed to translate Wasm to Component")?;
         if !keep_build_artifacts {
