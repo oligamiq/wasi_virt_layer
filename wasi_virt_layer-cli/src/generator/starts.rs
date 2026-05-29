@@ -8,7 +8,7 @@ use crate::{
     util::{ResultUtil, WalrusFID, WalrusUtilExport, WalrusUtilModule as _, WasmName},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// A list of export names is displayed in the order specified. Order, etc.
 /// When isolated here, it is automatically removed from module._start
 /// All initialization-related items are listed here.

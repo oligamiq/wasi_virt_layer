@@ -49,7 +49,7 @@ use crate::{
 };
 
 /// Represents the generation context, holding configuration arguments and targeted module info.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GeneratorCtx {
     /// The name of the VFS module.
     pub vfs_name: WasmName,
@@ -994,7 +994,21 @@ impl GeneratorRunner {
             })
             .wrap_run(path, dwarf, keep_build_artifacts, {
                 let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
-                use crate::wasm_stream::passes::{starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass};
+                use crate::wasm_stream::passes::{
+                    starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                    check::CheckUseWasiVirtLayerChecker,
+                    patch_component::PatchComponentStreamPass,
+                    abi_connect::{ConnectWasip1ABIPreVfsStreamPass, NonRecursiveWasiABIPreVfsStreamPass},
+                };
+
+                let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
+                    Box::new(CheckUseWasiVirtLayerChecker::new()),
+                ]);
+                pipeline.add_pass(Box::new(check_pass));
+                pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
+                pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
+                pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
+
                 pipeline.add_pass(Box::new(StartsPreStreamPass::new(true, pipeline_is_library, "__flesh_vfs_start".to_string())));
                 pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
                     "__thread_patch".to_string(),
@@ -1012,6 +1026,7 @@ impl GeneratorRunner {
         self.ctx.vfs_used_memory_id = None;
         for (i, (target, target_name)) in self.targets.iter_mut().zip(self.ctx.target_names.clone()).enumerate() {
             let skip_target_opt = self.vfs_build_opts.no_opt_all > 0 || self.target_vfs_build_opts[i].no_opt > 0 || self.target_vfs_build_opts[i].no_opt_all > 0;
+            let cloned_ctx = self.ctx.clone();
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
@@ -1030,7 +1045,24 @@ impl GeneratorRunner {
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts, {
                     let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
-                    use crate::wasm_stream::passes::{starts_pre::StartsPreStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass};
+                    use crate::wasm_stream::passes::{
+                        starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                        producer::ProducerStreamPass, anonymous::AnonymousStreamPass, check_unused_threads::CheckUnusedThreadsStreamPass,
+                        check::IsRustWasmChecker,
+                        abi_connect::{ConnectWasip1ABIPreTargetStreamPass, ConnectWasip1ThreadsABIPreTargetStreamPass},
+                    };
+                    
+                    pipeline.add_pass(Box::new(ProducerStreamPass::new()));
+                    pipeline.add_pass(Box::new(CheckUnusedThreadsStreamPass::new(cloned_ctx.clone())));
+                    pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx)));
+                    pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(target_name.to_string())));
+                    pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(target_name.to_string())));
+                    
+                    let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
+                        Box::new(IsRustWasmChecker::new()),
+                    ]);
+                    pipeline.add_pass(Box::new(check_pass));
+
                     let export_name = format!("__flesh_{}_start", target_name);
                     pipeline.add_pass(Box::new(StartsPreStreamPass::new(false, false, export_name.clone())));
                     pipeline.add_pass(Box::new(crate::wasm_stream::passes::dummy_injector::DummyInjectorStreamPass::new(vec![export_name])));

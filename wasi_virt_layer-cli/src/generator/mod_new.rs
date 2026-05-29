@@ -88,22 +88,22 @@ pub struct GeneratorCtx {
 }
 
 /// Sub-context for extracting and storing component variables during execution.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ComponentCtx {
     /// Optional name of the VFS module.
-    vfs_name: Option<WasmName>,
+    pub vfs_name: Option<WasmName>,
     /// Optional names of the target modules.
-    target_names: Option<Box<[WasmName]>>,
+    pub target_names: Option<Box<[WasmName]>>,
     /// Optional memory type of the target modules.
-    target_memory_type: Option<TargetMemoryType>,
+    pub target_memory_type: Option<TargetMemoryType>,
     /// Optional flag for unstable debug printing.
-    unstable_print_debug: Option<bool>,
+    pub unstable_print_debug: Option<bool>,
     /// Flag for including DWARF debug information.
-    dwarf: bool,
+    pub dwarf: bool,
     /// Optional flag for multi-threading support.
-    threads: Option<bool>,
+    pub threads: Option<bool>,
     /// Flag for ABI adjustment.
-    adjust_abi: bool,
+    pub adjust_abi: bool,
 }
 
 struct CompressNames {
@@ -1257,42 +1257,62 @@ impl ComponentRunner {
 
         println!("Adjusting component Merged Wasm...");
         (|path: &mut WasmPath| {
-            (|module: &mut walrus::Module| {
-                let mut visitor = ComponentCtxVisitor::default();
+            let mut module = walrus::Module::from_file(path.path()?).map_err(|e| eyre::eyre!(e)).wrap_err("Failed to load Wasm for ctx extraction")?;
+            let mut visitor = ComponentCtxVisitor::default();
+            visitor
+                .post_components(
+                    &mut module,
+                    &ComponentCtx {
+                        dwarf,
+                        ..Default::default()
+                    },
+                )
+                .wrap_err("Failed in post_components")?;
+            let wasm_name_holder = WasmNameHolder::new(
                 visitor
-                    .post_components(
-                        module,
-                        &ComponentCtx {
-                            dwarf,
-                            ..Default::default()
-                        },
-                    )
-                    .wrap_err("Failed in post_components")?;
-                let wasm_name_holder = WasmNameHolder::new(
-                    visitor
-                        .target_names
-                        .unwrap()
-                        .into_iter()
-                        .chain(core::iter::once(visitor.vfs_name.unwrap()))
-                        .collect::<Box<_>>(),
-                );
-                self.wasm_name_holder = Some(wasm_name_holder);
-                let mut wasm_name_holder_iter = self.wasm_name_holder.as_ref().unwrap().iter();
-                self.ctx = Some(ComponentCtx {
-                    vfs_name: Some(wasm_name_holder_iter.next().unwrap()),
-                    target_names: Some(wasm_name_holder_iter.collect::<Box<_>>()),
-                    target_memory_type: Some(visitor.target_memory_type.unwrap()),
-                    unstable_print_debug: Some(visitor.unstable_print_debug.unwrap()),
-                    dwarf: visitor.dwarf.unwrap(),
-                    threads: Some(visitor.threads.unwrap()),
-                    adjust_abi: visitor.adjust_abi,
-                });
+                    .target_names
+                    .unwrap()
+                    .into_iter()
+                    .chain(core::iter::once(visitor.vfs_name.unwrap()))
+                    .collect::<Box<_>>(),
+            );
+            self.wasm_name_holder = Some(wasm_name_holder);
+            let mut wasm_name_holder_iter = self.wasm_name_holder.as_ref().unwrap().iter();
+            self.ctx = Some(ComponentCtx {
+                vfs_name: Some(wasm_name_holder_iter.next().unwrap()),
+                target_names: Some(wasm_name_holder_iter.collect::<Box<_>>()),
+                target_memory_type: Some(visitor.target_memory_type.unwrap()),
+                unstable_print_debug: Some(visitor.unstable_print_debug.unwrap()),
+                dwarf: visitor.dwarf.unwrap(),
+                threads: Some(visitor.threads.unwrap()),
+                adjust_abi: visitor.adjust_abi,
+            });
 
+            let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
+            use crate::wasm_stream::passes::{
+                producer::ProducerStreamPass,
+                anonymous::AnonymousStreamPass,
+                check_unused_threads::CheckUnusedThreadsStreamPass,
+                check::{IsRustWasmChecker, CheckUseLibraryChecker, CheckVFSMemoryTypeChecker},
+            };
+            
+            pipeline.add_pass(Box::new(ProducerStreamPass::new()));
+            pipeline.add_pass(Box::new(AnonymousStreamPass::new(self.ctx.as_ref().unwrap().clone())));
+            pipeline.add_pass(Box::new(CheckUnusedThreadsStreamPass::new(self.ctx.as_ref().unwrap().clone())));
+            
+            let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
+                Box::new(IsRustWasmChecker::new()),
+                Box::new(CheckUseLibraryChecker::new(self.ctx.as_ref().unwrap().clone())),
+                Box::new(CheckVFSMemoryTypeChecker::new(self.ctx.as_ref().unwrap().clone())),
+            ]);
+            pipeline.add_pass(Box::new(check_pass));
+
+            (|module: &mut walrus::Module| {
                 self.generators
                     .post_components(module, self.ctx.as_ref().unwrap())
                     .wrap_err("Failed in run_post_components")
             })
-            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts(), None)
+            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts(), Some(pipeline))
         })
         .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), parsed_args.dev())?;
 

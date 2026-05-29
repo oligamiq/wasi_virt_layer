@@ -7,19 +7,13 @@ use crate::{
 macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
-            abi_connect, anonymous, check, debug, memory, memory_post_components, patch_component, producer,
-            special_func, starts, threads, vfs_host, wrap_unreachable, poll,
+            anonymous, debug, memory, memory_post_components, producer,
+            special_func, starts, threads, wrap_unreachable, poll,
         };
 
         generator::add_generators_by_type!(
             $runner,
             memory_post_components::PostComponentsMemoryFix,
-            check::IsRustWasm,
-            producer::Producer,
-            anonymous::Anonymous,
-            check::CheckUseLibrary,
-            check::CheckVFSMemoryType,
-            check::CheckUnusedThreads,
             wrap_unreachable::WrapUnreachableGenerator,
             threads::ThreadsSpawn,
             threads::ThreadsSpawnPatch,
@@ -32,19 +26,12 @@ macro_rules! add_generator {
             memory::MemoryBridge,
             memory::MemoryTrap,
 
-            abi_connect::ConnectWasip1ABI,
-            abi_connect::ConnectWasip1ThreadsABI,
-            abi_connect::NonRecursiveWasiABI,
-            vfs_host::ConnectVfsHost,
             debug::SimpleDebug,
             debug::DebugCallMemoryGrow,
             debug::DebugExportVFSFunctions,
             debug::DebugCallFunctionSmallScale,
             debug::DebugCallFunctionMain,
-            patch_component::PatchComponent,
         );
-
-        $runner.checker(check::CheckUseWasiVirtLayer);
     }};
 }
 

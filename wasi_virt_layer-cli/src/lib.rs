@@ -227,3 +227,4 @@ fn get_command_lock_identifiers(command: &args::Command) -> Vec<String> {
         })
         .collect()
 }
+

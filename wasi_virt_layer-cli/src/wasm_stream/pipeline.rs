@@ -7,6 +7,35 @@ pub trait StreamPass: Send + Sync {
     fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>>;
 }
 
+pub trait StreamChecker: Send + Sync {
+    fn check(&mut self, payload: &wasmparser::Payload) -> eyre::Result<()>;
+}
+
+pub struct ParallelCheckStreamPass {
+    checkers: Vec<Box<dyn StreamChecker>>,
+}
+
+impl ParallelCheckStreamPass {
+    pub fn new(checkers: Vec<Box<dyn StreamChecker>>) -> Self {
+        Self { checkers }
+    }
+}
+
+impl StreamPass for ParallelCheckStreamPass {
+    fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
+        for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
+            let payload = payload?;
+            // Process checkers sequentially for now (parsing itself is fast, 
+            // and parallelizing across lightweight checkers might not outweigh thread overhead,
+            // but the architecture allows replacing this loop with rayon later).
+            for checker in &mut self.checkers {
+                checker.check(&payload)?;
+            }
+        }
+        Ok(input_wasm.to_vec())
+    }
+}
+
 /// A pipeline of sequential WebAssembly transformations.
 pub struct Pipeline {
     passes: Vec<Box<dyn StreamPass>>,

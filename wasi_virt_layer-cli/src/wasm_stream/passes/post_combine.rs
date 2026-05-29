@@ -31,6 +31,8 @@ impl Rebind for PostCombineRebinder {
 #[derive(Default, Debug)]
 struct ParsedInfo {
     dropped_imports: HashMap<u32, String>,
+    host_imports: HashMap<u32, String>,
+    exported_funcs: HashMap<String, u32>,
     mutable_globals: HashMap<u32, i64>, // index -> initial value
     data_segments: Vec<(u32, i32, usize)>, // mem_idx, offset, length
     flesh_vfs_start: Option<u32>,
@@ -74,6 +76,8 @@ impl StreamPass for PostCombineStreamPass {
                                 
                                 if is_special {
                                     info.dropped_imports.insert(func_import_count, import.name.to_string());
+                                } else if import.module == "__wasip1_vfs-host" {
+                                    info.host_imports.insert(func_import_count, import.name.to_string());
                                 }
                                 func_import_count += 1;
                             }
@@ -104,6 +108,7 @@ impl StreamPass for PostCombineStreamPass {
                     for export in s {
                         let export = export?;
                         if export.kind == wasmparser::ExternalKind::Func {
+                            info.exported_funcs.insert(export.name.to_string(), export.index);
                             match export.name {
                                 "__flesh_vfs_start" => info.flesh_vfs_start = Some(export.index),
                                 "__thread_patch" => info.thread_patch = Some(export.index),
@@ -179,7 +184,9 @@ impl StreamPass for PostCombineStreamPass {
         let mut dropped_func_original_indices = Vec::new();
 
         for i in 0..func_import_count {
-            if info.dropped_imports.contains_key(&i) {
+            if info.host_imports.contains_key(&i) {
+                // Do not assign new index yet! Will route to export's new index below.
+            } else if info.dropped_imports.contains_key(&i) {
                 dropped_func_original_indices.push(i);
             } else {
                 func_map.insert(i, current_new_idx);
@@ -191,6 +198,16 @@ impl StreamPass for PostCombineStreamPass {
             let orig_idx = func_import_count + i;
             func_map.insert(orig_idx, current_new_idx);
             current_new_idx += 1;
+        }
+
+        for (import_idx, name) in &info.host_imports {
+            if let Some(&export_orig_idx) = info.exported_funcs.get(name) {
+                let export_new_idx = func_map.get(&export_orig_idx).copied().unwrap();
+                func_map.insert(*import_idx, export_new_idx);
+            } else {
+                dropped_func_original_indices.push(*import_idx);
+                info.dropped_imports.insert(*import_idx, "_memory_trap".to_string());
+            }
         }
 
         // Newly injected functions (memory_copy, etc) go at the end
