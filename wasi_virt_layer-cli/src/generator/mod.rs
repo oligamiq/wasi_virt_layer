@@ -1045,7 +1045,6 @@ impl GeneratorRunner {
                     };
                     
                     pipeline.add_pass(Box::new(ProducerStreamPass::new()));
-                    pipeline.add_pass(Box::new(CheckUnusedThreadsStreamPass::new(cloned_ctx.clone())));
                     pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(target_name.to_string())));
                     pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(target_name.to_string())));
                     

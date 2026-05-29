@@ -24,6 +24,7 @@ impl StreamPass for SharedGlobalStreamPass {
 
         let mut encoder = Module::new();
         let mut global_count = 0;
+        let mut global_inits = HashMap::new();
         let mut exports = HashMap::new();
         let mut start_func_id = None;
         let mut func_count = 0;
@@ -51,6 +52,14 @@ impl StreamPass for SharedGlobalStreamPass {
                 }
                 Payload::GlobalSection(s) => {
                     global_count = s.count();
+                    for (i, g) in s.clone().into_iter().enumerate() {
+                        let g = g?;
+                        let mut reader = g.init_expr.get_operators_reader();
+                        let op = reader.read()?;
+                        if let wasmparser::Operator::I32Const { value } = op {
+                            global_inits.insert(i as u32, value);
+                        }
+                    }
                     let range = s.range();
                     encoder.section(&RawSection { id: 6, data: &input_wasm[range.start..range.end] });
                 }
@@ -130,8 +139,10 @@ impl StreamPass for SharedGlobalStreamPass {
                         // If this is the start function, prepend init_once calls
                         if Some(fid) == start_func_id {
                             for (g_id, init_fn) in &init_once_funcs {
-                                func.instruction(&Instruction::GlobalGet(*g_id));
-                                func.instruction(&Instruction::Call(*init_fn));
+                                if let Some(&init_val) = global_inits.get(g_id) {
+                                    func.instruction(&Instruction::I32Const(init_val));
+                                    func.instruction(&Instruction::Call(*init_fn));
+                                }
                             }
                         }
 

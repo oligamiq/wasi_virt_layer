@@ -9,6 +9,11 @@ repository = "https://github.com/oligamiq/wasi_virt_layer"
 documentation = "https://docs.rs/wasi_virt_layer"
 publish = true
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+targets = ["wasm32-wasip1"]
+
 [features]
 default = ["std"]
 alloc = []

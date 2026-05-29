@@ -9,6 +9,10 @@ documentation = "https://docs.rs/wasi_virt_layer-cli"
 repository = "https://github.com/oligamiq/wasi_virt_layer"
 publish = true
 
+[package.metadata.docs.rs]
+features = ["parallel"]
+rustdoc-args = ["--cfg", "docsrs"]
+
 [[bin]]
 name = "wasi_virt_layer"
 path = "src/main.rs"

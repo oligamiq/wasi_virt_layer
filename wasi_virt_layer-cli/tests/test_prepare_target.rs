@@ -90,11 +90,10 @@ pub extern "C" fn test_export() -> i32 {
         .output()?;
 
     if !result.status.success() {
-        eprintln!(
+        panic!(
             "prepare-target command failed:\n{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        return Ok(());
     }
 
     // Verify output file exists
@@ -190,11 +189,10 @@ pub extern "C" fn run() {
         .output()?;
 
     if !result.status.success() {
-        eprintln!(
+        panic!(
             "prepare-target failed:\n{}",
             String::from_utf8_lossy(&result.stderr)
         );
-        return Ok(());
     }
 
     // Verify ABI functions were imported
@@ -305,7 +303,10 @@ pub extern "C" fn multiply(a: i32, b: i32) -> i32 {
         .output()?;
 
     if !result.status.success() {
-        return Ok(());
+        panic!(
+            "prepare-target failed:\n{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
     }
 
     // Verify exports are preserved
