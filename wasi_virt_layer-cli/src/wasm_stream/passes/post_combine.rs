@@ -42,6 +42,7 @@ struct ParsedInfo {
     save_target_memory: Option<u32>,
     flesh_target_starts: HashMap<String, u32>,
     simple_debug_pre_init: Option<u32>,
+    import_types: HashMap<u32, u32>,
 }
 
 impl StreamPass for PostCombineStreamPass {
@@ -78,6 +79,9 @@ impl StreamPass for PostCombineStreamPass {
                                     info.dropped_imports.insert(func_import_count, import.name.to_string());
                                 } else if import.module == "__wasip1_vfs-host" {
                                     info.host_imports.insert(func_import_count, import.name.to_string());
+                                }
+                                if let wasmparser::TypeRef::Func(type_index) = import.ty {
+                                    info.import_types.insert(func_import_count, type_index);
                                 }
                                 func_import_count += 1;
                             }
@@ -228,7 +232,7 @@ impl StreamPass for PostCombineStreamPass {
         let mut type_void_i32 = None;
         let mut type_i32_i32_void = None;
         let mut type_i32_i32 = None;
-        let mut has_start_section_emitted = false;
+
         
         let mut data_section_opt = None;
         let mut is_after_code = false;
@@ -302,7 +306,7 @@ impl StreamPass for PostCombineStreamPass {
                         for i in group?.into_iter() {
                             let (_, import) = i?;
                             if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
-                                if !info.dropped_imports.contains_key(&idx) {
+                                if !info.dropped_imports.contains_key(&idx) && !info.host_imports.contains_key(&idx) {
                                     let entity = match import.ty {
                                         wasmparser::TypeRef::Func(i) => EntityType::Function(i),
                                         _ => unreachable!(),
@@ -334,18 +338,8 @@ impl StreamPass for PostCombineStreamPass {
                     println!("Dropped imports: {:?}", info.dropped_imports);
                     
                     for orig_idx in &dropped_func_original_indices {
-                        let name = info.dropped_imports.get(orig_idx).unwrap();
-                        if name.contains("memory_copy") {
-                            function_section.function(type_mem_copy.unwrap());
-                        } else if name.ends_with("_memory_grow_alt") {
-                            function_section.function(type_i32_i32.unwrap());
-                        } else if name.ends_with("___main_void") {
-                            function_section.function(type_void_i32.unwrap());
-                        } else if name.ends_with("_wasi_thread_start") {
-                            function_section.function(type_i32_i32_void.unwrap());
-                        } else {
-                            function_section.function(type_void_void.unwrap());
-                        }
+                        let type_index = info.import_types.get(orig_idx).unwrap();
+                        function_section.function(*type_index);
                     }
                     function_section.function(type_void_void.unwrap()); // start
                     
@@ -382,7 +376,7 @@ impl StreamPass for PostCombineStreamPass {
                 wasmparser::Payload::ExportSection(s) => {
                     for export in s {
                         let export = export?;
-                        if matches!(export.name, "__flesh_vfs_start" | "__thread_patch" | "__init_offset_global" | "__save_target_memory" | "__simple_debug_wasip1_vfs_pre_init") || (export.name.starts_with("__flesh_") && export.name.ends_with("_start")) {
+                        if matches!(export.name, "_start" | "__flesh_vfs_start" | "__thread_patch" | "__init_offset_global" | "__save_target_memory" | "__simple_debug_wasip1_vfs_pre_init") || (export.name.starts_with("__flesh_") && export.name.ends_with("_start")) {
                             continue; // dropped
                         }
                         if export.kind == wasmparser::ExternalKind::Memory {
@@ -402,12 +396,12 @@ impl StreamPass for PostCombineStreamPass {
                             _ => export.index, // other indices are untouched for now
                         });
                     }
+                    export_section.export("_start", wasm_encoder::ExportKind::Func, new_start_idx);
                     module.section(&export_section);
-                    module.section(&wasm_encoder::StartSection { function_index: new_start_idx });
-                    has_start_section_emitted = true;
+                    // Do not generate StartSection, WASI expects `_start` to be an export instead.
                 }
                 wasmparser::Payload::StartSection { .. } => {
-                    // Do not emit original start, we already emitted our custom one right after ExportSection.
+                    // Do not emit original start, we exported our custom `_start` instead.
                 }
                 wasmparser::Payload::ElementSection(s) => {
                     let mut elements = wasm_encoder::ElementSection::new();
@@ -542,9 +536,9 @@ impl StreamPass for PostCombineStreamPass {
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if name.ends_with("_wasi_thread_start") {
                 let target_name = name.strip_prefix("__wasip1_vfs_").unwrap().strip_suffix("_wasi_thread_start").unwrap();
-                func.instruction(&wasm_encoder::Instruction::LocalGet(0));
-                func.instruction(&wasm_encoder::Instruction::LocalGet(1));
                 if let Some(&anchor_idx) = info.wasi_thread_starts.get(target_name) {
+                    func.instruction(&wasm_encoder::Instruction::LocalGet(0));
+                    func.instruction(&wasm_encoder::Instruction::LocalGet(1));
                     func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(anchor_idx)));
                 }
                 func.instruction(&wasm_encoder::Instruction::End);

@@ -432,6 +432,7 @@ impl Generator for WrapUnreachableGenerator {
     fn pre_vfs(&mut self, module: &mut Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         for target in ctx.target_names.iter() {
             let marker = WrapUnreachableName::WrapUnreachable(&target).to_string();
+            println!("Looking for marker: {}, found: {}", marker, module.exports.iter().any(|e| e.name == marker));
             if module.exports.iter().any(|e| e.name == marker) {
                 self.targets.insert(target.to_string());
             }
@@ -470,9 +471,11 @@ impl Generator for WrapUnreachableGenerator {
         _: &GeneratorCtx,
         external: &ModuleExternal,
     ) -> eyre::Result<()> {
+        println!("pre_target checking if self.targets {:?} contains {}", self.targets, external.name.to_string());
         if !self.targets.contains(&external.name.to_string()) {
             return Ok(());
         }
+        println!("pre_target EXECUTING for {}", external.name.to_string());
 
         let get_flag_name = WrapUnreachableName::GetUnreachableFlag(&external.name).to_string();
         let set_flag_name = WrapUnreachableName::SetUnreachableFlag(&external.name).to_string();
@@ -541,6 +544,9 @@ impl Generator for WrapUnreachableGenerator {
             .collect();
 
         for (fid, return_types, mut scan) in scan_results {
+            if !scan.unreachables.is_empty() {
+                println!("Found {} unreachables in func {:?}", scan.unreachables.len(), fid);
+            }
             let func_mut = module.funcs.get_mut(fid).kind.unwrap_local_mut();
             patch_unreachables(func_mut, &mut scan.unreachables, flag_global, &return_types);
             hook_calls(func_mut, &mut scan.calls, flag_global, &return_types);

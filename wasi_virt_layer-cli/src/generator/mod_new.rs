@@ -3,7 +3,7 @@ pub mod abi_connect;
 /// Utilities for handling anonymous and generic WASM rewrites.
 pub mod anonymous;
 /// Type-checking routines for imported/exported functions.
-pub mod check;
+
 /// Internal debug formatting and trace generators.
 pub mod debug;
 /// Generates and bridges memory copy, trap, and related VFS interactions.
@@ -569,9 +569,6 @@ impl ModuleExternal {
 /// Coordinates iterating over registered generators and merging external module logic into the VFS.
 #[derive(Debug)]
 pub struct GeneratorRunner {
-    /// The checkers used to validate the module.
-    pub checkers: Vec<Box<dyn Generator + 'static>>,
-    /// The generators used to transform the module.
     pub generators: Vec<Box<dyn Generator + 'static>>,
     /// The context used during generation.
     pub ctx: GeneratorCtx,
@@ -804,7 +801,6 @@ impl GeneratorRunner {
             .collect::<HashMap<_, _>>();
 
         Ok(Self {
-            checkers: Vec::new(),
             generators: Vec::new(),
             ctx: GeneratorCtx {
                 vfs_name,
@@ -839,10 +835,7 @@ impl GeneratorRunner {
         self.generators.push(Box::new(generator));
     }
 
-    /// Registers a diagnostic validation checker resolving pre or post-conditions automatically.
-    pub fn checker(&mut self, checker: impl Generator + 'static) {
-        self.checkers.push(Box::new(checker));
-    }
+
 
     /// Resolves and retrieves a shared reference to a specific structured generator dynamically at runtime.
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
@@ -941,12 +934,9 @@ impl GeneratorRunner {
 
         println!("Adjusting VFS Wasm...");
         let skip_vfs_opt = self.vfs_build_opts.no_opt > 0 || self.vfs_build_opts.no_opt_all > 0;
+        let cloned_ctx = self.ctx.clone();
         (|path: &mut WasmPath| {
             (|module: &mut walrus::Module| {
-                self.checkers
-                    .pre_vfs(module, &self.ctx)
-                    .wrap_err("Failed to run checkers in pre_vfs")?;
-
                 mem_id_visitor
                     .pre_vfs(module, &self.ctx)
                     .wrap_err("Failed in pre_vfs")?;
@@ -976,7 +966,23 @@ impl GeneratorRunner {
             })
             .wrap_run(path, dwarf, keep_build_artifacts, {
                 let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
-                use crate::wasm_stream::passes::{starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass};
+                use crate::wasm_stream::passes::{
+                    starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                    check::CheckUseWasiVirtLayerChecker,
+                    patch_component::PatchComponentStreamPass,
+                    anonymous::AnonymousStreamPass,
+                    abi_connect::{ConnectWasip1ABIPreVfsStreamPass, NonRecursiveWasiABIPreVfsStreamPass},
+                };
+                
+                let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
+                    Box::new(CheckUseWasiVirtLayerChecker::new()),
+                ]);
+                pipeline.add_pass(Box::new(check_pass));
+                pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx)));
+                pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
+                pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
+                pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
+
                 pipeline.add_pass(Box::new(StartsPreStreamPass::new(true, self.ctx.vfs_is_library, "__flesh_vfs_start".to_string())));
                 if !self.ctx.vfs_is_library {
                     pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
@@ -1014,7 +1020,22 @@ impl GeneratorRunner {
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts, {
                     let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
-                    use crate::wasm_stream::passes::{starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass};
+                    use crate::wasm_stream::passes::{
+                        starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                        producer::ProducerStreamPass, anonymous::AnonymousStreamPass, check_unused_threads::CheckUnusedThreadsStreamPass,
+                        check::CheckLibraryImportAnchorChecker,
+                        abi_connect::{ConnectWasip1ABIPreTargetStreamPass, ConnectWasip1ThreadsABIPreTargetStreamPass},
+                    };
+                    
+                    let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
+                        Box::new(CheckLibraryImportAnchorChecker::new()),
+                    ]);
+                    pipeline.add_pass(Box::new(check_pass));
+                    pipeline.add_pass(Box::new(ProducerStreamPass::new()));
+                    pipeline.add_pass(Box::new(CheckUnusedThreadsStreamPass::new(cloned_ctx.clone())));
+                    pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(target_name.to_string())));
+                    pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(target_name.to_string())));
+
                     let export_name = format!("__flesh_{}_start", external.name);
                     pipeline.add_pass(Box::new(StartsPreStreamPass::new(false, false, export_name.clone())));
                     pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![export_name])));
@@ -1564,10 +1585,13 @@ impl Generator for StartFuncIdVisitor {
             // to find it as an import or to redirect calls to it.
 
             // The anchor export was created by import_wasm! macro and uses underscores
-            module.exports.erase_with(
-                &format!("__wasip1_vfs_{normalized_wasm}__start_anchor"),
-                ctx.unstable_print_debug,
-            )?;
+            let anchor_name = format!("__wasip1_vfs_{normalized_wasm}__start_anchor");
+            if let Some(_) = anchor_name.find_fid(&module.exports) {
+                module.exports.erase_with(
+                    &anchor_name,
+                    ctx.unstable_print_debug,
+                )?;
+            }
         }
 
         Ok(())

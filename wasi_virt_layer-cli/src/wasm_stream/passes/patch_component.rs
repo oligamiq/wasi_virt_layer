@@ -25,7 +25,10 @@ impl StreamPass for PatchComponentStreamPass {
         let mut module = Module::new();
         let parser = Parser::new(0);
 
-        let mut replacements = std::collections::HashMap::new();
+        // Build forward replacements: (CORE_MODULE_ROOT, component_name) -> (WASIP1_ABI_MODULE, name)
+        let mut forward_replacements = std::collections::HashMap::new();
+        // Build reverse replacements: (WASIP1_ABI_MODULE, name) -> (CORE_MODULE_ROOT, component_name)
+        let mut reverse_replacements = std::collections::HashMap::new();
         let mut anchors_to_remove = std::collections::HashSet::new();
 
         for (name, (namespace, root)) in
@@ -37,8 +40,34 @@ impl StreamPass for PatchComponentStreamPass {
                 )))
         {
             let component_name = gen_component_name(namespace, name);
-            replacements.insert((root.to_string(), component_name), (UniqueName::WASIP1_ABI_MODULE.to_string(), name.to_string()));
+            forward_replacements.insert(
+                (root.to_string(), component_name.clone()),
+                (UniqueName::WASIP1_ABI_MODULE.to_string(), name.to_string()),
+            );
+            reverse_replacements.insert(
+                (UniqueName::WASIP1_ABI_MODULE.to_string(), name.to_string()),
+                (root.to_string(), component_name),
+            );
             anchors_to_remove.insert(format!("{name}_import_anchor"));
+        }
+
+        // First pass: collect all import keys to determine which forward/reverse pairs exist
+        let mut has_forward = std::collections::HashSet::new();
+        let mut has_reverse = std::collections::HashSet::new();
+        for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
+            if let wasmparser::Payload::ImportSection(s) = payload? {
+                for import_group in s {
+                    for import_res in import_group? {
+                        let (_, import) = import_res?;
+                        let key = (import.module.to_string(), import.name.to_string());
+                        if forward_replacements.contains_key(&key) {
+                            has_forward.insert(key);
+                        } else if reverse_replacements.contains_key(&key) {
+                            has_reverse.insert(key);
+                        }
+                    }
+                }
+            }
         }
 
         for payload in parser.parse_all(input_wasm) {
@@ -60,9 +89,21 @@ impl StreamPass for PatchComponentStreamPass {
                                 _ => unimplemented!("TypeRef variant not supported"),
                             };
 
-                            let (new_module, new_name) = replacements.get(&(import.module.to_string(), import.name.to_string()))
-                                .map(|(m, n)| (m.as_str(), n.as_str()))
-                                .unwrap_or((import.module, import.name));
+                            let key = (import.module.to_string(), import.name.to_string());
+                            let (new_module, new_name) = if let Some((m, n)) = forward_replacements.get(&key) {
+                                // Forward: WIT-component import -> wasi_snapshot_preview1
+                                (m.as_str(), n.as_str())
+                            } else if let Some((m, n)) = reverse_replacements.get(&key) {
+                                // Only apply reverse if the forward counterpart also exists
+                                // (i.e., do a true swap only when both sides are present)
+                                if has_forward.contains(&(m.clone(), n.clone())) {
+                                    (m.as_str(), n.as_str())
+                                } else {
+                                    (import.module, import.name)
+                                }
+                            } else {
+                                (import.module, import.name)
+                            };
                                 
                             new_import_section.import(new_module, new_name, entity_type);
                         }
