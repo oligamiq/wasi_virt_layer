@@ -398,7 +398,11 @@ impl StreamPass for PostCombineStreamPass {
                     }
                     export_section.export("_start", wasm_encoder::ExportKind::Func, new_start_idx);
                     module.section(&export_section);
-                    // Do not generate StartSection, WASI expects `_start` to be an export instead.
+                    // The generated component entrypoint can call `main` directly,
+                    // so keep the initialization sequence as a core wasm start too.
+                    module.section(&wasm_encoder::StartSection {
+                        function_index: new_start_idx,
+                    });
                 }
                 wasmparser::Payload::StartSection { .. } => {
                     // Do not emit original start, we exported our custom `_start` instead.
