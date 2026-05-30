@@ -9,7 +9,11 @@ unsafe extern "C" {
 }
 
 #[cfg(not(target_os = "wasi"))]
-pub unsafe extern "C" fn __wvl_poll_atomic_wait(_addr: *mut u32, _expected: u32, _timeout: i64) -> i32 {
+pub unsafe extern "C" fn __wvl_poll_atomic_wait(
+    _addr: *mut u32,
+    _expected: u32,
+    _timeout: i64,
+) -> i32 {
     2 // timed out dummy return
 }
 

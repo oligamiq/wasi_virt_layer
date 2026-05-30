@@ -425,7 +425,17 @@ pub fn optimize_wasm(
             cmd.arg("-Oz");
         }
 
-        cmd.args(["--enable-threads", "--enable-bulk-memory", "--enable-reference-types", "--enable-simd", "--enable-exception-handling", "--enable-shared-everything", "--enable-multivalue", "--enable-multimemory", "--enable-gc"]);
+        cmd.args([
+            "--enable-threads",
+            "--enable-bulk-memory",
+            "--enable-reference-types",
+            "--enable-simd",
+            "--enable-exception-handling",
+            "--enable-shared-everything",
+            "--enable-multivalue",
+            "--enable-multimemory",
+            "--enable-gc",
+        ]);
 
         cmd.arg(wasm_path.as_str());
 

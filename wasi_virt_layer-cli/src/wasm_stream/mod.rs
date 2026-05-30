@@ -1,13 +1,11 @@
-pub mod tracker;
-pub mod pipeline;
-pub mod passes;
-pub mod translator;
 pub mod mem_info;
-
+pub mod passes;
+pub mod pipeline;
+pub mod tracker;
+pub mod translator;
 
 use wasm_encoder::Module;
 use wasmparser::Parser;
-use std::borrow::Cow;
 
 /// Context for streaming transformations over a Wasm module.
 pub struct StreamContext {

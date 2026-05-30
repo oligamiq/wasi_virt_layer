@@ -6,11 +6,7 @@ use walrus::{ImportKind, Module};
 pub struct PostComponentsMemoryFix {}
 
 impl Generator for PostComponentsMemoryFix {
-    fn post_components(
-        &mut self,
-        module: &mut Module,
-        ctx: &ComponentCtx,
-    ) -> Result<()> {
+    fn post_components(&mut self, module: &mut Module, ctx: &ComponentCtx) -> Result<()> {
         if !ctx.threads.unwrap_or(false) {
             return Ok(());
         }
@@ -20,14 +16,12 @@ impl Generator for PostComponentsMemoryFix {
             if mem.maximum.is_none() {
                 mem.maximum = Some(mem.initial.max(65536));
             }
-            
-            // In the original TemporaryRefugeMemory, ALL shared memories were 
+
+            // In the original TemporaryRefugeMemory, ALL shared memories were
             // imported from `env.memory` after components were built.
-            let import_id = module.imports.add(
-                "env",
-                "memory",
-                ImportKind::Memory(mem.id()),
-            );
+            let import_id = module
+                .imports
+                .add("env", "memory", ImportKind::Memory(mem.id()));
             mem.import = Some(import_id);
         }
 

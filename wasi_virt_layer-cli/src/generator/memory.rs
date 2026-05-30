@@ -1,13 +1,11 @@
-use std::{collections::HashMap, str::FromStr};
-
 use eyre::{Context as _, ContextCompat as _};
 use walrus::ir;
 
 use crate::{
     args::TargetMemoryType,
-    generator::{ComponentCtx, Generator, GeneratorCtx},
+    generator::{Generator, GeneratorCtx},
     unique_name::UniqueName,
-    util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
+    util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WasmName},
 };
 
 /// Encapsulates naming variants reserved for VFS memory interactions.

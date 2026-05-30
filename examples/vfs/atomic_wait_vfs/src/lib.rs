@@ -45,7 +45,11 @@ plug_process!(
 );
 
 plug_poll!(DefaultWaitPoll, test_atomic_wait, self);
-plug_clock!(wasi_virt_layer::clock::StandardClock, test_atomic_wait, self);
+plug_clock!(
+    wasi_virt_layer::clock::StandardClock,
+    test_atomic_wait,
+    self
+);
 
 #[const_struct]
 const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
@@ -56,7 +60,7 @@ plug_env!(@embedded, VirtualEnvTy, test_atomic_wait, self);
 mod fs {
     use std::sync::LazyLock;
 
-use super::*;
+    use super::*;
 
     type LFS = StandardDynamicLFS<DefaultStdIO>;
 

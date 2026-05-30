@@ -690,7 +690,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
             } else if component.as_parent_dir() {
                 let parent = self
                     .read_inode(&current_inode, |node| match &node.data {
-                        InodeData::Dir(map) => map.get(&smallstr::SmallString::from_str("..")).copied(),
+                        InodeData::Dir(map) => {
+                            map.get(&smallstr::SmallString::from_str("..")).copied()
+                        }
                         _ => None,
                     })
                     .flatten();
@@ -1154,13 +1156,16 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         let new_path = WasmPathAccess::<Wasm>::new(new_path_ptr, new_path_len);
         if let Some((parent_ino, new_name)) = self.resolve_parent_for_path_inner(inode, new_path) {
             // Check if the new path already exists
-            if self.read_inode(&parent_ino, |node| {
-                if let InodeData::Dir(map) = &node.data {
-                    map.contains_key(&new_name)
-                } else {
-                    false
-                }
-            }).unwrap_or(false) {
+            if self
+                .read_inode(&parent_ino, |node| {
+                    if let InodeData::Dir(map) = &node.data {
+                        map.contains_key(&new_name)
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false)
+            {
                 return Err(wasip1::ERRNO_EXIST);
             }
 
@@ -1230,7 +1235,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         } else {
             if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
                 let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
-                
+
                 if let Some((parent_ino, s)) = self.resolve_parent_for_path_inner(dir_ino, path) {
                     let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
                     let filetype = if is_dir {
@@ -1366,7 +1371,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         }
 
         let new_path = WasmPathAccess::<Wasm>::new(new_path_ptr, new_path_len);
-        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path) {
+        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path)
+        {
             self.modify_inode(&parent_ino, |node| {
                 if let InodeData::Dir(dir_map) = &mut node.data {
                     dir_map.insert(new_s, inode);
@@ -1893,7 +1899,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
-        
+
         if self
             .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
             .is_some()
@@ -1943,14 +1949,9 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
     ) -> Result<(), wasip1::Errno> {
         let old_dir_ino = Self::downcast_inode(old_dir_inode);
         let new_dir_ino = Self::downcast_inode(new_dir_inode);
-        
+
         let inode = self
-            .get_inode_for_path_dyn_compatible(
-                access,
-                old_dir_ino,
-                old_path_ptr,
-                old_path_len,
-            )
+            .get_inode_for_path_dyn_compatible(access, old_dir_ino, old_path_ptr, old_path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         if self.is_dir(&inode) {
@@ -1959,7 +1960,8 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
 
         let new_path =
             crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
-        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path) {
+        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path)
+        {
             self.modify_inode(&parent_ino, |node| {
                 if let InodeData::Dir(dir_map) = &mut node.data {
                     dir_map.insert(new_s, inode);
@@ -1979,7 +1981,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
-        
+
         let inode = self
             .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
@@ -2027,14 +2029,9 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
     ) -> Result<(), wasip1::Errno> {
         let old_dir_ino = Self::downcast_inode(old_dir_inode);
         let new_dir_ino = Self::downcast_inode(new_dir_inode);
-        
+
         let inode = self
-            .get_inode_for_path_dyn_compatible(
-                access,
-                old_dir_ino,
-                old_path_ptr,
-                old_path_len,
-            )
+            .get_inode_for_path_dyn_compatible(access, old_dir_ino, old_path_ptr, old_path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         let old_path =
@@ -2082,7 +2079,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
-        
+
         let inode = self
             .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
@@ -2305,7 +2302,14 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                 .ok_or(wasip1::ERRNO_LOOP)?;
         }
 
-        Wasip1DynCompatibleLFS::<B>::fd_filestat_set_times_raw_dyn_compatible(self, access, &target_inode, atim, mtim, fst_flags)
+        Wasip1DynCompatibleLFS::<B>::fd_filestat_set_times_raw_dyn_compatible(
+            self,
+            access,
+            &target_inode,
+            atim,
+            mtim,
+            fst_flags,
+        )
     }
 
     fn path_symlink_raw_dyn_compatible(
@@ -2318,10 +2322,11 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         new_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let inode_id = Self::downcast_inode(inode);
-        
+
         // Read the old (target) path
         let old_path_str = {
-            let path = crate::memory::WasmPathAccessDynCompatible::new(access, old_path_ptr, old_path_len);
+            let path =
+                crate::memory::WasmPathAccessDynCompatible::new(access, old_path_ptr, old_path_len);
             let mut s = alloc::string::String::new();
             for component in path.components() {
                 if !s.is_empty() {
@@ -2341,16 +2346,21 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
             s
         };
 
-        let new_path = crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
-        if let Some((parent_ino, new_name)) = self.resolve_parent_for_path_inner(inode_id, new_path) {
+        let new_path =
+            crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
+        if let Some((parent_ino, new_name)) = self.resolve_parent_for_path_inner(inode_id, new_path)
+        {
             // Check if the new path already exists
-            if self.read_inode(&parent_ino, |node| {
-                if let InodeData::Dir(map) = &node.data {
-                    map.contains_key(&new_name)
-                } else {
-                    false
-                }
-            }).unwrap_or(false) {
+            if self
+                .read_inode(&parent_ino, |node| {
+                    if let InodeData::Dir(map) = &node.data {
+                        map.contains_key(&new_name)
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false)
+            {
                 return Err(wasip1::ERRNO_EXIST);
             }
 

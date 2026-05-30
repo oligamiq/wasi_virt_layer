@@ -45,12 +45,18 @@ pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()
                 return Ok(());
             }
 
-            format!("deno execution failed: {}\nstdout: {}\nstderr: {}", status, stdout, stderr)
+            format!(
+                "deno execution failed: {}\nstdout: {}\nstderr: {}",
+                status, stdout, stderr
+            )
         }
         None => {
             child.kill()?;
             let code = child.wait()?.code();
-            format!("Process timed out after {:?} and was killed. Exit code: {:?}", timeout, code)
+            format!(
+                "Process timed out after {:?} and was killed. Exit code: {:?}",
+                timeout, code
+            )
         }
     };
 
@@ -91,7 +97,10 @@ pub fn run_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
         None => {
             child.kill()?;
             let code = child.wait()?.code();
-            format!("Process timed out after {:?} and was killed. Exit code: {:?}", timeout, code)
+            format!(
+                "Process timed out after {:?} and was killed. Exit code: {:?}",
+                timeout, code
+            )
         }
     };
 

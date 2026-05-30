@@ -432,7 +432,11 @@ impl Generator for WrapUnreachableGenerator {
     fn pre_vfs(&mut self, module: &mut Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
         for target in ctx.target_names.iter() {
             let marker = WrapUnreachableName::WrapUnreachable(&target).to_string();
-            println!("Looking for marker: {}, found: {}", marker, module.exports.iter().any(|e| e.name == marker));
+            println!(
+                "Looking for marker: {}, found: {}",
+                marker,
+                module.exports.iter().any(|e| e.name == marker)
+            );
             if module.exports.iter().any(|e| e.name == marker) {
                 self.targets.insert(target.to_string());
             }
@@ -471,7 +475,11 @@ impl Generator for WrapUnreachableGenerator {
         _: &GeneratorCtx,
         external: &ModuleExternal,
     ) -> eyre::Result<()> {
-        println!("pre_target checking if self.targets {:?} contains {}", self.targets, external.name.to_string());
+        println!(
+            "pre_target checking if self.targets {:?} contains {}",
+            self.targets,
+            external.name.to_string()
+        );
         if !self.targets.contains(&external.name.to_string()) {
             return Ok(());
         }
@@ -529,7 +537,7 @@ impl Generator for WrapUnreachableGenerator {
         let func_ids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
 
         use rayon::prelude::*;
-        let mut scan_results: Vec<(FunctionId, Vec<ValType>, InstrScanResult)> = func_ids
+        let scan_results: Vec<(FunctionId, Vec<ValType>, InstrScanResult)> = func_ids
             .par_iter()
             .map(|&fid| {
                 let return_types = module
@@ -545,7 +553,11 @@ impl Generator for WrapUnreachableGenerator {
 
         for (fid, return_types, mut scan) in scan_results {
             if !scan.unreachables.is_empty() {
-                println!("Found {} unreachables in func {:?}", scan.unreachables.len(), fid);
+                println!(
+                    "Found {} unreachables in func {:?}",
+                    scan.unreachables.len(),
+                    fid
+                );
             }
             let func_mut = module.funcs.get_mut(fid).kind.unwrap_local_mut();
             patch_unreachables(func_mut, &mut scan.unreachables, flag_global, &return_types);

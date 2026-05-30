@@ -1,11 +1,10 @@
-use crate::wasm_stream::pipeline::StreamChecker;
-use eyre::{Result, Context};
-use wasmparser::{Payload, ExternalKind};
-use crate::generator::GeneratorCtx;
-use compact_str::CompactString as WasmName;
-use crate::unique_name::UniqueName;
 use crate::abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc};
+use crate::generator::GeneratorCtx;
+use crate::unique_name::UniqueName;
+use crate::wasm_stream::pipeline::StreamChecker;
+use eyre::Result;
 use strum::VariantNames;
+use wasmparser::Payload;
 
 /// Checks whether the file comes from the Rust `rustc` compiler.
 #[derive(Debug, Default)]
@@ -67,7 +66,12 @@ fn has_library_import_anchor_names(export_names: &[&str]) -> bool {
 
     let has_prefixed_thread_anchor = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
         .iter()
-        .map(|name| UniqueName::ThreadsSpawn(&crate::generator::threads::ThreadsSpawnName::ImportAnchor(name)).to_string())
+        .map(|name| {
+            UniqueName::ThreadsSpawn(&crate::generator::threads::ThreadsSpawnName::ImportAnchor(
+                name,
+            ))
+            .to_string()
+        })
         .any(|required| export_names.iter().any(|name| *name == required));
 
     has_wasip1_anchor || has_prefixed_thread_anchor
@@ -86,7 +90,7 @@ impl StreamChecker for CheckUseLibraryChecker {
             }
         } else if let Payload::End(_) = payload {
             let names_ref: Vec<&str> = self.export_names.iter().map(|s| s.as_str()).collect();
-            
+
             if !has_library_import_anchor_names(&names_ref) {
                 eyre::bail!(
                     r#"This wasm file is not use "wasi_virt_layer" crate, you need to add it to your dependencies and use wasi_virt_layer; or, it does not import a crate."#
@@ -96,25 +100,35 @@ impl StreamChecker for CheckUseLibraryChecker {
             // check use import_wasm!
             for wasm_name in self.ctx.target_names.iter() {
                 let normalized_name = normalize_name(wasm_name.as_ref());
-                if !self.export_names.iter().any(|name| {
-                    name == &format!("__wasip1_vfs_{normalized_name}__start_anchor")
-                }) {
-                    let suggests = self.export_names
+                if !self
+                    .export_names
+                    .iter()
+                    .any(|name| name == &format!("__wasip1_vfs_{normalized_name}__start_anchor"))
+                {
+                    let suggests = self
+                        .export_names
                         .iter()
                         .filter_map(|name| {
-                            if name.starts_with("__wasip1_vfs_") && name.ends_with("__start_anchor") {
-                                Some(name.replace("__wasip1_vfs_", "").replace("__start_anchor", ""))
+                            if name.starts_with("__wasip1_vfs_") && name.ends_with("__start_anchor")
+                            {
+                                Some(
+                                    name.replace("__wasip1_vfs_", "")
+                                        .replace("__start_anchor", ""),
+                                )
                             } else {
                                 None
                             }
                         })
                         .collect::<Vec<_>>();
-                    eyre::bail!("WASM module `{wasm_name}` is provided as a target argument, but not declared with `import_wasm!` macro in VFS. Found: {suggests:?}");
+                    eyre::bail!(
+                        "WASM module `{wasm_name}` is provided as a target argument, but not declared with `import_wasm!` macro in VFS. Found: {suggests:?}"
+                    );
                 }
             }
 
             // Check that all import_wasm! declarations have corresponding target WASM arguments
-            let declared_wasm_names = self.export_names
+            let declared_wasm_names = self
+                .export_names
                 .iter()
                 .filter_map(|name| {
                     name.strip_prefix("__wasip1_vfs_")?
@@ -130,7 +144,9 @@ impl StreamChecker for CheckUseLibraryChecker {
                     continue;
                 }
 
-                if !self.ctx.target_names
+                if !self
+                    .ctx
+                    .target_names
                     .iter()
                     .any(|target| normalize_name(target.as_ref()) == normalize_name(&declared_name))
                 {

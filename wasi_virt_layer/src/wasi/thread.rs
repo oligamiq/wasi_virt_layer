@@ -394,7 +394,9 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
     pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
         let need_expansion = {
             let mut sender_lock = self.queue.lock();
-            let sender = sender_lock.as_mut().expect("Thread pool queue not initialized");
+            let sender = sender_lock
+                .as_mut()
+                .expect("Thread pool queue not initialized");
 
             sender
                 .send(VirtualThreadPoolMessage::Run(
@@ -417,7 +419,10 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                     .is_ok()
                 {
                     #[cfg(feature = "trace-thread")]
-                    println!("[] Automatically expanding thread pool capacity to {}", max + 1);
+                    println!(
+                        "[] Automatically expanding thread pool capacity to {}",
+                        max + 1
+                    );
 
                     let _ = self.flush_capacity();
                 }
@@ -805,4 +810,3 @@ pub mod vfs_atomic {
         unsafe { __wvl_atomic_notify_vfs(ptr, count) }
     }
 }
-

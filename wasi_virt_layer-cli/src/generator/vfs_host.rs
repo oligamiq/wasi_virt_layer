@@ -1,5 +1,5 @@
-use crate::util::WalrusUtilModule as _;
 use super::{Generator, GeneratorCtx};
+use crate::util::WalrusUtilModule as _;
 
 /// Generator that connects imports from `__wasip1_vfs-host` to identical exports if they exist.
 ///
@@ -38,7 +38,10 @@ impl Generator for ConnectVfsHost {
             });
 
             if let Some(export_fid) = export_fid {
-                log::info!("Connecting __wasip1_vfs-host import '{}' to matching export.", name);
+                log::info!(
+                    "Connecting __wasip1_vfs-host import '{}' to matching export.",
+                    name
+                );
                 // Connect the import to the export without removing the export.
                 module.connect_func_without_remove(import_fid, export_fid)?;
             }

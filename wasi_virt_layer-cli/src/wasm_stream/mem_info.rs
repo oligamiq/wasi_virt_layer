@@ -17,128 +17,540 @@ pub fn memory_op_info<'a>(op: &wasmparser::Operator<'a>) -> Option<MemoryOpInfo>
     use wasm_encoder::ValType::*;
     match op {
         // --- plain loads: [addr] -> [val] ---
-        wasmparser::Operator::I32Load { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I64Load { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::F32Load { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(F32) }),
-        wasmparser::Operator::F64Load { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(F64) }),
-        wasmparser::Operator::I32Load8S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I32Load8U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I32Load16S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I32Load16U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I64Load8S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64Load8U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64Load16S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64Load16U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64Load32S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64Load32U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
+        wasmparser::Operator::I32Load { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64Load { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::F32Load { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(F32),
+        }),
+        wasmparser::Operator::F64Load { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(F64),
+        }),
+        wasmparser::Operator::I32Load8S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32Load8U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32Load16S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32Load16U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64Load8S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64Load8U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64Load16S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64Load16U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64Load32S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64Load32U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
 
         // --- plain stores: [addr, val] -> [] ---
-        wasmparser::Operator::I32Store { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: None }),
-        wasmparser::Operator::I64Store { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
-        wasmparser::Operator::F32Store { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![F32], result_type: None }),
-        wasmparser::Operator::F64Store { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![F64], result_type: None }),
-        wasmparser::Operator::I32Store8 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: None }),
-        wasmparser::Operator::I32Store16 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: None }),
-        wasmparser::Operator::I64Store8 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
-        wasmparser::Operator::I64Store16 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
-        wasmparser::Operator::I64Store32 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
+        wasmparser::Operator::I32Store { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64Store { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
+        wasmparser::Operator::F32Store { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![F32],
+            result_type: None,
+        }),
+        wasmparser::Operator::F64Store { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![F64],
+            result_type: None,
+        }),
+        wasmparser::Operator::I32Store8 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: None,
+        }),
+        wasmparser::Operator::I32Store16 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64Store8 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64Store16 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64Store32 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
 
         // --- memory.atomic.notify: [addr, count:i32] -> [result:i32] ---
-        wasmparser::Operator::MemoryAtomicNotify { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
+        wasmparser::Operator::MemoryAtomicNotify { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
 
         // --- memory.atomic.wait32: [addr, expected:i32, timeout:i64] -> [result:i32] ---
-        wasmparser::Operator::MemoryAtomicWait32 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32, I64], result_type: Some(I32) }),
+        wasmparser::Operator::MemoryAtomicWait32 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32, I64],
+            result_type: Some(I32),
+        }),
         // --- memory.atomic.wait64: [addr, expected:i64, timeout:i64] -> [result:i32] ---
-        wasmparser::Operator::MemoryAtomicWait64 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64, I64], result_type: Some(I32) }),
+        wasmparser::Operator::MemoryAtomicWait64 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64, I64],
+            result_type: Some(I32),
+        }),
 
         // --- atomic loads: [addr] -> [val] ---
-        wasmparser::Operator::I32AtomicLoad { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicLoad { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicLoad8U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicLoad16U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicLoad8U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicLoad16U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicLoad32U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(I64) }),
+        wasmparser::Operator::I32AtomicLoad { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicLoad { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicLoad8U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicLoad16U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicLoad8U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicLoad16U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicLoad32U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(I64),
+        }),
 
         // --- atomic stores: [addr, val] -> [] ---
-        wasmparser::Operator::I32AtomicStore { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: None }),
-        wasmparser::Operator::I64AtomicStore { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
-        wasmparser::Operator::I32AtomicStore8 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: None }),
-        wasmparser::Operator::I32AtomicStore16 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: None }),
-        wasmparser::Operator::I64AtomicStore8 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
-        wasmparser::Operator::I64AtomicStore16 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
-        wasmparser::Operator::I64AtomicStore32 { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: None }),
+        wasmparser::Operator::I32AtomicStore { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64AtomicStore { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
+        wasmparser::Operator::I32AtomicStore8 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: None,
+        }),
+        wasmparser::Operator::I32AtomicStore16 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64AtomicStore8 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64AtomicStore16 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
+        wasmparser::Operator::I64AtomicStore32 { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: None,
+        }),
 
         // --- atomic RMW (read-modify-write): [addr, val] -> [old_val] ---
-        wasmparser::Operator::I32AtomicRmwAdd { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwAdd { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8AddU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16AddU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8AddU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16AddU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32AddU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmwSub { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwSub { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8SubU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16SubU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8SubU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16SubU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32SubU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmwAnd { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwAnd { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8AndU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16AndU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8AndU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16AndU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32AndU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmwOr { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwOr { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8OrU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16OrU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8OrU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16OrU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32OrU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmwXor { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwXor { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8XorU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16XorU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8XorU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16XorU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32XorU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmwXchg { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwXchg { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8XchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16XchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8XchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16XchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32XchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64], result_type: Some(I64) }),
+        wasmparser::Operator::I32AtomicRmwAdd { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwAdd { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8AddU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16AddU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8AddU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16AddU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32AddU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmwSub { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwSub { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8SubU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16SubU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8SubU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16SubU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32SubU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmwAnd { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwAnd { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8AndU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16AndU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8AndU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16AndU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32AndU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmwOr { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwOr { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8OrU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16OrU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8OrU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16OrU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32OrU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmwXor { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwXor { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8XorU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16XorU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8XorU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16XorU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32XorU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmwXchg { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwXchg { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8XchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16XchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8XchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16XchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32XchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64],
+            result_type: Some(I64),
+        }),
 
         // --- atomic cmpxchg: [addr, expected, replacement] -> [old_val] ---
-        wasmparser::Operator::I32AtomicRmwCmpxchg { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32, I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmwCmpxchg { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64, I64], result_type: Some(I64) }),
-        wasmparser::Operator::I32AtomicRmw8CmpxchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32, I32], result_type: Some(I32) }),
-        wasmparser::Operator::I32AtomicRmw16CmpxchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I32, I32], result_type: Some(I32) }),
-        wasmparser::Operator::I64AtomicRmw8CmpxchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64, I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw16CmpxchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64, I64], result_type: Some(I64) }),
-        wasmparser::Operator::I64AtomicRmw32CmpxchgU { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![I64, I64], result_type: Some(I64) }),
+        wasmparser::Operator::I32AtomicRmwCmpxchg { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32, I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmwCmpxchg { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64, I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I32AtomicRmw8CmpxchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32, I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I32AtomicRmw16CmpxchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I32, I32],
+            result_type: Some(I32),
+        }),
+        wasmparser::Operator::I64AtomicRmw8CmpxchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64, I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw16CmpxchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64, I64],
+            result_type: Some(I64),
+        }),
+        wasmparser::Operator::I64AtomicRmw32CmpxchgU { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![I64, I64],
+            result_type: Some(I64),
+        }),
 
         // --- SIMD loads: [addr] -> [v128] ---
-        wasmparser::Operator::V128Load { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load8x8S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load8x8U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load16x4S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load16x4U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load32x2S { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load32x2U { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load8Splat { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load16Splat { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load32Splat { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load64Splat { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load32Zero { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
-        wasmparser::Operator::V128Load64Zero { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![], result_type: Some(V128) }),
+        wasmparser::Operator::V128Load { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load8x8S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load8x8U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load16x4S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load16x4U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load32x2S { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load32x2U { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load8Splat { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load16Splat { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load32Splat { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load64Splat { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load32Zero { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
+        wasmparser::Operator::V128Load64Zero { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![],
+            result_type: Some(V128),
+        }),
 
         // --- SIMD store: [addr, v128] -> [] ---
-        wasmparser::Operator::V128Store { memarg } => Some(MemoryOpInfo { memory: memarg.memory, value_operands: vec![V128], result_type: None }),
+        wasmparser::Operator::V128Store { memarg } => Some(MemoryOpInfo {
+            memory: memarg.memory,
+            value_operands: vec![V128],
+            result_type: None,
+        }),
 
         _ => None,
     }
@@ -267,7 +679,10 @@ pub fn clear_memory_index(op: &mut wasm_encoder::Instruction) {
         wasm_encoder::Instruction::MemorySize(mem) => *mem = 0,
         wasm_encoder::Instruction::MemoryGrow(mem) => *mem = 0,
         wasm_encoder::Instruction::MemoryInit { mem, .. } => *mem = 0,
-        wasm_encoder::Instruction::MemoryCopy { dst_mem, src_mem } => { *dst_mem = 0; *src_mem = 0; }
+        wasm_encoder::Instruction::MemoryCopy { dst_mem, src_mem } => {
+            *dst_mem = 0;
+            *src_mem = 0;
+        }
         wasm_encoder::Instruction::MemoryFill(mem) => *mem = 0,
         wasm_encoder::Instruction::MemoryDiscard(mem) => *mem = 0,
         _ => {}
@@ -276,7 +691,14 @@ pub fn clear_memory_index(op: &mut wasm_encoder::Instruction) {
 
 /// Returns the temp local index for a given ValType, using the temp local
 /// allocation layout from the multi-memory lowering pass.
-pub fn temp_local_for_type(val_ty: wasm_encoder::ValType, tmp_i32: u32, tmp_i64: u32, tmp_f32: u32, tmp_f64: u32, tmp_v128: u32) -> u32 {
+pub fn temp_local_for_type(
+    val_ty: wasm_encoder::ValType,
+    tmp_i32: u32,
+    tmp_i64: u32,
+    tmp_f32: u32,
+    tmp_f64: u32,
+    tmp_v128: u32,
+) -> u32 {
     match val_ty {
         wasm_encoder::ValType::I32 => tmp_i32,
         wasm_encoder::ValType::I64 => tmp_i64,

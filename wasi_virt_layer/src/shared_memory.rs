@@ -327,7 +327,7 @@ pub extern "C" fn wasip1_vfs_register_shared_memory_target(
     if id >= MAX_TARGETS {
         return core::ptr::null();
     }
-    
+
     unsafe {
         let metadata = &mut TARGET_METADATA_ARRAY[id];
         metadata.base_ptr = base;

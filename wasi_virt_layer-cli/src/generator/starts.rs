@@ -3,10 +3,7 @@ use std::collections::HashMap;
 use eyre::Context as _;
 use walrus::FunctionId;
 
-use crate::{
-    generator::Generator,
-    util::{ResultUtil, WalrusFID, WalrusUtilExport, WalrusUtilModule as _, WasmName},
-};
+use crate::util::{ResultUtil, WalrusFID, WalrusUtilExport, WalrusUtilModule as _, WasmName};
 
 #[derive(Debug, Clone)]
 /// A list of export names is displayed in the order specified. Order, etc.
@@ -169,4 +166,3 @@ impl FnInStarts {
         Ok(empty_start)
     }
 }
-

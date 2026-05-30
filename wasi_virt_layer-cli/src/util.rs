@@ -2101,8 +2101,9 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     {
         use rayon::prelude::*;
         let children = self.find_children_with(fid, false)?;
-        
-        let funcs: Vec<&walrus::LocalFunction> = children.iter()
+
+        let funcs: Vec<&walrus::LocalFunction> = children
+            .iter()
             .filter_map(|fid| {
                 if let walrus::FunctionKind::Local(loc) = &self.get(*fid).kind {
                     Some(loc)
@@ -2111,14 +2112,18 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
                 }
             })
             .collect();
-            
-        funcs.into_par_iter()
+
+        funcs
+            .into_par_iter()
             .map(|func| {
                 let mut results = vec![];
-                func.read(&mut |instr: &walrus::ir::Instr, loc: (usize, InstrSeqId)| -> Result<(), eyre::Error> {
+                func.read(&mut |instr: &walrus::ir::Instr,
+                                loc: (usize, InstrSeqId)|
+                 -> Result<(), eyre::Error> {
                     results.push(find(instr, loc));
                     Ok(())
-                }).unwrap();
+                })
+                .unwrap();
                 results
             })
             .collect::<Vec<Vec<T>>>()
@@ -2157,14 +2162,18 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     {
         use rayon::prelude::*;
         let exclude = exclude.iter().map(|e| *e.borrow()).collect::<Vec<_>>();
-        
-        let funcs: Vec<(FunctionId, &mut walrus::LocalFunction)> = self.iter_local_mut()
+
+        let funcs: Vec<(FunctionId, &mut walrus::LocalFunction)> = self
+            .iter_local_mut()
             .filter(|(fid, _)| !exclude.contains(fid))
             .collect();
-            
-        funcs.into_par_iter()
+
+        funcs
+            .into_par_iter()
             .map(|(_, func)| {
-                func.builder_mut().func_body().rewrite(|instr, loc| find(instr, loc))
+                func.builder_mut()
+                    .func_body()
+                    .rewrite(|instr, loc| find(instr, loc))
             })
             .collect::<eyre::Result<Vec<Vec<T>>>>()
             .map(|res| res.into_iter().flatten().collect())
@@ -2181,14 +2190,18 @@ impl WalrusUtilFuncs for walrus::ModuleFunctions {
     {
         use rayon::prelude::*;
         let children = self.find_children_with(fid, allow_call_indirect)?;
-        
-        let funcs: Vec<(FunctionId, &mut walrus::LocalFunction)> = self.iter_local_mut()
+
+        let funcs: Vec<(FunctionId, &mut walrus::LocalFunction)> = self
+            .iter_local_mut()
             .filter(|(fid, _)| children.contains(fid))
             .collect();
-            
-        funcs.into_par_iter()
+
+        funcs
+            .into_par_iter()
             .map(|(_, func)| {
-                func.builder_mut().func_body().rewrite(|instr, loc| find(instr, loc))
+                func.builder_mut()
+                    .func_body()
+                    .rewrite(|instr, loc| find(instr, loc))
             })
             .collect::<eyre::Result<Vec<Vec<T>>>>()
             .map(|res| res.into_iter().flatten().collect())

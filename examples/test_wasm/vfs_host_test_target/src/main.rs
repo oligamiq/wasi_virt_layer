@@ -15,5 +15,7 @@ fn main() {
 
     // We call the host function that should be redirected to the host
     #[cfg(target_os = "wasi")]
-    unsafe { importing_test_vfs_func() };
+    unsafe {
+        importing_test_vfs_func()
+    };
 }

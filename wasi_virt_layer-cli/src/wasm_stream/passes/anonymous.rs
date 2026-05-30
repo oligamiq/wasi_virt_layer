@@ -1,13 +1,13 @@
 use crate::wasm_stream::pipeline::StreamPass;
-use eyre::{Result, Context};
-use wasm_encoder::{ExportSection, ImportSection, Module, RawSection, Section};
-use wasmparser::Parser;
 use crate::{
     abi::Wasip1ABIFunc,
     generator::{GeneratorCtx, memory::MemoryUniqueName},
     unique_name::UniqueName,
 };
+use eyre::{Context, Result};
 use strum::VariantNames;
+use wasm_encoder::{ExportSection, ImportSection, Module, RawSection};
+use wasmparser::Parser;
 
 fn normalize_name(s: &str) -> String {
     s.replace('-', "_")
@@ -35,18 +35,27 @@ impl StreamPass for AnonymousStreamPass {
             let section_info = payload.as_section().map(|(id, r)| (id, r.clone()));
             match payload {
                 wasmparser::Payload::ExportSection(s) => {
-                    let anonymous_targets = s.clone().into_iter().filter_map(|e| {
-                        let e = e.unwrap();
-                        e.name
-                            .strip_prefix("__wasip1_vfs_")?
-                            .strip_suffix("__start_anchor")
-                            .map(|s| s.to_string())
-                    }).collect::<Vec<_>>();
+                    let anonymous_targets = s
+                        .clone()
+                        .into_iter()
+                        .filter_map(|e| {
+                            let e = e.unwrap();
+                            e.name
+                                .strip_prefix("__wasip1_vfs_")?
+                                .strip_suffix("__start_anchor")
+                                .map(|s| s.to_string())
+                        })
+                        .collect::<Vec<_>>();
 
-                    let collected = self.ctx.target_names.iter().filter(|t| {
-                        let normalized_t = normalize_name(t.as_ref());
-                        !anonymous_targets.iter().any(|at| at == &normalized_t)
-                    }).collect::<Vec<_>>();
+                    let collected = self
+                        .ctx
+                        .target_names
+                        .iter()
+                        .filter(|t| {
+                            let normalized_t = normalize_name(t.as_ref());
+                            !anonymous_targets.iter().any(|at| at == &normalized_t)
+                        })
+                        .collect::<Vec<_>>();
 
                     if collected.len() != 1 {
                         module.section(&RawSection {
@@ -87,8 +96,14 @@ impl StreamPass for AnonymousStreamPass {
                             }
                         }
 
-                        if let Some(anonymous_suffix) = name.strip_prefix(prefix).and_then(|s| s.strip_prefix("anonymous_")) {
-                            if let Some(f) = Wasip1ABIFunc::VARIANTS.iter().find(|v| anonymous_suffix == **v) {
+                        if let Some(anonymous_suffix) = name
+                            .strip_prefix(prefix)
+                            .and_then(|s| s.strip_prefix("anonymous_"))
+                        {
+                            if let Some(f) = Wasip1ABIFunc::VARIANTS
+                                .iter()
+                                .find(|v| anonymous_suffix == **v)
+                            {
                                 name = format!("{prefix}{target_name}_{f}");
                                 modified = true;
                             }
@@ -99,11 +114,7 @@ impl StreamPass for AnonymousStreamPass {
                             modified = true;
                         }
 
-                        new_export_section.export(
-                            &name,
-                            export.kind.into(),
-                            export.index,
-                        );
+                        new_export_section.export(&name, export.kind.into(), export.index);
                     }
 
                     if modified {
@@ -116,7 +127,6 @@ impl StreamPass for AnonymousStreamPass {
                     }
                 }
                 wasmparser::Payload::ImportSection(s) => {
-
                     // we don't have exports here to find anonymous_targets, but we can just use self.ctx.target_names.len() != 1
                     // Wait, collected logic needs to be the same, but we don't have exports!
                     // Let's just do self.ctx.target_names.len() == 1 for imports too as an approximation,
@@ -154,8 +164,15 @@ impl StreamPass for AnonymousStreamPass {
                             let mut name = import.name.to_string();
 
                             if import.module == namespace {
-                                if let Some(anonymous_suffix) = name.strip_prefix(prefix).and_then(|s| s.strip_prefix("anonymous_")) {
-                                    if let Some(f) = MemoryUniqueName::VARIANTS.iter().chain(EXTRA_IMPORTS).find(|v| anonymous_suffix == **v) {
+                                if let Some(anonymous_suffix) = name
+                                    .strip_prefix(prefix)
+                                    .and_then(|s| s.strip_prefix("anonymous_"))
+                                {
+                                    if let Some(f) = MemoryUniqueName::VARIANTS
+                                        .iter()
+                                        .chain(EXTRA_IMPORTS)
+                                        .find(|v| anonymous_suffix == **v)
+                                    {
                                         name = format!("{prefix}{target_name}_{f}");
                                         modified = true;
                                     }
@@ -163,20 +180,34 @@ impl StreamPass for AnonymousStreamPass {
                             }
 
                             let translated_ty = match import.ty {
-                                wasmparser::TypeRef::Func(idx) => wasm_encoder::EntityType::Function(idx),
-                                wasmparser::TypeRef::FuncExact(_) => unimplemented!("FuncExact translation is not supported"),
-                                wasmparser::TypeRef::Table(t) => wasm_encoder::EntityType::Table(crate::wasm_stream::translator::translate_table_type(t, &crate::wasm_stream::translator::DefaultRebinder)),
-                                wasmparser::TypeRef::Memory(t) => wasm_encoder::EntityType::Memory(crate::wasm_stream::translator::translate_memory_type(t)),
-                                wasmparser::TypeRef::Global(t) => wasm_encoder::EntityType::Global(crate::wasm_stream::translator::translate_global_type(t, &crate::wasm_stream::translator::DefaultRebinder)),
-                                wasmparser::TypeRef::Tag(t) => wasm_encoder::EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t)),
+                                wasmparser::TypeRef::Func(idx) => {
+                                    wasm_encoder::EntityType::Function(idx)
+                                }
+                                wasmparser::TypeRef::FuncExact(_) => {
+                                    unimplemented!("FuncExact translation is not supported")
+                                }
+                                wasmparser::TypeRef::Table(t) => wasm_encoder::EntityType::Table(
+                                    crate::wasm_stream::translator::translate_table_type(
+                                        t,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                ),
+                                wasmparser::TypeRef::Memory(t) => wasm_encoder::EntityType::Memory(
+                                    crate::wasm_stream::translator::translate_memory_type(t),
+                                ),
+                                wasmparser::TypeRef::Global(t) => wasm_encoder::EntityType::Global(
+                                    crate::wasm_stream::translator::translate_global_type(
+                                        t,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                ),
+                                wasmparser::TypeRef::Tag(t) => wasm_encoder::EntityType::Tag(
+                                    crate::wasm_stream::translator::translate_tag_type(t),
+                                ),
                                 _ => unimplemented!("Unsupported TypeRef translation"),
                             };
 
-                            new_import_section.import(
-                                import.module,
-                                &name,
-                                translated_ty,
-                            );
+                            new_import_section.import(import.module, &name, translated_ty);
                         }
                     }
 

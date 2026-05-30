@@ -1,6 +1,5 @@
-use eyre::Result;
-use wasm_encoder::{Module, Section, RawSection, ExportSection, ExportKind};
 use crate::wasm_stream::pipeline::StreamPass;
+use wasm_encoder::{ExportKind, ExportSection, Module, RawSection};
 
 pub struct StartsPreStreamPass {
     pub is_vfs: bool,
@@ -22,17 +21,17 @@ impl StreamPass for StartsPreStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
         let mut module = Module::new();
         let parser = wasmparser::Parser::new(0);
-        
+
         let mut start_func_id = None;
         let mut has_export_section = false;
-        
+
         // Pass 1: Find start section
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             if let wasmparser::Payload::StartSection { func, range: _ } = payload? {
                 start_func_id = Some(func);
             }
         }
-        
+
         for payload in parser.parse_all(input_wasm) {
             let payload = payload?;
             match payload {
@@ -61,7 +60,9 @@ impl StreamPass for StartsPreStreamPass {
                         // If there is no start function and it's not a library, we'd need to generate a dummy start.
                         // Generating a dummy start here is complex because it requires modifying Function/Code sections.
                         // We will defer dummy start generation to the post-combine pass where it's easier, or just let post-combine handle missing starts.
-                        log::warn!("Module has no start section but is not marked as a library. Deferred dummy start generation.");
+                        log::warn!(
+                            "Module has no start section but is not marked as a library. Deferred dummy start generation."
+                        );
                     }
                     module.section(&exports);
                 }
@@ -81,10 +82,14 @@ impl StreamPass for StartsPreStreamPass {
                 }
             }
         }
-        
+
         if !has_export_section && start_func_id.is_some() {
             let mut exports = ExportSection::new();
-            exports.export(&self.start_export_name, ExportKind::Func, start_func_id.unwrap());
+            exports.export(
+                &self.start_export_name,
+                ExportKind::Func,
+                start_func_id.unwrap(),
+            );
             module.section(&exports);
         }
 

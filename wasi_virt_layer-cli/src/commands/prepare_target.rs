@@ -10,7 +10,7 @@ use crate::util::WalrusUtilFuncs;
 use camino::Utf8PathBuf;
 use eyre::Context;
 use std::fs;
-use walrus::{ir::*, ConstExpr, Module, ModuleConfig, ValType};
+use walrus::{ConstExpr, Module, ModuleConfig, ValType, ir::*};
 
 /// Arguments for the `prepare-target` command.
 #[derive(Debug, Clone)]
@@ -160,7 +160,8 @@ fn add_globals(module: &mut Module) -> eyre::Result<(walrus::GlobalId, walrus::G
     );
 
     // Give them names for easier debugging
-    module.globals.get_mut(metadata_ptr).name = Some("__wvl_shared_memory_metadata_ptr".to_string());
+    module.globals.get_mut(metadata_ptr).name =
+        Some("__wvl_shared_memory_metadata_ptr".to_string());
     module.globals.get_mut(lock_ptr).name = Some("__wvl_shared_memory_lock_ptr".to_string());
 
     Ok((metadata_ptr, lock_ptr))
@@ -177,24 +178,31 @@ fn inject_init_code(
     log::debug!("Injecting initialization code");
 
     // 1. Find original _start
-    let original_start_id = module.exports.iter()
-        .find(|e| e.name == "_start")
-        .and_then(|e| match e.item {
-            walrus::ExportItem::Function(f) => Some(f),
-            _ => None,
-        });
+    let original_start_id =
+        module
+            .exports
+            .iter()
+            .find(|e| e.name == "_start")
+            .and_then(|e| match e.item {
+                walrus::ExportItem::Function(f) => Some(f),
+                _ => None,
+            });
 
     // 2. Determine initial memory parameters
-    let memory = module.memories.iter().next()
+    let memory = module
+        .memories
+        .iter()
+        .next()
         .ok_or_else(|| eyre::eyre!("No memory found in module"))?;
     let initial_pages = memory.initial as i32;
     let max_pages = memory.maximum.map(|m| m as i32).unwrap_or(0);
 
     // 3. Create a new initialization function
     let mut builder = walrus::FunctionBuilder::new(&mut module.types, &[], &[]);
-    
+
     // Call wasip1_vfs_register_shared_memory_target(base=0, pages, max_pages)
-    builder.func_body()
+    builder
+        .func_body()
         .i32_const(0) // base_ptr (assumed 0 for standalone, VFS will adjust if needed)
         .i32_const(initial_pages)
         .i32_const(max_pages)
@@ -208,13 +216,17 @@ fn inject_init_code(
     // 4. If original _start exists, call it and re-export the new one
     if let Some(orig_id) = original_start_id {
         builder.func_body().call(orig_id);
-        
+
         let new_start = builder.finish(Vec::new(), &mut module.funcs);
-        
+
         // Update export to point to the new function
-        let export = module.exports.iter_mut().find(|e| e.name == "_start").unwrap();
+        let export = module
+            .exports
+            .iter_mut()
+            .find(|e| e.name == "_start")
+            .unwrap();
         export.item = walrus::ExportItem::Function(new_start);
-        
+
         log::debug!("Injected initialization into _start");
     } else {
         // Just create an initialization function and export it as __wvl_init
@@ -228,7 +240,7 @@ fn inject_init_code(
 
 /// Replaces all memory.grow instructions with ABI calls.
 fn replace_memory_grow(
-    module: &mut Module, 
+    module: &mut Module,
     grow_fn: walrus::FunctionId,
     metadata_ptr_global: walrus::GlobalId,
 ) -> eyre::Result<()> {
@@ -236,14 +248,19 @@ fn replace_memory_grow(
 
     // Create a helper function: __wvl_grow_wrapper(pages) -> old_size
     // wasip1_vfs_shared_memory_grow(metadata_ptr, pages) -> old_size
-    let mut builder = walrus::FunctionBuilder::new(&mut module.types, &[walrus::ValType::I32], &[walrus::ValType::I32]);
+    let mut builder = walrus::FunctionBuilder::new(
+        &mut module.types,
+        &[walrus::ValType::I32],
+        &[walrus::ValType::I32],
+    );
     let pages_local = module.locals.add(walrus::ValType::I32);
-    
-    builder.func_body()
+
+    builder
+        .func_body()
         .global_get(metadata_ptr_global)
         .local_get(pages_local)
         .call(grow_fn);
-    
+
     let wrapper_fn = builder.finish(vec![pages_local], &mut module.funcs);
     module.funcs.get_mut(wrapper_fn).name = Some("__wvl_grow_wrapper".to_string());
 

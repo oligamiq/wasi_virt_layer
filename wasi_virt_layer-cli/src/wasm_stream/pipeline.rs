@@ -1,4 +1,3 @@
-use super::StreamContext;
 use eyre::Context as _;
 
 pub trait StreamPass: Send + Sync {
@@ -25,7 +24,7 @@ impl StreamPass for ParallelCheckStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             let payload = payload?;
-            // Process checkers sequentially for now (parsing itself is fast, 
+            // Process checkers sequentially for now (parsing itself is fast,
             // and parallelizing across lightweight checkers might not outweigh thread overhead,
             // but the architecture allows replacing this loop with rayon later).
             for checker in &mut self.checkers {
@@ -48,10 +47,12 @@ pub fn par_process_code_section<F>(
     transform: F,
 ) -> eyre::Result<wasm_encoder::CodeSection>
 where
-    F: Fn(usize, wasmparser::FunctionBody<'_>) -> eyre::Result<wasm_encoder::Function> + Sync + Send,
+    F: Fn(usize, wasmparser::FunctionBody<'_>) -> eyre::Result<wasm_encoder::Function>
+        + Sync
+        + Send,
 {
-    use rayon::prelude::*;
     use eyre::Context;
+    use rayon::prelude::*;
 
     // Collect all function bodies
     let bodies = code_section
@@ -87,14 +88,16 @@ impl Pipeline {
     pub fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
         let mut current_wasm = input_wasm.to_vec();
         log::debug!("PIPELINE RUN IS EXECUTING!");
-        
+
         let mut i = 0;
         for pass in &mut self.passes {
             log::debug!("RUNNING STREAM PASS #{}", i);
-            current_wasm = pass.run(&current_wasm).wrap_err_with(|| format!("Failed in stream pass #{i}"))?;
+            current_wasm = pass
+                .run(&current_wasm)
+                .wrap_err_with(|| format!("Failed in stream pass #{i}"))?;
             i += 1;
         }
-        
+
         Ok(current_wasm)
     }
 }

@@ -29,8 +29,6 @@ export!(Starter);
 // Import the target Wasm module named `test_wasm`
 import_wasm!(test_wasm);
 
-
-
 mod fs {
     use super::*;
     use std::sync::LazyLock;
@@ -52,8 +50,4 @@ const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
 
 plug_env!(@embedded, VirtualEnvTy, test_wasm, self);
 
-plug_process!(
-    wasi_virt_layer::process::StandardProcess,
-    test_wasm,
-    self
-);
+plug_process!(wasi_virt_layer::process::StandardProcess, test_wasm, self);

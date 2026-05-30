@@ -9,8 +9,12 @@ pub mod debug;
 /// Generates and bridges memory copy, trap, and related VFS interactions.
 pub mod memory;
 pub mod memory_post_components;
+/// Reimplementation of binaryen's `--multi-memory-lowering` pass using walrus.
+pub mod multi_memory_lowering;
 /// Routines for stripping or patching unused WASM components.
 pub mod patch_component;
+/// Generates the atomic wait implementation for `WaitPoll` timeout handling.
+pub mod poll;
 /// Embeds module metadata.
 pub mod producer;
 /// Low-level multi-threading global locks and shared allocations.
@@ -20,13 +24,9 @@ pub mod special_func;
 pub mod starts;
 /// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
+pub mod vfs_host;
 /// Handles logic for rewriting unreachable instructions to prevent Wasm execution traps.
 pub mod wrap_unreachable;
-pub mod vfs_host;
-/// Generates the atomic wait implementation for `WaitPoll` timeout handling.
-pub mod poll;
-/// Reimplementation of binaryen's `--multi-memory-lowering` pass using walrus.
-pub mod multi_memory_lowering;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
@@ -618,20 +618,23 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
     fn wrap_run(
         self,
         path: &mut WasmPath,
-        dwarf: bool,
+        _dwarf: bool,
         keep_build_artifacts: bool,
         mut stream_pipeline: Option<crate::wasm_stream::pipeline::Pipeline>,
     ) -> eyre::Result<T> {
         let old_path = path.path()?.clone();
-        
+
         let mut input_wasm = fs::read(&old_path).wrap_err("Failed to read Wasm file")?;
-        
+
         if let Some(pipeline) = &mut stream_pipeline {
-            input_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline pre-walrus")?;
+            input_wasm = pipeline
+                .run(&input_wasm)
+                .wrap_err("Failed to run StreamPipeline pre-walrus")?;
         }
-        
-        let module =
-            &mut walrus::Module::from_buffer(&input_wasm).map_err(|e| eyre::eyre!(e)).wrap_err("Failed to load Wasm module from buffer")?;
+
+        let module = &mut walrus::Module::from_buffer(&input_wasm)
+            .map_err(|e| eyre::eyre!(e))
+            .wrap_err("Failed to load Wasm module from buffer")?;
 
         let result = (self)(module)?;
 
@@ -648,8 +651,9 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
             .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
 
         if !keep_build_artifacts && !path.is_original(&old_path) {
-            std::fs::remove_file(&old_path)
-                .unwrap_or_else(|e| log::warn!("Failed to remove intermediate file {old_path}: {e}"));
+            std::fs::remove_file(&old_path).unwrap_or_else(|e| {
+                log::warn!("Failed to remove intermediate file {old_path}: {e}")
+            });
         }
 
         path.set_path(new_path)?;
@@ -835,8 +839,6 @@ impl GeneratorRunner {
         self.generators.push(Box::new(generator));
     }
 
-
-
     /// Resolves and retrieves a shared reference to a specific structured generator dynamically at runtime.
     pub fn get_generator_ref<T: Generator + 'static>(&self) -> eyre::Result<&T> {
         fn downcast_ref<T: 'static>(b: &dyn Any) -> Option<&'_ T> {
@@ -985,23 +987,32 @@ impl GeneratorRunner {
             .wrap_run(path, dwarf, keep_build_artifacts, {
                 let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
                 use crate::wasm_stream::passes::{
-                    starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
-                    check::CheckUseWasiVirtLayerChecker,
-                    patch_component::PatchComponentStreamPass,
+                    abi_connect::{
+                        ConnectWasip1ABIPreVfsStreamPass, NonRecursiveWasiABIPreVfsStreamPass,
+                    },
                     anonymous::AnonymousStreamPass,
-                    abi_connect::{ConnectWasip1ABIPreVfsStreamPass, NonRecursiveWasiABIPreVfsStreamPass},
+                    check::CheckUseWasiVirtLayerChecker,
+                    dummy_injector::DummyInjectorStreamPass,
+                    patch_component::PatchComponentStreamPass,
+                    pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                    starts_pre::StartsPreStreamPass,
                 };
 
-                let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
-                    Box::new(CheckUseWasiVirtLayerChecker::new()),
-                ]);
+                let check_pass =
+                    crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![Box::new(
+                        CheckUseWasiVirtLayerChecker::new(),
+                    )]);
                 pipeline.add_pass(Box::new(check_pass));
                 pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx)));
                 pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
                 pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
                 pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
 
-                pipeline.add_pass(Box::new(StartsPreStreamPass::new(true, pipeline_is_library, "__flesh_vfs_start".to_string())));
+                pipeline.add_pass(Box::new(StartsPreStreamPass::new(
+                    true,
+                    pipeline_is_library,
+                    "__flesh_vfs_start".to_string(),
+                )));
                 pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
                     "__thread_patch".to_string(),
                     "__init_offset_global".to_string(),
@@ -1016,9 +1027,16 @@ impl GeneratorRunner {
 
         println!("Adjusting target Wasm...");
         self.ctx.vfs_used_memory_id = None;
-        for (i, (target, target_name)) in self.targets.iter_mut().zip(self.ctx.target_names.clone()).enumerate() {
-            let skip_target_opt = self.vfs_build_opts.no_opt_all > 0 || self.target_vfs_build_opts[i].no_opt > 0 || self.target_vfs_build_opts[i].no_opt_all > 0;
-            let cloned_ctx = self.ctx.clone();
+        for (i, (target, target_name)) in self
+            .targets
+            .iter_mut()
+            .zip(self.ctx.target_names.clone())
+            .enumerate()
+        {
+            let skip_target_opt = self.vfs_build_opts.no_opt_all > 0
+                || self.target_vfs_build_opts[i].no_opt > 0
+                || self.target_vfs_build_opts[i].no_opt_all > 0;
+            let _cloned_ctx = self.ctx.clone();
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
@@ -1038,26 +1056,44 @@ impl GeneratorRunner {
                 .wrap_run(path, dwarf, keep_build_artifacts, {
                     let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
                     use crate::wasm_stream::passes::{
-                        starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
-                        producer::ProducerStreamPass, anonymous::AnonymousStreamPass, check_unused_threads::CheckUnusedThreadsStreamPass,
+                        abi_connect::{
+                            ConnectWasip1ABIPreTargetStreamPass,
+                            ConnectWasip1ThreadsABIPreTargetStreamPass,
+                        },
                         check::IsRustWasmChecker,
-                        abi_connect::{ConnectWasip1ABIPreTargetStreamPass, ConnectWasip1ThreadsABIPreTargetStreamPass},
+                        dummy_injector::DummyInjectorStreamPass,
+                        pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                        producer::ProducerStreamPass,
+                        starts_pre::StartsPreStreamPass,
                     };
-                    
+
                     pipeline.add_pass(Box::new(ProducerStreamPass::new()));
-                    pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(target_name.to_string())));
-                    pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(target_name.to_string())));
-                    
-                    let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![
-                        Box::new(IsRustWasmChecker::new()),
-                    ]);
+                    pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(
+                        target_name.to_string(),
+                    )));
+                    pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(
+                        target_name.to_string(),
+                    )));
+
+                    let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(
+                        vec![Box::new(IsRustWasmChecker::new())],
+                    );
                     pipeline.add_pass(Box::new(check_pass));
 
                     let export_name = format!("__flesh_{}_start", target_name);
-                    pipeline.add_pass(Box::new(StartsPreStreamPass::new(false, false, export_name.clone())));
-                    pipeline.add_pass(Box::new(crate::wasm_stream::passes::dummy_injector::DummyInjectorStreamPass::new(vec![export_name])));
-                    let new_memory_name = format!("__wasip1_vfs_{}_memory", target_name);
-                    pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(Some(new_memory_name))));
+                    pipeline.add_pass(Box::new(StartsPreStreamPass::new(
+                        false,
+                        false,
+                        export_name.clone(),
+                    )));
+                    pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![export_name])));
+                    let new_memory_name = crate::generator::UniqueName::Memory(
+                        &crate::generator::memory::MemoryUniqueName::Memory(&target_name),
+                    )
+                    .to_string();
+                    pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(Some(
+                        new_memory_name,
+                    ))));
                     Some(pipeline)
                 })
             })
@@ -1065,7 +1101,10 @@ impl GeneratorRunner {
         }
 
         let skip_all_opt = self.vfs_build_opts.no_opt_all > 0
-            || self.target_vfs_build_opts.iter().any(|opts| opts.no_opt_all > 0);
+            || self
+                .target_vfs_build_opts
+                .iter()
+                .any(|opts| opts.no_opt_all > 0);
 
         println!("Combining Wasm modules...");
         self.ctx.vfs_used_memory_id = None;
@@ -1149,10 +1188,10 @@ impl GeneratorRunner {
         (|path: &mut WasmPath| {
             let old_path = path.path()?.clone();
             let input_wasm = std::fs::read(&old_path).wrap_err("Failed to read Wasm file")?;
-            
+
             let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
             let target_names: Vec<String> = self.ctx.target_names.iter().map(|n| n.as_ref().to_string()).collect();
-            
+
             pipeline.add_pass(Box::new(
                 crate::wasm_stream::passes::post_combine::PostCombineStreamPass::new(target_names.clone())
             ));
@@ -1166,16 +1205,16 @@ impl GeneratorRunner {
                     crate::wasm_stream::passes::shared_global::SharedGlobalStreamPass::new(self.ctx.threads, target_names)
                 ));
             }
-            
+
             let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
-            
+
             let new_path = old_path.with_extension("lowered.wasm");
             std::fs::write(&new_path, output_wasm).wrap_err("Failed to write lowered Wasm file")?;
-            
+
             if !keep_build_artifacts {
                 std::fs::remove_file(&old_path).wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
             }
-            
+
             path.set_path(new_path)?;
             Ok(())
         }).with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
@@ -1325,7 +1364,12 @@ impl ComponentRunner {
 
             Ok(core_wasm.clone())
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), parsed_args.dev())?;
+        .with_opt(
+            &mut self.path,
+            dwarf,
+            parsed_args.keep_build_artifacts(),
+            parsed_args.dev(),
+        )?;
 
         let mem_size_visitor = MemorySizeVisitor::default();
         self.generators.push(Box::new(mem_size_visitor));
@@ -1369,7 +1413,12 @@ impl ComponentRunner {
             })
             .wrap_run(path, dwarf, parsed_args.keep_build_artifacts(), None)
         })
-        .with_opt(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), parsed_args.dev())?;
+        .with_opt(
+            &mut self.path,
+            dwarf,
+            parsed_args.keep_build_artifacts(),
+            parsed_args.dev(),
+        )?;
 
         let dwarf = {
             let new_dwarf = self.ctx.as_ref().unwrap().dwarf;
@@ -1399,7 +1448,12 @@ impl ComponentRunner {
                     }
                 }
             })
-            .wrap_run(&mut self.path, dwarf, parsed_args.keep_build_artifacts(), None)?;
+            .wrap_run(
+                &mut self.path,
+                dwarf,
+                parsed_args.keep_build_artifacts(),
+                None,
+            )?;
         }
 
         std::fs::rename(self.path.path()?, &core_wasm_path).wrap_err_with(|| {
@@ -1621,10 +1675,9 @@ impl Generator for StartFuncIdVisitor {
             // The anchor export was created by import_wasm! macro and uses underscores
             let anchor_name = format!("__wasip1_vfs_{normalized_wasm}__start_anchor");
             if let Some(_) = anchor_name.find_fid(&module.exports) {
-                module.exports.erase_with(
-                    &anchor_name,
-                    ctx.unstable_print_debug,
-                )?;
+                module
+                    .exports
+                    .erase_with(&anchor_name, ctx.unstable_print_debug)?;
             }
         }
 
@@ -1947,7 +2000,17 @@ pub fn merge(
         .arg("--output")
         .arg(output.as_ref().as_os_str().to_str().unwrap())
         // .arg("--rename-export-conflicts")
-        .args(["--enable-threads", "--enable-bulk-memory", "--enable-reference-types", "--enable-simd", "--enable-exception-handling", "--enable-shared-everything", "--enable-multivalue", "--enable-multimemory", "--enable-gc"]);
+        .args([
+            "--enable-threads",
+            "--enable-bulk-memory",
+            "--enable-reference-types",
+            "--enable-simd",
+            "--enable-exception-handling",
+            "--enable-shared-everything",
+            "--enable-multivalue",
+            "--enable-multimemory",
+            "--enable-gc",
+        ]);
 
     let result = merge_cmd
         .spawn()
@@ -1994,4 +2057,3 @@ macro_rules! _add_generators_by_type {
     };
 }
 pub(crate) use _add_generators_by_type as add_generators_by_type;
-

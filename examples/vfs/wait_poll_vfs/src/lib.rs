@@ -2,7 +2,9 @@ use const_struct::const_struct;
 use wasi_virt_layer::file::*;
 use wasi_virt_layer::poll::DefaultWaitPoll;
 use wasi_virt_layer::prelude::*;
-use wasi_virt_layer::{import_wasm, plug_clock, plug_env, plug_fs, plug_poll, plug_process, plug_sched, EmbeddedFiles};
+use wasi_virt_layer::{
+    EmbeddedFiles, import_wasm, plug_clock, plug_env, plug_fs, plug_poll, plug_process, plug_sched,
+};
 
 import_wasm!(test_poll);
 
@@ -29,7 +31,10 @@ const FILE_COUNT: usize = 2; // "." directory + "placeholder.txt"
 
 #[const_struct]
 const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-    EmbeddedFiles!([(".", [("placeholder.txt", WasiEmbeddedFile::new("placeholder"))])]);
+    EmbeddedFiles!([(
+        ".",
+        [("placeholder.txt", WasiEmbeddedFile::new("placeholder"))]
+    )]);
 
 // Minimal filesystem setup
 mod fs {

@@ -1,13 +1,9 @@
 use crate::wasm_stream::pipeline::StreamPass;
+use crate::{abi::Wasip1ABIFunc, unique_name::UniqueName, util::gen_component_name};
 use eyre::Result;
-use wasm_encoder::{ExportSection, ImportSection, Module, Section, EntityType};
-use wasmparser::Parser;
 use strum::VariantNames;
-use crate::{
-    abi::Wasip1ABIFunc,
-    unique_name::UniqueName,
-    util::gen_component_name,
-};
+use wasm_encoder::{EntityType, ExportSection, ImportSection, Module};
+use wasmparser::Parser;
 
 /// Apply the patch to use wit-bindgen.
 /// As it will be rejected otherwise,
@@ -73,7 +69,7 @@ impl StreamPass for PatchComponentStreamPass {
         for payload in parser.parse_all(input_wasm) {
             let payload = payload?;
             let section_info = payload.as_section().map(|(id, r)| (id, r.clone()));
-            
+
             match payload {
                 wasmparser::Payload::ImportSection(s) => {
                     let mut new_import_section = ImportSection::new();
@@ -82,29 +78,44 @@ impl StreamPass for PatchComponentStreamPass {
                             let (_, import) = import_res.unwrap();
                             let entity_type = match import.ty {
                                 wasmparser::TypeRef::Func(f) => EntityType::Function(f),
-                                wasmparser::TypeRef::Table(t) => EntityType::Table(crate::wasm_stream::translator::translate_table_type(t, &crate::wasm_stream::translator::DefaultRebinder)),
-                                wasmparser::TypeRef::Memory(m) => EntityType::Memory(crate::wasm_stream::translator::translate_memory_type(m)),
-                                wasmparser::TypeRef::Global(g) => EntityType::Global(crate::wasm_stream::translator::translate_global_type(g, &crate::wasm_stream::translator::DefaultRebinder)),
-                                wasmparser::TypeRef::Tag(t) => EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t)),
+                                wasmparser::TypeRef::Table(t) => EntityType::Table(
+                                    crate::wasm_stream::translator::translate_table_type(
+                                        t,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                ),
+                                wasmparser::TypeRef::Memory(m) => EntityType::Memory(
+                                    crate::wasm_stream::translator::translate_memory_type(m),
+                                ),
+                                wasmparser::TypeRef::Global(g) => EntityType::Global(
+                                    crate::wasm_stream::translator::translate_global_type(
+                                        g,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                ),
+                                wasmparser::TypeRef::Tag(t) => EntityType::Tag(
+                                    crate::wasm_stream::translator::translate_tag_type(t),
+                                ),
                                 _ => unimplemented!("TypeRef variant not supported"),
                             };
 
                             let key = (import.module.to_string(), import.name.to_string());
-                            let (new_module, new_name) = if let Some((m, n)) = forward_replacements.get(&key) {
-                                // Forward: WIT-component import -> wasi_snapshot_preview1
-                                (m.as_str(), n.as_str())
-                            } else if let Some((m, n)) = reverse_replacements.get(&key) {
-                                // Only apply reverse if the forward counterpart also exists
-                                // (i.e., do a true swap only when both sides are present)
-                                if has_forward.contains(&(m.clone(), n.clone())) {
+                            let (new_module, new_name) =
+                                if let Some((m, n)) = forward_replacements.get(&key) {
+                                    // Forward: WIT-component import -> wasi_snapshot_preview1
                                     (m.as_str(), n.as_str())
+                                } else if let Some((m, n)) = reverse_replacements.get(&key) {
+                                    // Only apply reverse if the forward counterpart also exists
+                                    // (i.e., do a true swap only when both sides are present)
+                                    if has_forward.contains(&(m.clone(), n.clone())) {
+                                        (m.as_str(), n.as_str())
+                                    } else {
+                                        (import.module, import.name)
+                                    }
                                 } else {
                                     (import.module, import.name)
-                                }
-                            } else {
-                                (import.module, import.name)
-                            };
-                                
+                                };
+
                             new_import_section.import(new_module, new_name, entity_type);
                         }
                     }
@@ -118,8 +129,12 @@ impl StreamPass for PatchComponentStreamPass {
                             let export_kind = match export.kind {
                                 wasmparser::ExternalKind::Func => wasm_encoder::ExportKind::Func,
                                 wasmparser::ExternalKind::Table => wasm_encoder::ExportKind::Table,
-                                wasmparser::ExternalKind::Memory => wasm_encoder::ExportKind::Memory,
-                                wasmparser::ExternalKind::Global => wasm_encoder::ExportKind::Global,
+                                wasmparser::ExternalKind::Memory => {
+                                    wasm_encoder::ExportKind::Memory
+                                }
+                                wasmparser::ExternalKind::Global => {
+                                    wasm_encoder::ExportKind::Global
+                                }
                                 wasmparser::ExternalKind::Tag => wasm_encoder::ExportKind::Tag,
                                 _ => unimplemented!("ExternalKind variant not supported"),
                             };
@@ -138,7 +153,7 @@ impl StreamPass for PatchComponentStreamPass {
                 }
             }
         }
-        
+
         Ok(module.finish())
     }
 }

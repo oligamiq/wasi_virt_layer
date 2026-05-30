@@ -1,34 +1,26 @@
+use crate::abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc};
+use crate::unique_name::UniqueName;
 use crate::wasm_stream::pipeline::StreamPass;
 use crate::wasm_stream::translator::DefaultRebinder;
 use eyre::Result;
-use wasm_encoder::{Module, Section, ImportSection};
-use crate::unique_name::UniqueName;
-use crate::abi::{Wasip1ABIFunc, Wasip1ThreadsABIFunc};
 use strum::VariantNames;
+use wasm_encoder::{ImportSection, Module};
 
 /// Helper to translate a `wasmparser::TypeRef` into a `wasm_encoder::EntityType`.
 fn translate_type_ref(ty: wasmparser::TypeRef) -> wasm_encoder::EntityType {
     match ty {
         wasmparser::TypeRef::Func(f) => wasm_encoder::EntityType::Function(f),
-        wasmparser::TypeRef::Table(t) => {
-            wasm_encoder::EntityType::Table(
-                crate::wasm_stream::translator::translate_table_type(t, &DefaultRebinder),
-            )
-        }
-        wasmparser::TypeRef::Memory(m) => {
-            wasm_encoder::EntityType::Memory(
-                crate::wasm_stream::translator::translate_memory_type(m),
-            )
-        }
-        wasmparser::TypeRef::Global(g) => {
-            wasm_encoder::EntityType::Global(
-                crate::wasm_stream::translator::translate_global_type(g, &DefaultRebinder),
-            )
-        }
+        wasmparser::TypeRef::Table(t) => wasm_encoder::EntityType::Table(
+            crate::wasm_stream::translator::translate_table_type(t, &DefaultRebinder),
+        ),
+        wasmparser::TypeRef::Memory(m) => wasm_encoder::EntityType::Memory(
+            crate::wasm_stream::translator::translate_memory_type(m),
+        ),
+        wasmparser::TypeRef::Global(g) => wasm_encoder::EntityType::Global(
+            crate::wasm_stream::translator::translate_global_type(g, &DefaultRebinder),
+        ),
         wasmparser::TypeRef::Tag(t) => {
-            wasm_encoder::EntityType::Tag(
-                crate::wasm_stream::translator::translate_tag_type(t),
-            )
+            wasm_encoder::EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t))
         }
         _ => unimplemented!("TypeRef variant not supported"),
     }
@@ -165,7 +157,10 @@ impl StreamPass for NonRecursiveWasiABIPreVfsStreamPass {
             if <Wasip1ABIFunc as VariantNames>::VARIANTS.contains(&imp_name)
                 && imp_module == UniqueName::CORE_NON_RECURSIVE_MODULE_ROOT
             {
-                (UniqueName::WASIP1_ABI_MODULE.to_string(), imp_name.to_string())
+                (
+                    UniqueName::WASIP1_ABI_MODULE.to_string(),
+                    imp_name.to_string(),
+                )
             } else {
                 (imp_module.to_string(), imp_name.to_string())
             }

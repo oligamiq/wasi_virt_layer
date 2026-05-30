@@ -1,6 +1,8 @@
-use eyre::Result;
-use wasm_encoder::{Module, Section, RawSection, ExportSection, ExportKind, TypeSection, FunctionSection, CodeSection, Instruction};
 use crate::wasm_stream::pipeline::StreamPass;
+use wasm_encoder::{
+    CodeSection, ExportKind, ExportSection, FunctionSection, Instruction, Module, RawSection,
+    TypeSection,
+};
 
 pub struct DummyInjectorStreamPass {
     pub dummy_names: Vec<String>,
@@ -20,7 +22,7 @@ impl StreamPass for DummyInjectorStreamPass {
 
         let mut module = Module::new();
         let parser = wasmparser::Parser::new(0);
-        
+
         let mut empty_type_idx = None;
         let mut type_count = 0;
         let mut orig_func_count = 0;
@@ -36,7 +38,9 @@ impl StreamPass for DummyInjectorStreamPass {
                     for (i, ty) in s.into_iter().enumerate() {
                         let ty = ty?;
                         for sub_ty in ty.into_types() {
-                            if let wasmparser::CompositeInnerType::Func(f) = &sub_ty.composite_type.inner {
+                            if let wasmparser::CompositeInnerType::Func(f) =
+                                &sub_ty.composite_type.inner
+                            {
                                 if f.params().is_empty() && f.results().is_empty() {
                                     empty_type_idx = Some(i as u32);
                                 }
@@ -68,8 +72,9 @@ impl StreamPass for DummyInjectorStreamPass {
             }
         }
 
-        self.dummy_names.retain(|name| !existing_exports.contains(name));
-        
+        self.dummy_names
+            .retain(|name| !existing_exports.contains(name));
+
         if self.dummy_names.is_empty() {
             return Ok(input_wasm.to_vec());
         }
@@ -79,19 +84,30 @@ impl StreamPass for DummyInjectorStreamPass {
             match payload {
                 wasmparser::Payload::TypeSection(s) => {
                     let mut types = TypeSection::new();
-                      for ty in s {
-                          let ty = ty?;
-                          if ty.is_explicit_rec_group() {
-                              let rec_types = ty.into_types().map(|sub_ty| {
-                                  crate::wasm_stream::translator::translate_sub_type(&sub_ty, &crate::wasm_stream::translator::DefaultRebinder)
-                              }).collect::<Vec<_>>();
-                              types.ty().rec(rec_types);
-                          } else {
-                              for sub_ty in ty.into_types() {
-                                  types.ty().subtype(&crate::wasm_stream::translator::translate_sub_type(&sub_ty, &crate::wasm_stream::translator::DefaultRebinder));
-                              }
-                          }
-                      }
+                    for ty in s {
+                        let ty = ty?;
+                        if ty.is_explicit_rec_group() {
+                            let rec_types = ty
+                                .into_types()
+                                .map(|sub_ty| {
+                                    crate::wasm_stream::translator::translate_sub_type(
+                                        &sub_ty,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    )
+                                })
+                                .collect::<Vec<_>>();
+                            types.ty().rec(rec_types);
+                        } else {
+                            for sub_ty in ty.into_types() {
+                                types.ty().subtype(
+                                    &crate::wasm_stream::translator::translate_sub_type(
+                                        &sub_ty,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                );
+                            }
+                        }
+                    }
                     if empty_type_idx.is_none() {
                         empty_type_idx = Some(type_count);
                         types.ty().function(vec![], vec![]);
@@ -129,9 +145,13 @@ impl StreamPass for DummyInjectorStreamPass {
                     }
                     module.section(&exports);
                 }
-                wasmparser::Payload::CodeSectionStart { count: _, range: _, size: _ } => {
+                wasmparser::Payload::CodeSectionStart {
+                    count: _,
+                    range: _,
+                    size: _,
+                } => {
                     let mut code = CodeSection::new();
-                    let mut body_parser = wasmparser::Parser::new(0);
+                    let body_parser = wasmparser::Parser::new(0);
                     for payload in body_parser.parse_all(input_wasm) {
                         if let wasmparser::Payload::CodeSectionEntry(body) = payload? {
                             code.raw(&input_wasm[body.range().start..body.range().end]);
@@ -162,7 +182,7 @@ impl StreamPass for DummyInjectorStreamPass {
                 }
             }
         }
-        
+
         Ok(module.finish())
     }
 }

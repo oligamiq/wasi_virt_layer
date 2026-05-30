@@ -1,6 +1,6 @@
 use crate::wasm_stream::pipeline::StreamPass;
 use eyre::Result;
-use wasm_encoder::{CustomSection, Module, RawSection, Section};
+use wasm_encoder::{Module, RawSection};
 use wasmparser::Parser;
 
 /// Generator that adds `wasi-virt-layer` as a processed producer to the final binary metric.
@@ -23,7 +23,7 @@ impl StreamPass for ProducerStreamPass {
             let payload = payload?;
             match payload {
                 wasmparser::Payload::CustomSection(c) if c.name() == "producers" => {
-                    // TODO: We could append to existing producers section, 
+                    // TODO: We could append to existing producers section,
                     // but for now, we just pass it through and append our own at the end,
                     // or append to the existing one. Wait, multiple producers sections are allowed?
                     // According to WASM spec, custom sections can appear multiple times.

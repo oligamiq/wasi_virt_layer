@@ -14,7 +14,11 @@ struct Hello;
 import_wasm!(test_threads);
 import_wasm!(ls);
 
-wrap_unreachable!(wasi_virt_layer::wasi::wrap_unreachable::StandardWrapUnreachable, test_threads, ls);
+wrap_unreachable!(
+    wasi_virt_layer::wasi::wrap_unreachable::StandardWrapUnreachable,
+    test_threads,
+    ls
+);
 
 impl Guest for Hello {
     fn world() {

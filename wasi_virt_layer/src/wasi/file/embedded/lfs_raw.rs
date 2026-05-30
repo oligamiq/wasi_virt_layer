@@ -540,7 +540,12 @@ impl<File: WasiEmbeddedPrimitiveFile> Wasip1FileTrait for WasiEmbeddedFile<File>
         Err(wasip1::ERRNO_ROFS)
     }
 
-    fn advise(&self, _offset: u64, _len: u64, _advice: wasip1::Advice) -> Result<(), wasip1::Errno> {
+    fn advise(
+        &self,
+        _offset: u64,
+        _len: u64,
+        _advice: wasip1::Advice,
+    ) -> Result<(), wasip1::Errno> {
         Ok(())
     }
 

@@ -822,7 +822,10 @@ where
         trace_fs!(self, Wasm; "fd_advise: fd={fd}, offset={offset}, len={len}, advice={advice:?}");
 
         get_open_fd!(open_fd = self, fd);
-        match self.lfs.fd_advise_raw::<Wasm>(open_fd.inode_id(), offset, len, advice) {
+        match self
+            .lfs
+            .fd_advise_raw::<Wasm>(open_fd.inode_id(), offset, len, advice)
+        {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,
         }
@@ -837,7 +840,10 @@ where
         trace_fs!(self, Wasm; "fd_allocate: fd={fd}, offset={offset}, len={len}");
 
         get_open_fd!(open_fd = self, fd);
-        match self.lfs.fd_allocate_raw::<Wasm>(open_fd.inode_id(), offset, len) {
+        match self
+            .lfs
+            .fd_allocate_raw::<Wasm>(open_fd.inode_id(), offset, len)
+        {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,
         }
@@ -856,10 +862,7 @@ where
         }
     }
 
-    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
-        &self,
-        fd: Fd,
-    ) -> wasip1::Errno {
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_sync: fd={fd}");
 
         get_open_fd!(open_fd = self, fd);
@@ -918,7 +921,10 @@ where
         trace_fs!(self, Wasm; "fd_filestat_set_size: fd={fd}, size={size}");
 
         get_open_fd!(open_fd = self, fd);
-        match self.lfs.fd_filestat_set_size_raw::<Wasm>(open_fd.inode_id(), size) {
+        match self
+            .lfs
+            .fd_filestat_set_size_raw::<Wasm>(open_fd.inode_id(), size)
+        {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,
         }
@@ -934,7 +940,10 @@ where
         trace_fs!(self, Wasm; "fd_filestat_set_times: fd={fd}, atim={atim}, mtim={mtim}, fst_flags={fst_flags}");
 
         get_open_fd!(open_fd = self, fd);
-        match self.lfs.fd_filestat_set_times_raw::<Wasm>(open_fd.inode_id(), atim, mtim, fst_flags) {
+        match self
+            .lfs
+            .fd_filestat_set_times_raw::<Wasm>(open_fd.inode_id(), atim, mtim, fst_flags)
+        {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,
         }
@@ -954,7 +963,13 @@ where
 
         get_open_fd!(open_fd = self, fd);
         match self.lfs.path_filestat_set_times_raw::<Wasm>(
-            open_fd.inode_id(), flags, path_ptr, path_len, atim, mtim, fst_flags,
+            open_fd.inode_id(),
+            flags,
+            path_ptr,
+            path_len,
+            atim,
+            mtim,
+            fst_flags,
         ) {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,
@@ -973,7 +988,11 @@ where
 
         get_open_fd!(open_fd = self, fd);
         match self.lfs.path_symlink_raw::<Wasm>(
-            open_fd.inode_id(), old_path_ptr, old_path_len, new_path_ptr, new_path_len,
+            open_fd.inode_id(),
+            old_path_ptr,
+            old_path_len,
+            new_path_ptr,
+            new_path_len,
         ) {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,

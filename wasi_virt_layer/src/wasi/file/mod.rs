@@ -909,16 +909,11 @@ pub trait Wasip1FileSystem: core::fmt::Debug {
     ) -> wasip1::Errno;
 
     /// Synchronizes the data of a file to disk.
-    fn fd_datasync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
-        &self,
-        fd: Fd,
-    ) -> wasip1::Errno;
+    fn fd_datasync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd)
+    -> wasip1::Errno;
 
     /// Synchronizes the data and metadata of a file to disk.
-    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
-        &self,
-        fd: Fd,
-    ) -> wasip1::Errno;
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> wasip1::Errno;
 
     /// Gets the current offset of a file descriptor.
     fn fd_tell_raw<Wasm: WasmAccess + WasmAccessName + 'static>(

@@ -3,9 +3,9 @@ use itertools::Itertools;
 use strum::VariantNames;
 
 use crate::{
-    instrs::InstrRewrite,
     abi::{Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, GeneratorCtx},
+    instrs::InstrRewrite,
     unique_name::UniqueName,
     util::{
         WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,
@@ -291,7 +291,7 @@ impl Generator for ThreadsSpawnPatch {
     }
 }
 
-/// Rewrites `memory.atomic.wait` and `memory.atomic.notify` in target modules 
+/// Rewrites `memory.atomic.wait` and `memory.atomic.notify` in target modules
 /// to VFS alternate implementations to handle offset shifts during memory growth safely.
 #[derive(Debug, Default)]
 pub struct AtomicPatch;
@@ -311,10 +311,7 @@ impl AtomicPatch {
         results: &[walrus::ValType],
     ) -> walrus::FunctionId {
         let mut builder = walrus::FunctionBuilder::new(&mut module.types, params, results);
-        let args: Vec<walrus::LocalId> = params
-            .iter()
-            .map(|ty| module.locals.add(*ty))
-            .collect();
+        let args: Vec<walrus::LocalId> = params.iter().map(|ty| module.locals.add(*ty)).collect();
 
         {
             let mut body = builder.func_body();
@@ -348,20 +345,26 @@ impl Generator for AtomicPatch {
             return Ok(());
         }
 
-        let wasm_id = ctx.target_names.iter().position(|n| n.as_str() == external.name.as_str())
+        let wasm_id = ctx
+            .target_names
+            .iter()
+            .position(|n| n.as_str() == external.name.as_str())
             .unwrap_or(0) as u32;
 
         use walrus::ValType::{I32, I64};
 
         // Import base VFS atomic functions (take wasm_id as first arg now)
         let wait32_ty = module.types.add(&[I32, I32, I32, I64], &[I32]);
-        let (wait32_import, _) = module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_wait32", wait32_ty);
+        let (wait32_import, _) =
+            module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_wait32", wait32_ty);
 
         let wait64_ty = module.types.add(&[I32, I32, I64, I64], &[I32]);
-        let (wait64_import, _) = module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_wait64", wait64_ty);
+        let (wait64_import, _) =
+            module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_wait64", wait64_ty);
 
         let notify_ty = module.types.add(&[I32, I32, I32], &[I32]);
-        let (notify_import, _) = module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_notify", notify_ty);
+        let (notify_import, _) =
+            module.add_import_func("wasi_snapshot_preview1", "__vfs_atomic_notify", notify_ty);
 
         // --- Pass 1: Collect unique offsets via DFS visitor ---
         let mut wait32_offsets = std::collections::BTreeSet::new();
@@ -407,29 +410,54 @@ impl Generator for AtomicPatch {
         }
 
         // --- Create wrapper functions for each unique offset ---
-        let mut wait32_map: std::collections::HashMap<u64, walrus::FunctionId> = std::collections::HashMap::new();
-        let mut wait64_map: std::collections::HashMap<u64, walrus::FunctionId> = std::collections::HashMap::new();
-        let mut notify_map: std::collections::HashMap<u64, walrus::FunctionId> = std::collections::HashMap::new();
+        let mut wait32_map: std::collections::HashMap<u64, walrus::FunctionId> =
+            std::collections::HashMap::new();
+        let mut wait64_map: std::collections::HashMap<u64, walrus::FunctionId> =
+            std::collections::HashMap::new();
+        let mut notify_map: std::collections::HashMap<u64, walrus::FunctionId> =
+            std::collections::HashMap::new();
 
         for offset in wait32_offsets {
-            let fid = Self::make_offset_wrapper(module, wait32_import, wasm_id, offset, &[I32, I32, I64], &[I32]);
+            let fid = Self::make_offset_wrapper(
+                module,
+                wait32_import,
+                wasm_id,
+                offset,
+                &[I32, I32, I64],
+                &[I32],
+            );
             wait32_map.insert(offset, fid);
         }
         for offset in wait64_offsets {
-            let fid = Self::make_offset_wrapper(module, wait64_import, wasm_id, offset, &[I32, I64, I64], &[I32]);
+            let fid = Self::make_offset_wrapper(
+                module,
+                wait64_import,
+                wasm_id,
+                offset,
+                &[I32, I64, I64],
+                &[I32],
+            );
             wait64_map.insert(offset, fid);
         }
         for offset in notify_offsets {
-            let fid = Self::make_offset_wrapper(module, notify_import, wasm_id, offset, &[I32, I32], &[I32]);
+            let fid = Self::make_offset_wrapper(
+                module,
+                notify_import,
+                wasm_id,
+                offset,
+                &[I32, I32],
+                &[I32],
+            );
             notify_map.insert(offset, fid);
         }
 
         // --- Pass 2: Rewrite all atomic.wait/notify to calls ---
-        let funcs: Vec<(walrus::FunctionId, &mut walrus::LocalFunction)> = module.funcs.iter_local_mut().collect();
+        let funcs: Vec<(walrus::FunctionId, &mut walrus::LocalFunction)> =
+            module.funcs.iter_local_mut().collect();
         use rayon::prelude::*;
         funcs.into_par_iter().try_for_each(|(_fid, func)| {
             let mut body = func.builder_mut().func_body();
-            
+
             body.rewrite(|instr, _pos| {
                 let new_instr = match instr {
                     walrus::ir::Instr::AtomicWait(w) => {
@@ -445,19 +473,19 @@ impl Generator for AtomicPatch {
                         let target = notify_map[&n.arg.offset];
                         Some(walrus::ir::Instr::Call(walrus::ir::Call { func: target }))
                     }
-                    _ => None
+                    _ => None,
                 };
                 if let Some(n) = new_instr {
                     *instr = n;
                 }
-            }).map_err(|e| eyre::eyre!("{e}"))?;
-            
+            })
+            .map_err(|e| eyre::eyre!("{e}"))?;
+
             eyre::Ok(())
         })?;
 
         Ok(())
     }
-
 
     fn post_combine(
         &mut self,
@@ -472,88 +500,163 @@ impl Generator for AtomicPatch {
 
         use crate::util::{WalrusFID, WalrusUtilModule};
 
-        if let Some(id) = ("wvl_atomic", "__wvl_atomic_wait32_vfs").get_fid(&module.imports).ok() {
-            module.replace_imported_func(id, |(builder, args)| {
-                builder.func_body()
-                    .local_get(args[0])
-                    .local_get(args[1])
-                    .local_get(args[2])
-                    .atomic_wait(vfs_mem, walrus::ir::MemArg { align: 4, offset: 0 }, false);
-            }).map_err(|e| eyre::eyre!("{e}"))?;
+        if let Some(id) = ("wvl_atomic", "__wvl_atomic_wait32_vfs")
+            .get_fid(&module.imports)
+            .ok()
+        {
+            module
+                .replace_imported_func(id, |(builder, args)| {
+                    builder
+                        .func_body()
+                        .local_get(args[0])
+                        .local_get(args[1])
+                        .local_get(args[2])
+                        .atomic_wait(
+                            vfs_mem,
+                            walrus::ir::MemArg {
+                                align: 4,
+                                offset: 0,
+                            },
+                            false,
+                        );
+                })
+                .map_err(|e| eyre::eyre!("{e}"))?;
         }
 
-        if let Some(id) = ("wvl_atomic", "__wvl_atomic_notify_vfs").get_fid(&module.imports).ok() {
-            module.replace_imported_func(id, |(builder, args)| {
-                builder.func_body()
-                    .local_get(args[0])
-                    .local_get(args[1])
-                    .atomic_notify(vfs_mem, walrus::ir::MemArg { align: 4, offset: 0 });
-            }).map_err(|e| eyre::eyre!("{e}"))?;
+        if let Some(id) = ("wvl_atomic", "__wvl_atomic_notify_vfs")
+            .get_fid(&module.imports)
+            .ok()
+        {
+            module
+                .replace_imported_func(id, |(builder, args)| {
+                    builder
+                        .func_body()
+                        .local_get(args[0])
+                        .local_get(args[1])
+                        .atomic_notify(
+                            vfs_mem,
+                            walrus::ir::MemArg {
+                                align: 4,
+                                offset: 0,
+                            },
+                        );
+                })
+                .map_err(|e| eyre::eyre!("{e}"))?;
         }
 
-        if let Some(id) = ("wvl_atomic", "__wvl_atomic_cmpxchg32_vfs").get_fid(&module.imports).ok() {
-            module.replace_imported_func(id, |(builder, args)| {
-                builder.func_body()
-                    .local_get(args[0])
-                    .local_get(args[1])
-                    .local_get(args[2])
-                    .cmpxchg(vfs_mem, walrus::ir::AtomicWidth::I32, walrus::ir::MemArg { align: 4, offset: 0 });
-            }).map_err(|e| eyre::eyre!("{e}"))?;
+        if let Some(id) = ("wvl_atomic", "__wvl_atomic_cmpxchg32_vfs")
+            .get_fid(&module.imports)
+            .ok()
+        {
+            module
+                .replace_imported_func(id, |(builder, args)| {
+                    builder
+                        .func_body()
+                        .local_get(args[0])
+                        .local_get(args[1])
+                        .local_get(args[2])
+                        .cmpxchg(
+                            vfs_mem,
+                            walrus::ir::AtomicWidth::I32,
+                            walrus::ir::MemArg {
+                                align: 4,
+                                offset: 0,
+                            },
+                        );
+                })
+                .map_err(|e| eyre::eyre!("{e}"))?;
         }
 
-        if let Some(id) = ("wvl_atomic", "__wvl_atomic_store32_vfs").get_fid(&module.imports).ok() {
-            module.replace_imported_func(id, |(builder, args)| {
-                builder.func_body()
-                    .local_get(args[0])
-                    .local_get(args[1])
-                    .store(vfs_mem, walrus::ir::StoreKind::I32 { atomic: true }, walrus::ir::MemArg { align: 4, offset: 0 });
-            }).map_err(|e| eyre::eyre!("{e}"))?;
+        if let Some(id) = ("wvl_atomic", "__wvl_atomic_store32_vfs")
+            .get_fid(&module.imports)
+            .ok()
+        {
+            module
+                .replace_imported_func(id, |(builder, args)| {
+                    builder
+                        .func_body()
+                        .local_get(args[0])
+                        .local_get(args[1])
+                        .store(
+                            vfs_mem,
+                            walrus::ir::StoreKind::I32 { atomic: true },
+                            walrus::ir::MemArg {
+                                align: 4,
+                                offset: 0,
+                            },
+                        );
+                })
+                .map_err(|e| eyre::eyre!("{e}"))?;
         }
 
-        if let Some(id) = ("wvl_atomic", "__wvl_atomic_load32_target").get_fid(&module.imports).ok() {
-            module.replace_imported_func(id, |(builder, args)| {
-                let mut body = builder.func_body();
-                for (i, name) in ctx.target_names.iter().enumerate() {
-                    if let Some(&mem) = ctx.target_used_memory_id.as_ref().unwrap().get(name) {
-                        body.local_get(args[0])
-                            .i32_const(i as i32)
-                            .binop(walrus::ir::BinaryOp::I32Eq)
-                            .if_else(
-                                None,
-                                |then| {
-                                    then.local_get(args[1])
-                                        .load(mem, walrus::ir::LoadKind::I32 { atomic: true }, walrus::ir::MemArg { align: 4, offset: 0 })
-                                        .return_();
-                                },
-                                |_else| {}
-                            );
+        if let Some(id) = ("wvl_atomic", "__wvl_atomic_load32_target")
+            .get_fid(&module.imports)
+            .ok()
+        {
+            module
+                .replace_imported_func(id, |(builder, args)| {
+                    let mut body = builder.func_body();
+                    for (i, name) in ctx.target_names.iter().enumerate() {
+                        if let Some(&mem) = ctx.target_used_memory_id.as_ref().unwrap().get(name) {
+                            body.local_get(args[0])
+                                .i32_const(i as i32)
+                                .binop(walrus::ir::BinaryOp::I32Eq)
+                                .if_else(
+                                    None,
+                                    |then| {
+                                        then.local_get(args[1])
+                                            .load(
+                                                mem,
+                                                walrus::ir::LoadKind::I32 { atomic: true },
+                                                walrus::ir::MemArg {
+                                                    align: 4,
+                                                    offset: 0,
+                                                },
+                                            )
+                                            .return_();
+                                    },
+                                    |_else| {},
+                                );
+                        }
                     }
-                }
-                body.unreachable();
-            }).map_err(|e| eyre::eyre!("{e}"))?;
+                    body.unreachable();
+                })
+                .map_err(|e| eyre::eyre!("{e}"))?;
         }
 
-        if let Some(id) = ("wvl_atomic", "__wvl_atomic_load64_target").get_fid(&module.imports).ok() {
-            module.replace_imported_func(id, |(builder, args)| {
-                let mut body = builder.func_body();
-                for (i, name) in ctx.target_names.iter().enumerate() {
-                    if let Some(&mem) = ctx.target_used_memory_id.as_ref().unwrap().get(name) {
-                        body.local_get(args[0])
-                            .i32_const(i as i32)
-                            .binop(walrus::ir::BinaryOp::I32Eq)
-                            .if_else(
-                                None,
-                                |then| {
-                                    then.local_get(args[1])
-                                        .load(mem, walrus::ir::LoadKind::I64 { atomic: true }, walrus::ir::MemArg { align: 8, offset: 0 })
-                                        .return_();
-                                },
-                                |_else| {}
-                            );
+        if let Some(id) = ("wvl_atomic", "__wvl_atomic_load64_target")
+            .get_fid(&module.imports)
+            .ok()
+        {
+            module
+                .replace_imported_func(id, |(builder, args)| {
+                    let mut body = builder.func_body();
+                    for (i, name) in ctx.target_names.iter().enumerate() {
+                        if let Some(&mem) = ctx.target_used_memory_id.as_ref().unwrap().get(name) {
+                            body.local_get(args[0])
+                                .i32_const(i as i32)
+                                .binop(walrus::ir::BinaryOp::I32Eq)
+                                .if_else(
+                                    None,
+                                    |then| {
+                                        then.local_get(args[1])
+                                            .load(
+                                                mem,
+                                                walrus::ir::LoadKind::I64 { atomic: true },
+                                                walrus::ir::MemArg {
+                                                    align: 8,
+                                                    offset: 0,
+                                                },
+                                            )
+                                            .return_();
+                                    },
+                                    |_else| {},
+                                );
+                        }
                     }
-                }
-                body.unreachable();
-            }).map_err(|e| eyre::eyre!("{e}"))?;
+                    body.unreachable();
+                })
+                .map_err(|e| eyre::eyre!("{e}"))?;
         }
 
         Ok(())

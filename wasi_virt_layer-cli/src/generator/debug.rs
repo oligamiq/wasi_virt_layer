@@ -40,147 +40,141 @@ pub fn readjust_debug_call_function(module: &mut walrus::Module) -> eyre::Result
         .collect();
 
     use rayon::prelude::*;
-    funcs
-        .into_par_iter()
-        .try_for_each(|(fid, func)| {
-            use walrus::ir::*;
+    funcs.into_par_iter().try_for_each(|(fid, func)| {
+        use walrus::ir::*;
 
-            let fid = fid.index() as i32;
+        let fid = fid.index() as i32;
 
-            // check debugger call at entry
-            let entry_id = func.entry_block();
-            let mut body = func.builder_mut().func_body();
-            let mut entry_seq = body.instr_seq(entry_id);
+        // check debugger call at entry
+        let entry_id = func.entry_block();
+        let mut body = func.builder_mut().func_body();
+        let mut entry_seq = body.instr_seq(entry_id);
 
-            // eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
+        // eprintln!("fid: {fid:?} entry_id: {entry_id:?}");
 
-            // remove call we don't want
-            let len = entry_seq.instrs().len();
-            let ret_trap = entry_seq
-                .rewrite(|instr, (pos, seq_id)| {
-                    if instr.is_return()
-                        || instr.is_return_call()
-                        || instr.is_return_call_indirect()
-                    {
-                        Some((pos, seq_id))
-                    } else {
-                        None
-                    }
-                })?
-                .into_iter()
-                .filter_map(|v| v)
-                .sorted_by(|(a_pos, a_seq), (b_pos, b_seq)| b_seq.cmp(a_seq).then(b_pos.cmp(a_pos)))
-                .collect_vec();
-
-            {
-                entry_seq.rewrite(|instr, (pos, seq_id)| {
-                    if ret_trap
-                        .iter()
-                        .filter(|(_, s)| *s == seq_id)
-                        .any(|(p, _)| pos == *p - 1)
-                    {
-                        return;
-                    }
-
-                    if let Instr::Call(Call { func }) = instr
-                        && ((*func == debugger && seq_id == entry_id && pos != 1)
-                            || (*func == finalize && seq_id != entry_id && pos != len - 1))
-                    {
-                        *instr = Instr::Drop(Drop {});
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                        // eprintln!("### pos: {pos}, seq: {seq_id:?}, removed unwanted call");
-                    }
-                })?;
-            }
-
-            let adjust_common =
-                |seq: &mut walrus::InstrSeqBuilder<'_>,
-                 pos: usize,
-                 caller|
-                 -> eyre::Result<(Option<i32>, Option<walrus::FunctionId>)> {
-                    let before = match get_instr!(seq, pos) {
-                        Some(Instr::Const(Const {
-                            value: Value::I32(value),
-                        })) if value == fid => Some(value),
-                        _ => None,
-                    };
-                    let after = match get_instr!(seq, pos + 1) {
-                        Some(Instr::Call(Call { func })) if func == caller => Some(func),
-                        _ => None,
-                    };
-
-                    Ok((before, after))
-                };
-
-            let mut adjust_front = |seq_id: InstrSeqId, pos: usize, caller| {
-                let mut seq = body.instr_seq(seq_id);
-                let (before, after) = adjust_common(&mut seq, pos, caller)?;
-                // eprintln!(
-                //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
-                // );
-                match (before, after) {
-                    (Some(_), Some(_)) => {}
-                    (None, None) => {
-                        // eprintln!("pos: {pos}, seq: {seq:?}, added both");
-                        seq.const_at(pos + 2, Value::I32(fid));
-                        seq.call_at(pos + 3, caller);
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    (None, Some(_)) => {
-                        // eprintln!("pos: {pos}, seq: {seq:?}, added before");
-                        seq.instrs_mut().remove(pos);
-                        seq.const_at(pos, Value::I32(fid));
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    (Some(_), None) => {
-                        // eprintln!("pos: {pos}, seq: {seq:?}, added after");
-                        seq.instrs_mut().remove(pos + 1);
-                        seq.call_at(pos + 1, caller);
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
+        // remove call we don't want
+        let len = entry_seq.instrs().len();
+        let ret_trap = entry_seq
+            .rewrite(|instr, (pos, seq_id)| {
+                if instr.is_return() || instr.is_return_call() || instr.is_return_call_indirect() {
+                    Some((pos, seq_id))
+                } else {
+                    None
                 }
-                eyre::Ok(())
+            })?
+            .into_iter()
+            .filter_map(|v| v)
+            .sorted_by(|(a_pos, a_seq), (b_pos, b_seq)| b_seq.cmp(a_seq).then(b_pos.cmp(a_pos)))
+            .collect_vec();
+
+        {
+            entry_seq.rewrite(|instr, (pos, seq_id)| {
+                if ret_trap
+                    .iter()
+                    .filter(|(_, s)| *s == seq_id)
+                    .any(|(p, _)| pos == *p - 1)
+                {
+                    return;
+                }
+
+                if let Instr::Call(Call { func }) = instr
+                    && ((*func == debugger && seq_id == entry_id && pos != 1)
+                        || (*func == finalize && seq_id != entry_id && pos != len - 1))
+                {
+                    *instr = Instr::Drop(Drop {});
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    // eprintln!("### pos: {pos}, seq: {seq_id:?}, removed unwanted call");
+                }
+            })?;
+        }
+
+        let adjust_common = |seq: &mut walrus::InstrSeqBuilder<'_>,
+                             pos: usize,
+                             caller|
+         -> eyre::Result<(Option<i32>, Option<walrus::FunctionId>)> {
+            let before = match get_instr!(seq, pos) {
+                Some(Instr::Const(Const {
+                    value: Value::I32(value),
+                })) if value == fid => Some(value),
+                _ => None,
+            };
+            let after = match get_instr!(seq, pos + 1) {
+                Some(Instr::Call(Call { func })) if func == caller => Some(func),
+                _ => None,
             };
 
-            adjust_front(entry_id, len - 2, finalize)?;
-            for (pos, seq) in ret_trap.into_iter() {
-                adjust_front(seq, pos - 2, finalize)?;
-            }
+            Ok((before, after))
+        };
 
-            let mut adjust_first = |seq_id: InstrSeqId, pos: usize, caller| {
-                let mut seq = body.instr_seq(seq_id);
-                let (before, after) = adjust_common(&mut seq, pos, caller)?;
-                // eprintln!(
-                //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
-                // );
-                match (before, after) {
-                    (Some(_), Some(_)) => {}
-                    (None, None) => {
-                        // eprintln!("pos: {pos}, seq: {seq:?}, added both");
-                        seq.const_at(pos, Value::I32(fid));
-                        seq.call_at(pos + 1, caller);
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    (None, Some(_)) => {
-                        // eprintln!("pos: {pos}, seq: {seq:?}, added before");
-                        seq.instrs_mut().remove(pos);
-                        seq.const_at(pos, Value::I32(fid));
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
-                    (Some(_), None) => {
-                        // eprintln!("pos: {pos}, seq: {seq:?}, added after");
-                        seq.instrs_mut().remove(pos + 1);
-                        seq.call_at(pos + 1, caller);
-                        changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    }
+        let mut adjust_front = |seq_id: InstrSeqId, pos: usize, caller| {
+            let mut seq = body.instr_seq(seq_id);
+            let (before, after) = adjust_common(&mut seq, pos, caller)?;
+            // eprintln!(
+            //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
+            // );
+            match (before, after) {
+                (Some(_), Some(_)) => {}
+                (None, None) => {
+                    // eprintln!("pos: {pos}, seq: {seq:?}, added both");
+                    seq.const_at(pos + 2, Value::I32(fid));
+                    seq.call_at(pos + 3, caller);
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
-                eyre::Ok(())
-            };
-
-            adjust_first(entry_id, 0, debugger)?;
-
+                (None, Some(_)) => {
+                    // eprintln!("pos: {pos}, seq: {seq:?}, added before");
+                    seq.instrs_mut().remove(pos);
+                    seq.const_at(pos, Value::I32(fid));
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                (Some(_), None) => {
+                    // eprintln!("pos: {pos}, seq: {seq:?}, added after");
+                    seq.instrs_mut().remove(pos + 1);
+                    seq.call_at(pos + 1, caller);
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
             eyre::Ok(())
-        })?;
+        };
+
+        adjust_front(entry_id, len - 2, finalize)?;
+        for (pos, seq) in ret_trap.into_iter() {
+            adjust_front(seq, pos - 2, finalize)?;
+        }
+
+        let mut adjust_first = |seq_id: InstrSeqId, pos: usize, caller| {
+            let mut seq = body.instr_seq(seq_id);
+            let (before, after) = adjust_common(&mut seq, pos, caller)?;
+            // eprintln!(
+            //     "#### pos: {pos}, seq_id: {seq_id:?}, before: {before:?}, after: {after:?}"
+            // );
+            match (before, after) {
+                (Some(_), Some(_)) => {}
+                (None, None) => {
+                    // eprintln!("pos: {pos}, seq: {seq:?}, added both");
+                    seq.const_at(pos, Value::I32(fid));
+                    seq.call_at(pos + 1, caller);
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                (None, Some(_)) => {
+                    // eprintln!("pos: {pos}, seq: {seq:?}, added before");
+                    seq.instrs_mut().remove(pos);
+                    seq.const_at(pos, Value::I32(fid));
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                (Some(_), None) => {
+                    // eprintln!("pos: {pos}, seq: {seq:?}, added after");
+                    seq.instrs_mut().remove(pos + 1);
+                    seq.call_at(pos + 1, caller);
+                    changed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+            eyre::Ok(())
+        };
+
+        adjust_first(entry_id, 0, debugger)?;
+
+        eyre::Ok(())
+    })?;
 
     let final_changed = changed.into_inner();
     eprintln!("Readjusted debug_call_function, changes made: {final_changed}");
@@ -355,57 +349,55 @@ pub fn generate_debug_call_function_last(module: &mut walrus::Module) -> eyre::R
             .iter_local_mut()
             .filter(|(func, _)| !excludes.contains(func))
             .collect();
-            
+
         use rayon::prelude::*;
-        funcs
-            .into_par_iter()
-            .try_for_each(|(fid, func)| {
-                let fid = fids_with_size
-                    .get(&fid)
-                    .copied()
-                    .wrap_err("Failed to get function order id")? as i32;
-                let entry_id = func.entry_block();
-                let mut body = func.builder_mut().func_body();
-                let mut entry_seq = body.instr_seq(entry_id);
-                {
-                    entry_seq.const_at(0, Value::I32(fid));
-                    entry_seq.call_at(1, debugger);
-                }
+        funcs.into_par_iter().try_for_each(|(fid, func)| {
+            let fid = fids_with_size
+                .get(&fid)
+                .copied()
+                .wrap_err("Failed to get function order id")? as i32;
+            let entry_id = func.entry_block();
+            let mut body = func.builder_mut().func_body();
+            let mut entry_seq = body.instr_seq(entry_id);
+            {
+                entry_seq.const_at(0, Value::I32(fid));
+                entry_seq.call_at(1, debugger);
+            }
 
-                {
-                    // last instruction must be `Return`
-                    entry_seq.i32_const(fid).call(finalize);
+            {
+                // last instruction must be `Return`
+                entry_seq.i32_const(fid).call(finalize);
 
-                    let pos = body
-                        .rewrite(|instr, pos| {
-                            if instr.is_return()
-                                || instr.is_return_call()
-                                || instr.is_return_call_indirect()
-                            {
-                                Some(pos)
-                            } else {
-                                None
-                            }
-                        })
-                        .map(|v| {
-                            v.into_iter()
-                                .filter_map(|v| v)
-                                .sorted_by(|(a_pos, a_seq), (b_pos, b_seq)| {
-                                    b_seq.cmp(a_seq).then(b_pos.cmp(a_pos))
-                                })
-                                .collect_vec()
-                        })
-                        .wrap_err("Failed to find return instructions")?;
+                let pos = body
+                    .rewrite(|instr, pos| {
+                        if instr.is_return()
+                            || instr.is_return_call()
+                            || instr.is_return_call_indirect()
+                        {
+                            Some(pos)
+                        } else {
+                            None
+                        }
+                    })
+                    .map(|v| {
+                        v.into_iter()
+                            .filter_map(|v| v)
+                            .sorted_by(|(a_pos, a_seq), (b_pos, b_seq)| {
+                                b_seq.cmp(a_seq).then(b_pos.cmp(a_pos))
+                            })
+                            .collect_vec()
+                    })
+                    .wrap_err("Failed to find return instructions")?;
 
-                    pos.into_iter().for_each(|(pos, seq)| {
-                        let mut seq = body.instr_seq(seq);
-                        seq.const_at(pos, Value::I32(fid))
-                            .call_at(pos + 1, finalize);
-                    });
-                }
+                pos.into_iter().for_each(|(pos, seq)| {
+                    let mut seq = body.instr_seq(seq);
+                    seq.const_at(pos, Value::I32(fid))
+                        .call_at(pos + 1, finalize);
+                });
+            }
 
-                eyre::Ok(())
-            })?;
+            eyre::Ok(())
+        })?;
 
         eyre::Ok(())
     }) {

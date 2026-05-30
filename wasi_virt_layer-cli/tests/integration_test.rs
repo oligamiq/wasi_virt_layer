@@ -1147,7 +1147,8 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
     )?;
 
     // Run the generated module with Deno/Bun
-    run_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(120))
+        .wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }
@@ -1194,7 +1195,8 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     }
 
     // 3. Run with Deno
-    run_thread(&out_dir, std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&out_dir, std::time::Duration::from_secs(120))
+        .wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
 
@@ -1243,7 +1245,8 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     }
 
     // 2. Run with Deno
-    run_thread(&out_dir, std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&out_dir, std::time::Duration::from_secs(120))
+        .wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
 
@@ -1375,7 +1378,8 @@ fn test_multiple_calls_vfs() -> color_eyre::Result<()> {
     )?;
 
     // Run the generated module with Deno
-    run_non_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(30)).wrap_err("Failed to run combined module with Deno")?;
+    run_non_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(30))
+        .wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }
@@ -1398,9 +1402,10 @@ fn test_build_multi_opt() -> color_eyre::Result<()> {
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build normal multi (opt)")?;
+    )
+    .wrap_err("Failed to build normal multi (opt)")?;
     println!("Normal multi build done (opt).");
-    
+
     let _test_dir_threads = run_wasi_virt_layer(
         Some("threads_vfs"),
         Some("test_threads"),
@@ -1410,7 +1415,8 @@ fn test_build_multi_opt() -> color_eyre::Result<()> {
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build threads multi (opt)")?;
+    )
+    .wrap_err("Failed to build threads multi (opt)")?;
     println!("Threads multi build done (opt).");
 
     Ok(())
@@ -1434,9 +1440,10 @@ fn test_build_single_opt() -> color_eyre::Result<()> {
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build normal single (opt)")?;
+    )
+    .wrap_err("Failed to build normal single (opt)")?;
     println!("Normal single build done (opt).");
-    
+
     let _test_dir_threads = run_wasi_virt_layer(
         Some("threads_vfs"),
         Some("test_threads"),
@@ -1446,7 +1453,8 @@ fn test_build_single_opt() -> color_eyre::Result<()> {
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build threads single (opt)")?;
+    )
+    .wrap_err("Failed to build threads single (opt)")?;
     println!("Threads single build done (opt).");
 
     Ok(())
