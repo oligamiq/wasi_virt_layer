@@ -85,6 +85,7 @@ pub struct GeneratorCtx {
     /// combined start chain is skipped entirely.
     pub vfs_is_library: bool,
     pub starts: starts::FnInStarts,
+    pub wrap_unreachable_targets: std::collections::HashSet<String>,
 }
 
 /// Sub-context for extracting and storing component variables during execution.
@@ -223,6 +224,7 @@ impl Generator for ComponentCtxVisitor {
             keep_build_artifacts: _,
             vfs_is_library: _,
             starts: _,
+            wrap_unreachable_targets: _,
         } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
         module.save_info("target_names", target_names)?;
@@ -823,6 +825,7 @@ impl GeneratorRunner {
                 start_func_id: None,
                 vfs_is_library: false,
                 starts,
+                wrap_unreachable_targets: std::collections::HashSet::new(),
             },
             path,
             targets,
@@ -939,6 +942,7 @@ impl GeneratorRunner {
         (|path: &mut WasmPath| {
             let wasm_bytes = std::fs::read(&path.path()?).unwrap();
             let mut vfs_is_library = true;
+            let mut wrap_unreachable_targets = std::collections::HashSet::new();
             for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
                 if let Ok(wasmparser::Payload::StartSection { .. }) = payload {
                     vfs_is_library = false;
@@ -949,11 +953,18 @@ impl GeneratorRunner {
                             if e.name == "_start" {
                                 vfs_is_library = false;
                             }
+                            for target in self.ctx.target_names.iter() {
+                                let marker = format!("__wasip1_virt_layer_{}_wrap_unreachable", target.as_ref());
+                                if e.name == marker {
+                                    wrap_unreachable_targets.insert(target.as_ref().to_string());
+                                }
+                            }
                         }
                     }
                 }
             }
             self.ctx.vfs_is_library = vfs_is_library;
+            self.ctx.wrap_unreachable_targets = wrap_unreachable_targets;
             let pipeline_is_library = vfs_is_library;
             let cloned_ctx = self.ctx.clone();
 
@@ -1065,9 +1076,17 @@ impl GeneratorRunner {
                         pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
                         producer::ProducerStreamPass,
                         starts_pre::StartsPreStreamPass,
+                        wrap_unreachable::WrapUnreachablePreTargetStreamPass,
                     };
 
                     pipeline.add_pass(Box::new(ProducerStreamPass::new()));
+                    
+                    let is_opted_in = _cloned_ctx.wrap_unreachable_targets.contains(&target_name.to_string());
+                    pipeline.add_pass(Box::new(WrapUnreachablePreTargetStreamPass::new(
+                        target_name.to_string(),
+                        is_opted_in,
+                    )));
+
                     pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(
                         target_name.to_string(),
                     )));
@@ -1194,6 +1213,10 @@ impl GeneratorRunner {
 
             pipeline.add_pass(Box::new(
                 crate::wasm_stream::passes::post_combine::PostCombineStreamPass::new(target_names.clone())
+            ));
+
+            pipeline.add_pass(Box::new(
+                crate::wasm_stream::passes::poll::PollWaitStreamPass::new(self.ctx.threads, 0)
             ));
 
             if self.ctx.target_memory_type == TargetMemoryType::Single {
