@@ -7,7 +7,7 @@ use crate::{
 macro_rules! add_generator {
     ($runner:expr) => {{
         use crate::generator::{
-            debug, memory, memory_post_components, poll, special_func, threads, wrap_unreachable,
+            debug, memory, memory_post_components, special_func, threads, wrap_unreachable,
         };
 
         generator::add_generators_by_type!(
@@ -17,10 +17,8 @@ macro_rules! add_generator {
             threads::ThreadsSpawn,
             threads::ThreadsSpawnPatch,
             threads::AtomicPatch,
-            poll::PollWait,
             special_func::StartFunc,
             special_func::MainVoidFunc,
-            special_func::ResetFunc,
             memory::MemoryBridge,
             memory::MemoryTrap,
             debug::SimpleDebug,

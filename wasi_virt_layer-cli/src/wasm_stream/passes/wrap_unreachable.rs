@@ -54,12 +54,17 @@ fn push_dummy_return(func: &mut Function, return_types: &[wasmparser::ValType]) 
 
 /// Rebinder that shifts function indices by the number of injected imports.
 struct FuncRebinder {
-    func_tracker: IndexTracker,
+    import_func_count: u32,
+    shift_offset: u32,
 }
 
 impl Rebind for FuncRebinder {
     fn function(&self, index: u32) -> u32 {
-        self.func_tracker.remap(index)
+        if index < self.import_func_count {
+            index
+        } else {
+            index + self.shift_offset
+        }
     }
 }
 
@@ -200,12 +205,8 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
         func_tracker.shift_offset = 2;
 
         let rebinder = FuncRebinder {
-            func_tracker: IndexTracker {
-                original_count: func_tracker.original_count,
-                injected_count: func_tracker.injected_count,
-                shift_offset: func_tracker.shift_offset,
-                explicit_map: std::collections::HashMap::new(),
-            },
+            import_func_count,
+            shift_offset: 2,
         };
 
         let flag_global_idx = total_global_count; // appended at end of globals
@@ -228,6 +229,7 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
 
         // ── Second pass: rewrite sections ─────────────────────────────────
         let mut code_bodies: Vec<wasmparser::FunctionBody> = Vec::new();
+        let mut code_flushed = false;
 
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             match payload? {
@@ -360,8 +362,16 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
 
                 Payload::ExportSection(s) => {
                     let mut sec = ExportSection::new();
+                    let marker_name = format!(
+                        "__wasip1_virt_layer_{}_wrap_unreachable",
+                        self.target_name
+                    );
                     for e in s {
                         let e = e?;
+                        if e.name == marker_name {
+                            continue;
+                        }
+                        
                         let kind = match e.kind {
                             wasmparser::ExternalKind::Func
                             | wasmparser::ExternalKind::FuncExact => ExportKind::Func,
@@ -374,23 +384,7 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
 
                         let idx = match e.kind {
                             wasmparser::ExternalKind::Func
-                            | wasmparser::ExternalKind::FuncExact => {
-                                if e.name == "__main_void" {
-                                    if let Some(w) = main_void_wrapper_idx {
-                                        w
-                                    } else {
-                                        rebinder.function(e.index)
-                                    }
-                                } else if e.name == "wasi_thread_start" {
-                                    if let Some(w) = thread_start_wrapper_idx {
-                                        w
-                                    } else {
-                                        rebinder.function(e.index)
-                                    }
-                                } else {
-                                    rebinder.function(e.index)
-                                }
-                            }
+                            | wasmparser::ExternalKind::FuncExact => rebinder.function(e.index),
                             _ => e.index,
                         };
 
@@ -497,6 +491,27 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                 }
 
                 Payload::DataSection(s) => {
+                    // Code section must be emitted before data section.
+                    // Flush code bodies now.
+                    if !code_flushed {
+                        self.emit_code_section(
+                            &mut encoder,
+                            &code_bodies,
+                            &types,
+                            &func_type_indices,
+                            import_func_count,
+                            flag_global_idx,
+                            &rebinder,
+                            orig_main_void_idx,
+                            orig_thread_start_idx,
+                            fix_exit_import_idx,
+                            handle_exit_import_idx,
+                            main_void_wrapper_idx,
+                            thread_start_wrapper_idx,
+                        )?;
+                        code_flushed = true;
+                    }
+
                     let mut sec = wasm_encoder::DataSection::new();
                     for d in s {
                         let d = d?;
@@ -525,6 +540,25 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                 }
 
                 Payload::CustomSection(c) => {
+                    // Custom sections after code need code flushed first
+                    if !code_flushed && !code_bodies.is_empty() {
+                        self.emit_code_section(
+                            &mut encoder,
+                            &code_bodies,
+                            &types,
+                            &func_type_indices,
+                            import_func_count,
+                            flag_global_idx,
+                            &rebinder,
+                            orig_main_void_idx,
+                            orig_thread_start_idx,
+                            fix_exit_import_idx,
+                            handle_exit_import_idx,
+                            main_void_wrapper_idx,
+                            thread_start_wrapper_idx,
+                        )?;
+                        code_flushed = true;
+                    }
                     encoder.section(&wasm_encoder::CustomSection {
                         name: c.name().into(),
                         data: std::borrow::Cow::Borrowed(c.data()),
@@ -535,11 +569,56 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
             }
         }
 
-        // ── Code section: rewrite all function bodies ─────────────────────
+        // Flush code section if not already done
+        if !code_flushed {
+            self.emit_code_section(
+                &mut encoder,
+                &code_bodies,
+                &types,
+                &func_type_indices,
+                import_func_count,
+                flag_global_idx,
+                &rebinder,
+                orig_main_void_idx,
+                orig_thread_start_idx,
+                fix_exit_import_idx,
+                handle_exit_import_idx,
+                main_void_wrapper_idx,
+                thread_start_wrapper_idx,
+            )?;
+        }
+
+        Ok(encoder.finish())
+    }
+}
+
+impl WrapUnreachablePreTargetStreamPass {
+    /// Emits the code section with all original function bodies rewritten
+    /// (unreachable replaced, call sites hooked) plus injected helper functions.
+    #[allow(clippy::too_many_arguments)]
+    fn emit_code_section(
+        &self,
+        encoder: &mut Module,
+        code_bodies: &[wasmparser::FunctionBody<'_>],
+        types: &[wasmparser::SubType],
+        func_type_indices: &[u32],
+        import_func_count: u32,
+        flag_global_idx: u32,
+        rebinder: &FuncRebinder,
+        orig_main_void_idx: Option<u32>,
+        orig_thread_start_idx: Option<u32>,
+        fix_exit_import_idx: u32,
+        handle_exit_import_idx: u32,
+        main_void_wrapper_idx: Option<u32>,
+        thread_start_wrapper_idx: Option<u32>,
+    ) -> Result<()> {
         let mut code_sec = CodeSection::new();
+        let mut original_main_void_func = None;
+        let mut original_thread_start_func = None;
 
         for (body_idx, body) in code_bodies.iter().enumerate() {
-            let func_idx = import_func_count + body_idx as u32;
+            let orig_idx = body_idx as u32 + import_func_count;
+
             let ty_idx = func_type_indices[body_idx];
             let ty = &types[ty_idx as usize];
             let return_types = match &ty.composite_type.inner {
@@ -550,7 +629,7 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
             let mut locals = Vec::new();
             for local in body.get_locals_reader()? {
                 let local = local?;
-                locals.push((local.0, translate_val_type(local.1, &rebinder)));
+                locals.push((local.0, translate_val_type(local.1, rebinder)));
             }
             let mut func = Function::new(locals);
 
@@ -558,7 +637,6 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                 let op = op?;
                 match op {
                     wasmparser::Operator::Unreachable => {
-                        // Replace `unreachable` with: set flag = 1; push dummy returns; return
                         func.instruction(&Instruction::I32Const(1));
                         func.instruction(&Instruction::GlobalSet(flag_global_idx));
                         push_dummy_return(&mut func, &return_types);
@@ -567,7 +645,6 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                         func.instruction(&Instruction::Call(
                             rebinder.function(function_index),
                         ));
-                        // Post-call flag check
                         func.instruction(&Instruction::GlobalGet(flag_global_idx));
                         func.instruction(&Instruction::If(
                             wasm_encoder::BlockType::Empty,
@@ -584,7 +661,6 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                             type_index,
                             table_index,
                         });
-                        // Post-call flag check
                         func.instruction(&Instruction::GlobalGet(flag_global_idx));
                         func.instruction(&Instruction::If(
                             wasm_encoder::BlockType::Empty,
@@ -593,11 +669,43 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                         func.instruction(&Instruction::End);
                     }
                     _ => {
-                        func.instruction(&translate(&op, &rebinder));
+                        func.instruction(&translate(&op, rebinder));
                     }
                 }
             }
-            code_sec.function(&func);
+
+            if Some(orig_idx) == orig_main_void_idx {
+                original_main_void_func = Some(func);
+                let mut wrapper = Function::new([(1, ValType::I32)]);
+                wrapper.instruction(&Instruction::Call(main_void_wrapper_idx.unwrap()));
+                wrapper.instruction(&Instruction::LocalSet(0));
+                wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
+                wrapper.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
+                    ValType::I32,
+                )));
+                wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
+                wrapper.instruction(&Instruction::Call(fix_exit_import_idx));
+                wrapper.instruction(&Instruction::Else);
+                wrapper.instruction(&Instruction::LocalGet(0));
+                wrapper.instruction(&Instruction::End);
+                wrapper.instruction(&Instruction::End);
+                code_sec.function(&wrapper);
+            } else if Some(orig_idx) == orig_thread_start_idx {
+                original_thread_start_func = Some(func);
+                let mut wrapper = Function::new([]);
+                wrapper.instruction(&Instruction::LocalGet(0));
+                wrapper.instruction(&Instruction::LocalGet(1));
+                wrapper.instruction(&Instruction::Call(thread_start_wrapper_idx.unwrap()));
+                wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
+                wrapper.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
+                wrapper.instruction(&Instruction::Call(handle_exit_import_idx));
+                wrapper.instruction(&Instruction::End);
+                wrapper.instruction(&Instruction::End);
+                code_sec.function(&wrapper);
+            } else {
+                code_sec.function(&func);
+            }
         }
 
         // ── Injected function bodies ──────────────────────────────────────
@@ -615,41 +723,14 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
         set_flag_func.instruction(&Instruction::End);
         code_sec.function(&set_flag_func);
 
-        // __main_void wrapper
-        if let Some(orig_idx) = orig_main_void_idx {
-            let mut wrapper = Function::new([(1, ValType::I32)]);
-            wrapper.instruction(&Instruction::Call(rebinder.function(orig_idx)));
-            wrapper.instruction(&Instruction::LocalSet(0));
-            wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
-            wrapper.instruction(&Instruction::If(wasm_encoder::BlockType::Result(
-                ValType::I32,
-            )));
-            wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
-            wrapper.instruction(&Instruction::Call(fix_exit_import_idx));
-            wrapper.instruction(&Instruction::Else);
-            wrapper.instruction(&Instruction::LocalGet(0));
-            wrapper.instruction(&Instruction::End);
-            wrapper.instruction(&Instruction::End);
-            code_sec.function(&wrapper);
+        if main_void_wrapper_idx.is_some() {
+            code_sec.function(&original_main_void_func.unwrap());
         }
-
-        // wasi_thread_start wrapper
-        if let Some(orig_idx) = orig_thread_start_idx {
-            let mut wrapper = Function::new([]);
-            wrapper.instruction(&Instruction::LocalGet(0));
-            wrapper.instruction(&Instruction::LocalGet(1));
-            wrapper.instruction(&Instruction::Call(rebinder.function(orig_idx)));
-            wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
-            wrapper.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-            wrapper.instruction(&Instruction::GlobalGet(flag_global_idx));
-            wrapper.instruction(&Instruction::Call(handle_exit_import_idx));
-            wrapper.instruction(&Instruction::End);
-            wrapper.instruction(&Instruction::End);
-            code_sec.function(&wrapper);
+        if thread_start_wrapper_idx.is_some() {
+            code_sec.function(&original_thread_start_func.unwrap());
         }
 
         encoder.section(&code_sec);
-
-        Ok(encoder.finish())
+        Ok(())
     }
 }

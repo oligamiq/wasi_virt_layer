@@ -365,43 +365,7 @@ fn redirect_callers(
     Ok(())
 }
 
-/// Wires an import to its matching export (by name) and removes the export.
-///
-/// Silently skipped when either the import or the export is absent — not every
-/// target exports every helper.
-///
-/// The export is deleted by **name** rather than by function ID because, when
-/// multiple targets share the same underlying VFS handler function, the same
-/// `FunctionId` can appear in several exports simultaneously, which would
-/// cause a function-ID-based deletion to fail with "expected exactly one".
-fn wire_import_to_export(module: &mut Module, name: &str, debug: bool) -> eyre::Result<()> {
-    let Ok(import_fid) = (WRAP_UNREACHABLE_MODULE, name).get_fid(&module.imports) else {
-        return Ok(());
-    };
-    let Ok(export_fid) = name.get_fid(&module.exports) else {
-        return Ok(());
-    };
 
-    module.renew_call_fn(import_fid, export_fid)?;
-
-    // Delete by name: find the export whose name matches and remove it.
-    // We cannot use `erase_with(export_fid)` here because that helper
-    // searches by FunctionId and requires exactly one match — but after
-    // merging multiple targets the same function may be exported under
-    // several per-target names.
-    if !debug {
-        let export_id = module
-            .exports
-            .iter()
-            .find(|e| e.name == name)
-            .map(|e| e.id());
-        if let Some(export_id) = export_id {
-            module.exports.delete(export_id);
-        }
-    }
-
-    Ok(())
-}
 
 // ── Generator implementation ──────────────────────────────────────────
 
@@ -445,162 +409,18 @@ impl Generator for WrapUnreachableGenerator {
     }
 
     fn post_combine(&mut self, module: &mut Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        for target in &self.targets {
-            // Wire each helper import → export.
-            let helpers = helper_names_for(target, &ctx.target_names);
-            for name in &helpers {
-                wire_import_to_export(module, name, ctx.unstable_print_debug)?;
-            }
-
-            // Remove the opt-in marker export by name (not by function ID),
-            // for the same reason as in `wire_import_to_export`.
-            let marker = marker_name_for(target, &ctx.target_names);
-            if !ctx.unstable_print_debug {
-                let marker_eid = module
-                    .exports
-                    .iter()
-                    .find(|e| e.name == marker)
-                    .map(|e| e.id());
-                if let Some(eid) = marker_eid {
-                    module.exports.delete(eid);
-                }
-            }
-        }
         Ok(())
     }
 
     fn pre_target(
         &mut self,
-        module: &mut Module,
+        _module: &mut Module,
         _: &GeneratorCtx,
-        external: &ModuleExternal,
+        _external: &ModuleExternal,
     ) -> eyre::Result<()> {
-        println!(
-            "pre_target checking if self.targets {:?} contains {}",
-            self.targets,
-            external.name.to_string()
-        );
-        if !self.targets.contains(&external.name.to_string()) {
-            return Ok(());
-        }
-        println!("pre_target EXECUTING for {}", external.name.to_string());
-
-        let get_flag_name = WrapUnreachableName::GetUnreachableFlag(&external.name).to_string();
-        let set_flag_name = WrapUnreachableName::SetUnreachableFlag(&external.name).to_string();
-        let fix_exit_code_name =
-            WrapUnreachableName::FixMainRawExitCode(&external.name).to_string();
-        let handle_exit_name = WrapUnreachableName::HandleThreadExit(&external.name).to_string();
-
-        // ── 1. Per-target unreachable flag global ─────────────────────
-        let flag_global =
-            module
-                .globals
-                .add_local(ValType::I32, true, false, ConstExpr::Value(Value::I32(0)));
-
-        // ── 2. Export getter / setter for the flag ────────────────────
-        let getter = module.add_func(&[], &[ValType::I32], |builder, _| {
-            builder.func_body().global_get(flag_global);
-            Ok(())
-        })?;
-        module.exports.add(&get_flag_name, getter);
-
-        let setter = module.add_func(&[ValType::I32], &[], |builder, args| {
-            builder
-                .func_body()
-                .local_get(args[0])
-                .global_set(flag_global);
-            Ok(())
-        })?;
-        module.exports.add(&set_flag_name, setter);
-
-        // ── 3. Import VFS handler functions ───────────────────────────
-        let fix_exit_code_ty = module.types.add(&[ValType::I32], &[ValType::I32]);
-        let fix_exit_code_import = module
-            .add_import_func(
-                WRAP_UNREACHABLE_MODULE,
-                &fix_exit_code_name,
-                fix_exit_code_ty,
-            )
-            .0;
-
-        let handle_exit_ty = module.types.add(&[ValType::I32], &[]);
-        let handle_thread_exit_import = module
-            .add_import_func(WRAP_UNREACHABLE_MODULE, &handle_exit_name, handle_exit_ty)
-            .0;
-
-        // ── 4. Patch existing function instructions ───────────────────
-        // IMPORTANT: Must happen BEFORE creating wrapper functions below,
-        // so that the wrappers themselves are not processed by the
-        // call-hook loop. If the wrappers were processed, the hook after
-        // `call(orig_func)` would short-circuit with a dummy return,
-        // bypassing the fix_exit_code logic.
-        let func_ids: Vec<FunctionId> = module.funcs.iter_local().map(|(id, _)| id).collect();
-
-        use rayon::prelude::*;
-        let scan_results: Vec<(FunctionId, Vec<ValType>, InstrScanResult)> = func_ids
-            .par_iter()
-            .map(|&fid| {
-                let return_types = module
-                    .types
-                    .get(module.funcs.get(fid).ty())
-                    .results()
-                    .to_vec();
-
-                let scan = scan_instructions(module.funcs.get(fid).kind.unwrap_local());
-                (fid, return_types, scan)
-            })
-            .collect();
-
-        for (fid, return_types, mut scan) in scan_results {
-            if !scan.unreachables.is_empty() {
-                println!(
-                    "Found {} unreachables in func {:?}",
-                    scan.unreachables.len(),
-                    fid
-                );
-            }
-            let func_mut = module.funcs.get_mut(fid).kind.unwrap_local_mut();
-            patch_unreachables(func_mut, &mut scan.unreachables, flag_global, &return_types);
-            hook_calls(func_mut, &mut scan.calls, flag_global, &return_types);
-        }
-
-        // ── 5. Wrap entry-point exports ───────────────────────────────
-        // Created AFTER the instruction patching above so the wrappers
-        // themselves are not affected by the call-hook loop.
-        wrap_main_void(module, flag_global, fix_exit_code_import)?;
-        wrap_thread_start(module, flag_global, handle_thread_exit_import)?;
-
+        // Migrated to WrapUnreachablePreTargetStreamPass
         Ok(())
     }
 }
 
-// ── Private helpers for `post_combine` ────────────────────────────────
 
-/// Returns the four helper function names that need import→export wiring
-/// during `post_combine`.
-///
-/// Because `WrapUnreachableName` requires a `&WasmName` reference and
-/// `post_combine` only has `String` target names, we look up the matching
-/// `WasmName` from the context to build properly typed names.
-fn helper_names_for(target: &str, target_names: &[WasmName]) -> Vec<String> {
-    if let Some(wn) = target_names.iter().find(|n| n.as_ref() == target) {
-        vec![
-            WrapUnreachableName::GetUnreachableFlag(wn).to_string(),
-            WrapUnreachableName::SetUnreachableFlag(wn).to_string(),
-            WrapUnreachableName::FixMainRawExitCode(wn).to_string(),
-            WrapUnreachableName::HandleThreadExit(wn).to_string(),
-        ]
-    } else {
-        vec![]
-    }
-}
-
-/// Returns the marker export name for a target during `post_combine`.
-fn marker_name_for(target: &str, target_names: &[WasmName]) -> String {
-    if let Some(wn) = target_names.iter().find(|n| n.as_ref() == target) {
-        WrapUnreachableName::WrapUnreachable(wn).to_string()
-    } else {
-        // Fallback to raw formatting if the WasmName is somehow missing.
-        format!("{}_{}_wrap_unreachable", WRAP_UNREACHABLE_MODULE, target)
-    }
-}

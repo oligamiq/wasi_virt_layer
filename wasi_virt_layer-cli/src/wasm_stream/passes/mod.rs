@@ -12,3 +12,5 @@ pub mod shared_global;
 pub mod starts_pre;
 pub mod wrap_unreachable;
 pub mod poll;
+pub mod special_func;
+pub mod atomic_patch;

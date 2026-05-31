@@ -52,7 +52,12 @@ impl StreamPass for StartsPreStreamPass {
                             wasmparser::ExternalKind::Tag => ExportKind::Tag,
                             _ => unimplemented!(),
                         };
-                        exports.export(export.name, kind, export.index);
+                        
+                        if export.name == "_start" && matches!(kind, ExportKind::Func) {
+                            start_func_id = Some(export.index);
+                        } else {
+                            exports.export(export.name, kind, export.index);
+                        }
                     }
                     if let Some(func_id) = start_func_id {
                         exports.export(&self.start_export_name, ExportKind::Func, func_id);
@@ -61,7 +66,7 @@ impl StreamPass for StartsPreStreamPass {
                         // Generating a dummy start here is complex because it requires modifying Function/Code sections.
                         // We will defer dummy start generation to the post-combine pass where it's easier, or just let post-combine handle missing starts.
                         log::warn!(
-                            "Module has no start section but is not marked as a library. Deferred dummy start generation."
+                            "Module has no start section or _start export but is not marked as a library. Deferred dummy start generation."
                         );
                     }
                     module.section(&exports);

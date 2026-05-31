@@ -32,14 +32,17 @@ struct ParsedInfo {
     host_imports: HashMap<u32, String>,
     exported_funcs: HashMap<String, u32>,
     mutable_globals: HashMap<u32, i64>, // index -> initial value
-    data_segments: Vec<(u32, i32, usize)>, // mem_idx, offset, length
+    data_segments: Vec<(u32, i32, Vec<u8>)>, // mem_idx, offset, data bytes
     flesh_vfs_start: Option<u32>,
+    pub main_void_funcs: std::collections::HashSet<u32>,
     pub thread_patch: Option<u32>,
     pub wasi_thread_starts: HashMap<String, u32>,
     init_offset_global: Option<u32>,
     save_target_memory: Option<u32>,
     flesh_target_starts: HashMap<String, u32>,
+    reset_globals_funcs: HashMap<String, u32>,
     simple_debug_pre_init: Option<u32>,
+    original_data_count: u32,
     import_types: HashMap<u32, u32>,
 }
 
@@ -71,14 +74,18 @@ impl StreamPass for PostCombineStreamPass {
                                         || import.name.ends_with("__start")
                                         || import.name.ends_with("__main_void")
                                         || import.name.ends_with("_wasi_thread_start")
+                                        || import.name.ends_with("_memory_director")
                                         || import.name.ends_with("_reset_on_thread_once")))
                                     || (import.module == "wasip1-vfs_single_memory"
-                                        && import.name == "__wasip1_vfs_memory_grow_alt");
+                                        && import.name == "__wasip1_vfs_memory_grow_alt")
+                                    || import.module == "wvl_poll";
 
                                 if is_special {
                                     info.dropped_imports
                                         .insert(func_import_count, import.name.to_string());
-                                } else if import.module == "__wasip1_vfs-host" {
+                                } else if import.module == "__wasip1_vfs-host"
+                                    || import.module == "__wasip1_virt_layer"
+                                {
                                     info.host_imports
                                         .insert(func_import_count, import.name.to_string());
                                 }
@@ -150,6 +157,20 @@ impl StreamPass for PostCombineStreamPass {
                                     info.wasi_thread_starts
                                         .insert(target_name.to_string(), export.index);
                                 }
+                                name if name.ends_with("__main_void") => {
+                                    info.main_void_funcs.insert(export.index);
+                                }
+                                name if name.starts_with("__wasip1_vfs_")
+                                    && name.ends_with("_reset_globals") =>
+                                {
+                                    let target = name
+                                        .strip_prefix("__wasip1_vfs_")
+                                        .unwrap()
+                                        .strip_suffix("_reset_globals")
+                                        .unwrap();
+                                    info.reset_globals_funcs
+                                        .insert(target.replace("_", "-"), export.index);
+                                }
                                 _ => {}
                             }
                         }
@@ -175,6 +196,7 @@ impl StreamPass for PostCombineStreamPass {
                     }
                 }
                 wasmparser::Payload::DataSection(s) => {
+                    info.original_data_count = s.count();
                     for data in s {
                         let data = data?;
                         if let wasmparser::DataKind::Active {
@@ -186,10 +208,13 @@ impl StreamPass for PostCombineStreamPass {
                             let op = reader.read()?;
                             if let wasmparser::Operator::I32Const { value } = op {
                                 info.data_segments
-                                    .push((memory_index, value, data.data.len()));
+                                    .push((memory_index, value, data.data.to_vec()));
                             }
                         }
                     }
+                }
+                wasmparser::Payload::DataCountSection { count, .. } => {
+                    info.original_data_count = count;
                 }
                 _ => {}
             }
@@ -239,7 +264,7 @@ impl StreamPass for PostCombineStreamPass {
             } else {
                 dropped_func_original_indices.push(*import_idx);
                 info.dropped_imports
-                    .insert(*import_idx, "_memory_trap".to_string());
+                    .insert(*import_idx, name.clone());
             }
         }
 
@@ -263,6 +288,8 @@ impl StreamPass for PostCombineStreamPass {
         let mut data_section_opt = None;
         let mut is_after_code = false;
         let mut custom_sections_after_code: Vec<(String, Vec<u8>)> = Vec::new();
+
+        let mut current_defined_func_idx = 0;
 
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             match payload? {
@@ -476,6 +503,8 @@ impl StreamPass for PostCombineStreamPass {
                                 | "__simple_debug_wasip1_vfs_pre_init"
                         ) || (export.name.starts_with("__flesh_")
                             && export.name.ends_with("_start"))
+                          || (export.name.starts_with("__wasip1_virt_layer_")
+                            && export.name.ends_with("_wrap_unreachable"))
                         {
                             continue; // dropped
                         }
@@ -508,11 +537,6 @@ impl StreamPass for PostCombineStreamPass {
                     }
                     export_section.export("_start", wasm_encoder::ExportKind::Func, new_start_idx);
                     module.section(&export_section);
-                    // The generated component entrypoint can call `main` directly,
-                    // so keep the initialization sequence as a core wasm start too.
-                    module.section(&wasm_encoder::StartSection {
-                        function_index: new_start_idx,
-                    });
                 }
                 wasmparser::Payload::StartSection { .. } => {
                     // Do not emit original start, we exported our custom `_start` instead.
@@ -567,14 +591,18 @@ impl StreamPass for PostCombineStreamPass {
                     module.section(&elements);
                 }
                 wasmparser::Payload::DataCountSection { count, .. } => {
-                    data_count_section.count = count;
-                    data_count = count;
+                    data_count_section.count = count + info.data_segments.len() as u32;
+                    data_count = count; // original count
                     has_data_count = true;
                 }
                 wasmparser::Payload::CodeSectionStart { .. } => {
                     is_after_code = true;
                 }
                 wasmparser::Payload::CodeSectionEntry(body) => {
+                    let func_orig_idx = func_import_count + current_defined_func_idx;
+                    current_defined_func_idx += 1;
+                    let is_start = info.flesh_target_starts.values().any(|&idx| idx == func_orig_idx);
+
                     let mut locals = Vec::new();
                     for local in body.get_locals_reader()? {
                         let local = local?;
@@ -585,14 +613,27 @@ impl StreamPass for PostCombineStreamPass {
                     }
                     let mut func = wasm_encoder::Function::new(locals);
                     for op in body.get_operators_reader()? {
-                        func.instruction(&crate::wasm_stream::translator::translate(
-                            &op?, &rebinder,
-                        ));
+                        let op_unwrapped = op?;
+                        let mut skip = false;
+
+                        if let wasmparser::Operator::Call { function_index } = &op_unwrapped {
+                            if is_start && info.main_void_funcs.contains(function_index) {
+                                func.instruction(&wasm_encoder::Instruction::I32Const(0));
+                                skip = true;
+                            }
+                        }
+
+                        if !skip {
+                            func.instruction(&crate::wasm_stream::translator::translate(
+                                &op_unwrapped, &rebinder,
+                            ));
+                        }
                     }
                     code_section.function(&func);
                 }
                 wasmparser::Payload::DataSection(s) => {
                     let mut data_section = wasm_encoder::DataSection::new();
+                    let original_data_count = s.count();
                     for data in s {
                         let data = data?;
                         match data.kind {
@@ -622,7 +663,11 @@ impl StreamPass for PostCombineStreamPass {
                             }
                         }
                     }
-                    // TODO: append new reset data segment here
+                    for (_, _, bytes) in &info.data_segments {
+                        data_section.passive(bytes.iter().copied());
+                    }
+                    data_count_section.count = original_data_count + info.data_segments.len() as u32;
+                    has_data_count = true;
                     data_section_opt = Some(data_section);
                 }
                 wasmparser::Payload::CustomSection(s) => {
@@ -651,7 +696,7 @@ impl StreamPass for PostCombineStreamPass {
                 let wasm_mem = self
                     .target_names
                     .iter()
-                    .position(|n| n == target_name)
+                    .position(|n| n.replace("-", "_") == target_name)
                     .unwrap() as u32
                     + 1;
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
@@ -671,7 +716,7 @@ impl StreamPass for PostCombineStreamPass {
                 let wasm_mem = self
                     .target_names
                     .iter()
-                    .position(|n| n == target_name)
+                    .position(|n| n.replace("-", "_") == target_name)
                     .unwrap() as u32
                     + 1;
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
@@ -682,8 +727,36 @@ impl StreamPass for PostCombineStreamPass {
                     dst_mem: wasm_mem,
                 });
                 func.instruction(&wasm_encoder::Instruction::End);
+            } else if name.ends_with("_memory_director") {
+                let target_name = name
+                    .strip_prefix("__wasip1_vfs_")
+                    .unwrap()
+                    .strip_suffix("_memory_director")
+                    .unwrap();
+                let wasm_mem = self
+                    .target_names
+                    .iter()
+                    .position(|n| n.replace("-", "_") == target_name)
+                    .unwrap() as u32
+                    + 1;
+                
+                func.instruction(&wasm_encoder::Instruction::LocalGet(0));
+                
+                if wasm_mem > 0 {
+                    for i in 0..wasm_mem {
+                        func.instruction(&wasm_encoder::Instruction::MemorySize(i));
+                        if i > 0 {
+                            func.instruction(&wasm_encoder::Instruction::I32Add);
+                        }
+                    }
+                    func.instruction(&wasm_encoder::Instruction::I32Const(65536));
+                    func.instruction(&wasm_encoder::Instruction::I32Mul);
+                    func.instruction(&wasm_encoder::Instruction::I32Add);
+                }
+                func.instruction(&wasm_encoder::Instruction::End);
             } else if name.ends_with("_memory_trap") {
-                func.instruction(&wasm_encoder::Instruction::Unreachable);
+                // Just return the ptr to satisfy the anchor
+                func.instruction(&wasm_encoder::Instruction::LocalGet(0));
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if name.ends_with("_memory_grow_alt") {
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
@@ -724,7 +797,74 @@ impl StreamPass for PostCombineStreamPass {
                     ));
                 }
                 func.instruction(&wasm_encoder::Instruction::End);
-            } else if name.ends_with("_reset") || name.ends_with("_reset_on_thread_once") {
+            } else if name == "__wasip1_vfs_reset_on_thread_once" {
+                eprintln!("[START SEQUENCE] processing global reset_on_thread_once");
+                // The global reset_on_thread_once simply calls all target-specific reset functions.
+                for target_name in &self.target_names {
+                    let target_reset_name = format!("__wasip1_vfs_{}_reset", target_name.replace("-", "_"));
+                    let mut found_idx = None;
+                    for (orig_idx, d_name) in &info.dropped_imports {
+                        if d_name == &target_reset_name {
+                            found_idx = Some(*orig_idx);
+                            break;
+                        }
+                    }
+                    if let Some(idx) = found_idx {
+                        func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
+                    } else {
+                        eprintln!("[START SEQUENCE] Warning: target reset {} not found in dropped imports", target_reset_name);
+                    }
+                }
+                func.instruction(&wasm_encoder::Instruction::End);
+            } else if name.ends_with("_reset") {
+                eprintln!("[START SEQUENCE] processing reset function: {}", name);
+                let target_name = name
+                    .strip_prefix("__wasip1_vfs_")
+                    .unwrap_or_else(|| panic!("Failed prefix strip: {}", name))
+                    .strip_suffix("_reset")
+                    .unwrap_or_else(|| panic!("Failed to strip suffix from {}", name));
+                let wasm_mem = self
+                    .target_names
+                    .iter()
+                    .position(|n| n.replace("-", "_") == target_name)
+                    .unwrap() as u32
+                    + 1;
+
+                // 1. Reset globals
+                if let Some(&reset_globals_idx) = info.reset_globals_funcs.get(target_name) {
+                    func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(reset_globals_idx)));
+                }
+
+                // 2. Zero-fill memory
+                // To do this simply, we zero-fill the entire target memory `wasm_mem`.
+                // memory.size returns pages, so we multiply by 64KB (65536) to get bytes.
+                func.instruction(&wasm_encoder::Instruction::I32Const(0)); // dst
+                func.instruction(&wasm_encoder::Instruction::I32Const(0)); // val
+                func.instruction(&wasm_encoder::Instruction::MemorySize(wasm_mem)); // pages
+                func.instruction(&wasm_encoder::Instruction::I32Const(65536));
+                func.instruction(&wasm_encoder::Instruction::I32Mul); // length
+                func.instruction(&wasm_encoder::Instruction::MemoryFill(wasm_mem));
+
+                // 3. Initialize memory from passive data segments
+                let mut data_idx_offset = info.original_data_count;
+                for (mem_idx, offset, bytes) in &info.data_segments {
+                    if *mem_idx == wasm_mem {
+                        func.instruction(&wasm_encoder::Instruction::I32Const(*offset)); // dst
+                        func.instruction(&wasm_encoder::Instruction::I32Const(0)); // src
+                        func.instruction(&wasm_encoder::Instruction::I32Const(bytes.len() as i32)); // size
+                        func.instruction(&wasm_encoder::Instruction::MemoryInit {
+                            data_index: data_idx_offset,
+                            mem: wasm_mem,
+                        });
+                    }
+                    data_idx_offset += 1;
+                }
+
+                // 4. Call target's original start
+                if let Some(&start_idx) = info.flesh_target_starts.get(target_name) {
+                    func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(start_idx)));
+                }
+                
                 func.instruction(&wasm_encoder::Instruction::End);
             } else {
                 func.instruction(&wasm_encoder::Instruction::Unreachable);
@@ -733,27 +873,69 @@ impl StreamPass for PostCombineStreamPass {
             code_section.function(&func);
         }
 
+        // -----------------------------------------------------------------------------
+        // [START SEQUENCE]
+        // The execution order of start functions is extremely important for virtualization.
+        // In the legacy walrus pipeline, this was managed by creating empty dummy functions
+        // and later injecting their bodies (via starts.rs and ResetFunc).
+        // In the streaming pipeline, we achieve much better developer clarity by directly
+        // building the `_start` function here with an explicit, sequentially ordered list of calls.
+        // -----------------------------------------------------------------------------
         let mut start_func = wasm_encoder::Function::new(vec![]);
+        
+        eprintln!("[START SEQUENCE DEBUG] new_start_idx = {new_start_idx}");
+        eprintln!("[START SEQUENCE DEBUG] flesh_vfs_start = {:?}", info.flesh_vfs_start);
+        eprintln!("[START SEQUENCE DEBUG] thread_patch = {:?}", info.thread_patch);
+        eprintln!("[START SEQUENCE DEBUG] init_offset_global = {:?}", info.init_offset_global);
+        eprintln!("[START SEQUENCE DEBUG] save_target_memory = {:?}", info.save_target_memory);
+        eprintln!("[START SEQUENCE DEBUG] flesh_target_starts = {:?}", info.flesh_target_starts);
+        eprintln!("[START SEQUENCE DEBUG] simple_debug_pre_init = {:?}", info.simple_debug_pre_init);
+        eprintln!("[START SEQUENCE DEBUG] self.target_names = {:?}", self.target_names);
+        eprintln!("[START SEQUENCE DEBUG] reset_globals_funcs = {:?}", info.reset_globals_funcs);
+        
+        // 1. Initialize the VFS internal state.
         if let Some(idx) = info.flesh_vfs_start {
+            eprintln!("[START SEQUENCE] 1. flesh_vfs_start: orig={idx} -> rebind={}", rebinder.function(idx));
             start_func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
         }
+        
+        // 2. Patch thread-local behaviors (if threads are enabled).
         if let Some(idx) = info.thread_patch {
+            eprintln!("[START SEQUENCE] 2. thread_patch: orig={idx} -> rebind={}", rebinder.function(idx));
             start_func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
         }
+        
+        // 3. Initialize global offsets for memory merging.
         if let Some(idx) = info.init_offset_global {
+            eprintln!("[START SEQUENCE] 3. init_offset_global: orig={idx} -> rebind={}", rebinder.function(idx));
             start_func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
         }
+        
+        // 4. Save the initial memory state of the target (for later resets).
+        // Note: In the streaming pipeline, memory backup is handled efficiently by preserving
+        // passive data segments in the DataSection, so this function may be a no-op empty function.
         if let Some(idx) = info.save_target_memory {
+            eprintln!("[START SEQUENCE] 4. save_target_memory: orig={idx} -> rebind={}", rebinder.function(idx));
             start_func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
         }
+        
+        // 5. Finally, invoke the target modules' native start functions.
         for target_name in &self.target_names {
             if let Some(&idx) = info.flesh_target_starts.get(target_name) {
+                eprintln!("[START SEQUENCE] 5. flesh_target_start[{target_name}]: orig={idx} -> rebind={}", rebinder.function(idx));
                 start_func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
+            } else {
+                eprintln!("[START SEQUENCE] 5. flesh_target_start[{target_name}]: NOT FOUND");
+                eprintln!("[START SEQUENCE]    Available keys: {:?}", info.flesh_target_starts.keys().collect::<Vec<_>>());
             }
         }
+        
+        // 6. Post-initialization debug hooks.
         if let Some(idx) = info.simple_debug_pre_init {
+            eprintln!("[START SEQUENCE] 6. simple_debug_pre_init: orig={idx} -> rebind={}", rebinder.function(idx));
             start_func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(idx)));
         }
+        
         start_func.instruction(&wasm_encoder::Instruction::End);
         code_section.function(&start_func);
 

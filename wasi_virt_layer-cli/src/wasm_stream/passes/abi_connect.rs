@@ -202,3 +202,4 @@ impl StreamPass for ConnectWasip1ThreadsABIPreTargetStreamPass {
         })
     }
 }
+

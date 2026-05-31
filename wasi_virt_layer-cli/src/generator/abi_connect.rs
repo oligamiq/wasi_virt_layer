@@ -95,26 +95,10 @@ impl Generator for ConnectWasip1ABI {
 
     fn pre_target(
         &mut self,
-        module: &mut walrus::Module,
+        _module: &mut walrus::Module,
         _: &crate::generator::GeneratorCtx,
-        external: &crate::generator::ModuleExternal,
+        _external: &crate::generator::ModuleExternal,
     ) -> eyre::Result<()> {
-        module
-            .imports
-            .iter_mut()
-            .filter(|import| {
-                <Wasip1ABIFunc as strum::VariantNames>::VARIANTS.contains(&import.name.as_str())
-                    && import.module == UniqueName::WASIP1_ABI_MODULE
-            })
-            .for_each(|import| {
-                import.name =
-                    crate::unique_name::UniqueName::Wasip1ABI(&Wasip1ABIName::TargetTemporal {
-                        wasm: &external.name,
-                        import: import.name.as_str(),
-                    })
-                    .to_string();
-            });
-
         Ok(())
     }
 

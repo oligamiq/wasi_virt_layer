@@ -86,6 +86,7 @@ pub struct GeneratorCtx {
     pub vfs_is_library: bool,
     pub starts: starts::FnInStarts,
     pub wrap_unreachable_targets: std::collections::HashSet<String>,
+    pub main_void_synthesized_targets: Option<std::collections::HashSet<String>>,
 }
 
 /// Sub-context for extracting and storing component variables during execution.
@@ -225,6 +226,7 @@ impl Generator for ComponentCtxVisitor {
             vfs_is_library: _,
             starts: _,
             wrap_unreachable_targets: _,
+            main_void_synthesized_targets: _,
         } = ctx;
         module.save_info("vfs_name", vfs_name.to_string())?;
         module.save_info("target_names", target_names)?;
@@ -826,6 +828,7 @@ impl GeneratorRunner {
                 vfs_is_library: false,
                 starts,
                 wrap_unreachable_targets: std::collections::HashSet::new(),
+                main_void_synthesized_targets: None,
             },
             path,
             targets,
@@ -1048,6 +1051,7 @@ impl GeneratorRunner {
                 || self.target_vfs_build_opts[i].no_opt > 0
                 || self.target_vfs_build_opts[i].no_opt_all > 0;
             let _cloned_ctx = self.ctx.clone();
+            let is_synthesized = std::sync::Arc::new(std::sync::Mutex::new(false));
             (|path: &mut WasmPath| {
                 (|module: &mut walrus::Module| {
                     let external = ModuleExternal::new(&target_name);
@@ -1076,10 +1080,16 @@ impl GeneratorRunner {
                         pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
                         producer::ProducerStreamPass,
                         starts_pre::StartsPreStreamPass,
+                        special_func::SpecialFuncPreTargetStreamPass,
                         wrap_unreachable::WrapUnreachablePreTargetStreamPass,
+                        atomic_patch::AtomicPatchStreamPass,
                     };
 
                     pipeline.add_pass(Box::new(ProducerStreamPass::new()));
+                    pipeline.add_pass(Box::new(SpecialFuncPreTargetStreamPass::new(
+                        target_name.to_string(),
+                        is_synthesized.clone(),
+                    )));
                     
                     let is_opted_in = _cloned_ctx.wrap_unreachable_targets.contains(&target_name.to_string());
                     pipeline.add_pass(Box::new(WrapUnreachablePreTargetStreamPass::new(
@@ -1092,6 +1102,10 @@ impl GeneratorRunner {
                     )));
                     pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(
                         target_name.to_string(),
+                    )));
+                    pipeline.add_pass(Box::new(AtomicPatchStreamPass::new(
+                        _cloned_ctx.threads,
+                        i as u32,
                     )));
 
                     let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(
@@ -1113,10 +1127,15 @@ impl GeneratorRunner {
                     pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(Some(
                         new_memory_name,
                     ))));
+
                     Some(pipeline)
                 })
             })
             .with_opt(target, dwarf, keep_build_artifacts, skip_target_opt)?;
+
+            if *is_synthesized.lock().unwrap() {
+                self.ctx.main_void_synthesized_targets.get_or_insert_default().insert(target_name.to_string());
+            }
         }
 
         let skip_all_opt = self.vfs_build_opts.no_opt_all > 0
@@ -1181,10 +1200,10 @@ impl GeneratorRunner {
                 global_id_visitor
                     .post_combine(module, &self.ctx)
                     .wrap_err("Failed in post_combine")?;
-                let mut start_func_id_visitor = StartFuncIdVisitor::default();
-                start_func_id_visitor
-                    .post_combine(module, &self.ctx)
-                    .wrap_err("Failed in post_combine")?;
+                // let mut start_func_id_visitor = StartFuncIdVisitor::default();
+                // start_func_id_visitor
+                //     .post_combine(module, &self.ctx)
+                //     .wrap_err("Failed in post_combine")?;
 
                 self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id.take();
                 self.ctx.target_used_memory_id = mem_id_visitor.used_target_memory_id.take();
@@ -1192,7 +1211,7 @@ impl GeneratorRunner {
                 self.ctx.vfs_used_global_id = global_id_visitor.vfs_global_id.take();
                 self.ctx.target_used_global_id = global_id_visitor.global_id.take();
 
-                self.ctx.start_func_id = start_func_id_visitor.start_func_id.take();
+                // self.ctx.start_func_id = start_func_id_visitor.start_func_id.take();
 
                 self.generators.post_combine(module, &self.ctx)?;
 
