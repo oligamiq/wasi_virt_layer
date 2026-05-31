@@ -153,7 +153,6 @@ pub fn postbuild(parsed_args: PostBuildArgs) -> eyre::Result<()> {
     }
 
     let mut component_runner = generator::ComponentRunner::new(package);
-    crate::commands::build::add_generator!(component_runner);
 
     run_postbuild(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 

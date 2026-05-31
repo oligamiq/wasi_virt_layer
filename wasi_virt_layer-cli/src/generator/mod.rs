@@ -8,7 +8,7 @@ pub mod anonymous;
 pub mod debug;
 /// Generates and bridges memory copy, trap, and related VFS interactions.
 pub mod memory;
-pub mod memory_post_components;
+
 /// Reimplementation of binaryen's `--multi-memory-lowering` pass using walrus.
 pub mod multi_memory_lowering;
 /// Routines for stripping or patching unused WASM components.
@@ -24,7 +24,6 @@ pub mod special_func;
 pub mod starts;
 /// Internal logic for rewriting WASI threads spawn imports to the VFS.
 pub mod threads;
-pub mod vfs_host;
 /// Handles logic for rewriting unreachable instructions to prevent Wasm execution traps.
 pub mod wrap_unreachable;
 
@@ -1017,8 +1016,11 @@ impl GeneratorRunner {
                         CheckUseWasiVirtLayerChecker::new(),
                     )]);
                 pipeline.add_pass(Box::new(check_pass));
-                pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx)));
+                pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx.clone())));
                 pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
+                pipeline.add_pass(Box::new(crate::wasm_stream::passes::threads_spawn::ThreadsSpawnPreVfsStreamPass::new(
+                    cloned_ctx.threads,
+                )));
                 pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
                 pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
 
@@ -1103,6 +1105,10 @@ impl GeneratorRunner {
                     pipeline.add_pass(Box::new(ConnectWasip1ThreadsABIPreTargetStreamPass::new(
                         target_name.to_string(),
                     )));
+                    pipeline.add_pass(Box::new(crate::wasm_stream::passes::threads_spawn::ThreadsSpawnPreTargetStreamPass::new(
+                        _cloned_ctx.threads,
+                        target_name.to_string(),
+                    )));
                     pipeline.add_pass(Box::new(AtomicPatchStreamPass::new(
                         _cloned_ctx.threads,
                         i as u32,
@@ -1180,44 +1186,6 @@ impl GeneratorRunner {
             }
 
             path.set_path(output.into())
-        })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
-        println!("Adjusting Merged Wasm (walrus post_combine)...");
-        (|path: &mut WasmPath| {
-            (|module: &mut walrus::Module| {
-                let mut mem_id_visitor = MemoryIDVisitor {
-                    memory_hint: self.memory_hint.clone(),
-                    used_vfs_memory_id: None,
-                    used_target_memory_id: None,
-                };
-                let mut global_id_visitor = GlobalIdVisitor {
-                    vfs_global_id: None,
-                    global_id: None,
-                };
-                mem_id_visitor
-                    .post_combine(module, &self.ctx)
-                    .wrap_err("Failed in post_combine")?;
-                global_id_visitor
-                    .post_combine(module, &self.ctx)
-                    .wrap_err("Failed in post_combine")?;
-                // let mut start_func_id_visitor = StartFuncIdVisitor::default();
-                // start_func_id_visitor
-                //     .post_combine(module, &self.ctx)
-                //     .wrap_err("Failed in post_combine")?;
-
-                self.ctx.vfs_used_memory_id = mem_id_visitor.used_vfs_memory_id.take();
-                self.ctx.target_used_memory_id = mem_id_visitor.used_target_memory_id.take();
-
-                self.ctx.vfs_used_global_id = global_id_visitor.vfs_global_id.take();
-                self.ctx.target_used_global_id = global_id_visitor.global_id.take();
-
-                // self.ctx.start_func_id = start_func_id_visitor.start_func_id.take();
-
-                self.generators.post_combine(module, &self.ctx)?;
-
-                Ok(())
-            })
-            .wrap_run(path, dwarf, keep_build_artifacts, None)
         })
         .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
 
@@ -1453,7 +1421,26 @@ impl ComponentRunner {
                     .post_components(module, self.ctx.as_ref().unwrap())
                     .wrap_err("Failed in run_post_components")
             })
-            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts(), None)
+            .wrap_run(path, dwarf, parsed_args.keep_build_artifacts(), None)?;
+
+            let old_path = path.path()?.clone();
+            let input_wasm = std::fs::read(&old_path).wrap_err("Failed to read Wasm file")?;
+            let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
+
+            pipeline.add_pass(Box::new(
+                crate::wasm_stream::passes::memory_post_components::PostComponentsMemoryFixStreamPass::new(self.ctx.as_ref().unwrap().threads.unwrap_or(false))
+            ));
+
+            let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
+            let new_path = old_path.with_extension("post-comp-stream.wasm");
+            std::fs::write(&new_path, output_wasm).wrap_err("Failed to write Wasm file")?;
+            
+            if !parsed_args.keep_build_artifacts() {
+                std::fs::remove_file(&old_path).unwrap_or_default();
+            }
+            path.set_path(new_path)?;
+
+            Ok(())
         })
         .with_opt(
             &mut self.path,

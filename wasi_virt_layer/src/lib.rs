@@ -369,6 +369,8 @@ pub mod prelude {
 #[cfg(feature = "threads")]
 /// Threading support for WASI.
 pub mod thread {
+    #[cfg(target_os = "wasi")]
+    pub use crate::wasi::thread::__wasip1_vfs_is_root_spawn;
     pub use crate::wasi::thread::{
         DirectThreadPool, ThreadAccess, ThreadRunner, VirtualThread, VirtualThreadPool, root_spawn,
         root_spawn_unchecked,

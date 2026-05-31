@@ -127,8 +127,6 @@ pub(crate) fn run_prebuild_internal(
         wasm_memory_hints,
     )?;
 
-    crate::commands::build::add_generator!(generator);
-
     let component_runner = generator
         .run_layers_to_component(out_dir, keep_build_artifacts)
         .wrap_err("Failed to run layers to component")?;

@@ -28,7 +28,7 @@ fn translate_type_ref(ty: wasmparser::TypeRef) -> wasm_encoder::EntityType {
 
 /// Helper to re-emit all sections, optionally rewriting imports.
 /// `rewrite_import` is called for each import and returns `(module, name)`.
-fn rewrite_imports(
+pub fn rewrite_imports(
     input_wasm: &[u8],
     rewrite_import: impl Fn(&str, &str, &wasmparser::TypeRef) -> (String, String),
 ) -> Result<Vec<u8>> {

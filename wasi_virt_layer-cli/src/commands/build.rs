@@ -4,33 +4,7 @@ use crate::{
     generator::{self, WasmPath},
 };
 
-macro_rules! add_generator {
-    ($runner:expr) => {{
-        use crate::generator::{
-            debug, memory, memory_post_components, special_func, threads, wrap_unreachable,
-        };
 
-        generator::add_generators_by_type!(
-            $runner,
-            memory_post_components::PostComponentsMemoryFix,
-            wrap_unreachable::WrapUnreachableGenerator,
-            threads::ThreadsSpawn,
-            threads::ThreadsSpawnPatch,
-            threads::AtomicPatch,
-            special_func::StartFunc,
-            special_func::MainVoidFunc,
-            memory::MemoryBridge,
-            memory::MemoryTrap,
-            debug::SimpleDebug,
-            debug::DebugCallMemoryGrow,
-            debug::DebugExportVFSFunctions,
-            debug::DebugCallFunctionSmallScale,
-            debug::DebugCallFunctionMain,
-        );
-    }};
-}
-
-pub(crate) use add_generator;
 
 /// Executes the build command, coordinating the compilation and transformation of WASM modules.
 ///
@@ -44,7 +18,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
 
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());
-        add_generator!(component_runner);
+
 
         postbuild::run_postbuild(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 
