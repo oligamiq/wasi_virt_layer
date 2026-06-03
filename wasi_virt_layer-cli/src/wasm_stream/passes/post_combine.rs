@@ -45,6 +45,7 @@ struct ParsedInfo {
     original_data_count: u32,
     import_types: HashMap<u32, u32>,
     wasi_thread_initializer: Option<u32>,
+    vfs_wasi_thread_start: Option<u32>,
 }
 
 impl StreamPass for PostCombineStreamPass {
@@ -75,6 +76,7 @@ impl StreamPass for PostCombineStreamPass {
                                         || import.name.ends_with("__start")
                                         || import.name.ends_with("__main_void")
                                         || import.name.ends_with("_wasi_thread_start")
+                                        || import.name.ends_with("_wasi_thread_start_entry")
                                         || import.name.ends_with("_memory_director")
                                         || import.name.ends_with("_reset_on_thread_once")))
                                     || (import.module == "wasip1-vfs_single_memory"
@@ -137,6 +139,9 @@ impl StreamPass for PostCombineStreamPass {
                                 }
                                 "simple_debug_wasip1_vfs_pre_init" => {
                                     info.simple_debug_pre_init = Some(export.index)
+                                }
+                                "wasi_thread_start" => {
+                                    info.vfs_wasi_thread_start = Some(export.index)
                                 }
                                 "wasi_thread_initializer" => {
                                     info.wasi_thread_initializer = Some(export.index)
@@ -791,18 +796,28 @@ impl StreamPass for PostCombineStreamPass {
                     func.instruction(&wasm_encoder::Instruction::I32Const(0));
                 }
                 func.instruction(&wasm_encoder::Instruction::End);
-            } else if name.ends_with("_wasi_thread_start") {
-                let target_name = name
-                    .strip_prefix("__wasip1_vfs_")
-                    .unwrap()
-                    .strip_suffix("_wasi_thread_start")
-                    .unwrap();
-                if let Some(&anchor_idx) = info.wasi_thread_starts.get(target_name) {
-                    func.instruction(&wasm_encoder::Instruction::LocalGet(0));
-                    func.instruction(&wasm_encoder::Instruction::LocalGet(1));
-                    func.instruction(&wasm_encoder::Instruction::Call(
-                        rebinder.function(anchor_idx),
-                    ));
+            } else if name.ends_with("_wasi_thread_start") || name.ends_with("_wasi_thread_start_entry") {
+                if name.ends_with("_wasi_thread_start_entry") {
+                    if let Some(anchor_idx) = info.vfs_wasi_thread_start {
+                        func.instruction(&wasm_encoder::Instruction::LocalGet(0));
+                        func.instruction(&wasm_encoder::Instruction::LocalGet(1));
+                        func.instruction(&wasm_encoder::Instruction::Call(
+                            rebinder.function(anchor_idx),
+                        ));
+                    }
+                } else {
+                    let target_name = name
+                        .strip_prefix("__wasip1_vfs_")
+                        .unwrap()
+                        .strip_suffix("_wasi_thread_start")
+                        .unwrap();
+                    if let Some(&anchor_idx) = info.wasi_thread_starts.get(target_name) {
+                        func.instruction(&wasm_encoder::Instruction::LocalGet(0));
+                        func.instruction(&wasm_encoder::Instruction::LocalGet(1));
+                        func.instruction(&wasm_encoder::Instruction::Call(
+                            rebinder.function(anchor_idx),
+                        ));
+                    }
                 }
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if name == "__wasip1_vfs_reset_on_thread_once" {
