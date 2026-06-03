@@ -705,7 +705,7 @@ impl StreamPass for PostCombineStreamPass {
                     .target_names
                     .iter()
                     .position(|n| n.replace("-", "_") == target_name)
-                    .unwrap() as u32
+                    .ok_or_else(|| eyre::eyre!("Target name '{}' not found in provided targets. Ensure the VFS import matches the provided Wasm filename.", target_name))? as u32
                     + 1;
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
                 func.instruction(&wasm_encoder::Instruction::LocalGet(1));
@@ -725,7 +725,7 @@ impl StreamPass for PostCombineStreamPass {
                     .target_names
                     .iter()
                     .position(|n| n.replace("-", "_") == target_name)
-                    .unwrap() as u32
+                    .ok_or_else(|| eyre::eyre!("Target name '{}' not found in provided targets.", target_name))? as u32
                     + 1;
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
                 func.instruction(&wasm_encoder::Instruction::LocalGet(1));

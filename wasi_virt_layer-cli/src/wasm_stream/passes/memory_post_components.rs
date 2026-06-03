@@ -1,5 +1,5 @@
 use crate::wasm_stream::pipeline::StreamPass;
-use wasm_encoder::{ImportSection, MemorySection, Module, RawSection};
+use wasm_encoder::{ImportSection, Module, RawSection};
 
 pub struct PostComponentsMemoryFixStreamPass {
     pub threads: bool,

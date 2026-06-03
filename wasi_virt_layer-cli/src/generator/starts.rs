@@ -50,6 +50,7 @@ pub struct FnInStarts {
     pub simple_debug_wasip1_vfs_pre_init: String,
 }
 
+#[allow(dead_code)]
 impl FnInStarts {
     pub fn new(wasms: &[WasmName]) -> Self {
         let flesh_vfs_start = "__flesh_vfs_start".to_string();

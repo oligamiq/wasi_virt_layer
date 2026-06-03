@@ -2544,6 +2544,7 @@ dependencies = [
  "paste",
  "rayon",
  "regex",
+ "serde",
  "serde_json",
  "smallvec",
  "strsim",

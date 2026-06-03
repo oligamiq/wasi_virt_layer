@@ -2,7 +2,7 @@ use crate::wasm_stream::pipeline::{par_process_code_section, StreamPass};
 use eyre::Result;
 use std::collections::{BTreeSet, HashMap};
 use wasm_encoder::{
-    CodeSection, CustomSection, DataCountSection, DataSection, ElementSection, EntityType,
+    CustomSection, DataCountSection, DataSection, ElementSection, EntityType,
     ExportSection, Function, FunctionSection, GlobalSection, ImportSection, Instruction, Module,
     StartSection, TypeSection, ValType,
 };
@@ -348,7 +348,7 @@ impl StreamPass for AtomicPatchStreamPass {
                             wasmparser::ExternalKind::Memory => wasm_encoder::ExportKind::Memory,
                             wasmparser::ExternalKind::Global => wasm_encoder::ExportKind::Global,
                             wasmparser::ExternalKind::Tag => wasm_encoder::ExportKind::Tag,
-                            _ => continue,
+
                         };
                         let idx = match e.kind {
                             wasmparser::ExternalKind::Func

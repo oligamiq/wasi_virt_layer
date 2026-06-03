@@ -1,15 +1,25 @@
 // https://github.com/bytecodealliance/wasmtime/blob/cff811b55e8b715e037226f2f3c36c65676d319a/crates/wasi-preview1-component-adapter/src/lib.rs#L1655
 
+/// WASI args module
 pub mod args;
+/// WASI clock module
 pub mod clock;
+/// WASI env module
 pub mod env;
+/// WASI file module
 pub mod file;
+/// WASI poll module
 pub mod poll;
+/// WASI process module
 pub mod process;
+/// WASI random module
 pub mod random;
+/// WASI sched module
 pub mod sched;
 #[cfg(feature = "threads")]
+/// WASI thread module
 pub mod thread;
+/// Internal module for wrapping unreachable code
 pub mod wrap_unreachable;
 
 /// Internal helper macro for handle `self` and other identifiers.

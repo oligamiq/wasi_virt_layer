@@ -566,7 +566,7 @@ pub(super) mod analysis {
 }
 
 /// Specifies the memory architecture of the target WebAssembly module.
-#[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display)]
+#[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display, serde::Serialize, serde::Deserialize)]
 pub enum TargetMemoryType {
     /// Traditional single memory environment.
     #[strum(ascii_case_insensitive)]

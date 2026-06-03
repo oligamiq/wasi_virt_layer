@@ -2,7 +2,7 @@ use crate::wasm_stream::pipeline::StreamPass;
 use crate::wasm_stream::translator::{translate_sub_type, DefaultRebinder};
 use std::sync::{Arc, Mutex};
 use wasm_encoder::{
-    CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection, Instruction,
+    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction,
     Module, RawSection, TypeSection, ValType,
 };
 

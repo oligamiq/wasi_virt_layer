@@ -112,7 +112,7 @@ pub(crate) fn run_prebuild_internal(
         )
     };
 
-    let mut generator = generator::GeneratorRunner::new(
+    let generator = generator::GeneratorRunner::new(
         package,
         wasm.to_vec().into_boxed_slice(),
         threads,

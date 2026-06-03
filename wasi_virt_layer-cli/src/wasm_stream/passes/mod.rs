@@ -1,3 +1,4 @@
+#![allow(unused_variables, unused_assignments, unreachable_patterns, dead_code)]
 pub mod abi_connect;
 pub mod anonymous;
 pub mod check;
@@ -14,5 +15,8 @@ pub mod threads_spawn;
 pub mod wrap_unreachable;
 pub mod poll;
 pub mod special_func;
+
 pub mod atomic_patch;
 pub mod memory_post_components;
+pub mod component_ctx;
+pub mod extract_mem_sizes;

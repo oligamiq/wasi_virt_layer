@@ -379,7 +379,7 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                             wasmparser::ExternalKind::Memory => ExportKind::Memory,
                             wasmparser::ExternalKind::Global => ExportKind::Global,
                             wasmparser::ExternalKind::Tag => ExportKind::Tag,
-                            _ => continue,
+
                         };
 
                         let idx = match e.kind {
@@ -420,7 +420,7 @@ impl StreamPass for WrapUnreachablePreTargetStreamPass {
                     let mut sec = wasm_encoder::ElementSection::new();
                     for elem in s {
                         let elem = elem?;
-                        let mut funcs_vec = Vec::new();
+                        let funcs_vec;
                         let items = match elem.items {
                             wasmparser::ElementItems::Functions(f) => {
                                 funcs_vec = f

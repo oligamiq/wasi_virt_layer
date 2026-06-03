@@ -15,10 +15,12 @@ pub struct IndexTracker {
     /// (e.g. injecting imports pushes all internal functions up), or at the END.
     /// Let's support both.
     pub shift_offset: u32,
+    /// Explicit mapping of original index to new index.
     pub explicit_map: HashMap<u32, u32>,
 }
 
 impl IndexTracker {
+    /// Creates a new index tracker.
     pub fn new() -> Self {
         Self::default()
     }

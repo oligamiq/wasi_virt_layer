@@ -1,6 +1,7 @@
 use crate::__private::wasip1;
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! gen_alt_global {
     ($name:ident) => {
         $crate::__private::paste::paste! {

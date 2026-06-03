@@ -1,3 +1,4 @@
+/// WASI poll wait_poll utilities.
 pub mod wait_poll;
 use crate::memory::WasmAccess;
 use crate::{__private::wasip1::*, memory::WasmAccessName};

@@ -32,6 +32,7 @@ pub mod feature_extractor;
 /// Generate TypeScript helper code for VFS modules.
 pub mod gen_ts_helper;
 /// Internal generators for modifying and stitching Wasm structures.
+#[allow(missing_docs)]
 pub mod generator;
 /// Instruction scanning and rewriting utilities for Walrus IR.
 pub mod instrs;
@@ -42,6 +43,7 @@ pub mod unique_name;
 /// General utility functions for CLI logic and AST operations.
 pub mod util;
 /// Streaming Wasm module modification engine.
+#[allow(missing_docs)]
 pub mod wasm_stream;
 
 /// Central execution entrypoint for the CLI logic

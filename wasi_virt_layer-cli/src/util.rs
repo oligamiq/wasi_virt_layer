@@ -108,6 +108,7 @@ pub(crate) trait WalrusUtilExport: Debug {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) trait WalrusUtilFuncs {
     /// Find children flat functions
     fn find_children(

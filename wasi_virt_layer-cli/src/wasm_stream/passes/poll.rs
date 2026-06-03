@@ -1,5 +1,5 @@
 use crate::wasm_stream::pipeline::{par_process_code_section, StreamPass};
-use wasm_encoder::{CodeSection, Function, Instruction, Module, RawSection};
+use wasm_encoder::{Function, Instruction, Module, RawSection};
 use wasmparser::{Parser, Payload};
 
 pub struct PollWaitStreamPass {

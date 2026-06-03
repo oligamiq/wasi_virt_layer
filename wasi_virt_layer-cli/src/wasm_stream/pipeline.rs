@@ -77,14 +77,17 @@ where
 }
 
 impl Pipeline {
+    /// Create a new empty streaming pipeline.
     pub fn new() -> Self {
         Self { passes: Vec::new() }
     }
 
+    /// Add a streaming pass to the pipeline.
     pub fn add_pass(&mut self, pass: Box<dyn StreamPass>) {
         self.passes.push(pass);
     }
 
+    /// Run all passes in the pipeline sequentially on the given WebAssembly module.
     pub fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
         let mut current_wasm = input_wasm.to_vec();
         log::debug!("PIPELINE RUN IS EXECUTING!");

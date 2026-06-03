@@ -22,6 +22,7 @@ pub mod wasip1_derive;
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -40,6 +41,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -58,6 +60,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -76,6 +79,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -94,6 +98,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -112,6 +117,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -130,6 +136,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -148,6 +155,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -166,6 +174,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -184,6 +193,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -202,6 +212,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -220,6 +231,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -238,6 +250,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -256,6 +269,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -274,6 +288,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -292,6 +307,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -327,6 +343,7 @@ pub mod memory;
 pub mod shared_global;
 mod transporter;
 mod utils;
+/// WebAssembly System Interface (WASI) modules and utilities.
 pub mod wasi;
 mod wit;
 

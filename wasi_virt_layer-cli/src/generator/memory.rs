@@ -1,11 +1,7 @@
-use eyre::{Context as _, ContextCompat as _};
-use walrus::ir;
 
 use crate::{
-    args::TargetMemoryType,
     generator::{Generator, GeneratorCtx},
-    unique_name::UniqueName,
-    util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WasmName},
+    util::WasmName,
 };
 
 /// Encapsulates naming variants reserved for VFS memory interactions.
@@ -44,6 +40,7 @@ pub enum MemoryUniqueName<'a> {
 #[derive(Debug, Default)]
 pub struct MemoryBridge;
 
+#[allow(unused_macros)]
 macro_rules! assert_ptr {
     ($ptr:expr) => {
         if { $ptr } != walrus::ValType::I32 {
@@ -53,6 +50,7 @@ macro_rules! assert_ptr {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! assert_len {
     ($len:expr) => {
         if { $len } != walrus::ValType::I32 {
@@ -62,6 +60,7 @@ macro_rules! assert_len {
     };
 }
 
+#[allow(unused_macros)]
 macro_rules! check_len {
     ($params:expr, $len:expr) => {
         if { $params.len() } != { $len } {

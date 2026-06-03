@@ -4,6 +4,6 @@ fn main() {
         align: 0,
         memory_index: 0,
     };
-    let op = wasm_encoder::Instruction::I32Load(memarg);
+    let _op = wasm_encoder::Instruction::I32Load(memarg);
     println!("Compiled!");
 }

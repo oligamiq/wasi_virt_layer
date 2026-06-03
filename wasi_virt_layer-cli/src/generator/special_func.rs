@@ -1,14 +1,6 @@
-use std::collections::HashSet;
 
-use eyre::Context as _;
-use walrus::*;
 
-use crate::{
-    generator::{Generator, GeneratorCtx, ModuleExternal},
-    instrs::InstrRewrite as _,
-    unique_name::UniqueName,
-    util::{ResultUtil as _, WalrusFID, WalrusUtilFuncs as _, WalrusUtilModule as _, WasmName},
-};
+use crate::util::WasmName;
 
 /// Defines unique names associated with special life-cycle functions (startup, reset, main execution).
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]

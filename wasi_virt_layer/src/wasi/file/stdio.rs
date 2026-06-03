@@ -88,6 +88,7 @@ impl StdIO for DefaultStdIO {
 
 #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 /// Trait for handling standard I/O operations.
+#[allow(missing_docs)]
 pub trait StdIO: core::fmt::Debug {
     /// Reads data from stdin into the provided buffer.
     #[allow(unused_variables)]

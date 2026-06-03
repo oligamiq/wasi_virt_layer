@@ -5,7 +5,6 @@ use strum::VariantNames;
 use crate::{
     abi::{Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc},
     generator::{Generator, GeneratorCtx},
-    instrs::InstrRewrite,
     unique_name::UniqueName,
     util::{
         WalrusFID as _, WalrusUtilExport as _, WalrusUtilImport as _, WalrusUtilModule as _,

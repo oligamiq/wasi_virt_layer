@@ -1,7 +1,6 @@
 use crate::abi::{Wasip1ThreadsABIExportFunc, Wasip1ThreadsABIFunc};
 use crate::unique_name::UniqueName;
 use crate::wasm_stream::pipeline::StreamPass;
-use eyre::Context;
 use strum::VariantNames;
 use wasm_encoder::{EntityType, ExportKind, ExportSection, ImportSection, Module, RawSection};
 

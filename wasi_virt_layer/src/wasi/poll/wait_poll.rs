@@ -5,10 +5,12 @@ use crate::memory::{WasmAccess, WasmAccessName};
 #[cfg(target_os = "wasi")]
 #[link(wasm_import_module = "wvl_poll")]
 unsafe extern "C" {
+    #[doc(hidden)]
     pub fn __wvl_poll_atomic_wait(addr: *mut u32, expected: u32, timeout: i64) -> i32;
 }
 
 #[cfg(not(target_os = "wasi"))]
+#[doc(hidden)]
 pub unsafe extern "C" fn __wvl_poll_atomic_wait(
     _addr: *mut u32,
     _expected: u32,

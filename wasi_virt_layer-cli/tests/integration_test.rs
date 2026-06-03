@@ -717,7 +717,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
     let parent_dir_keep = test_dir_keep.0.parent().unwrap();
 
     // Check for intermediate files
-    let adjusted_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.adjusted.wasm"))?
+    let adjusted_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.post-comp-stream.wasm"))?
         .filter_map(Result::ok)
         .collect();
     let opt_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.opt.wasm"))?
@@ -726,7 +726,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 
     assert!(
         !adjusted_wasm_files.is_empty(),
-        "Expected .adjusted.wasm files to exist when keep_build_artifacts is true"
+        "Expected .post-comp-stream.wasm files to exist when keep_build_artifacts is true"
     );
     assert!(
         !opt_wasm_files.is_empty(),
@@ -750,7 +750,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 
     // Check for intermediate files - should not exist
     let adjusted_wasm_files_no_keep: Vec<_> =
-        glob::glob(&format!("{parent_dir_no_keep}/**/*.adjusted.wasm"))?
+        glob::glob(&format!("{parent_dir_no_keep}/**/*.post-comp-stream.wasm"))?
             .filter_map(Result::ok)
             .collect();
     let opt_wasm_files_no_keep: Vec<_> =
@@ -760,7 +760,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 
     assert!(
         adjusted_wasm_files_no_keep.is_empty(),
-        "Expected no .adjusted.wasm files to exist when keep_build_artifacts is false"
+        "Expected no .post-comp-stream.wasm files to exist when keep_build_artifacts is false"
     );
     assert!(
         opt_wasm_files_no_keep.is_empty(),

@@ -511,6 +511,7 @@ where
 
 #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 #[allow(dead_code)]
+#[allow(missing_docs)]
 pub trait Wasip1DynCompatibleLFSSlice: core::fmt::Debug {
     /// return inode, and the name of the pre-opened directory
     fn index(

@@ -1,3 +1,4 @@
+#![allow(missing_docs)]
 use eyre::Result;
 use wasm_encoder::Instruction;
 pub trait Rebind {

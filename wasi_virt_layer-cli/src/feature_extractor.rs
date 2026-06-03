@@ -1,5 +1,7 @@
 use clap::ArgMatches;
 
+/// Extracts CLI arguments into internal feature options for VFS module generation and dependencies.
+
 pub fn extract_features(
     matches: &ArgMatches,
     wasm_count: usize,
