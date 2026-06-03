@@ -6,5 +6,3 @@ pub mod r#new;
 pub mod postbuild;
 /// Logic for the `prebuild` command.
 pub mod prebuild;
-/// Logic for the `prepare-target` command.
-pub mod prepare_target;

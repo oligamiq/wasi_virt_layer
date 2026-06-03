@@ -131,15 +131,16 @@ fn generate_ts_helper_file(
     Ok(())
 }
 
-/// Extract export names from a WASM module binary
 fn extract_wasm_exports(wasm_bytes: &[u8]) -> eyre::Result<Vec<String>> {
-    use walrus::Module;
-
-    let module =
-        Module::from_buffer(wasm_bytes).map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
-
-    let exports = module.exports.iter().map(|e| e.name.clone()).collect();
-
+    let mut exports = Vec::new();
+    let parser = wasmparser::Parser::new(0);
+    for payload in parser.parse_all(wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload? {
+            for e in s {
+                exports.push(e?.name.to_string());
+            }
+        }
+    }
     Ok(exports)
 }
 /// Executes the postbuild command, transpiling a Component WASM into JavaScript.

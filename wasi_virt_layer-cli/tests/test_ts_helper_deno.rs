@@ -51,14 +51,15 @@ fn test_shared_memory_export_detection() -> color_eyre::Result<()> {
     let wasm_bytes = fs::read(&wasm_path)
         .wrap_err_with(|| format!("Failed to read WASM file: {:?}", wasm_path))?;
 
-    // Parse with walrus using default config
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM module: {}", e))?;
-
-    // Extract export names
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
 
     // Check SharedMemory exports
     let exports = detect_vfs_exports(&export_names);
@@ -111,13 +112,17 @@ fn test_shared_memory_helper_generation() -> color_eyre::Result<()> {
         .join("target/wasm32-wasip1-threads/release/test_helper_shared_memory_vfs.wasm");
     let wasm_bytes = fs::read(&wasm_path).wrap_err("Failed to read WASM")?;
 
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
     // Extract export names and detect exports
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
     let vfs_exports = detect_vfs_exports(&export_names);
 
     // Generate helper
@@ -165,12 +170,16 @@ fn test_pseudo_wasm_deno_execution() -> color_eyre::Result<()> {
     // Load and generate helper
     let wasm_path = workspace_root.join("target/wasm32-wasip1/release/test_helper_vfs.wasm");
     let wasm_bytes = fs::read(&wasm_path)?;
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
     let vfs_exports = detect_vfs_exports(&export_names);
     let helper_code = generate_ts_helper("test_helper_vfs", &vfs_exports, &[]);
 
@@ -236,12 +245,16 @@ fn test_shared_memory_deno_execution() -> color_eyre::Result<()> {
     let wasm_path = workspace_root
         .join("target/wasm32-wasip1-threads/release/test_helper_shared_memory_vfs.wasm");
     let wasm_bytes = fs::read(&wasm_path)?;
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
     let vfs_exports = detect_vfs_exports(&export_names);
     let helper_code = generate_ts_helper("test_helper_shared_memory_vfs", &vfs_exports, &[]);
 

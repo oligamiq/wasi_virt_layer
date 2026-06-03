@@ -35,10 +35,8 @@ js-component-bindgen = "1.18.0"
 log = "0.4.29"
 regex = "1.12.3"
 serde_json = "1.0.149"
-walrus = "0.26.1"
 # wasmtime-environ = { version = "35.0.0", features = ["component-model"] }
 wit-component = "0.248.0"
-walrus-simple-interpreter = "0.3.0"
 strum = { version = "0.28.0", features = ["derive"] }
 toml_edit = "0.25.11"
 itertools = "0.14.0"
@@ -85,7 +83,7 @@ windows-sys = { version = "0.61", features = [
 
 [features]
 default = ["parallel"]
-parallel = ["walrus/parallel"]
+parallel = []
 fallback = ["dep:wasm-merge-sys", "dep:wasm-opt"]
 
 [dev-dependencies]

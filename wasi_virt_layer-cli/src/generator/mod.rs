@@ -1,20 +1,3 @@
-/// Module for ABI connection generation and overrides.
-pub mod abi_connect;
-/// Utilities for handling anonymous and generic WASM rewrites.
-pub mod anonymous;
-/// Type-checking routines for imported/exported functions.
-
-// pub mod debug;
-pub mod memory;
-pub mod patch_component;
-pub mod producer;
-pub mod multi_memory_lowering;
-// pub mod poll;
-pub mod shared_global;
-pub mod special_func;
-pub mod starts;
-pub mod threads;
-// pub mod wrap_unreachable;
 
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
@@ -28,10 +11,9 @@ use crate::{
     compile,
     config_checker::TomlRestorers,
     fallback_command,
-    unique_name::UniqueName,
+    unique_name::{MemoryUniqueName, UniqueName},
     util::{
-        CaminoUtilModule as _, ResultUtil, WalrusFID as _, WalrusUtilModule,
-        WasmName, WasmNameHolder,
+        CaminoUtilModule as _, ResultUtil, WasmName, WasmNameHolder,
     },
 };
 
@@ -61,7 +43,6 @@ pub struct GeneratorCtx {
     /// Detected during `pre_vfs`; when `true`, the VFS start slot in the
     /// combined start chain is skipped entirely.
     pub vfs_is_library: bool,
-    pub starts: starts::FnInStarts,
     pub wrap_unreachable_targets: std::collections::HashSet<String>,
     pub main_void_synthesized_targets: Option<std::collections::HashSet<String>>,
 }
@@ -139,255 +120,6 @@ impl ComponentCtx {
     }
 }
 
-/// Defines the core trait for WASM transformations, hooks, and component optimizations over the build lifecycle.
-pub trait Generator: std::fmt::Debug + Any {
-    /// Operations performed on the built VFS module.
-    #[allow(unused_variables)]
-    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        Ok(())
-    }
-
-    /// Operations performed on the target module.
-    #[allow(unused_variables)]
-    fn pre_target(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-        external: &ModuleExternal,
-    ) -> eyre::Result<()> {
-        Ok(())
-    }
-
-    /// Operations performed on the combined module.
-    #[allow(unused_variables)]
-    fn post_combine(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        Ok(())
-    }
-
-    /// Operations performed after lowerings memory operations.
-    /// Only called if the target memory type is `Single`.
-    #[allow(unused_variables)]
-    fn post_lower_memory(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        Ok(())
-    }
-
-    /// Operations performed after components.
-    #[allow(unused_variables)]
-    fn post_components(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<()> {
-        Ok(())
-    }
-
-    /// Operations performed after last optimizations.
-    /// Generating debug functions is a delicate process,
-    /// so in this case, output once per structure.
-    /// Return true if there are changes.
-    #[allow(unused_variables)]
-    fn post_all_optimize(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<bool> {
-        Ok(false)
-    }
-}
-impl<T: std::fmt::Debug + Any + Generator> Generator for [T] {
-    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        for generator in self {
-            generator.pre_vfs(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run pre_vfs for {generator:?}"))
-            })?;
-        }
-        Ok(())
-    }
-
-    fn pre_target(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-        external: &ModuleExternal,
-    ) -> eyre::Result<()> {
-        for generator in self {
-            generator
-                .pre_target(module, ctx, external)
-                .wrap_err_with(|| {
-                    eyre::eyre!(format!("Failed to run pre_target for {generator:?}"))
-                })?;
-        }
-        Ok(())
-    }
-
-    fn post_combine(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        for generator in self {
-            generator.post_combine(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run post_combine for {generator:?}"))
-            })?;
-        }
-        Ok(())
-    }
-
-    fn post_lower_memory(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        for generator in self {
-            generator.post_lower_memory(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run post_lower_memory for {generator:?}"))
-            })?;
-        }
-        Ok(())
-    }
-
-    fn post_components(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<()> {
-        for generator in self {
-            generator.post_components(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run post_components for {generator:?}"))
-            })?;
-        }
-        Ok(())
-    }
-
-    fn post_all_optimize(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<bool> {
-        let mut changed = false;
-        for generator in self {
-            changed |= generator.post_all_optimize(module, ctx).wrap_err_with(|| {
-                eyre::eyre!(format!("Failed to run post_all_optimize for {generator:?}"))
-            })?;
-        }
-        Ok(changed)
-    }
-}
-impl Generator for Box<dyn Generator + 'static> {
-    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        (**self).pre_vfs(module, ctx)
-    }
-
-    fn pre_target(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-        external: &ModuleExternal,
-    ) -> eyre::Result<()> {
-        (**self).pre_target(module, ctx, external)
-    }
-
-    fn post_combine(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        (**self).post_combine(module, ctx)
-    }
-
-    fn post_lower_memory(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        (**self).post_lower_memory(module, ctx)
-    }
-
-    fn post_components(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<()> {
-        (**self).post_components(module, ctx)
-    }
-
-    fn post_all_optimize(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<bool> {
-        (**self).post_all_optimize(module, ctx)
-    }
-}
-impl<'a> Generator for &'a mut (dyn Generator + 'a) {
-    fn pre_vfs(&mut self, module: &mut walrus::Module, ctx: &GeneratorCtx) -> eyre::Result<()> {
-        (**self).pre_vfs(module, ctx)
-    }
-
-    fn pre_target(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-        external: &ModuleExternal,
-    ) -> eyre::Result<()> {
-        (**self).pre_target(module, ctx, external)
-    }
-
-    fn post_combine(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        (**self).post_combine(module, ctx)
-    }
-
-    fn post_lower_memory(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &GeneratorCtx,
-    ) -> eyre::Result<()> {
-        (**self).post_lower_memory(module, ctx)
-    }
-
-    fn post_components(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<()> {
-        (**self).post_components(module, ctx)
-    }
-
-    fn post_all_optimize(
-        &mut self,
-        module: &mut walrus::Module,
-        ctx: &ComponentCtx,
-    ) -> eyre::Result<bool> {
-        (**self).post_all_optimize(module, ctx)
-    }
-}
-
-/// Stores the identity of an external loaded Wasm target.
-#[derive(Debug)]
-pub struct ModuleExternal {
-    /// The name of the external module.
-    pub name: WasmName,
-}
-
-impl ModuleExternal {
-    /// Creates a new `ModuleExternal` with the specified name.
-    pub fn new(name: &WasmName) -> Self {
-        Self { name: name.clone() }
-    }
-}
-
 /// Coordinates iterating over registered generators and merging external module logic into the VFS.
 #[derive(Debug)]
 pub struct GeneratorRunner {
@@ -433,7 +165,7 @@ pub(crate) trait WrapRunner<T> {
         Self: Sized;
 }
 
-impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
+impl<T, F: FnOnce() -> eyre::Result<T>> WrapRunner<T> for F {
     fn wrap_run(
         self,
         path: &mut WasmPath,
@@ -443,39 +175,32 @@ impl<T, F: FnOnce(&mut walrus::Module) -> eyre::Result<T>> WrapRunner<T> for F {
     ) -> eyre::Result<T> {
         let old_path = path.path()?.clone();
 
-        let mut input_wasm = fs::read(&old_path).wrap_err("Failed to read Wasm file")?;
+        let result = (self)()?;
 
         if let Some(pipeline) = &mut stream_pipeline {
-            input_wasm = pipeline
+            let input_wasm = fs::read(&old_path).wrap_err("Failed to read Wasm file")?;
+            let output_wasm = pipeline
                 .run(&input_wasm)
                 .wrap_err("Failed to run StreamPipeline pre-walrus")?;
+
+            let new_path = old_path.with_extension("adjusted.wasm");
+
+            if fs::metadata(&new_path).is_ok() {
+                fs::remove_file(&new_path)
+                    .wrap_err_with(|| format!("Failed to remove existing file {new_path}"))?;
+            }
+
+            std::fs::write(&new_path, &output_wasm)
+                .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
+
+            if !keep_build_artifacts && !path.is_original(&old_path) {
+                std::fs::remove_file(&old_path).unwrap_or_else(|e| {
+                    log::warn!("Failed to remove intermediate file {old_path}: {e}")
+                });
+            }
+
+            path.set_path(new_path)?;
         }
-
-        let module = &mut walrus::Module::from_buffer(&input_wasm)
-            .map_err(|e| eyre::eyre!(e))
-            .wrap_err("Failed to load Wasm module from buffer")?;
-
-        let result = (self)(module)?;
-
-        let new_path = old_path.with_extension("adjusted.wasm");
-
-        if fs::metadata(&new_path).is_ok() {
-            fs::remove_file(&new_path)
-                .wrap_err_with(|| format!("Failed to remove existing file {new_path}"))?;
-        }
-
-        module
-            .emit_wasm_file(&new_path)
-            .to_eyre()
-            .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
-
-        if !keep_build_artifacts && !path.is_original(&old_path) {
-            std::fs::remove_file(&old_path).unwrap_or_else(|e| {
-                log::warn!("Failed to remove intermediate file {old_path}: {e}")
-            });
-        }
-
-        path.set_path(new_path)?;
 
         Ok(result)
     }
@@ -603,7 +328,6 @@ impl GeneratorRunner {
 
         let target_names = wasm_name_holder_iter.collect::<Box<_>>();
 
-        let starts = starts::FnInStarts::new(&target_names);
 
         // log targeting info
         for name in target_names.iter() {
@@ -636,7 +360,7 @@ impl GeneratorRunner {
                 keep_build_artifacts,
 
                 vfs_is_library: false,
-                starts,
+
                 wrap_unreachable_targets: std::collections::HashSet::new(),
                 main_void_synthesized_targets: None,
             },
@@ -732,12 +456,12 @@ impl GeneratorRunner {
                     }
                 }
             }
-            self.ctx.vfs_is_library = vfs_is_library;
+        self.ctx.vfs_is_library = vfs_is_library;
             self.ctx.wrap_unreachable_targets = wrap_unreachable_targets;
             let pipeline_is_library = vfs_is_library;
             let cloned_ctx = self.ctx.clone();
 
-            (|_module: &mut walrus::Module| {
+            (|| {
                 // Detect VFS library mode: if the VFS module has no start section,
                 // it is a library and has no initialization entry point.
                 if pipeline_is_library {
@@ -807,7 +531,7 @@ impl GeneratorRunner {
             let _cloned_ctx = self.ctx.clone();
             let is_synthesized = std::sync::Arc::new(std::sync::Mutex::new(false));
             (|path: &mut WasmPath| {
-                (|_module: &mut walrus::Module| {
+                (|| {
                     Ok(())
                 })
                 .wrap_run(path, dwarf, keep_build_artifacts, {
@@ -867,7 +591,7 @@ impl GeneratorRunner {
                     )));
                     pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![export_name])));
                     let new_memory_name = crate::generator::UniqueName::Memory(
-                        &crate::generator::memory::MemoryUniqueName::Memory(&target_name),
+                        &crate::unique_name::MemoryUniqueName::Memory(&target_name),
                     )
                     .to_string();
                     pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(Some(
@@ -1428,22 +1152,18 @@ pub fn merge(
     _threads: bool,
     dwarf: bool,
 ) -> eyre::Result<()> {
-    let custom_section = {
-        let mut vfs_module = walrus::Module::load(vfs, dwarf)?;
-        let custom_section_names = vfs_module
-            .customs
-            .iter()
-            .map(|(_, section)| section.name().to_string())
-            .filter(|name| name.starts_with("component-type:"))
-            .collect::<Vec<_>>();
-        // let custom_section = vfs_module
-        //     .customs.delete(custom_section_names)
-        let custom_section = custom_section_names
-            .iter()
-            .filter_map(|id| vfs_module.customs.remove_raw(id))
-            .collect::<Vec<_>>();
-
-        custom_section
+    let custom_sections = {
+        let wasm = std::fs::read(vfs)?;
+        let mut sections = Vec::new();
+        for payload in wasmparser::Parser::new(0).parse_all(&wasm) {
+            let payload = payload?;
+            if let wasmparser::Payload::CustomSection(c) = payload {
+                if c.name().starts_with("component-type:") {
+                    sections.push((c.name().to_string(), c.data().to_vec()));
+                }
+            }
+        }
+        sections
     };
 
     let mut merge_cmd = fallback_command::get_fallback_command("wasm-merge");
@@ -1502,17 +1222,15 @@ pub fn merge(
         return Err(eyre::eyre!("wasm-merge command failed: {error_message}"));
     }
 
-    let mut module = walrus::Module::load(output.as_ref(), dwarf)?;
-    for section in custom_section {
-        module.customs.add(section);
+    let mut module_bytes = std::fs::read(output.as_ref())?;
+    for (name, data) in custom_sections {
+        let section = wasm_encoder::CustomSection {
+            name: name.into(),
+            data: data.into(),
+        };
+        wasm_encoder::Section::append_to(&section, &mut module_bytes);
     }
-
-    // to output
-    fs::remove_file(output.as_ref()).expect("Failed to remove existing file");
-
-    module
-        .emit_wasm_file(output.as_ref())
-        .expect("Failed to emit wasm file");
+    std::fs::write(output.as_ref(), &module_bytes)?;
 
     Ok(())
 }

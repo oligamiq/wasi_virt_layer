@@ -1,8 +1,8 @@
 use crate::wasm_stream::pipeline::StreamPass;
 use crate::{
     abi::Wasip1ABIFunc,
-    generator::{GeneratorCtx, memory::MemoryUniqueName},
-    unique_name::UniqueName,
+    generator::GeneratorCtx,
+    unique_name::{MemoryUniqueName, UniqueName},
 };
 use eyre::{Context, Result};
 use strum::VariantNames;

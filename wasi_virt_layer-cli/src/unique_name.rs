@@ -1,12 +1,6 @@
 //! Provides mechanisms to generate unique non-colliding crate identifiers and exports for WASM modules.
 
-use crate::{
-    generator::{
-        abi_connect::Wasip1ABIName, memory::MemoryUniqueName, shared_global::SharedGlobalFnsName,
-        special_func::SpecialFuncUniqueName, threads::ThreadsSpawnName,
-    },
-    util::WasmName,
-};
+use crate::util::WasmName;
 
 /// Represents a unique, non-colliding name element within the generated WASM structure.
 #[derive(Debug, Eq, PartialEq, Hash)]
@@ -83,7 +77,7 @@ mod tests {
 
     #[test]
     fn test_unique_name_threads_import_anchor_is_prefixed() {
-        let t = crate::generator::threads::ThreadsSpawnName::ImportAnchor("thread-spawn");
+        let t = crate::unique_name::ThreadsSpawnName::ImportAnchor("thread-spawn");
         let s = super::UniqueName::ThreadsSpawn(&t).to_string();
         assert_eq!(s, "__wasip1_vfs_thread-spawn_import_anchor");
     }
@@ -432,4 +426,128 @@ mod unique_name_iterator_tests {
             "Found duplicate unique names: {duplicates:?}",
         );
     }
+}
+
+
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum Wasip1ABIName<'a> {
+    #[strum(serialize = "__self")]
+    /// Reference to a self-contained import.
+    SelfDefault {
+        /// Identifier string representation of the import.
+        import: &'a str,
+    },
+    #[strum(serialize = "")]
+    /// Temporarily constructed linking to a specified module during intermediate compilation.
+    TargetTemporal {
+        /// Specific wasm module binding origin.
+        wasm: &'a WasmName,
+        /// Specific imported signature target.
+        import: &'a str,
+    },
+}
+
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq, strum::VariantNames)]
+#[strum(serialize_all = "snake_case")]
+pub enum MemoryUniqueName<'a> {
+    /// Copies contents from Target Memory to VFS Memory.
+    MemoryCopyFrom(&'a WasmName),
+    /// Copies contents from VFS Memory to Target Memory.
+    MemoryCopyTo(&'a WasmName),
+    /// Emplaces a runtime trap to deduce pointer arithmetic limits.
+    MemoryTrap(&'a WasmName),
+    /// Serves as a linked anchor ensuring `MemoryTrap` preserves its compiled identity.
+    MemoryTrapAnchor(&'a WasmName),
+    /// Wraps dynamic function dispatch controlling pointers to merged targets.
+    MemoryDirector(&'a WasmName),
+    /// Serves as a linked anchor preserving the compiled `MemoryDirector` identity.
+    MemoryDirectorAnchor(&'a WasmName),
+    /// The fundamental reference identifying the exported memory location of the underlying module.
+    Memory(&'a WasmName),
+}
+
+#[derive(Debug, Default)]
+pub struct SharedGlobal {
+    before_globals: Option<usize>,
+    before_memories: Option<usize>,
+}
+
+/// Enum containing identifiers for alternative shared global function replacements and locker usages.
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, PartialEq, Eq, Hash)]
+#[strum(serialize_all = "snake_case")]
+pub enum SharedGlobalFnsName {
+    /// Wrapper replacing a global variable assignment internally without locking overhead.
+    GlobalAltSet,
+    GlobalAltSetWithLock,
+    /// Thread-safe wrapper evaluating and retrieving the global value.
+    GlobalAltGet,
+    /// Fast wrapper evaluating the global value bypassing thread synchronization lock operations.
+    GlobalAltGetNoWait,
+    /// Singleton wrapper assigning an initializing value solely on a one-time startup sequence.
+    GlobalAltInitOnce,
+    /// Utility function yielding the exact offset index memory location storing the global proxy.
+    GlobalAltPos,
+    /// Locking function instance controlling concurrent memory accesses for a specific table identified by index.
+    Locker(usize),
+    #[strum(serialize = "locker")]
+    /// Uniquely identified primary initial lock mechanism controlling baseline single-memory environments.
+    LockerBase,
+    #[strum(serialize = "alt")]
+    /// Replaced function logic hooking WebAssembly natively executed `memory.grow` allocation algorithms.
+    MemoryGrowAlt,
+}
+
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum SpecialFuncUniqueName<'a> {
+    /// Function that initializes memory resets.
+    Resetter(&'a WasmName),
+    /// Function that handles thread resets.
+    ResetOnThread,
+    /// Function that ensures thread reset occurs precisely once.
+    ResetOnThreadOnce,
+    /// Preserved original initialization function.
+    StartInitOld,
+    /// The primary start wrapper routine function.
+    Start(&'a WasmName),
+    /// Early application termination safe wrapper function.
+    MainVoid(&'a WasmName),
+    /// State reset function generated for given module.
+    Reset(&'a WasmName),
+}
+
+#[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
+#[strum(serialize_all = "snake_case")]
+pub enum ThreadsSpawnName<'a> {
+    /// Custom spawn anchor injected for bridging definitions.
+    ImportAnchor(&'a str),
+    /// Flag indicating whether the current instance is the root spawner thread.
+    IsRootSpawn,
+    #[strum(serialize = "wasi_thread_spawn___self")]
+    /// Function identifier for native WASI spawn capability.
+    WasiThreadSpawnSelf,
+    #[strum(serialize = "__self_wasi_thread_start")]
+    /// The starting routine mapping on thread creation execution.
+    SelfWasiThreadStart,
+    #[strum(serialize = "__self_wasi_thread_start_anchor")]
+    /// The underlying static bridge to anchor thread origins.
+    SelfWasiThreadStartAnchor,
+    /// Low level function signature to actually request system spawn.
+    RealThreadSpawnFn,
+    /// Entry stub function used when entering newly spawned routines.
+    WasiThreadStartEntry,
+    /// Specialized start function per WASM module target.
+    WasiThreadStart(&'a WasmName),
+    #[strum(serialize = "wasi_thread_start")]
+    /// Target resolving memory start capabilities per component.
+    WasiThreadStartDestination(&'a WasmName),
+    /// Wraps dynamic spawn allocations over components.
+    WasiThreadSpawn(&'a WasmName),
+    /// Cross-linking anchor marking a spawn location.
+    WasiThreadStartAnchor(&'a WasmName),
+    /// Initializer function for thread memory limits scaling.
+    ThreadInitializer,
+    /// Reference to the existing deprecated `_start` handling.
+    OldStart,
 }

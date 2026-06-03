@@ -67,7 +67,7 @@ fn has_library_import_anchor_names(export_names: &[&str]) -> bool {
     let has_prefixed_thread_anchor = <Wasip1ThreadsABIFunc as VariantNames>::VARIANTS
         .iter()
         .map(|name| {
-            UniqueName::ThreadsSpawn(&crate::generator::threads::ThreadsSpawnName::ImportAnchor(
+            UniqueName::ThreadsSpawn(&crate::unique_name::ThreadsSpawnName::ImportAnchor(
                 name,
             ))
             .to_string()

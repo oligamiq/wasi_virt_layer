@@ -58,8 +58,6 @@ pub enum Command {
     Postbuild(PostBuildArgs),
     /// Initializes a new WASI Virt Layer project.
     New(NewArgs),
-    /// Prepares a target WASM module for shared memory operation.
-    PrepareTarget(PrepareTargetArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -82,29 +80,6 @@ pub struct NewArgs {
     pub threads: bool,
 }
 
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None, help_template = "
-{name} {version}
-{author}
-{about}
-
-{usage-heading} {usage}
-
-{all-args}")]
-/// Arguments for the `prepare-target` command.
-pub struct PrepareTargetArgs {
-    /// Path to the target WASM module (wasip1)
-    #[arg(value_name = "TARGET_WASM")]
-    pub target_wasm: Utf8PathBuf,
-
-    /// Output path for the transformed WASM module
-    #[arg(short, long, value_name = "OUTPUT")]
-    pub output: Option<Utf8PathBuf>,
-
-    /// Whether to keep intermediate build artifacts
-    #[arg(long, default_value = "false")]
-    pub keep_artifacts: bool,
-}
 
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None, help_template = "
