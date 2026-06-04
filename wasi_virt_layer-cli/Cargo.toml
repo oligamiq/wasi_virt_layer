@@ -10,7 +10,7 @@ repository = "https://github.com/oligamiq/wasi_virt_layer"
 publish = true
 autobins = false
 autoexamples = false
-autotests = false
+autotests = true
 autobenches = false
 
 [package.metadata.docs.rs]

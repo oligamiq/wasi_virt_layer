@@ -208,7 +208,12 @@ console.log("✓ PseudoWasm helper works with Deno");
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(eyre::eyre!("Deno execution failed: {}", stderr));
+        let code = output.status.code().unwrap_or(1);
+        return Err(eyre::eyre!(
+            "Deno execution failed with status {}: {}",
+            code,
+            stderr
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -293,7 +298,12 @@ console.log("✓ SharedMemory helper works with Deno");
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        return Err(eyre::eyre!("Deno execution failed: {}", stderr));
+        let code = output.status.code().unwrap_or(1);
+        return Err(eyre::eyre!(
+            "Deno execution failed with status {}: {}",
+            code,
+            stderr
+        ));
     }
 
     let stdout = String::from_utf8_lossy(&output.stdout);

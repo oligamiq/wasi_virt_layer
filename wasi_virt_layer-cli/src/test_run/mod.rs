@@ -35,33 +35,54 @@ try {{
             _start: () => {{
                 // init only
                 console.log("[WASI main]");
+                if (root._start) {{
+                    p = root._start();
+                }}
                 if (root.main) {{
                     p = root.main();
-                }} else if (root._start) {{
-                    p = root._start();
-                }} else if (inst.exports._start) {{
+                }} else if (inst.exports._start && !root._start) {{
                     p = (inst.exports._start as Function)();
-                }} else if (inst.exports.main) {{
+                }} else if (inst.exports.main && !root.main) {{
                     p = (inst.exports.main as Function)();
                 }}
                 console.log("[WASI main] done.");
             }}
         }},
     }});
-}} catch (e) {{
-    // Ignore proc_exit errors (exit code 0 is success)
-    if (e instanceof Error && e.message.includes("exit with exit code 0")) {{
-        // Expected behavior - normal exit
-    }} else {{
+}} catch (e: any) {{
+    let shouldThrow = true;
+    if (e instanceof Error) {{
+        const match = e.message.match(/exit with exit code (\d+)/);
+        if (match) {{
+            const code = parseInt(match[1], 10);
+            if (typeof Deno !== "undefined") {{
+                Deno.exit(code);
+            }} else if (code === 0) {{
+                // Expected behavior - normal exit in browser
+                shouldThrow = false;
+            }}
+        }}
+    }}
+    if (shouldThrow) {{
         throw e;
     }}
 }}
 
 if (p) {{
     await Promise.resolve(p).catch((e: any) => {{
-        if (e instanceof Error && e.message.includes("exit with exit code 0")) {{
-            // Expected behavior - normal exit
-        }} else {{
+        let shouldThrow = true;
+        if (e instanceof Error) {{
+            const match = e.message.match(/exit with exit code (\d+)/);
+            if (match) {{
+                const code = parseInt(match[1], 10);
+                if (typeof Deno !== "undefined") {{
+                    Deno.exit(code);
+                }} else if (code === 0) {{
+                    shouldThrow = false;
+                }}
+            }}
+        }}
+        if (shouldThrow) {{
             throw e;
         }}
     }});
@@ -100,8 +121,15 @@ import { ConsoleStdout, File, OpenFile, PreopenDirectory, WASI } from "@bjorn3/b
 
 // Catch the leaked promise rejection from jco task wrappers on proc_exit
 globalThis.addEventListener("unhandledrejection", (e) => {
-    if (e.reason instanceof Error && e.reason.message.includes("exit with exit code 0")) {
-        e.preventDefault();
+    if (e.reason instanceof Error) {
+        const match = e.reason.message.match(/exit with exit code (\d+)/);
+        if (match) {
+            e.preventDefault();
+            const code = parseInt(match[1], 10);
+            if (typeof Deno !== "undefined") {
+                Deno.exit(code);
+            }
+        }
     }
 });
 

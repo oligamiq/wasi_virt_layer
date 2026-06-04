@@ -52,7 +52,7 @@ impl StreamPass for StartsPreStreamPass {
                             wasmparser::ExternalKind::Tag => ExportKind::Tag,
                             _ => unimplemented!(),
                         };
-                        
+
                         if export.name == "_start" && matches!(kind, ExportKind::Func) {
                             start_func_id = Some(export.index);
                         } else {

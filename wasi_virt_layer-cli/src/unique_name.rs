@@ -428,7 +428,6 @@ mod unique_name_iterator_tests {
     }
 }
 
-
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
 pub enum Wasip1ABIName<'a> {

@@ -1,16 +1,16 @@
-use crate::wasm_stream::pipeline::{par_process_code_section, StreamPass};
+use crate::wasm_stream::pipeline::{StreamPass, par_process_code_section};
 use eyre::Result;
 use std::collections::{BTreeSet, HashMap};
 use wasm_encoder::{
-    CustomSection, DataCountSection, DataSection, ElementSection, EntityType,
-    ExportSection, Function, FunctionSection, GlobalSection, ImportSection, Instruction, Module,
-    StartSection, TypeSection, ValType,
+    CustomSection, DataCountSection, DataSection, ElementSection, EntityType, ExportSection,
+    Function, FunctionSection, GlobalSection, ImportSection, Instruction, Module, StartSection,
+    TypeSection, ValType,
 };
 use wasmparser::{Parser, Payload, TypeRef};
 
 use crate::wasm_stream::translator::{
-    translate, translate_global_type, translate_memory_type, translate_ref_type,
-    translate_table_type, DefaultRebinder, Rebind,
+    DefaultRebinder, Rebind, translate, translate_global_type, translate_memory_type,
+    translate_ref_type, translate_table_type,
 };
 
 pub struct AtomicPatchStreamPass {
@@ -234,10 +234,16 @@ impl StreamPass for AtomicPatchStreamPass {
                             let (_, import) = import?;
                             let ty = match import.ty {
                                 TypeRef::Func(f) => EntityType::Function(f),
-                                TypeRef::Table(t) => EntityType::Table(translate_table_type(t, &DefaultRebinder)),
+                                TypeRef::Table(t) => {
+                                    EntityType::Table(translate_table_type(t, &DefaultRebinder))
+                                }
                                 TypeRef::Memory(m) => EntityType::Memory(translate_memory_type(m)),
-                                TypeRef::Global(g) => EntityType::Global(translate_global_type(g, &DefaultRebinder)),
-                                TypeRef::Tag(t) => EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t)),
+                                TypeRef::Global(g) => {
+                                    EntityType::Global(translate_global_type(g, &DefaultRebinder))
+                                }
+                                TypeRef::Tag(t) => EntityType::Tag(
+                                    crate::wasm_stream::translator::translate_tag_type(t),
+                                ),
                                 _ => unreachable!(),
                             };
                             import_sec.import(import.module, import.name, ty);
@@ -348,7 +354,6 @@ impl StreamPass for AtomicPatchStreamPass {
                             wasmparser::ExternalKind::Memory => wasm_encoder::ExportKind::Memory,
                             wasmparser::ExternalKind::Global => wasm_encoder::ExportKind::Global,
                             wasmparser::ExternalKind::Tag => wasm_encoder::ExportKind::Tag,
-
                         };
                         let idx = match e.kind {
                             wasmparser::ExternalKind::Func

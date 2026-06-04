@@ -155,6 +155,7 @@ impl StreamPass for AnonymousStreamPass {
                         "__main_void",
                         "reset",
                         "wasi_thread_start",
+                        "wasi_thread_start_entry",
                     ];
 
                     for import_group in s {

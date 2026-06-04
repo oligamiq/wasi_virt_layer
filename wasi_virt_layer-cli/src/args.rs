@@ -80,7 +80,6 @@ pub struct NewArgs {
     pub threads: bool,
 }
 
-
 #[derive(Parser, Debug)]
 #[clap(author, version, about, long_about = None, help_template = "
 {name} {version}
@@ -541,7 +540,16 @@ pub(super) mod analysis {
 }
 
 /// Specifies the memory architecture of the target WebAssembly module.
-#[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    strum::EnumString,
+    strum::Display,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum TargetMemoryType {
     /// Traditional single memory environment.
     #[strum(ascii_case_insensitive)]

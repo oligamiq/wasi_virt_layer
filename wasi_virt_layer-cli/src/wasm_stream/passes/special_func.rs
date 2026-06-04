@@ -1,9 +1,9 @@
 use crate::wasm_stream::pipeline::StreamPass;
-use crate::wasm_stream::translator::{translate_sub_type, DefaultRebinder};
+use crate::wasm_stream::translator::{DefaultRebinder, translate_sub_type};
 use std::sync::{Arc, Mutex};
 use wasm_encoder::{
-    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction,
-    Module, RawSection, TypeSection, ValType,
+    CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, Module,
+    RawSection, TypeSection, ValType,
 };
 
 pub struct SpecialFuncPreTargetStreamPass {
@@ -187,10 +187,13 @@ impl StreamPass for SpecialFuncPreTargetStreamPass {
                             name = format!("__wasip1_vfs_{target_name}__start");
                         } else if name == "__main_void" {
                             name = format!("__wasip1_vfs_{target_name}___main_void");
+                        } else if name == "wasi_thread_start" {
+                            name = format!("__wasip1_vfs_{target_name}_wasi_thread_start");
                         }
-                        
+
                         let kind = match export.kind {
-                            wasmparser::ExternalKind::Func | wasmparser::ExternalKind::FuncExact => ExportKind::Func,
+                            wasmparser::ExternalKind::Func
+                            | wasmparser::ExternalKind::FuncExact => ExportKind::Func,
                             wasmparser::ExternalKind::Table => ExportKind::Table,
                             wasmparser::ExternalKind::Memory => ExportKind::Memory,
                             wasmparser::ExternalKind::Global => ExportKind::Global,
@@ -240,7 +243,7 @@ impl StreamPass for SpecialFuncPreTargetStreamPass {
                             }
                             reset_func.instruction(&Instruction::End);
                             codes.function(&reset_func);
-                            
+
                             encoder.section(&codes);
                             code_flushed = true;
                         }
@@ -274,7 +277,7 @@ impl StreamPass for SpecialFuncPreTargetStreamPass {
             }
             reset_func.instruction(&Instruction::End);
             codes.function(&reset_func);
-                            
+
             encoder.section(&codes);
         }
 

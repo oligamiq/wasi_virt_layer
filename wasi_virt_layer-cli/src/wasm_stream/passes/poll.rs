@@ -1,4 +1,4 @@
-use crate::wasm_stream::pipeline::{par_process_code_section, StreamPass};
+use crate::wasm_stream::pipeline::{StreamPass, par_process_code_section};
 use wasm_encoder::{Function, Instruction, Module, RawSection};
 use wasmparser::{Parser, Payload};
 
@@ -26,7 +26,9 @@ impl StreamPass for PollWaitStreamPass {
                     for import_res in group? {
                         let (_, import) = import_res?;
                         if let wasmparser::TypeRef::Func(_) = import.ty {
-                            if import.module == "wvl_poll" && import.name == "__wvl_poll_atomic_wait" {
+                            if import.module == "wvl_poll"
+                                && import.name == "__wvl_poll_atomic_wait"
+                            {
                                 target_func_idx = Some(current_func_idx);
                             }
                             current_func_idx += 1;
@@ -46,8 +48,15 @@ impl StreamPass for PollWaitStreamPass {
         for payload in Parser::new(0).parse_all(input_wasm) {
             let payload = payload?;
             match payload {
-                Payload::CodeSectionStart { count: _, range, size: _ } => {
-                    let reader = wasmparser::BinaryReader::new(&input_wasm[range.start..range.end], range.start);
+                Payload::CodeSectionStart {
+                    count: _,
+                    range,
+                    size: _,
+                } => {
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
                     let s = wasmparser::CodeSectionReader::new(reader)?;
                     let code_sec = par_process_code_section(s, |_, func_body| {
                         let mut locals = Vec::new();
@@ -66,13 +75,17 @@ impl StreamPass for PollWaitStreamPass {
                         while !reader.eof() {
                             let op = reader.read()?;
                             match op {
-                                wasmparser::Operator::Call { function_index } if function_index == target_idx => {
+                                wasmparser::Operator::Call { function_index }
+                                    if function_index == target_idx =>
+                                {
                                     if self.threads {
-                                        func.instruction(&Instruction::MemoryAtomicWait32(wasm_encoder::MemArg {
-                                            align: 2,
-                                            offset: 0,
-                                            memory_index: self.vfs_mem,
-                                        }));
+                                        func.instruction(&Instruction::MemoryAtomicWait32(
+                                            wasm_encoder::MemArg {
+                                                align: 2,
+                                                offset: 0,
+                                                memory_index: self.vfs_mem,
+                                            },
+                                        ));
                                     } else {
                                         func.instruction(&Instruction::Drop);
                                         func.instruction(&Instruction::Drop);
@@ -100,7 +113,8 @@ impl StreamPass for PollWaitStreamPass {
                 }
                 _ => {
                     if let Some((id, range)) = payload.as_section() {
-                        if id != 10 { // code section
+                        if id != 10 {
+                            // code section
                             module.section(&RawSection {
                                 id,
                                 data: &input_wasm[range.clone()],

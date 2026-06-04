@@ -44,25 +44,48 @@ impl StreamPass for PostComponentsMemoryFixStreamPass {
                         for import in group? {
                             let (_, import) = import?;
                             let ty = match import.ty {
-                                wasmparser::TypeRef::Func(f) => wasm_encoder::EntityType::Function(f),
-                                wasmparser::TypeRef::Table(t) => wasm_encoder::EntityType::Table(crate::wasm_stream::translator::translate_table_type(t, &crate::wasm_stream::translator::DefaultRebinder)),
-                                wasmparser::TypeRef::Memory(m) => wasm_encoder::EntityType::Memory(crate::wasm_stream::translator::translate_memory_type(m)),
-                                wasmparser::TypeRef::Global(g) => wasm_encoder::EntityType::Global(crate::wasm_stream::translator::translate_global_type(g, &crate::wasm_stream::translator::DefaultRebinder)),
-                                wasmparser::TypeRef::Tag(t) => wasm_encoder::EntityType::Tag(crate::wasm_stream::translator::translate_tag_type(t)),
+                                wasmparser::TypeRef::Func(f) => {
+                                    wasm_encoder::EntityType::Function(f)
+                                }
+                                wasmparser::TypeRef::Table(t) => wasm_encoder::EntityType::Table(
+                                    crate::wasm_stream::translator::translate_table_type(
+                                        t,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                ),
+                                wasmparser::TypeRef::Memory(m) => wasm_encoder::EntityType::Memory(
+                                    crate::wasm_stream::translator::translate_memory_type(m),
+                                ),
+                                wasmparser::TypeRef::Global(g) => wasm_encoder::EntityType::Global(
+                                    crate::wasm_stream::translator::translate_global_type(
+                                        g,
+                                        &crate::wasm_stream::translator::DefaultRebinder,
+                                    ),
+                                ),
+                                wasmparser::TypeRef::Tag(t) => wasm_encoder::EntityType::Tag(
+                                    crate::wasm_stream::translator::translate_tag_type(t),
+                                ),
                                 _ => unreachable!(),
                             };
                             import_sec.import(import.module, import.name, ty);
                         }
                     }
                     // Add defined memories as imports to env.memory
+                    let mut i = 0;
                     for mem in &defined_memories {
                         let mut max = mem.maximum;
                         if max.is_none() {
                             max = Some(mem.initial.max(65536));
                         }
+                        let name = if i == 0 {
+                            "memory".to_string()
+                        } else {
+                            format!("memory_{i}")
+                        };
+                        i += 1;
                         import_sec.import(
                             "env",
-                            "memory",
+                            &name,
                             wasm_encoder::EntityType::Memory(wasm_encoder::MemoryType {
                                 minimum: mem.initial,
                                 maximum: max,

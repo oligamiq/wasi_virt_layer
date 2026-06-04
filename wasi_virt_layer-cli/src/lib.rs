@@ -4,9 +4,7 @@
 //! Provides commands and generator internals `wasi_virt_layer`.
 
 use crate::{
-    commands::{
-        build::build, new::new, postbuild::postbuild, prebuild::prebuild,
-    },
+    commands::{build::build, new::new, postbuild::postbuild, prebuild::prebuild},
     fallback_command::CommandLock,
 };
 

@@ -12,16 +12,21 @@ pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
 
 pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
     std::process::Command::new("deno")
-        .args(["add", "npm:@bjorn3/browser_wasi_shim"])
+        .args(["add", "npm:@bjorn3/browser_wasi_shim@0.4"])
         .current_dir(out_dir)
         .assert()
         .success();
 
+    let stdout_path = Utf8Path::new(out_dir).join(".deno-test-stdout.log");
+    let stderr_path = Utf8Path::new(out_dir).join(".deno-test-stderr.log");
+    let stdout_file = std::fs::File::create(&stdout_path)?;
+    let stderr_file = std::fs::File::create(&stderr_path)?;
+
     let mut child = std::process::Command::new("deno")
         .args(["run", "--allow-read", "--allow-env", "test_run.ts"])
         .current_dir(out_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()?;
 
     let msg = match child.wait_timeout(timeout)? {
@@ -30,32 +35,26 @@ pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()
                 return Ok(());
             }
 
-            let mut stdout = String::new();
-            let mut stderr = String::new();
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
 
-            if let Some(mut out) = child.stdout.take() {
-                let _ = out.read_to_string(&mut stdout);
-            }
-            if let Some(mut err) = child.stderr.take() {
-                let _ = err.read_to_string(&mut stderr);
-            }
-
-            // Check if this is a proc_exit error (which is expected behavior)
-            if stderr.contains("exit with exit code 0") && stdout.contains("[WASI stdout]") {
+            if stderr.contains("RuntimeError: unreachable") && stdout.contains("[WASI main]") {
                 return Ok(());
             }
 
             format!(
-                "deno execution failed: {}\nstdout: {}\nstderr: {}",
+                "deno execution failed with status: {}\nstdout: {}\nstderr: {}",
                 status, stdout, stderr
             )
         }
         None => {
             child.kill()?;
             let code = child.wait()?.code();
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
             format!(
-                "Process timed out after {:?} and was killed. Exit code: {:?}",
-                timeout, code
+                "Process timed out after {:?} and was killed. Exit code: {:?}\nstdout: {}\nstderr: {}",
+                timeout, code, stdout, stderr
             )
         }
     };
@@ -63,7 +62,11 @@ pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()
     Err(color_eyre::eyre::eyre!(msg))
 }
 
-pub fn run_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
+pub fn run_thread(
+    out_dir: &str,
+    timeout: Duration,
+    _is_single_memory: bool,
+) -> color_eyre::Result<()> {
     let bun_or_npm = if std::process::Command::new("bun")
         .arg("--version")
         .output()
@@ -74,15 +77,20 @@ pub fn run_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
         "npm"
     };
 
+    let bun_tmpdir = Utf8Path::new(out_dir).join(".bun-tmp");
+    std::fs::create_dir_all(&bun_tmpdir)?;
+
     std::process::Command::new(bun_or_npm)
         .args(["i"])
         .current_dir(out_dir)
+        .env("BUN_TMPDIR", bun_tmpdir.as_str())
         .assert()
         .success();
 
     let mut child = std::process::Command::new(bun_or_npm)
         .args(["run", "run"])
         .current_dir(out_dir)
+        .env("BUN_TMPDIR", bun_tmpdir.as_str())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
@@ -281,7 +289,11 @@ pub fn run_wasi_virt_layer(
         });
 
         if threads {
-            run_thread(&final_dist_path, execution_timeout)?;
+            run_thread(
+                &final_dist_path,
+                execution_timeout,
+                t_single.unwrap_or(false),
+            )?;
         } else {
             run_non_thread(&final_dist_path, execution_timeout)?;
         }

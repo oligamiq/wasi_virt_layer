@@ -512,9 +512,9 @@ mod spawn {
     }
 }
 
-pub use spawn::{root_spawn, root_spawn_unchecked};
 #[cfg(target_os = "wasi")]
 pub use spawn::__wasip1_vfs_is_root_spawn;
+pub use spawn::{root_spawn, root_spawn_unchecked};
 
 impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     for DirectThreadPool<ThreadAccessor>
@@ -682,26 +682,6 @@ macro_rules! plug_thread {
 
                 $crate::plug_thread!(@sched_yield, $pool, $wasm);
             )*
-        }
-
-        #[cfg(target_os = "wasi")]
-        #[link(wasm_import_module = "wasi:thread/spawn/real")]
-        unsafe extern "C" {
-            #[link_name = "thread-spawn"]
-            fn __wasi_thread_spawn_real(data_ptr: *mut Box<dyn FnOnce()>) -> i32;
-        }
-
-        #[cfg(target_os = "wasi")]
-        #[unsafe(no_mangle)]
-        pub unsafe extern "C" fn __wasip1_vfs_wasi_thread_spawn_wrapper(
-            data_ptr: *mut Box<dyn FnOnce()>,
-        ) -> i32 {
-            // __wasip1_vfs_is_root_spawn is defined in the thread module
-            if $crate::thread::__wasip1_vfs_is_root_spawn() {
-                __wasi_thread_spawn_real(data_ptr)
-            } else {
-                __wasip1_vfs_wasi_thread_spawn___self(data_ptr)
-            }
         }
     };
 

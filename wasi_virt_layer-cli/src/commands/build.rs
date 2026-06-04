@@ -4,8 +4,6 @@ use crate::{
     generator::{self, WasmPath},
 };
 
-
-
 /// Executes the build command, coordinating the compilation and transformation of WASM modules.
 ///
 /// This is a convenience command that runs `prebuild` followed by `postbuild`.
@@ -18,7 +16,6 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
 
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());
-
 
         postbuild::run_postbuild(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 

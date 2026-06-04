@@ -1,4 +1,3 @@
-
 use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
 
 use camino::Utf8PathBuf;
@@ -12,9 +11,7 @@ use crate::{
     config_checker::TomlRestorers,
     fallback_command,
     unique_name::{MemoryUniqueName, UniqueName},
-    util::{
-        CaminoUtilModule as _, ResultUtil, WasmName, WasmNameHolder,
-    },
+    util::{CaminoUtilModule as _, ResultUtil, WasmName, WasmNameHolder},
 };
 
 /// Represents the generation context, holding configuration arguments and targeted module info.
@@ -65,7 +62,6 @@ pub struct ComponentCtx {
     /// Flag for ABI adjustment.
     pub adjust_abi: bool,
 }
-
 
 impl ComponentCtx {
     /// Creates a new `ComponentCtx` with the specified context parameters.
@@ -328,7 +324,6 @@ impl GeneratorRunner {
 
         let target_names = wasm_name_holder_iter.collect::<Box<_>>();
 
-
         // log targeting info
         for name in target_names.iter() {
             log::info!("Targeting module: {name}");
@@ -447,7 +442,10 @@ impl GeneratorRunner {
                                 vfs_is_library = false;
                             }
                             for target in self.ctx.target_names.iter() {
-                                let marker = format!("__wasip1_virt_layer_{}_wrap_unreachable", target.as_ref());
+                                let marker = format!(
+                                    "__wasip1_virt_layer_{}_wrap_unreachable",
+                                    target.as_ref()
+                                );
                                 if e.name == marker {
                                     wrap_unreachable_targets.insert(target.as_ref().to_string());
                                 }
@@ -456,7 +454,7 @@ impl GeneratorRunner {
                     }
                 }
             }
-        self.ctx.vfs_is_library = vfs_is_library;
+            self.ctx.vfs_is_library = vfs_is_library;
             self.ctx.wrap_unreachable_targets = wrap_unreachable_targets;
             let pipeline_is_library = vfs_is_library;
             let cloned_ctx = self.ctx.clone();
@@ -494,22 +492,26 @@ impl GeneratorRunner {
                 pipeline.add_pass(Box::new(check_pass));
                 pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx.clone())));
                 pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
-                pipeline.add_pass(Box::new(crate::wasm_stream::passes::threads_spawn::ThreadsSpawnPreVfsStreamPass::new(
-                    cloned_ctx.threads,
-                )));
+                pipeline.add_pass(Box::new(
+                    crate::wasm_stream::passes::threads_spawn::ThreadsSpawnPreVfsStreamPass::new(
+                        cloned_ctx.threads,
+                    ),
+                ));
                 pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
                 pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
 
+                let fn_in_starts =
+                    crate::wasm_stream::passes::fn_in_starts::FnInStarts::new::<String>(&[]);
                 pipeline.add_pass(Box::new(StartsPreStreamPass::new(
                     true,
                     pipeline_is_library,
-                    "__flesh_vfs_start".to_string(),
+                    fn_in_starts.flesh_vfs_start.clone(),
                 )));
                 pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
-                    "__thread_patch".to_string(),
-                    "__init_offset_global".to_string(),
-                    "__save_target_memory".to_string(),
-                    "__simple_debug_wasip1_vfs_pre_init".to_string(),
+                    fn_in_starts.thread_patch.clone(),
+                    fn_in_starts.init_offset_global.clone(),
+                    fn_in_starts.save_target_memory.clone(),
+                    fn_in_starts.simple_debug_pre_init.clone(),
                 ])));
                 pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(None)));
                 Some(pipeline)
@@ -556,7 +558,7 @@ impl GeneratorRunner {
                         target_name.to_string(),
                         is_synthesized.clone(),
                     )));
-                    
+
                     let is_opted_in = _cloned_ctx.wrap_unreachable_targets.contains(&target_name.to_string());
                     pipeline.add_pass(Box::new(WrapUnreachablePreTargetStreamPass::new(
                         target_name.to_string(),
@@ -604,7 +606,10 @@ impl GeneratorRunner {
             .with_opt(target, dwarf, keep_build_artifacts, skip_target_opt)?;
 
             if *is_synthesized.lock().unwrap() {
-                self.ctx.main_void_synthesized_targets.get_or_insert_default().insert(target_name.to_string());
+                self.ctx
+                    .main_void_synthesized_targets
+                    .get_or_insert_default()
+                    .insert(target_name.to_string());
             }
         }
 
@@ -617,8 +622,13 @@ impl GeneratorRunner {
         println!("Combining Wasm modules...");
 
         let output = format!("{out_dir}/merged.wasm");
+        let mut defined_funcs_counts = Vec::new();
         (|path: &mut WasmPath| {
             let old_path = path.path()?.clone();
+            defined_funcs_counts.push(count_defined_funcs(&old_path)?);
+            for target in self.targets.iter() {
+                defined_funcs_counts.push(count_defined_funcs(target.path()?)?);
+            }
             merge(
                 &old_path,
                 &self
@@ -661,8 +671,9 @@ impl GeneratorRunner {
             let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
             let target_names: Vec<String> = self.ctx.target_names.iter().map(|n| n.as_ref().to_string()).collect();
 
+            let vfs_name = self.ctx.vfs_name.as_ref().to_string();
             pipeline.add_pass(Box::new(
-                crate::wasm_stream::passes::post_combine::PostCombineStreamPass::new(target_names.clone())
+                crate::wasm_stream::passes::post_combine::PostCombineStreamPass::new(vfs_name, target_names.clone(), defined_funcs_counts.clone())
             ));
 
             pipeline.add_pass(Box::new(
@@ -698,9 +709,13 @@ impl GeneratorRunner {
             .wrap_err("Failed to translate Wasm to Component")?;
         let new_component = format!("{out_dir}/{}.component.wasm", self.ctx.vfs_name);
         let component_bytes = std::fs::read(&component)?;
-        let component_bytes_with_ctx = crate::wasm_stream::passes::component_ctx::append_component_ctx(&component_bytes, &self.ctx)?;
+        let component_bytes_with_ctx =
+            crate::wasm_stream::passes::component_ctx::append_component_ctx(
+                &component_bytes,
+                &self.ctx,
+            )?;
         std::fs::write(&new_component, &component_bytes_with_ctx)?;
-        
+
         if !keep_build_artifacts {
             std::fs::remove_file(&component)
                 .wrap_err_with(|| format!("Failed to remove existing file {component}"))?;
@@ -728,8 +743,6 @@ impl ComponentRunner {
         }
     }
 
-
-
     /// return is_threads, core_name, mem_size
     pub fn component_to_files(
         &mut self,
@@ -743,7 +756,8 @@ impl ComponentRunner {
 
         println!("Translating Component to JS...");
         let component_bytes = std::fs::read(&self.path.path()?)?;
-        self.ctx = Some(crate::wasm_stream::passes::component_ctx::read_component_ctx(&component_bytes)?);
+        self.ctx =
+            Some(crate::wasm_stream::passes::component_ctx::read_component_ctx(&component_bytes)?);
 
         let core_wasm_path = (|path: &mut WasmPath| {
             let old_path = path.path()?.clone();
@@ -816,7 +830,8 @@ impl ComponentRunner {
         )?;
 
         let mem_sizes = {
-            let wasm_bytes = std::fs::read(&self.path.path()?).wrap_err("Failed to read core wasm")?;
+            let wasm_bytes =
+                std::fs::read(&self.path.path()?).wrap_err("Failed to read core wasm")?;
             crate::wasm_stream::passes::extract_mem_sizes::extract_memory_sizes(&wasm_bytes)?
         };
 
@@ -834,7 +849,7 @@ impl ComponentRunner {
             let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
             let new_path = old_path.with_extension("post-comp-stream.wasm");
             std::fs::write(&new_path, output_wasm).wrap_err("Failed to write Wasm file")?;
-            
+
             if !parsed_args.keep_build_artifacts() {
                 std::fs::remove_file(&old_path).unwrap_or_default();
             }
@@ -859,8 +874,6 @@ impl ComponentRunner {
             new_dwarf
         };
 
-
-
         std::fs::rename(self.path.path()?, &core_wasm_path).wrap_err_with(|| {
             eyre::eyre!(
                 "Failed to rename final wasm from {} to {}",
@@ -878,7 +891,6 @@ impl ComponentRunner {
         ))
     }
 }
-
 
 /// Represents the resolution state and file format targeting for manipulating WebAssembly modules intelligently.
 #[derive(Debug, Clone, Hash)]
@@ -1145,6 +1157,17 @@ impl WasmPath {
 }
 
 /// Coordinates the underlying binary `wasm-merge` utility invocations to bundle outputs physically.
+fn count_defined_funcs(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<u32> {
+    let wasm = std::fs::read(wasm_path)?;
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm) {
+        let payload = payload.map_err(|e| eyre::eyre!("Parse error: {}", e))?;
+        if let wasmparser::Payload::FunctionSection(s) = payload {
+            return Ok(s.count());
+        }
+    }
+    Ok(0)
+}
+
 pub fn merge(
     vfs: &Utf8PathBuf,
     wasm: &[impl AsRef<std::path::Path>],
@@ -1168,9 +1191,12 @@ pub fn merge(
 
     let mut merge_cmd = fallback_command::get_fallback_command("wasm-merge");
 
-    // if threads {
-    //     merge_cmd.arg("--enable-threads");
-    // }
+    if _threads {
+        merge_cmd.arg("--enable-threads");
+        merge_cmd.arg("--enable-multimemory");
+    } else {
+        merge_cmd.arg("--enable-multimemory");
+    }
 
     if dwarf {
         merge_cmd.arg("--debuginfo");

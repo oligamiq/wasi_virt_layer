@@ -11,30 +11,11 @@ use compact_str::CompactString;
 use eyre::{Context as _, ContextCompat as _};
 use itertools::Itertools;
 
-
-use crate::{
-    args::TargetMemoryType,
-    unique_name::UniqueNameMarker,
-};
+use crate::{args::TargetMemoryType, unique_name::UniqueNameMarker};
 
 #[allow(dead_code)]
-
-
-
-
 #[allow(dead_code)]
-
-
 #[allow(dead_code)]
-
-
-
-
-
-
-
-
-
 
 /// Extension trait for Camino paths to extract the main module file name.
 pub trait CaminoUtilModule {
@@ -107,13 +88,9 @@ impl<T, I: Iterator> ResultUtil<T> for Result<T, itertools::ExactlyOneError<I>> 
     }
 }
 
-
-
 /// Provides unified Function ID resolution for different markers (like tuples of module/name).
 
-
 /// Provides the actual lookup operations for FID resolution.
-
 
 /// Marker for looking up FIDs by `FunctionId` values.
 pub struct FunctionIdMarker;
@@ -125,22 +102,6 @@ pub struct UniqueMarker;
 pub struct DoubleStrMarker;
 /// Marker for looking up FIDs using a string module-name and `UniqueName` item.
 pub struct StrAndUniqueNameMarker;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // pub fn init_data_set(buff: &mut walrus::ModuleData, offset: u32, data: &[u8]) -> eyre::Result<()> {
 //     let data_ids = buff.iter().map(|data| data.id()).collect::<Vec<_>>();

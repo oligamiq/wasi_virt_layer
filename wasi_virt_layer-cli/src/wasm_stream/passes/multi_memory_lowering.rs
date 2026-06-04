@@ -469,6 +469,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             tmp_i32_2,
                                         )); // dst
 
+                                        // Acquire read lock if threaded
+                                        if threads {
+                                            if let Some(acq) = lock_acquire_fn {
+                                                func.instruction(&wasm_encoder::Instruction::Call(
+                                                    acq,
+                                                ));
+                                            }
+                                        }
+
                                         func.instruction(&wasm_encoder::Instruction::LocalGet(
                                             tmp_i32_2,
                                         ));
@@ -500,6 +509,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             dst_mem: 0,
                                             src_mem: 0,
                                         });
+
+                                        // Release read lock if threaded
+                                        if threads {
+                                            if let Some(rel) = lock_release_fn {
+                                                func.instruction(&wasm_encoder::Instruction::Call(
+                                                    rel,
+                                                ));
+                                            }
+                                        }
                                     } else {
                                         func.instruction(&wasm_encoder::Instruction::MemoryCopy {
                                             dst_mem: 0,
@@ -520,6 +538,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             tmp_i32_2,
                                         )); // dst
 
+                                        // Acquire read lock if threaded
+                                        if threads {
+                                            if let Some(acq) = lock_acquire_fn {
+                                                func.instruction(&wasm_encoder::Instruction::Call(
+                                                    acq,
+                                                ));
+                                            }
+                                        }
+
                                         func.instruction(&wasm_encoder::Instruction::LocalGet(
                                             tmp_i32_2,
                                         ));
@@ -535,6 +562,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             tmp_addr,
                                         ));
                                         func.instruction(&wasm_encoder::Instruction::MemoryFill(0));
+
+                                        // Release read lock if threaded
+                                        if threads {
+                                            if let Some(rel) = lock_release_fn {
+                                                func.instruction(&wasm_encoder::Instruction::Call(
+                                                    rel,
+                                                ));
+                                            }
+                                        }
                                     } else {
                                         func.instruction(&wasm_encoder::Instruction::MemoryFill(0));
                                     }
@@ -551,6 +587,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         func.instruction(&wasm_encoder::Instruction::LocalSet(
                                             tmp_i32_2,
                                         )); // dst
+
+                                        // Acquire read lock if threaded
+                                        if threads {
+                                            if let Some(acq) = lock_acquire_fn {
+                                                func.instruction(&wasm_encoder::Instruction::Call(
+                                                    acq,
+                                                ));
+                                            }
+                                        }
 
                                         func.instruction(&wasm_encoder::Instruction::LocalGet(
                                             tmp_i32_2,
@@ -570,6 +615,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             data_index,
                                             mem: 0,
                                         });
+
+                                        // Release read lock if threaded
+                                        if threads {
+                                            if let Some(rel) = lock_release_fn {
+                                                func.instruction(&wasm_encoder::Instruction::Call(
+                                                    rel,
+                                                ));
+                                            }
+                                        }
                                     } else {
                                         func.instruction(&wasm_encoder::Instruction::MemoryInit {
                                             data_index,

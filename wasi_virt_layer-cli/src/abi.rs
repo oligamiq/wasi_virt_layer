@@ -17,29 +17,45 @@ pub mod is_valid {
                     let import_group = import_group.wrap_err("Failed to parse import group")?;
                     for i_res in import_group.into_iter() {
                         let (_, i) = i_res.wrap_err("Failed to parse import")?;
-                        if i.module == UniqueName::WASIP1_ABI_MODULE && matches!(i.ty, wasmparser::TypeRef::Func(_)) {
+                        if i.module == UniqueName::WASIP1_ABI_MODULE
+                            && matches!(i.ty, wasmparser::TypeRef::Func(_))
+                        {
                             let name_str = i.name.strip_prefix("__wasip1_vfs_");
-                        if let Some(name) = name_str {
-                            if let Some((wasm_name, plugger, func_name)) = wasm_names.iter().find_map(|n| {
-                                let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
-                                if func_name == "thread_spawn" {
-                                    return Some((n.as_ref().to_string(), Wasip1ABIPlugger::PlugThread, "thread_spawn".to_string()));
+                            if let Some(name) = name_str {
+                                if let Some((wasm_name, plugger, func_name)) =
+                                    wasm_names.iter().find_map(|n| {
+                                        let func_name =
+                                            name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
+                                        if func_name == "thread_spawn" {
+                                            return Some((
+                                                n.as_ref().to_string(),
+                                                Wasip1ABIPlugger::PlugThread,
+                                                "thread_spawn".to_string(),
+                                            ));
+                                        }
+                                        let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
+                                        Some((
+                                            n.as_ref().to_string(),
+                                            Wasip1ABIPlugger::from_variant(&func).unwrap(),
+                                            func.to_string(),
+                                        ))
+                                    })
+                                {
+                                    err_wasm_names
+                                        .entry((wasm_name, plugger))
+                                        .or_default()
+                                        .push(func_name);
+                                } else {
+                                    log::error!(
+                                        "Failed to parse wasm target and WASI function name: {}",
+                                        name
+                                    );
                                 }
-                                let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
-                                Some((n.as_ref().to_string(), Wasip1ABIPlugger::from_variant(&func).unwrap(), func.to_string()))
-                            }) {
-                                err_wasm_names
-                                    .entry((wasm_name, plugger))
-                                    .or_default()
-                                    .push(func_name);
-                            } else {
-                                log::error!("Failed to parse wasm target and WASI function name: {}", name);
                             }
                         }
                     }
                 }
             }
-        }
         }
 
         let err_wasm_names = err_wasm_names
@@ -306,4 +322,6 @@ pub enum Wasip1ThreadsABIFunc {
 pub enum Wasip1ThreadsABIExportFunc {
     /// wasi_thread_start
     WasiThreadStart,
+    /// wasi_thread_start_entry
+    WasiThreadStartEntry,
 }

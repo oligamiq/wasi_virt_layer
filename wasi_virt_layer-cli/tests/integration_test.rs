@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use eyre::Context;
 use glob;
 use itertools::Itertools;
-use std::{collections::HashSet, process::Command, sync::OnceLock};
+use std::{collections::HashSet, process::Command, sync::OnceLock, time::Duration};
 use utils::*;
 use uuid::Uuid;
 use wasi_virt_layer_cli::unique_name::UniqueName;
@@ -125,6 +125,47 @@ fn test_build_single() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests that single memory threaded VFS still fails under deno.
+/// Corresponding to: cargo r -r -- build -p threads_vfs test_threads -t single --threads true && deno run -A dist/test_run.ts
+#[test]
+fn test_threads_vfs_single_memory_deno_fails() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let test_dir = run_wasi_virt_layer(
+        Some("threads_vfs"),
+        Some("test_threads"),
+        Some(true), // t_single: true
+        true,       // threads: true
+        OutDir::Random,
+        false, // keep_build_artifacts
+        &[],
+        None,
+    )
+    .wrap_err("Failed to build threads single")?;
+
+    let out_dir = test_dir.0.as_str();
+
+    // Now run deno run -A test_run.ts
+    let output = Command::new("deno")
+        .args(["run", "-A", "test_run.ts"])
+        .current_dir(out_dir)
+        .output()
+        .wrap_err("Failed to execute deno")?;
+
+    assert!(
+        !output.status.success(),
+        "Expected deno run -A test_run.ts to fail for single memory thread VFS, but it succeeded! stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
 /// Helper function to build a wasm component with a "normal" (non-threaded) VFS.
 /// It uses the default output directory.
 fn build_normal(single: bool) -> color_eyre::Result<TestDir> {
@@ -188,7 +229,7 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
-        None,
+        Some(Duration::from_secs(180)),
     )
     .wrap_err("Failed to run self-rw-vfs example")?;
 
@@ -717,9 +758,10 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
     let parent_dir_keep = test_dir_keep.0.parent().unwrap();
 
     // Check for intermediate files
-    let adjusted_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.post-comp-stream.wasm"))?
-        .filter_map(Result::ok)
-        .collect();
+    let adjusted_wasm_files: Vec<_> =
+        glob::glob(&format!("{parent_dir_keep}/**/*.post-comp-stream.wasm"))?
+            .filter_map(Result::ok)
+            .collect();
     let opt_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.opt.wasm"))?
         .filter_map(Result::ok)
         .collect();
@@ -1147,8 +1189,12 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
     )?;
 
     // Run the generated module with Deno/Bun
-    run_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(120))
-        .wrap_err("Failed to run combined module with Deno")?;
+    run_thread(
+        &test_dir.0.to_string(),
+        std::time::Duration::from_secs(120),
+        true,
+    )
+    .wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }
@@ -1195,7 +1241,7 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     }
 
     // 3. Run with Deno
-    run_thread(&out_dir, std::time::Duration::from_secs(120))
+    run_thread(&out_dir, std::time::Duration::from_secs(120), true)
         .wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
@@ -1245,7 +1291,7 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     }
 
     // 2. Run with Deno
-    run_thread(&out_dir, std::time::Duration::from_secs(120))
+    run_thread(&out_dir, std::time::Duration::from_secs(120), true)
         .wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));

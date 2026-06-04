@@ -137,10 +137,12 @@ impl StreamPass for CheckUnusedThreadsStreamPass {
                 }
                 wasmparser::Payload::ExportSection(s) => {
                     let mut new_export_section = ExportSection::new();
+                    let export_names =
+                        <crate::abi::Wasip1ThreadsABIExportFunc as strum::VariantNames>::VARIANTS;
 
                     for export in s {
                         let export = export.unwrap();
-                        if export.name == "wasi_thread_start" {
+                        if export_names.contains(&export.name) {
                             continue; // Remove this export
                         }
                         new_export_section.export(export.name, export.kind.into(), export.index);

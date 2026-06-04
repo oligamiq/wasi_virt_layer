@@ -118,7 +118,7 @@ impl StreamPass for SharedGlobalStreamPass {
                         let normalized_target = target_name.replace('-', "_");
                         let prefix = format!("__wasip1_vfs_{normalized_target}_memory_grow_");
 
-                        let get_fn_name = format!("{}global_alt_get_with_lock", prefix);
+                        let get_fn_name = format!("{}global_alt_get", prefix);
                         let set_fn_name = format!("{}global_alt_set_with_lock", prefix);
                         let init_fn_name = format!("{}global_alt_init_once", prefix);
 
@@ -147,6 +147,11 @@ impl StreamPass for SharedGlobalStreamPass {
                         }
                     }
 
+                    let init_offset_global_fid = exports
+                        .get("__init_offset_global")
+                        .filter(|(k, _)| *k == wasmparser::ExternalKind::Func)
+                        .map(|(_, idx)| *idx);
+
                     let reader = wasmparser::BinaryReader::new(
                         &input_wasm[range.start..range.end],
                         range.start,
@@ -168,8 +173,8 @@ impl StreamPass for SharedGlobalStreamPass {
 
                         let mut func = Function::new(locals);
 
-                        // If this is the start function, prepend init_once calls
-                        if Some(fid) == start_func_id {
+                        // If this is the start function or __init_offset_global, prepend init_once calls
+                        if Some(fid) == start_func_id || Some(fid) == init_offset_global_fid {
                             for (g_id, init_fn) in &init_once_funcs {
                                 if let Some(&init_val) = global_inits.get(g_id) {
                                     func.instruction(&Instruction::I32Const(init_val));
