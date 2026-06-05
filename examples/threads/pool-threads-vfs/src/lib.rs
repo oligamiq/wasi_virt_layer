@@ -19,9 +19,7 @@ impl Guest for ComponentABI {
 
         // Initialize the pool before _start(), because _start() triggers
         // the guest's main() which immediately spawns threads via the pool.
-        unsafe { THREAD_POOL.init() };
-        THREAD_POOL.set_capacity(2);
-        THREAD_POOL.flush_capacity().wait();
+        unsafe { THREAD_POOL.init_with_capacity_and_wait(2) };
 
         println!("Pool threads initialized.");
 

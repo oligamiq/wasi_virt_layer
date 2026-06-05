@@ -182,12 +182,14 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let iovec_arr = [wasip1::Iovec {
-                buf: Wasm::memory_director_mut(buf),
-                buf_len: len,
-            }];
+            Wasm::with_directed_memory_mut(buf, |directed_buf| {
+                let iovec_arr = [wasip1::Iovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            })
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -206,13 +208,15 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "alloc")]
-            if let Some(directed_buf) = access.memory_director_mut_with(buf) {
+            if let Some(result) = access.with_directed_memory_mut_with(buf, |directed_buf| {
                 let iovec_arr = [wasip1::Iovec {
                     buf: directed_buf,
                     buf_len: len,
                 }];
 
                 unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            }) {
+                result
             } else {
                 let mut alloc_buf = alloc::vec![0u8; len];
                 let iovec_arr = [wasip1::Iovec {
@@ -228,12 +232,16 @@ impl Wasip1Transporter {
 
             #[cfg(not(feature = "alloc"))]
             {
-                let iovec_arr = [wasip1::Iovec {
-                    buf: access.memory_director_mut_with(buf).unwrap(),
-                    buf_len: len,
-                }];
+                access
+                    .with_directed_memory_mut_with(buf, |directed_buf| {
+                        let iovec_arr = [wasip1::Iovec {
+                            buf: directed_buf,
+                            buf_len: len,
+                        }];
 
-                unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                        unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                    })
+                    .unwrap()
             }
         }
 
@@ -269,14 +277,16 @@ impl Wasip1Transporter {
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: Wasm::memory_director(buf),
-            buf_len: len,
-        }];
-
         #[cfg(target_os = "wasi")]
-        unsafe {
-            non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr)
+        {
+            Wasm::with_directed_memory(buf, |directed_buf| {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
+
+                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            })
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -295,13 +305,15 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "alloc")]
-            if let Some(directed_buf) = access.memory_director_with(buf) {
+            if let Some(result) = access.with_directed_memory_with(buf, |directed_buf| {
                 let ciovec_arr = [wasip1::Ciovec {
                     buf: directed_buf,
                     buf_len: len,
                 }];
 
                 unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            }) {
+                result
             } else {
                 let mut alloc_buf = alloc::vec![0u8; len];
                 access.memcpy_to_with(&mut alloc_buf, buf);
@@ -314,12 +326,16 @@ impl Wasip1Transporter {
 
             #[cfg(not(feature = "alloc"))]
             {
-                let ciovec_arr = [wasip1::Ciovec {
-                    buf: access.memory_director_with(buf).unwrap(),
-                    buf_len: len,
-                }];
+                access
+                    .with_directed_memory_with(buf, |directed_buf| {
+                        let ciovec_arr = [wasip1::Ciovec {
+                            buf: directed_buf,
+                            buf_len: len,
+                        }];
 
-                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+                        unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+                    })
+                    .unwrap()
             }
         }
 
@@ -357,12 +373,14 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let ciovec_arr = [wasip1::Ciovec {
-                buf: Wasm::memory_director(buf),
-                buf_len: len,
-            }];
+            Wasm::with_directed_memory(buf, |directed_buf| {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            })
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -381,13 +399,15 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "alloc")]
-            if let Some(directed_buf) = access.memory_director_with(buf) {
+            if let Some(result) = access.with_directed_memory_with(buf, |directed_buf| {
                 let ciovec_arr = [wasip1::Ciovec {
                     buf: directed_buf,
                     buf_len: len,
                 }];
 
                 unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            }) {
+                result
             } else {
                 let mut alloc_buf = alloc::vec![0u8; len];
                 access.memcpy_to_with(&mut alloc_buf, buf);
@@ -400,12 +420,16 @@ impl Wasip1Transporter {
 
             #[cfg(not(feature = "alloc"))]
             {
-                let ciovec_arr = [wasip1::Ciovec {
-                    buf: access.memory_director_with(buf).unwrap(),
-                    buf_len: len,
-                }];
+                access
+                    .with_directed_memory_with(buf, |directed_buf| {
+                        let ciovec_arr = [wasip1::Ciovec {
+                            buf: directed_buf,
+                            buf_len: len,
+                        }];
 
-                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                        unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                    })
+                    .unwrap()
             }
         }
 

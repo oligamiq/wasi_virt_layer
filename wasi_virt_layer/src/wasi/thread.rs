@@ -263,9 +263,62 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
         }
     }
 
+    /// Initializes the thread pool, sets its capacity, and adjusts the worker count.
+    ///
+    /// The returned [`WaitThreadJoin`] can be used to wait until the requested
+    /// worker count is ready.
+    ///
+    /// This has the same safety requirements as [`Self::init`].
+    pub unsafe fn init_with_capacity(&self, max_threads: usize) -> WaitThreadJoin {
+        unsafe { self.init() };
+        self.resize(max_threads)
+    }
+
+    /// Initializes the thread pool, sets its capacity, and waits for workers to be ready.
+    ///
+    /// This has the same safety requirements as [`Self::init`].
+    pub unsafe fn init_with_capacity_and_wait(&self, max_threads: usize) {
+        unsafe { self.init_with_capacity(max_threads) }.wait();
+    }
+
+    /// Returns whether the thread pool has been initialized.
+    pub fn is_initialized(&self) -> bool {
+        self.queue.lock().is_some()
+    }
+
+    /// Returns the configured maximum capacity of the thread pool.
+    pub fn capacity(&self) -> usize {
+        self.max_threads.load(Ordering::SeqCst)
+    }
+
+    /// Returns the number of worker threads the pool currently tracks.
+    pub fn worker_count(&self) -> usize {
+        self.read_kept_workers_pool_size.load(Ordering::SeqCst)
+    }
+
+    /// Returns the number of pending queue items, or `None` if the pool is not initialized.
+    pub fn queued_task_count(&self) -> Option<usize> {
+        self.queue.lock().as_ref().map(flume::Sender::len)
+    }
+
     /// Sets the maximum capacity of the thread pool.
     pub fn set_capacity(&self, max_threads: usize) {
         self.max_threads.store(max_threads, Ordering::SeqCst);
+    }
+
+    /// Sets the maximum capacity and adjusts the worker count to match it.
+    ///
+    /// The pool must already be initialized.
+    pub fn resize(&self, max_threads: usize) -> WaitThreadJoin {
+        self.set_capacity(max_threads);
+        self.flush_capacity()
+    }
+
+    /// Sets the maximum capacity and waits until the worker count has been adjusted.
+    ///
+    /// The pool must already be initialized.
+    pub fn resize_and_wait(&self, max_threads: usize) {
+        self.resize(max_threads).wait();
     }
 
     fn add_queue_with<T>(
@@ -428,6 +481,62 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Copy)]
+    struct TestThreadAccessor;
+
+    impl ThreadAccess for TestThreadAccessor {
+        fn call_wasi_thread_start(&self, _ptr: ThreadRunner, _thread_id: Option<NonZero<u32>>) {}
+
+        fn as_name(&self) -> &'static str {
+            "test-thread-accessor"
+        }
+
+        fn as_usize(&self) -> usize {
+            0
+        }
+
+        fn from_usize(_v: usize) -> Self {
+            Self
+        }
+    }
+
+    #[test]
+    fn virtual_thread_pool_reports_capacity_and_initialization_state() {
+        let pool = unsafe { VirtualThreadPool::<TestThreadAccessor>::new_const(3) };
+
+        assert!(!pool.is_initialized());
+        assert_eq!(pool.capacity(), 3);
+        assert_eq!(pool.worker_count(), 0);
+        assert_eq!(pool.queued_task_count(), None);
+
+        unsafe { pool.init() };
+
+        assert!(pool.is_initialized());
+        assert_eq!(pool.queued_task_count(), Some(0));
+    }
+
+    #[test]
+    fn virtual_thread_pool_can_initialize_and_resize_with_helpers() {
+        let pool = unsafe { VirtualThreadPool::<TestThreadAccessor>::new_const(0) };
+
+        unsafe { pool.init_with_capacity_and_wait(2) };
+
+        assert!(pool.is_initialized());
+        assert_eq!(pool.capacity(), 2);
+        assert_eq!(pool.worker_count(), 2);
+        assert_eq!(pool.queued_task_count(), Some(0));
+
+        pool.resize_and_wait(0);
+
+        assert_eq!(pool.capacity(), 0);
+        assert_eq!(pool.worker_count(), 0);
     }
 }
 

@@ -21,6 +21,7 @@ pub struct MergeInput<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[repr(usize)]
 enum IndexKind {
     Func,
     Table,
@@ -29,11 +30,69 @@ enum IndexKind {
     Tag,
 }
 
+const INDEX_KIND_COUNT: usize = 5;
+const INDEX_KINDS: [IndexKind; INDEX_KIND_COUNT] = [
+    IndexKind::Func,
+    IndexKind::Table,
+    IndexKind::Memory,
+    IndexKind::Global,
+    IndexKind::Tag,
+];
+
+impl IndexKind {
+    fn idx(self) -> usize {
+        self as usize
+    }
+
+    fn from_type_ref(ty: TypeRef) -> Self {
+        match ty {
+            TypeRef::Func(_) | TypeRef::FuncExact(_) => Self::Func,
+            TypeRef::Table(_) => Self::Table,
+            TypeRef::Memory(_) => Self::Memory,
+            TypeRef::Global(_) => Self::Global,
+            TypeRef::Tag(_) => Self::Tag,
+        }
+    }
+
+    fn from_external(kind: ExternalKind) -> Self {
+        match kind {
+            ExternalKind::Func | ExternalKind::FuncExact => Self::Func,
+            ExternalKind::Table => Self::Table,
+            ExternalKind::Memory => Self::Memory,
+            ExternalKind::Global => Self::Global,
+            ExternalKind::Tag => Self::Tag,
+        }
+    }
+
+    fn export_kind(self) -> ExportKind {
+        match self {
+            Self::Func => ExportKind::Func,
+            Self::Table => ExportKind::Table,
+            Self::Memory => ExportKind::Memory,
+            Self::Global => ExportKind::Global,
+            Self::Tag => ExportKind::Tag,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct ExportRef {
     module: usize,
     kind: IndexKind,
     index: u32,
+}
+
+#[derive(Clone, Debug)]
+struct ExportInfo {
+    name: String,
+    kind: ExternalKind,
+    index: u32,
+}
+
+impl ExportInfo {
+    fn index_kind(&self) -> IndexKind {
+        IndexKind::from_external(self.kind)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -64,6 +123,52 @@ struct Counts {
     data: u32,
 }
 
+impl Counts {
+    fn first_defined_offsets(self) -> Offsets {
+        Offsets {
+            funcs: self.imported(IndexKind::Func),
+            tables: self.imported(IndexKind::Table),
+            memories: self.imported(IndexKind::Memory),
+            globals: self.imported(IndexKind::Global),
+            tags: self.imported(IndexKind::Tag),
+            ..Offsets::default()
+        }
+    }
+
+    fn imported(self, kind: IndexKind) -> u32 {
+        match kind {
+            IndexKind::Func => self.func_imports,
+            IndexKind::Table => self.table_imports,
+            IndexKind::Memory => self.memory_imports,
+            IndexKind::Global => self.global_imports,
+            IndexKind::Tag => self.tag_imports,
+        }
+    }
+
+    fn defined(self, kind: IndexKind) -> u32 {
+        match kind {
+            IndexKind::Func => self.funcs,
+            IndexKind::Table => self.tables,
+            IndexKind::Memory => self.memories,
+            IndexKind::Global => self.globals,
+            IndexKind::Tag => self.tags,
+        }
+    }
+
+    fn next_import_index(&mut self, kind: IndexKind) -> u32 {
+        let counter = match kind {
+            IndexKind::Func => &mut self.func_imports,
+            IndexKind::Table => &mut self.table_imports,
+            IndexKind::Memory => &mut self.memory_imports,
+            IndexKind::Global => &mut self.global_imports,
+            IndexKind::Tag => &mut self.tag_imports,
+        };
+        let idx = *counter;
+        *counter += 1;
+        idx
+    }
+}
+
 #[derive(Default, Clone, Copy, Debug)]
 struct Offsets {
     types: u32,
@@ -76,16 +181,49 @@ struct Offsets {
     data: u32,
 }
 
+impl Offsets {
+    fn get(self, kind: IndexKind) -> u32 {
+        match kind {
+            IndexKind::Func => self.funcs,
+            IndexKind::Table => self.tables,
+            IndexKind::Memory => self.memories,
+            IndexKind::Global => self.globals,
+            IndexKind::Tag => self.tags,
+        }
+    }
+
+    fn assign_defined_indices(&mut self, module: &mut ParsedModule) {
+        module.offsets.funcs = self.funcs;
+        self.funcs += module.counts.funcs;
+        module.offsets.tables = self.tables;
+        self.tables += module.counts.tables;
+        module.offsets.memories = self.memories;
+        self.memories += module.counts.memories;
+        module.offsets.globals = self.globals;
+        self.globals += module.counts.globals;
+        module.offsets.tags = self.tags;
+        self.tags += module.counts.tags;
+        module.offsets.elems = self.elems;
+        self.elems += module.counts.elems;
+        module.offsets.data = self.data;
+        self.data += module.counts.data;
+    }
+}
+
 #[derive(Debug)]
 struct ParsedModule {
     alias: String,
     bytes: Vec<u8>,
     imports: Vec<ImportInfo>,
-    exports: Vec<(String, ExternalKind, u32)>,
+    exports: Vec<ExportInfo>,
     counts: Counts,
     offsets: Offsets,
     has_data_count: bool,
 }
+
+type AliasMap = HashMap<String, usize>;
+type ExportKey = (String, String, IndexKind);
+type ExportMap = HashMap<ExportKey, ExportRef>;
 
 #[derive(Clone, Copy)]
 struct ResolvedIndex {
@@ -93,13 +231,39 @@ struct ResolvedIndex {
     resolving: bool,
 }
 
-#[derive(Default)]
+impl ResolvedIndex {
+    const UNRESOLVED: Self = Self {
+        value: u32::MAX,
+        resolving: false,
+    };
+
+    fn is_resolved(self) -> bool {
+        self.value != u32::MAX
+    }
+}
+
 struct IndexMaps {
-    funcs: Vec<Vec<ResolvedIndex>>,
-    tables: Vec<Vec<ResolvedIndex>>,
-    memories: Vec<Vec<ResolvedIndex>>,
-    globals: Vec<Vec<ResolvedIndex>>,
-    tags: Vec<Vec<ResolvedIndex>>,
+    values: [Vec<Vec<ResolvedIndex>>; INDEX_KIND_COUNT],
+}
+
+impl IndexMaps {
+    fn new(modules: &[ParsedModule]) -> Self {
+        Self {
+            values: INDEX_KINDS.map(|kind| allocate_maps(modules, kind)),
+        }
+    }
+
+    fn get(&self, kind: IndexKind) -> &[Vec<ResolvedIndex>] {
+        &self.values[kind.idx()]
+    }
+
+    fn get_mut(&mut self, kind: IndexKind) -> &mut [Vec<ResolvedIndex>] {
+        &mut self.values[kind.idx()]
+    }
+
+    fn value(&self, kind: IndexKind, module: usize, index: u32) -> u32 {
+        self.get(kind)[module][index as usize].value
+    }
 }
 
 struct MergeRebinder<'a> {
@@ -108,21 +272,36 @@ struct MergeRebinder<'a> {
     maps: &'a IndexMaps,
 }
 
+struct EmitContext<'a> {
+    modules: &'a [ParsedModule],
+    maps: &'a IndexMaps,
+}
+
+impl<'a> EmitContext<'a> {
+    fn rebinder(&self, module: usize) -> MergeRebinder<'a> {
+        MergeRebinder {
+            module,
+            modules: self.modules,
+            maps: self.maps,
+        }
+    }
+}
+
 impl Rebind for MergeRebinder<'_> {
     fn function(&self, index: u32) -> u32 {
-        self.maps.funcs[self.module][index as usize].value
+        self.maps.value(IndexKind::Func, self.module, index)
     }
 
     fn global(&self, index: u32) -> u32 {
-        self.maps.globals[self.module][index as usize].value
+        self.maps.value(IndexKind::Global, self.module, index)
     }
 
     fn memory(&self, index: u32) -> u32 {
-        self.maps.memories[self.module][index as usize].value
+        self.maps.value(IndexKind::Memory, self.module, index)
     }
 
     fn table(&self, index: u32) -> u32 {
-        self.maps.tables[self.module][index as usize].value
+        self.maps.value(IndexKind::Table, self.module, index)
     }
 
     fn ty(&self, index: u32) -> u32 {
@@ -138,7 +317,7 @@ impl Rebind for MergeRebinder<'_> {
     }
 
     fn tag(&self, index: u32) -> u32 {
-        self.maps.tags[self.module][index as usize].value
+        self.maps.value(IndexKind::Tag, self.module, index)
     }
 }
 
@@ -169,7 +348,7 @@ fn parse_module(input: &MergeInput<'_>) -> eyre::Result<ParsedModule> {
     let mut exports = Vec::new();
     let mut has_data_count = false;
 
-    for payload in wasmparser::Parser::new(0).parse_all(&bytes) {
+    for payload in parse_payloads(&bytes) {
         match payload.wrap_err_with(|| format!("Failed to parse {}", input.path.display()))? {
             Payload::TypeSection(section) => {
                 for ty in section {
@@ -180,33 +359,8 @@ fn parse_module(input: &MergeInput<'_>) -> eyre::Result<ParsedModule> {
                 for group in section {
                     for item in group?.into_iter() {
                         let (_, import) = item?;
-                        let (kind, old_index) = match import.ty {
-                            TypeRef::Func(_) | TypeRef::FuncExact(_) => {
-                                let idx = counts.func_imports;
-                                counts.func_imports += 1;
-                                (IndexKind::Func, idx)
-                            }
-                            TypeRef::Table(_) => {
-                                let idx = counts.table_imports;
-                                counts.table_imports += 1;
-                                (IndexKind::Table, idx)
-                            }
-                            TypeRef::Memory(_) => {
-                                let idx = counts.memory_imports;
-                                counts.memory_imports += 1;
-                                (IndexKind::Memory, idx)
-                            }
-                            TypeRef::Global(_) => {
-                                let idx = counts.global_imports;
-                                counts.global_imports += 1;
-                                (IndexKind::Global, idx)
-                            }
-                            TypeRef::Tag(_) => {
-                                let idx = counts.tag_imports;
-                                counts.tag_imports += 1;
-                                (IndexKind::Tag, idx)
-                            }
-                        };
+                        let kind = IndexKind::from_type_ref(import.ty);
+                        let old_index = counts.next_import_index(kind);
                         imports.push(ImportInfo {
                             module: import.module.to_string(),
                             name: import.name.to_string(),
@@ -233,7 +387,11 @@ fn parse_module(input: &MergeInput<'_>) -> eyre::Result<ParsedModule> {
             Payload::ExportSection(section) => {
                 for export in section {
                     let export = export?;
-                    exports.push((export.name.to_string(), export.kind, export.index));
+                    exports.push(ExportInfo {
+                        name: export.name.to_string(),
+                        kind: export.kind,
+                        index: export.index,
+                    });
                 }
             }
             Payload::StartSection { .. } => {
@@ -257,55 +415,83 @@ fn parse_module(input: &MergeInput<'_>) -> eyre::Result<ParsedModule> {
     })
 }
 
+fn parse_payloads(bytes: &[u8]) -> impl Iterator<Item = wasmparser::Result<Payload<'_>>> {
+    wasmparser::Parser::new(0).parse_all(bytes)
+}
+
 fn resolve_imports(modules: &mut [ParsedModule]) -> eyre::Result<()> {
-    let alias_to_module = modules
+    let alias_to_module = build_alias_map(modules);
+    let exports = build_export_map(modules);
+
+    for module_idx in 0..modules.len() {
+        let importing_alias = modules[module_idx].alias.clone();
+        for import in &mut modules[module_idx].imports {
+            resolve_import(
+                &importing_alias,
+                module_idx,
+                import,
+                &alias_to_module,
+                &exports,
+            )?;
+        }
+    }
+
+    Ok(())
+}
+
+fn build_alias_map(modules: &[ParsedModule]) -> AliasMap {
+    modules
         .iter()
         .enumerate()
         .map(|(idx, module)| (module.alias.clone(), idx))
-        .collect::<HashMap<_, _>>();
-    let mut exports = HashMap::new();
+        .collect()
+}
+
+fn build_export_map(modules: &[ParsedModule]) -> ExportMap {
+    let mut exports = ExportMap::new();
     for (module_idx, module) in modules.iter().enumerate() {
-        for (name, kind, index) in &module.exports {
-            let Some(kind) = kind_from_external(*kind) else {
-                continue;
-            };
+        for export in &module.exports {
+            let kind = export.index_kind();
             let export_ref = ExportRef {
                 module: module_idx,
                 kind,
-                index: *index,
+                index: export.index,
             };
-            for export_name in alias_export_names(&module.alias, name) {
+            for export_name in alias_export_names(&module.alias, &export.name) {
                 exports
                     .entry((module.alias.clone(), export_name, kind))
                     .or_insert(export_ref);
             }
         }
     }
+    exports
+}
 
-    for module_idx in 0..modules.len() {
-        let importing_alias = modules[module_idx].alias.clone();
-        for import in &mut modules[module_idx].imports {
-            let Some(&target_module_idx) = alias_to_module.get(&import.module) else {
-                continue;
-            };
-            let key = (import.module.clone(), import.name.clone(), import.kind);
-            if let Some(export) = exports.get(&key).copied() {
-                import.resolved = Some(export);
-            } else if target_module_idx == module_idx
-                && importing_alias == UniqueName::WASIP1_ABI_MODULE
-            {
-                import.module = "__wasip1_vfs-host".to_string();
-                import.name = format!("__wasip1_vfs___self_{}", import.name);
-            } else {
-                eyre::bail!(
-                    "Module `{}` imports `{}::{}` from merge alias `{}`, but no matching export exists",
-                    importing_alias,
-                    import.module,
-                    import.name,
-                    import.module
-                );
-            }
-        }
+fn resolve_import(
+    importing_alias: &str,
+    module_idx: usize,
+    import: &mut ImportInfo,
+    alias_to_module: &AliasMap,
+    exports: &ExportMap,
+) -> eyre::Result<()> {
+    let Some(&target_module_idx) = alias_to_module.get(&import.module) else {
+        return Ok(());
+    };
+
+    let key = (import.module.clone(), import.name.clone(), import.kind);
+    if let Some(export) = exports.get(&key).copied() {
+        import.resolved = Some(export);
+    } else if target_module_idx == module_idx && importing_alias == UniqueName::WASIP1_ABI_MODULE {
+        import.module = "__wasip1_vfs-host".to_string();
+        import.name = format!("__wasip1_vfs___self_{}", import.name);
+    } else {
+        eyre::bail!(
+            "Module `{}` imports `{}::{}` from merge alias `{}`, but no matching export exists",
+            importing_alias,
+            import.module,
+            import.name,
+            import.module
+        );
     }
 
     Ok(())
@@ -324,87 +510,31 @@ fn assign_offsets(modules: &mut [ParsedModule]) {
             if import.resolved.is_some() {
                 continue;
             }
-            let final_index = match import.kind {
-                IndexKind::Func => {
-                    let idx = unresolved.func_imports;
-                    unresolved.func_imports += 1;
-                    idx
-                }
-                IndexKind::Table => {
-                    let idx = unresolved.table_imports;
-                    unresolved.table_imports += 1;
-                    idx
-                }
-                IndexKind::Memory => {
-                    let idx = unresolved.memory_imports;
-                    unresolved.memory_imports += 1;
-                    idx
-                }
-                IndexKind::Global => {
-                    let idx = unresolved.global_imports;
-                    unresolved.global_imports += 1;
-                    idx
-                }
-                IndexKind::Tag => {
-                    let idx = unresolved.tag_imports;
-                    unresolved.tag_imports += 1;
-                    idx
-                }
-            };
+            let final_index = unresolved.next_import_index(import.kind);
             import.final_index = Some(final_index);
         }
     }
 
-    let mut offsets = Offsets {
-        funcs: unresolved.func_imports,
-        tables: unresolved.table_imports,
-        memories: unresolved.memory_imports,
-        globals: unresolved.global_imports,
-        tags: unresolved.tag_imports,
-        ..Offsets::default()
-    };
+    let mut offsets = unresolved.first_defined_offsets();
 
     for module in modules.iter_mut() {
-        module.offsets.funcs = offsets.funcs;
-        offsets.funcs += module.counts.funcs;
-        module.offsets.tables = offsets.tables;
-        offsets.tables += module.counts.tables;
-        module.offsets.memories = offsets.memories;
-        offsets.memories += module.counts.memories;
-        module.offsets.globals = offsets.globals;
-        offsets.globals += module.counts.globals;
-        module.offsets.tags = offsets.tags;
-        offsets.tags += module.counts.tags;
-        module.offsets.elems = offsets.elems;
-        offsets.elems += module.counts.elems;
-        module.offsets.data = offsets.data;
-        offsets.data += module.counts.data;
+        offsets.assign_defined_indices(module);
     }
 }
 
 fn build_index_maps(modules: &[ParsedModule]) -> eyre::Result<IndexMaps> {
-    let mut maps = IndexMaps {
-        funcs: allocate_maps(modules, IndexKind::Func),
-        tables: allocate_maps(modules, IndexKind::Table),
-        memories: allocate_maps(modules, IndexKind::Memory),
-        globals: allocate_maps(modules, IndexKind::Global),
-        tags: allocate_maps(modules, IndexKind::Tag),
-    };
+    let mut maps = IndexMaps::new(modules);
 
     for module_idx in 0..modules.len() {
-        fill_direct_map(modules, &mut maps, module_idx, IndexKind::Func);
-        fill_direct_map(modules, &mut maps, module_idx, IndexKind::Table);
-        fill_direct_map(modules, &mut maps, module_idx, IndexKind::Memory);
-        fill_direct_map(modules, &mut maps, module_idx, IndexKind::Global);
-        fill_direct_map(modules, &mut maps, module_idx, IndexKind::Tag);
+        for kind in INDEX_KINDS {
+            fill_direct_map(modules, &mut maps, module_idx, kind);
+        }
     }
 
     for module_idx in 0..modules.len() {
-        resolve_all_kind(modules, &mut maps, module_idx, IndexKind::Func)?;
-        resolve_all_kind(modules, &mut maps, module_idx, IndexKind::Table)?;
-        resolve_all_kind(modules, &mut maps, module_idx, IndexKind::Memory)?;
-        resolve_all_kind(modules, &mut maps, module_idx, IndexKind::Global)?;
-        resolve_all_kind(modules, &mut maps, module_idx, IndexKind::Tag)?;
+        for kind in INDEX_KINDS {
+            resolve_all_kind(modules, &mut maps, module_idx, kind)?;
+        }
     }
 
     Ok(maps)
@@ -414,14 +544,8 @@ fn allocate_maps(modules: &[ParsedModule], kind: IndexKind) -> Vec<Vec<ResolvedI
     modules
         .iter()
         .map(|module| {
-            let len = imported_count(module, kind) + defined_count(module, kind);
-            vec![
-                ResolvedIndex {
-                    value: u32::MAX,
-                    resolving: false,
-                };
-                len as usize
-            ]
+            let len = module.counts.imported(kind) + module.counts.defined(kind);
+            vec![ResolvedIndex::UNRESOLVED; len as usize]
         })
         .collect()
 }
@@ -435,14 +559,14 @@ fn fill_direct_map(
     let module = &modules[module_idx];
     for import in module.imports.iter().filter(|import| import.kind == kind) {
         if let Some(final_index) = import.final_index {
-            kind_map_mut(maps, kind)[module_idx][import.old_index as usize].value = final_index;
+            maps.get_mut(kind)[module_idx][import.old_index as usize].value = final_index;
         }
     }
 
-    let import_count = imported_count(module, kind);
-    let def_offset = offset_for(module, kind);
-    for local_idx in 0..defined_count(module, kind) {
-        kind_map_mut(maps, kind)[module_idx][(import_count + local_idx) as usize].value =
+    let import_count = module.counts.imported(kind);
+    let def_offset = module.offsets.get(kind);
+    for local_idx in 0..module.counts.defined(kind) {
+        maps.get_mut(kind)[module_idx][(import_count + local_idx) as usize].value =
             def_offset + local_idx;
     }
 }
@@ -453,7 +577,7 @@ fn resolve_all_kind(
     module_idx: usize,
     kind: IndexKind,
 ) -> eyre::Result<()> {
-    let len = kind_map(maps, kind)[module_idx].len();
+    let len = maps.get(kind)[module_idx].len();
     for index in 0..len {
         resolve_index(modules, maps, module_idx, kind, index as u32)?;
     }
@@ -467,8 +591,8 @@ fn resolve_index(
     kind: IndexKind,
     index: u32,
 ) -> eyre::Result<u32> {
-    let slot = &kind_map(maps, kind)[module_idx][index as usize];
-    if slot.value != u32::MAX {
+    let slot = &maps.get(kind)[module_idx][index as usize];
+    if slot.is_resolved() {
         return Ok(slot.value);
     }
     if slot.resolving {
@@ -479,7 +603,7 @@ fn resolve_index(
             index
         );
     }
-    kind_map_mut(maps, kind)[module_idx][index as usize].resolving = true;
+    maps.get_mut(kind)[module_idx][index as usize].resolving = true;
 
     let import = modules[module_idx]
         .imports
@@ -501,7 +625,7 @@ fn resolve_index(
         resolved.kind,
         resolved.index,
     )?;
-    let slot = &mut kind_map_mut(maps, kind)[module_idx][index as usize];
+    let slot = &mut maps.get_mut(kind)[module_idx][index as usize];
     slot.value = value;
     slot.resolving = false;
     Ok(value)
@@ -512,43 +636,36 @@ fn emit_merged_module(
     maps: &IndexMaps,
     dwarf: bool,
 ) -> eyre::Result<Vec<u8>> {
+    let ctx = EmitContext { modules, maps };
     let mut module = Module::new();
-    emit_type_section(modules, maps, &mut module)?;
-    emit_import_section(modules, maps, &mut module)?;
-    emit_function_section(modules, &mut module)?;
-    emit_table_section(modules, maps, &mut module)?;
-    emit_memory_section(modules, &mut module)?;
-    emit_tag_section(modules, maps, &mut module)?;
-    emit_global_section(modules, maps, &mut module)?;
-    emit_export_section(modules, maps, &mut module)?;
-    emit_element_section(modules, maps, &mut module)?;
+    emit_type_section(&ctx, &mut module)?;
+    emit_import_section(&ctx, &mut module)?;
+    emit_function_section(&ctx, &mut module)?;
+    emit_table_section(&ctx, &mut module)?;
+    emit_memory_section(&ctx, &mut module)?;
+    emit_tag_section(&ctx, &mut module)?;
+    emit_global_section(&ctx, &mut module)?;
+    emit_export_section(&ctx, &mut module)?;
+    emit_element_section(&ctx, &mut module)?;
 
-    let has_data_count = modules.iter().any(|m| m.has_data_count);
-    let total_data = modules.iter().map(|m| m.counts.data).sum::<u32>();
+    let has_data_count = ctx.modules.iter().any(|m| m.has_data_count);
+    let total_data = ctx.modules.iter().map(|m| m.counts.data).sum::<u32>();
     if has_data_count {
         module.section(&DataCountSection { count: total_data });
     }
 
-    emit_code_section(modules, maps, &mut module)?;
-    emit_data_section(modules, maps, &mut module)?;
-    emit_custom_sections(modules, dwarf, &mut module)?;
+    emit_code_section(&ctx, &mut module)?;
+    emit_data_section(&ctx, &mut module)?;
+    emit_custom_sections(&ctx, dwarf, &mut module)?;
 
     Ok(module.finish())
 }
 
-fn emit_type_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_type_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = TypeSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::TypeSection(types) = payload? {
                 for ty in types {
                     let ty = ty?;
@@ -575,18 +692,10 @@ fn emit_type_section(
     Ok(())
 }
 
-fn emit_import_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_import_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = ImportSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
         for import in parsed
             .imports
             .iter()
@@ -605,10 +714,10 @@ fn emit_import_section(
     Ok(())
 }
 
-fn emit_function_section(modules: &[ParsedModule], module: &mut Module) -> eyre::Result<()> {
+fn emit_function_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = FunctionSection::new();
-    for parsed in modules {
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for parsed in ctx.modules {
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::FunctionSection(functions) = payload? {
                 for ty in functions {
                     section.function(parsed.offsets.types + ty?);
@@ -622,19 +731,11 @@ fn emit_function_section(modules: &[ParsedModule], module: &mut Module) -> eyre:
     Ok(())
 }
 
-fn emit_table_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_table_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = TableSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::TableSection(tables) = payload? {
                 for table in tables {
                     section.table(translator::translate_table_type(table?.ty, &rebinder));
@@ -648,10 +749,10 @@ fn emit_table_section(
     Ok(())
 }
 
-fn emit_memory_section(modules: &[ParsedModule], module: &mut Module) -> eyre::Result<()> {
+fn emit_memory_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = MemorySection::new();
-    for parsed in modules {
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for parsed in ctx.modules {
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::MemorySection(memories) = payload? {
                 for memory in memories {
                     section.memory(translator::translate_memory_type(memory?));
@@ -665,19 +766,11 @@ fn emit_memory_section(modules: &[ParsedModule], module: &mut Module) -> eyre::R
     Ok(())
 }
 
-fn emit_tag_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_tag_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = TagSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::TagSection(tags) = payload? {
                 for tag in tags {
                     let tag = translator::translate_tag_type(tag?);
@@ -695,19 +788,11 @@ fn emit_tag_section(
     Ok(())
 }
 
-fn emit_global_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_global_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = GlobalSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::GlobalSection(globals) = payload? {
                 for global in globals {
                     let global = global?;
@@ -726,23 +811,15 @@ fn emit_global_section(
     Ok(())
 }
 
-fn emit_export_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_export_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = ExportSection::new();
     let mut used_names = HashSet::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for (name, kind, index) in &parsed.exports {
-            let final_index = rebind_external_index(*kind, *index, &rebinder);
-            let export_name = unique_export_name(&mut used_names, &parsed.alias, name);
-            section.export(&export_name, export_kind(*kind), final_index);
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for export in &parsed.exports {
+            let final_index = rebind_external_index(export.kind, export.index, &rebinder);
+            let export_name = unique_export_name(&mut used_names, &parsed.alias, &export.name);
+            section.export(&export_name, export.index_kind().export_kind(), final_index);
         }
     }
     if !section.is_empty() {
@@ -751,19 +828,11 @@ fn emit_export_section(
     Ok(())
 }
 
-fn emit_element_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_element_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = ElementSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::ElementSection(elements) = payload? {
                 for elem in elements {
                     let elem = elem?;
@@ -794,19 +863,11 @@ fn emit_element_section(
     Ok(())
 }
 
-fn emit_code_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_code_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = CodeSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::CodeSectionEntry(body) = payload? {
                 let mut locals = Vec::new();
                 for local in body.get_locals_reader()? {
@@ -828,19 +889,11 @@ fn emit_code_section(
     Ok(())
 }
 
-fn emit_data_section(
-    modules: &[ParsedModule],
-    maps: &IndexMaps,
-    module: &mut Module,
-) -> eyre::Result<()> {
+fn emit_data_section(ctx: &EmitContext<'_>, module: &mut Module) -> eyre::Result<()> {
     let mut section = DataSection::new();
-    for (module_idx, parsed) in modules.iter().enumerate() {
-        let rebinder = MergeRebinder {
-            module: module_idx,
-            modules,
-            maps,
-        };
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for (module_idx, parsed) in ctx.modules.iter().enumerate() {
+        let rebinder = ctx.rebinder(module_idx);
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::DataSection(data_section) = payload? {
                 for data in data_section {
                     let data = data?;
@@ -871,12 +924,12 @@ fn emit_data_section(
 }
 
 fn emit_custom_sections(
-    modules: &[ParsedModule],
+    ctx: &EmitContext<'_>,
     dwarf: bool,
     module: &mut Module,
 ) -> eyre::Result<()> {
-    for parsed in modules {
-        for payload in wasmparser::Parser::new(0).parse_all(&parsed.bytes) {
+    for parsed in ctx.modules {
+        for payload in parse_payloads(&parsed.bytes) {
             if let Payload::CustomSection(custom) = payload? {
                 if !dwarf && (custom.name() == "name" || custom.name().starts_with(".debug_")) {
                     continue;
@@ -970,26 +1023,6 @@ fn rebind_external_index(kind: ExternalKind, index: u32, rebinder: &impl Rebind)
     }
 }
 
-fn export_kind(kind: ExternalKind) -> ExportKind {
-    match kind {
-        ExternalKind::Func | ExternalKind::FuncExact => ExportKind::Func,
-        ExternalKind::Table => ExportKind::Table,
-        ExternalKind::Memory => ExportKind::Memory,
-        ExternalKind::Global => ExportKind::Global,
-        ExternalKind::Tag => ExportKind::Tag,
-    }
-}
-
-fn kind_from_external(kind: ExternalKind) -> Option<IndexKind> {
-    match kind {
-        ExternalKind::Func | ExternalKind::FuncExact => Some(IndexKind::Func),
-        ExternalKind::Table => Some(IndexKind::Table),
-        ExternalKind::Memory => Some(IndexKind::Memory),
-        ExternalKind::Global => Some(IndexKind::Global),
-        ExternalKind::Tag => Some(IndexKind::Tag),
-    }
-}
-
 fn alias_export_names(alias: &str, export_name: &str) -> Vec<String> {
     let mut names = vec![export_name.to_string()];
 
@@ -1022,56 +1055,6 @@ fn unique_export_name(used: &mut HashSet<String>, alias: &str, name: &str) -> St
         suffix += 1;
     }
     candidate
-}
-
-fn imported_count(module: &ParsedModule, kind: IndexKind) -> u32 {
-    match kind {
-        IndexKind::Func => module.counts.func_imports,
-        IndexKind::Table => module.counts.table_imports,
-        IndexKind::Memory => module.counts.memory_imports,
-        IndexKind::Global => module.counts.global_imports,
-        IndexKind::Tag => module.counts.tag_imports,
-    }
-}
-
-fn defined_count(module: &ParsedModule, kind: IndexKind) -> u32 {
-    match kind {
-        IndexKind::Func => module.counts.funcs,
-        IndexKind::Table => module.counts.tables,
-        IndexKind::Memory => module.counts.memories,
-        IndexKind::Global => module.counts.globals,
-        IndexKind::Tag => module.counts.tags,
-    }
-}
-
-fn offset_for(module: &ParsedModule, kind: IndexKind) -> u32 {
-    match kind {
-        IndexKind::Func => module.offsets.funcs,
-        IndexKind::Table => module.offsets.tables,
-        IndexKind::Memory => module.offsets.memories,
-        IndexKind::Global => module.offsets.globals,
-        IndexKind::Tag => module.offsets.tags,
-    }
-}
-
-fn kind_map(maps: &IndexMaps, kind: IndexKind) -> &[Vec<ResolvedIndex>] {
-    match kind {
-        IndexKind::Func => &maps.funcs,
-        IndexKind::Table => &maps.tables,
-        IndexKind::Memory => &maps.memories,
-        IndexKind::Global => &maps.globals,
-        IndexKind::Tag => &maps.tags,
-    }
-}
-
-fn kind_map_mut(maps: &mut IndexMaps, kind: IndexKind) -> &mut [Vec<ResolvedIndex>] {
-    match kind {
-        IndexKind::Func => &mut maps.funcs,
-        IndexKind::Table => &mut maps.tables,
-        IndexKind::Memory => &mut maps.memories,
-        IndexKind::Global => &mut maps.globals,
-        IndexKind::Tag => &mut maps.tags,
-    }
 }
 
 #[cfg(test)]
@@ -1112,7 +1095,7 @@ mod tests {
         let bytes = std::fs::read(out)?;
         let mut import_count = 0;
         let mut has_call = false;
-        for payload in wasmparser::Parser::new(0).parse_all(&bytes) {
+        for payload in parse_payloads(&bytes) {
             match payload? {
                 Payload::ImportSection(section) => import_count += section.count(),
                 Payload::CodeSectionEntry(body) => {

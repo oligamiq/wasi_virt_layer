@@ -559,6 +559,25 @@ impl<T: WasmAccessNameDynCompatible + ?Sized> WasmAccessNameDynCompatible for &T
     }
 }
 
+/// Holds the single-memory read lock while a directed pointer is in use.
+#[cfg(not(feature = "multi_memory"))]
+pub struct MemoryDirectorGuard {
+    #[cfg(feature = "threads")]
+    _read: crate::shared_global::ReadGuard,
+}
+
+#[cfg(not(feature = "multi_memory"))]
+impl MemoryDirectorGuard {
+    /// Acquires the guard required for using a directed pointer.
+    #[inline(always)]
+    pub fn acquire() -> Self {
+        Self {
+            #[cfg(feature = "threads")]
+            _read: crate::shared_global::lock_read(),
+        }
+    }
+}
+
 /// A dynamically compatible trait for low-level memory operations in WASM.
 pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     /// Copies a slice of data into WASM memory starting at the given offset.
@@ -568,6 +587,10 @@ pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize);
 
     /// Directs a pointer to its mapped address in a single-memory model.
+    ///
+    /// This is an implementation hook. Public/direct users must use the guarded
+    /// `with_directed_memory*` APIs so the returned pointer is not kept after the
+    /// single-memory offset lock has been released.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(&self, ptr: isize) -> Option<isize>;
 
@@ -622,13 +645,21 @@ pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
         buff
     }
 
-    /// Directs a pointer to its mapped address in a single-memory model.
+    /// Directs a pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<T>(&self, ptr: *const T) -> Option<*const T>;
+    fn with_directed_memory_with<T, R>(
+        &self,
+        ptr: *const T,
+        f: impl FnOnce(*const T) -> R,
+    ) -> Option<R>;
 
-    /// Directs a mutable pointer to its mapped address in a single-memory model.
+    /// Directs a mutable pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<T>(&self, ptr: *mut T) -> Option<*mut T>;
+    fn with_directed_memory_mut_with<T, R>(
+        &self,
+        ptr: *mut T,
+        f: impl FnOnce(*mut T) -> R,
+    ) -> Option<R>;
 
     /// Execute the `_main` entrypoint of the WASM module.
     fn _main_with(&self) -> wasip1::Errno;
@@ -713,13 +744,23 @@ impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatible for T {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<U>(&self, ptr: *const U) -> Option<*const U> {
-        Self::memory_director_raw(self, ptr as isize).map(|p| p as *const U)
+    fn with_directed_memory_with<U, R>(
+        &self,
+        ptr: *const U,
+        f: impl FnOnce(*const U) -> R,
+    ) -> Option<R> {
+        let _guard = MemoryDirectorGuard::acquire();
+        Self::memory_director_raw(self, ptr as isize).map(|p| f(p as *const U))
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<U>(&self, ptr: *mut U) -> Option<*mut U> {
-        Self::memory_director_raw(self, ptr as isize).map(|p| p as *mut U)
+    fn with_directed_memory_mut_with<U, R>(
+        &self,
+        ptr: *mut U,
+        f: impl FnOnce(*mut U) -> R,
+    ) -> Option<R> {
+        let _guard = MemoryDirectorGuard::acquire();
+        Self::memory_director_raw(self, ptr as isize).map(|p| f(p as *mut U))
     }
 
     fn _main_with(&self) -> wasip1::Errno {
@@ -744,6 +785,10 @@ pub trait WasmAccessRaw: core::fmt::Debug {
     fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize);
 
     /// Directs a pointer to its mapped address in a single-memory model.
+    ///
+    /// This is an implementation hook. Public/direct users must use the guarded
+    /// `with_directed_memory*` APIs so the returned pointer is not kept after the
+    /// single-memory offset lock has been released.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(ptr: isize) -> isize;
 
@@ -883,13 +928,15 @@ impl<T: WasmAccessRaw> WasmAccess for T {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director<U>(ptr: *const U) -> *const U {
-        Self::memory_director_raw(ptr as isize) as *const U
+    fn with_directed_memory<U, R>(ptr: *const U, f: impl FnOnce(*const U) -> R) -> R {
+        let _guard = MemoryDirectorGuard::acquire();
+        f(Self::memory_director_raw(ptr as isize) as *const U)
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut<U>(ptr: *mut U) -> *mut U {
-        Self::memory_director_raw(ptr as isize) as *mut U
+    fn with_directed_memory_mut<U, R>(ptr: *mut U, f: impl FnOnce(*mut U) -> R) -> R {
+        let _guard = MemoryDirectorGuard::acquire();
+        f(Self::memory_director_raw(ptr as isize) as *mut U)
     }
 
     fn _main() -> wasip1::Errno {
@@ -938,13 +985,13 @@ pub trait WasmAccess: WasmAccessRaw {
         buff
     }
 
-    /// Directs a pointer to its mapped address in a single-memory model.
+    /// Directs a pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director<T>(ptr: *const T) -> *const T;
+    fn with_directed_memory<T, R>(ptr: *const T, f: impl FnOnce(*const T) -> R) -> R;
 
-    /// Directs a mutable pointer to its mapped address in a single-memory model.
+    /// Directs a mutable pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut<T>(ptr: *mut T) -> *mut T;
+    fn with_directed_memory_mut<T, R>(ptr: *mut T, f: impl FnOnce(*mut T) -> R) -> R;
 
     /// wrapping wasm's _start function
     /// By default in Rust code, when _start is called,

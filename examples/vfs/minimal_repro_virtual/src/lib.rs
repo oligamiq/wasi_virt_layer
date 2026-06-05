@@ -34,9 +34,7 @@ impl Guest for Hello {
         use wasi_virt_layer::__private::utils::InitOnce;
         static INIT: InitOnce = InitOnce::new_const();
         INIT.call_once(|| {
-            unsafe { THREAD_POOL.init() };
-            THREAD_POOL.set_capacity(4);
-            THREAD_POOL.flush_capacity().wait();
+            unsafe { THREAD_POOL.init_with_capacity_and_wait(4) };
         });
 
         println!("--- Starting test_threads ---");

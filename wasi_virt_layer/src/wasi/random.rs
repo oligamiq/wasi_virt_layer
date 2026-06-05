@@ -22,13 +22,19 @@ impl Random for StandardRandom {
         {
             use crate::transporter::non_recursive_random_get;
             #[cfg(not(feature = "multi_memory"))]
-            let ptr = Wasm::memory_director_mut(buf);
-            #[cfg(feature = "multi_memory")]
-            let ptr = buf;
-
-            match unsafe { non_recursive_random_get(ptr, buf_len) } {
+            match Wasm::with_directed_memory_mut(buf, |ptr| unsafe {
+                non_recursive_random_get(ptr, buf_len)
+            }) {
                 Ok(_) => wasip1::ERRNO_SUCCESS,
                 Err(e) => e,
+            }
+
+            #[cfg(feature = "multi_memory")]
+            {
+                match unsafe { non_recursive_random_get(buf, buf_len) } {
+                    Ok(_) => wasip1::ERRNO_SUCCESS,
+                    Err(e) => e,
+                }
             }
         }
         #[cfg(not(target_os = "wasi"))]

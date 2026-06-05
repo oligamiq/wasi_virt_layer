@@ -3,6 +3,8 @@ use eyre::Result;
 use wasm_encoder::{Function, Instruction, Module, RawSection};
 use wasmparser::{Parser, Payload, TypeRef};
 
+const LOWERING_HELPERS_SECTION: &str = "wvl.multi_memory_lowering.helpers.v1";
+
 #[derive(Debug, Default)]
 pub struct MultiMemoryLoweringStreamPass {
     pub threads: bool,
@@ -884,6 +886,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         new_code_sec.function(&func);
                     }
 
+                    if threads {
+                        let mut data = Vec::with_capacity(8);
+                        data.extend_from_slice(&orig_func_count.to_le_bytes());
+                        data.extend_from_slice(&memory_count.to_le_bytes());
+                        encoder.section(&wasm_encoder::CustomSection {
+                            name: LOWERING_HELPERS_SECTION.into(),
+                            data: std::borrow::Cow::Owned(data),
+                        });
+                    }
                     encoder.section(&new_code_sec);
                 }
                 Payload::CustomSection(c) => {
