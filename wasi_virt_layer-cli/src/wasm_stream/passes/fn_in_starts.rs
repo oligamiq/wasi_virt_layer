@@ -142,7 +142,7 @@ impl FnInStarts {
     /// into the VFS module before merging.
     ///
     /// These are functions whose bodies are filled in later (by the post-combine pass),
-    /// but must exist as exports so that `wasm-merge` can resolve references.
+    /// but must exist as exports so that the in-process merge can resolve references.
     pub fn dummy_export_names(&self) -> Vec<String> {
         vec![
             self.thread_patch.clone(),

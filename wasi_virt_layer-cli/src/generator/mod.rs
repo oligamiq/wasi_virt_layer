@@ -1,4 +1,4 @@
-use std::{any::Any, collections::HashMap, fs, io::Read as _, str::FromStr};
+use std::{collections::HashMap, fs, io::Read as _, str::FromStr};
 
 use camino::Utf8PathBuf;
 use compact_str::{CompactString, ToCompactString as _};
@@ -9,9 +9,8 @@ use crate::{
     args::{self, TargetMemoryType},
     compile,
     config_checker::TomlRestorers,
-    fallback_command,
     unique_name::{MemoryUniqueName, UniqueName},
-    util::{CaminoUtilModule as _, ResultUtil, WasmName, WasmNameHolder},
+    util::{CaminoUtilModule as _, WasmName, WasmNameHolder},
 };
 
 /// Represents the generation context, holding configuration arguments and targeted module info.
@@ -592,10 +591,11 @@ impl GeneratorRunner {
                         export_name.clone(),
                     )));
                     pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![export_name])));
-                    let new_memory_name = crate::generator::UniqueName::Memory(
-                        &crate::unique_name::MemoryUniqueName::Memory(&target_name),
-                    )
-                    .to_string();
+                    let new_memory_name =
+                        crate::generator::UniqueName::Memory(&MemoryUniqueName::Memory(
+                            &target_name,
+                        ))
+                        .to_string();
                     pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(Some(
                         new_memory_name,
                     ))));
@@ -1156,7 +1156,7 @@ impl WasmPath {
     }
 }
 
-/// Coordinates the underlying binary `wasm-merge` utility invocations to bundle outputs physically.
+/// Combines prepared VFS and target modules into one core Wasm module.
 fn count_defined_funcs(wasm_path: &camino::Utf8PathBuf) -> eyre::Result<u32> {
     let wasm = std::fs::read(wasm_path)?;
     for payload in wasmparser::Parser::new(0).parse_all(&wasm) {
@@ -1175,90 +1175,23 @@ pub fn merge(
     _threads: bool,
     dwarf: bool,
 ) -> eyre::Result<()> {
-    let custom_sections = {
-        let wasm = std::fs::read(vfs)?;
-        let mut sections = Vec::new();
-        for payload in wasmparser::Parser::new(0).parse_all(&wasm) {
-            let payload = payload?;
-            if let wasmparser::Payload::CustomSection(c) = payload {
-                if c.name().starts_with("component-type:") {
-                    sections.push((c.name().to_string(), c.data().to_vec()));
-                }
-            }
-        }
-        sections
-    };
-
-    let mut merge_cmd = fallback_command::get_fallback_command("wasm-merge");
-
-    if _threads {
-        merge_cmd.arg("--enable-threads");
-        merge_cmd.arg("--enable-multimemory");
-    } else {
-        merge_cmd.arg("--enable-multimemory");
-    }
-
-    if dwarf {
-        merge_cmd.arg("--debuginfo");
-    }
-
-    merge_cmd.arg(vfs).arg(UniqueName::WASIP1_ABI_MODULE);
-
+    let mut inputs = Vec::with_capacity(wasm.len() + 1);
+    inputs.push(crate::wasm_stream::merge::MergeInput {
+        alias: UniqueName::WASIP1_ABI_MODULE.to_string(),
+        path: vfs.as_std_path(),
+    });
     for wasm in wasm {
-        merge_cmd
-            .arg(wasm.as_ref().as_os_str().to_str().unwrap())
-            .arg(format!(
+        inputs.push(crate::wasm_stream::merge::MergeInput {
+            alias: format!(
                 "wasip1_vfs_{}",
-                wasm.as_ref().get_file_main_name().unwrap()
-            ));
-    }
-
-    merge_cmd
-        .arg("--output")
-        .arg(output.as_ref().as_os_str().to_str().unwrap())
-        // .arg("--rename-export-conflicts")
-        .args([
-            "--enable-threads",
-            "--enable-bulk-memory",
-            "--enable-reference-types",
-            "--enable-simd",
-            "--enable-exception-handling",
-            "--enable-shared-everything",
-            "--enable-multivalue",
-            "--enable-multimemory",
-            "--enable-gc",
-        ]);
-
-    let result = merge_cmd
-        .spawn()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => eyre::eyre!(
-                "wasm-merge command not found. Please install wasm-merge from https://github.com/WebAssembly/binaryen/releases/latest"
+                wasm.as_ref()
+                    .get_file_main_name()
+                    .ok_or_else(|| eyre::eyre!("Failed to get Wasm module name"))?
             ),
-            _ => e.into(),
-        })?
-        .wait_with_output()
-        .wrap_err("Failed to wait for wasm-merge process")?;
-
-    if !result.success {
-        let stdout = String::from_utf8_lossy(&result.stdout);
-        let stderr = String::from_utf8_lossy(&result.stderr);
-        let error_message = format!("stdout: {stdout}\nstderr: {stderr}");
-
-        return Err(eyre::eyre!("wasm-merge command failed: {error_message}"));
+            path: wasm.as_ref(),
+        });
     }
-
-    let mut module_bytes = std::fs::read(output.as_ref())?;
-    for (name, data) in custom_sections {
-        let section = wasm_encoder::CustomSection {
-            name: name.into(),
-            data: data.into(),
-        };
-        wasm_encoder::Section::append_to(&section, &mut module_bytes);
-    }
-    std::fs::write(output.as_ref(), &module_bytes)?;
-
-    Ok(())
+    crate::wasm_stream::merge::merge_modules(&inputs, output, dwarf)
 }
 
 macro_rules! _add_generators_by_type {

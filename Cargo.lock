@@ -2508,7 +2508,6 @@ dependencies = [
  "uuid",
  "wait-timeout",
  "wasm-encoder 0.248.0",
- "wasm-merge-sys",
  "wasm-opt",
  "wasmparser 0.248.0",
  "windows-sys",
@@ -2651,18 +2650,6 @@ checksum = "2271adb766023046af314460f1fae02cc34ea16d736d93404d3b65be44270923"
 dependencies = [
  "leb128fmt",
  "wasmparser 0.250.0",
-]
-
-[[package]]
-name = "wasm-merge-sys"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fc294bb8b5805882dc8cf4fa454a88de5d92ea2efc81939987ce9b42ec2bc2d"
-dependencies = [
- "anyhow",
- "cc",
- "cxx",
- "cxx-build",
 ]
 
 [[package]]

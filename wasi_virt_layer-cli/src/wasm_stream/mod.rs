@@ -1,4 +1,5 @@
 pub mod mem_info;
+pub mod merge;
 pub mod passes;
 pub mod pipeline;
 pub mod tracker;
