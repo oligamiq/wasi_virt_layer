@@ -673,11 +673,12 @@ impl GeneratorRunner {
 
             let vfs_name = self.ctx.vfs_name.as_ref().to_string();
             pipeline.add_pass(Box::new(
-                crate::wasm_stream::passes::post_combine::PostCombineStreamPass::new(vfs_name, target_names.clone(), defined_funcs_counts.clone())
-            ));
-
-            pipeline.add_pass(Box::new(
-                crate::wasm_stream::passes::poll::PollWaitStreamPass::new(self.ctx.threads, 0)
+                crate::wasm_stream::passes::post_combine::PostCombineStreamPass::new(
+                    vfs_name,
+                    target_names.clone(),
+                    defined_funcs_counts.clone(),
+                    self.ctx.threads,
+                )
             ));
 
             if self.ctx.target_memory_type == TargetMemoryType::Single {

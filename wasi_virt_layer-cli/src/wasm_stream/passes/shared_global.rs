@@ -1,7 +1,7 @@
 use crate::wasm_stream::pipeline::{StreamPass, par_process_code_section};
 use eyre::{ContextCompat, Result};
 use std::collections::HashMap;
-use wasm_encoder::{Function, Instruction, Module, RawSection};
+use wasm_encoder::{ExportKind, ExportSection, Function, Instruction, Module, RawSection};
 use wasmparser::{Parser, Payload};
 
 const LOWERING_HELPERS_SECTION: &str = "wvl.multi_memory_lowering.helpers.v1";
@@ -125,15 +125,24 @@ impl StreamPass for SharedGlobalStreamPass {
                     });
                 }
                 Payload::ExportSection(s) => {
+                    let mut new_exports = ExportSection::new();
                     for e in s.clone() {
                         let e = e?;
                         exports.insert(e.name.to_string(), (e.kind, e.index));
+                        if e.name == "__init_offset_global" {
+                            continue;
+                        }
+                        let kind = match e.kind {
+                            wasmparser::ExternalKind::Func
+                            | wasmparser::ExternalKind::FuncExact => ExportKind::Func,
+                            wasmparser::ExternalKind::Table => ExportKind::Table,
+                            wasmparser::ExternalKind::Memory => ExportKind::Memory,
+                            wasmparser::ExternalKind::Global => ExportKind::Global,
+                            wasmparser::ExternalKind::Tag => ExportKind::Tag,
+                        };
+                        new_exports.export(e.name, kind, e.index);
                     }
-                    let range = s.range();
-                    encoder.section(&RawSection {
-                        id: 7,
-                        data: &input_wasm[range.start..range.end],
-                    });
+                    encoder.section(&new_exports);
                 }
                 Payload::StartSection { func, range } => {
                     start_func_id = Some(func);
@@ -241,8 +250,10 @@ impl StreamPass for SharedGlobalStreamPass {
 
                         let mut func = Function::new(locals);
 
-                        // If this is the start function or __init_offset_global, prepend init_once calls
-                        if Some(fid) == start_func_id || Some(fid) == init_offset_global_fid {
+                        // Prefer the explicit helper when it exists so callers control ordering.
+                        if Some(fid) == init_offset_global_fid
+                            || (init_offset_global_fid.is_none() && Some(fid) == start_func_id)
+                        {
                             for (g_id, init_fn) in &init_once_funcs {
                                 if let Some(&init_val) = global_inits.get(g_id) {
                                     func.instruction(&Instruction::I32Const(init_val));

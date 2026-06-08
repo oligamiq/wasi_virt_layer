@@ -6,7 +6,6 @@ pub mod check_unused_threads;
 pub mod dummy_injector;
 pub mod multi_memory_lowering;
 pub mod patch_component;
-pub mod poll;
 pub mod post_combine;
 pub mod pre_vfs_memory_refuge;
 pub mod producer;

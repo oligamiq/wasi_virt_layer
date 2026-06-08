@@ -3,6 +3,7 @@ use crate::unique_name::UniqueName;
 use crate::wasm_stream::pipeline::StreamPass;
 use crate::wasm_stream::translator::DefaultRebinder;
 use eyre::Result;
+use std::collections::HashSet;
 use strum::VariantNames;
 use wasm_encoder::{ImportSection, Module};
 
@@ -72,7 +73,8 @@ pub fn rewrite_imports(
 // ---------------------------------------------------------------------------
 
 /// Renames WASI ABI imports in the **VFS module** from `wasi_snapshot_preview1`
-/// to `__wasip1_vfs-host`, with names like `__wasip1_vfs___self_{import}`.
+/// to `__wasip1_vfs-host` when a matching
+/// `__wasip1_vfs___self_{import}` export exists.
 ///
 /// This ensures that after merging, the VFS module's own WASI calls get routed
 /// through the host (or resolved against matching exports) instead of recursing
@@ -88,12 +90,28 @@ impl ConnectWasip1ABIPreVfsStreamPass {
 
 impl StreamPass for ConnectWasip1ABIPreVfsStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> Result<Vec<u8>> {
+        let mut exported_funcs = HashSet::new();
+        for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
+            if let wasmparser::Payload::ExportSection(exports) = payload? {
+                for export in exports {
+                    let export = export?;
+                    if matches!(
+                        export.kind,
+                        wasmparser::ExternalKind::Func | wasmparser::ExternalKind::FuncExact
+                    ) {
+                        exported_funcs.insert(export.name.to_string());
+                    }
+                }
+            }
+        }
+
         rewrite_imports(input_wasm, |imp_module, imp_name, _ty| {
+            let self_export = format!("__wasip1_vfs___self_{imp_name}");
             if <Wasip1ABIFunc as VariantNames>::VARIANTS.contains(&imp_name)
                 && imp_module == UniqueName::WASIP1_ABI_MODULE
+                && exported_funcs.contains(&self_export)
             {
-                let new_name = format!("__wasip1_vfs___self_{imp_name}");
-                ("__wasip1_vfs-host".to_string(), new_name)
+                ("__wasip1_vfs-host".to_string(), self_export)
             } else {
                 (imp_module.to_string(), imp_name.to_string())
             }
@@ -200,5 +218,96 @@ impl StreamPass for ConnectWasip1ThreadsABIPreTargetStreamPass {
                 (imp_module.to_string(), imp_name.to_string())
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_encoder::{
+        CodeSection, ExportKind, ExportSection, Function, FunctionSection, Instruction, TypeSection,
+    };
+
+    #[test]
+    fn pre_vfs_leaves_wasi_import_without_self_export() -> eyre::Result<()> {
+        let input = module_with_wasi_import(None);
+        let mut pass = ConnectWasip1ABIPreVfsStreamPass::new();
+        let output = pass.run(&input)?;
+
+        assert_eq!(
+            first_import(&output)?,
+            ("wasi_snapshot_preview1".to_string(), "fd_write".to_string())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn pre_vfs_rewrites_wasi_import_with_self_export() -> eyre::Result<()> {
+        let self_export = "__wasip1_vfs___self_fd_write";
+        let input = module_with_wasi_import(Some(self_export));
+        let mut pass = ConnectWasip1ABIPreVfsStreamPass::new();
+        let output = pass.run(&input)?;
+
+        assert_eq!(
+            first_import(&output)?,
+            ("__wasip1_vfs-host".to_string(), self_export.to_string())
+        );
+        Ok(())
+    }
+
+    fn module_with_wasi_import(export_name: Option<&str>) -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+            ],
+            [wasm_encoder::ValType::I32],
+        );
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            UniqueName::WASIP1_ABI_MODULE,
+            "fd_write",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        if let Some(export_name) = export_name {
+            let mut functions = FunctionSection::new();
+            functions.function(0);
+            module.section(&functions);
+
+            let mut exports = ExportSection::new();
+            exports.export(export_name, ExportKind::Func, 1);
+            module.section(&exports);
+
+            let mut code = CodeSection::new();
+            let mut function = Function::new([]);
+            function.instruction(&Instruction::End);
+            code.function(&function);
+            module.section(&code);
+        }
+
+        module.finish()
+    }
+
+    fn first_import(wasm: &[u8]) -> eyre::Result<(String, String)> {
+        for payload in wasmparser::Parser::new(0).parse_all(wasm) {
+            if let wasmparser::Payload::ImportSection(imports) = payload? {
+                for group in imports {
+                    for import in group? {
+                        let (_, import) = import?;
+                        return Ok((import.module.to_string(), import.name.to_string()));
+                    }
+                }
+            }
+        }
+        eyre::bail!("module has no import")
     }
 }

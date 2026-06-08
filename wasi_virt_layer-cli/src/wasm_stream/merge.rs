@@ -333,6 +333,7 @@ pub fn merge_modules(
         .collect::<eyre::Result<Vec<_>>>()?;
 
     resolve_imports(&mut modules)?;
+    deduplicate_unresolved_function_imports(&mut modules);
     assign_offsets(&mut modules);
     let maps = build_index_maps(&modules)?;
     let bytes = emit_merged_module(&modules, &maps, dwarf)?;
@@ -437,6 +438,35 @@ fn resolve_imports(modules: &mut [ParsedModule]) -> eyre::Result<()> {
     }
 
     Ok(())
+}
+
+fn deduplicate_unresolved_function_imports(modules: &mut [ParsedModule]) {
+    for (module_idx, module) in modules.iter_mut().enumerate() {
+        let mut first_imports = HashMap::new();
+
+        for import in &mut module.imports {
+            if import.resolved.is_some() {
+                continue;
+            }
+
+            let type_key = match import.ty {
+                TypeRef::Func(type_idx) => (false, type_idx),
+                TypeRef::FuncExact(type_idx) => (true, type_idx),
+                _ => continue,
+            };
+            let key = (import.module.clone(), import.name.clone(), type_key);
+
+            if let Some(&first_old_index) = first_imports.get(&key) {
+                import.resolved = Some(ExportRef {
+                    module: module_idx,
+                    kind: IndexKind::Func,
+                    index: first_old_index,
+                });
+            } else {
+                first_imports.insert(key, import.old_index);
+            }
+        }
+    }
 }
 
 fn build_alias_map(modules: &[ParsedModule]) -> AliasMap {
@@ -1113,6 +1143,44 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn deduplicates_identical_external_function_imports() -> eyre::Result<()> {
+        let dir = tempdir()?;
+        let input = dir.path().join("input.wasm");
+        let out = dir.path().join("merged.wasm");
+
+        std::fs::write(&input, duplicate_importing_module("host", "run"))?;
+        merge_modules(
+            &[MergeInput {
+                alias: "input".to_string(),
+                path: &input,
+            }],
+            &out,
+            false,
+        )?;
+
+        let bytes = std::fs::read(out)?;
+        let mut import_count = 0;
+        let mut calls = Vec::new();
+        for payload in parse_payloads(&bytes) {
+            match payload? {
+                Payload::ImportSection(section) => import_count += section.count(),
+                Payload::CodeSectionEntry(body) => {
+                    for op in body.get_operators_reader()? {
+                        if let wasmparser::Operator::Call { function_index } = op? {
+                            calls.push(function_index);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        assert_eq!(import_count, 1);
+        assert_eq!(calls, vec![0, 0]);
+        Ok(())
+    }
+
     fn exported_const_module(export: &str, value: i32) -> Vec<u8> {
         let mut module = Module::new();
         let mut types = TypeSection::new();
@@ -1148,6 +1216,31 @@ mod tests {
         let mut func = Function::new([]);
         func.instruction(&Instruction::Call(0));
         func.instruction(&Instruction::Drop);
+        func.instruction(&Instruction::End);
+        code.function(&func);
+        module.section(&code);
+        module.finish()
+    }
+
+    fn duplicate_importing_module(module_name: &str, name: &str) -> Vec<u8> {
+        let mut module = Module::new();
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(module_name, name, EntityType::Function(0));
+        imports.import(module_name, name, EntityType::Function(0));
+        module.section(&imports);
+
+        let mut funcs = FunctionSection::new();
+        funcs.function(0);
+        module.section(&funcs);
+
+        let mut code = CodeSection::new();
+        let mut func = Function::new([]);
+        func.instruction(&Instruction::Call(0));
+        func.instruction(&Instruction::Call(1));
         func.instruction(&Instruction::End);
         code.function(&func);
         module.section(&code);
