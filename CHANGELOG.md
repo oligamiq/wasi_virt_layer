@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-06-09
+### Added
+- **Enhanced Streaming Merger**: Replaced the external `wasm-merge` dependency with a robust, in-process streaming merger.
+    - **Import Deduplication**: Automatically deduplicates identical external function imports during the merge process.
+    - **Robust Memory Restoration**: Implemented consistent memory state restoration, including zero-filling target memory, restoring active data segments from passive storage, and re-running target module starts.
+    - **Integrated Poll Support**: Integrated `poll_wait` logic directly into the post-combine pass, utilizing `atomic.wait` for efficient thread suspension in multi-threaded builds.
+- **Improved Memory Safety**:
+    - **Guarded Memory Access**: Refactored `memory_director` to use guarded closures (`with_directed_memory`), preventing pointer invalidation during shared global updates or memory growth.
+    - **Shared Global Optimization**: Optimized `SharedGlobalStreamPass` to use lock-free/wait-free global access for memory grow/size helpers.
+- **Thread Pool Enhancements**:
+    - **VirtualThreadPool Improvements**: Added initialization helpers, capacity reporting, and synchronous resizing to `VirtualThreadPool`.
+- **Custom Metadata Sections**: Added `wvl.multi_memory_lowering.helpers.v1` custom section to share metadata and control flags between different streaming passes.
+
+### Fixed
+- **ABI Connection Refinement**: Improved the ABI connection pass to be more selective, only renaming imports when matching exports are present in the module.
+- **Memory Copy Instruction Order**: Corrected the operand order for `memory.copy` instructions in generated director functions.
+- **Start Function Synthesis**: Ensured the synthesized `_start` function correctly orchestrates thread initialization and target runtime startup sequences.
+
+### Changed
+- **Version Bump**: Updated workspace version to 0.5.0.
+
 ## [0.4.12] - 2026-05-23
 ### Changed
 - **Parallelized Wasm Processing**: Introduced `rayon` to parallelize Wasm modification and generation steps (e.g., rewriting multi-memory, shared globals, atomic waits, unreachable wrappers, etc.) inside the CLI for single-module processing. This significantly improves transpilation speed for large Wasm modules without increasing memory overhead via parallel target generation.
