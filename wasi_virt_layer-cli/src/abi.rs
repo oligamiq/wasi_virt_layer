@@ -1,6 +1,6 @@
 /// Module for validating WASM modules against the expected WASI ABI.
 pub mod is_valid {
-    use crate::unique_name::UniqueName;
+
 
     /// Validates if unresolved WASI imports remain, ensuring no un-plugged custom WASIP1 imports are dropped silently.
     pub fn validate_unresolved_imports(
@@ -12,6 +12,16 @@ pub mod is_valid {
         for i_name in unresolved_imports {
             let name_str = i_name.strip_prefix("__wasip1_vfs_");
             if let Some(name) = name_str {
+                if let Some(func_name) = name.strip_prefix("__self_") {
+                    if let Ok(func) = func_name.parse::<super::Wasip1ABIFunc>() {
+                        let plugger = Wasip1ABIPlugger::from_variant(&func).unwrap();
+                        err_wasm_names
+                            .entry(("__self".to_string(), plugger))
+                            .or_default()
+                            .push(func.to_string());
+                        continue;
+                    }
+                }
                 if let Some((wasm_name, plugger, func_name)) =
                     wasm_names.iter().find_map(|n| {
                         let func_name =
@@ -36,7 +46,24 @@ pub mod is_valid {
                         .or_default()
                         .push(func_name);
                 } else {
-                    // Do not log error here as there are many non-WASI dropped imports
+                    return Err(eyre::eyre!(
+                        "Invalid import: Failed to parse wasm target and WASI function name. \
+                         This import is not a valid custom import or the function name is malformed: {}",
+                        i_name
+                    ));
+                }
+            } else {
+                if let Ok(func) = i_name.parse::<super::Wasip1ABIFunc>() {
+                    let plugger = Wasip1ABIPlugger::from_variant(&func).unwrap();
+                    err_wasm_names
+                        .entry(("__self".to_string(), plugger))
+                        .or_default()
+                        .push(func.to_string());
+                } else {
+                    return Err(eyre::eyre!(
+                        "This import is not a valid this library custom import: {}",
+                        i_name
+                    ));
                 }
             }
         }
@@ -109,10 +136,7 @@ pub mod is_valid {
 
     use std::collections::HashMap;
 
-    use eyre::{Context as _, ContextCompat};
     use strum::EnumMessage as _;
-
-    use crate::util::ResultUtil as _;
 
     use super::{Wasip1ABIFunc, Wasip1ABIFunc::*};
     impl Wasip1ABIPlugger {

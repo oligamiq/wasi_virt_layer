@@ -6,7 +6,7 @@ use std::{
 
 use eyre::{Context as _, ContextCompat};
 
-use crate::{abi, down_color, fallback_command, util::ResultUtil as _};
+use crate::{down_color, fallback_command, util::ResultUtil as _};
 
 struct CustomReadIterator<const T: usize, R: BufRead> {
     r: R,
@@ -488,7 +488,7 @@ pub fn optimize_wasm(
 /// Converts a WebAssembly module into a WebAssembly Component.
 pub fn wasm_to_component(
     wasm_path: &camino::Utf8PathBuf,
-    wasm_names: &[impl AsRef<str>],
+    _wasm_names: &[impl AsRef<str>],
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let output_path = wasm_path.with_extension("component.wasm");
     if output_path.exists() {

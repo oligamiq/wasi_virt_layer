@@ -199,11 +199,13 @@ impl StreamPass for PostCombineStreamPass {
                                 } else if import.module == "__wasip1_vfs-host"
                                     || import.module == "__wasip1_virt_layer"
                                     || import.module == "wasip1-vfs"
+                                    || import.module == "wasi_snapshot_preview1"
                                     || (import.module == "env"
                                         && import.name == "__wasip1_vfs_wasi_thread_spawn_wrapper")
                                 {
                                     info.host_imports
                                         .insert(func_import_count, import.name.to_string());
+
                                     if import.module == "env"
                                         && import.name == "__wasip1_vfs_wasi_thread_spawn_wrapper"
                                     {

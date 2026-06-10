@@ -19,7 +19,7 @@ fn test_lfs_api_operations() -> color_eyre::Result<()> {
         false,      // threads
         OutDir::Random,
         false, // keep_build_artifacts
-        &[],
+        &["--run-with-opt"],
         None,
     )?;
 

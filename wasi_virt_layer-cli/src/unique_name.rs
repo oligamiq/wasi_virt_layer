@@ -54,6 +54,7 @@ macro_rules! fmt {
         { format!("__wasip1_vfs_{}", format!($($arg)*)) }
     };
 }
+#[cfg(test)]
 pub(crate) use fmt;
 use strum::EnumCount;
 
@@ -430,6 +431,7 @@ mod unique_name_iterator_tests {
 
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
+/// Name for Wasip1 ABI.
 pub enum Wasip1ABIName<'a> {
     #[strum(serialize = "__self")]
     /// Reference to a self-contained import.
@@ -449,6 +451,7 @@ pub enum Wasip1ABIName<'a> {
 
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq, strum::VariantNames)]
 #[strum(serialize_all = "snake_case")]
+/// Name for memory.
 pub enum MemoryUniqueName<'a> {
     /// Copies contents from Target Memory to VFS Memory.
     MemoryCopyFrom(&'a WasmName),
@@ -466,9 +469,12 @@ pub enum MemoryUniqueName<'a> {
     Memory(&'a WasmName),
 }
 
+/// Shared global context.
 #[derive(Debug, Default)]
 pub struct SharedGlobal {
+    #[allow(dead_code)]
     before_globals: Option<usize>,
+    #[allow(dead_code)]
     before_memories: Option<usize>,
 }
 
@@ -478,6 +484,7 @@ pub struct SharedGlobal {
 pub enum SharedGlobalFnsName {
     /// Wrapper replacing a global variable assignment internally without locking overhead.
     GlobalAltSet,
+    /// Global alt set with lock.
     GlobalAltSetWithLock,
     /// Thread-safe wrapper evaluating and retrieving the global value.
     GlobalAltGet,
@@ -499,6 +506,7 @@ pub enum SharedGlobalFnsName {
 
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
+/// Name for special func.
 pub enum SpecialFuncUniqueName<'a> {
     /// Function that initializes memory resets.
     Resetter(&'a WasmName),
@@ -518,6 +526,7 @@ pub enum SpecialFuncUniqueName<'a> {
 
 #[derive(Debug, strum::AsRefStr, strum::EnumCount, Hash, PartialEq, Eq)]
 #[strum(serialize_all = "snake_case")]
+/// Name for threads spawn.
 pub enum ThreadsSpawnName<'a> {
     /// Custom spawn anchor injected for bridging definitions.
     ImportAnchor(&'a str),

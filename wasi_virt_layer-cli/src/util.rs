@@ -3,15 +3,10 @@ use std::{
     collections::HashMap,
     fmt::Debug,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::atomic::AtomicUsize,
 };
 
 use compact_str::CompactString;
-use eyre::{Context as _, ContextCompat as _};
-use itertools::Itertools;
-
-use crate::{args::TargetMemoryType, unique_name::UniqueNameMarker};
 
 #[allow(dead_code)]
 #[allow(dead_code)]
