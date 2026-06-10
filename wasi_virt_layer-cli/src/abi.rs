@@ -47,7 +47,7 @@ pub mod is_valid {
             log::error!(
                 "Extra imports remain for `{wasm_name}`. You must use the `{plugger}!` macro plugger to export these functions: {}{}",
                 variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "),
-                format!("\nExtra message: {}", plugger.get_message().unwrap_or(""))
+                format!("\n    Extra message: {}", plugger.get_message().unwrap_or(""))
             );
             wasm_name
         })

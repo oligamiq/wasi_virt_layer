@@ -1,7 +1,7 @@
 use crate::wasm_stream::passes::fn_in_starts::{FnInStarts, ResolvedStartFuncs};
 use crate::wasm_stream::pipeline::StreamPass;
 use crate::wasm_stream::translator::Rebind;
-use eyre::Result;
+use eyre::{Context, Result};
 use std::collections::{HashMap, HashSet};
 use wasm_encoder::{
     CodeSection, EntityType, ExportSection, FunctionSection, ImportSection, Module, StartSection,
@@ -486,9 +486,8 @@ impl StreamPass for PostCombineStreamPass {
                 unintentionally_dropped_names.push(name.as_str());
             }
         }
-
-        crate::abi::is_valid::validate_unresolved_imports(&unintentionally_dropped_names, &self.target_names)?;
-
+        crate::abi::is_valid::validate_unresolved_imports(&unintentionally_dropped_names, &self.target_names)
+            .wrap_err("Failed to translate Wasm to Component")?;
         // Newly injected functions (memory_copy, etc) go at the end
         for orig_idx in &dropped_func_original_indices {
             func_map.insert(*orig_idx, current_new_idx);
