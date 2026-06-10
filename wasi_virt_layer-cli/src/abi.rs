@@ -14,14 +14,15 @@ pub mod is_valid {
             if let Some(name) = name_str {
                 if let Some(func_name) = name.strip_prefix("__self_") {
                     if let Ok(func) = func_name.parse::<super::Wasip1ABIFunc>() {
-                        let plugger = Wasip1ABIPlugger::from_variant(&func).unwrap();
-                        err_wasm_names
-                            .entry(("__self".to_string(), plugger))
-                            .or_default()
-                            .push(func.to_string());
+                        // self is ignored if not plugged
                         continue;
                     }
                 }
+                
+                if name == "wasi_thread_start_entry" {
+                    continue;
+                }
+
                 if let Some((wasm_name, plugger, func_name)) =
                     wasm_names.iter().find_map(|n| {
                         let func_name =
@@ -54,11 +55,8 @@ pub mod is_valid {
                 }
             } else {
                 if let Ok(func) = i_name.parse::<super::Wasip1ABIFunc>() {
-                    let plugger = Wasip1ABIPlugger::from_variant(&func).unwrap();
-                    err_wasm_names
-                        .entry(("__self".to_string(), plugger))
-                        .or_default()
-                        .push(func.to_string());
+                    // self is ignored if not plugged
+                    continue;
                 } else {
                     return Err(eyre::eyre!(
                         "This import is not a valid this library custom import: {}",
