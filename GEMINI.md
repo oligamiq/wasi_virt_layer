@@ -58,7 +58,7 @@ WASI Virtual Layer (WVL) provides a virtualization layer for WebAssembly System 
 
 ### Versioning
 - Managed via workspace metadata in the root `Cargo.toml`.
-- Version: `0.1.5` (as of current state).
+- Version: `0.5.1` (as of current state).
 
 ---
 

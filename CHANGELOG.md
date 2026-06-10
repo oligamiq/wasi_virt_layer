@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-06-10
+### Fixed
+- **CLI Validation Improvements**:
+    - Restored and refined unresolved WASI import validation in the streaming pipeline.
+    - Improved error message formatting and context chaining for missing imports.
+    - Fixed validation to correctly ignore intentionally dropped imports.
+- **Test Fixes**:
+    - Fixed single-memory thread VFS tests for Deno.
+    - Cleaned up unused WASI imports in `c_target.wat` test fixture.
+
 ## [0.5.0] - 2026-06-09
 ### Added
 - **Enhanced Streaming Merger**: Replaced the external `wasm-merge` dependency with a robust, in-process streaming merger.
