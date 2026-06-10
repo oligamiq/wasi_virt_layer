@@ -466,6 +466,7 @@ impl StreamPass for PostCombineStreamPass {
             current_new_idx += 1;
         }
 
+        let mut unintentionally_dropped_names = Vec::new();
         for (import_idx, name) in &info.host_imports {
             if name == "__wasip1_vfs_wasi_thread_spawn_wrapper" {
                 dropped_func_original_indices.push(*import_idx);
@@ -482,11 +483,11 @@ impl StreamPass for PostCombineStreamPass {
             } else {
                 dropped_func_original_indices.push(*import_idx);
                 info.dropped_imports.insert(*import_idx, name.clone());
+                unintentionally_dropped_names.push(name.as_str());
             }
         }
 
-        let dropped_names: Vec<&str> = info.dropped_imports.values().map(|s| s.as_str()).collect();
-        crate::abi::is_valid::validate_unresolved_imports(&dropped_names, &self.target_names)?;
+        crate::abi::is_valid::validate_unresolved_imports(&unintentionally_dropped_names, &self.target_names)?;
 
         // Newly injected functions (memory_copy, etc) go at the end
         for orig_idx in &dropped_func_original_indices {

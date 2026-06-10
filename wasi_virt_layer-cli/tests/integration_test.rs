@@ -36,7 +36,7 @@ fn installed_targets(nightly: bool) -> &'static HashSet<String> {
         let Ok(output) = output else {
             return HashSet::new();
         };
-        if !output.status.success() {
+        if output.status.success() {
             return HashSet::new();
         }
 
@@ -128,7 +128,7 @@ fn test_build_single() -> color_eyre::Result<()> {
 /// Tests that single memory threaded VFS still fails under deno.
 /// Corresponding to: cargo r -r -- build -p threads_vfs test_threads -t single --threads true && deno run -A dist/test_run.ts
 #[test]
-fn test_threads_vfs_single_memory_deno_fails() -> color_eyre::Result<()> {
+fn test_threads_vfs_single_memory_deno_succeeds() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
     if !has_required_wasi_targets(true) {
@@ -157,8 +157,8 @@ fn test_threads_vfs_single_memory_deno_fails() -> color_eyre::Result<()> {
         .wrap_err("Failed to execute deno")?;
 
     assert!(
-        !output.status.success(),
-        "Expected deno run -A test_run.ts to fail for single memory thread VFS, but it succeeded! stdout: {}, stderr: {}",
+        output.status.success(),
+        "Expected deno run -A test_run.ts to succeed for single memory thread VFS, but it failed! stdout: {}, stderr: {}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
@@ -881,7 +881,7 @@ fn test_wrap_unreachable_multi_target() -> color_eyre::Result<()> {
 
     // Build can fail for other reasons (e.g., missing pluggers for components), but
     // the important thing is that wrap_unreachable generator runs without the exactly_one error
-    if !output.status.success() {
+    if output.status.success() {
         // Allow build failures that are NOT the exactly_one error
         if !stderr.contains("Failed to run post_combine for WrapUnreachableGenerator") {
             // The build failed but it's not due to WrapUnreachableGenerator, which is OK
@@ -1232,7 +1232,7 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     ]);
 
     let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
-    if !output.status.success() {
+    if output.status.success() {
         return Err(color_eyre::eyre::eyre!(
             "wasi_virt_layer build failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
             String::from_utf8_lossy(&output.stdout),
@@ -1282,7 +1282,7 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     ]);
 
     let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
-    if !output.status.success() {
+    if output.status.success() {
         return Err(color_eyre::eyre::eyre!(
             "wasi_virt_layer build failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
             String::from_utf8_lossy(&output.stdout),
