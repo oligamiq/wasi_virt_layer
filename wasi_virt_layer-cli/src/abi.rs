@@ -2,58 +2,41 @@
 pub mod is_valid {
     use crate::unique_name::UniqueName;
 
-    /// Validates if a WASM module is suitable for component transformation,
-    /// ensuring no un-plugged custom WASIP1 imports remain.
-    pub fn is_valid_wasm_for_component(
-        wasm_bytes: &[u8],
+    /// Validates if unresolved WASI imports remain, ensuring no un-plugged custom WASIP1 imports are dropped silently.
+    pub fn validate_unresolved_imports(
+        unresolved_imports: &[&str],
         wasm_names: &[impl AsRef<str>],
     ) -> eyre::Result<()> {
         let mut err_wasm_names = HashMap::<_, Vec<_>>::new();
 
-        for payload in wasmparser::Parser::new(0).parse_all(wasm_bytes) {
-            let payload = payload.wrap_err("Failed to parse WASM")?;
-            if let wasmparser::Payload::ImportSection(s) = payload {
-                for import_group in s {
-                    let import_group = import_group.wrap_err("Failed to parse import group")?;
-                    for i_res in import_group.into_iter() {
-                        let (_, i) = i_res.wrap_err("Failed to parse import")?;
-                        if i.module == UniqueName::WASIP1_ABI_MODULE
-                            && matches!(i.ty, wasmparser::TypeRef::Func(_))
-                        {
-                            let name_str = i.name.strip_prefix("__wasip1_vfs_");
-                            if let Some(name) = name_str {
-                                if let Some((wasm_name, plugger, func_name)) =
-                                    wasm_names.iter().find_map(|n| {
-                                        let func_name =
-                                            name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
-                                        if func_name == "thread_spawn" {
-                                            return Some((
-                                                n.as_ref().to_string(),
-                                                Wasip1ABIPlugger::PlugThread,
-                                                "thread_spawn".to_string(),
-                                            ));
-                                        }
-                                        let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
-                                        Some((
-                                            n.as_ref().to_string(),
-                                            Wasip1ABIPlugger::from_variant(&func).unwrap(),
-                                            func.to_string(),
-                                        ))
-                                    })
-                                {
-                                    err_wasm_names
-                                        .entry((wasm_name, plugger))
-                                        .or_default()
-                                        .push(func_name);
-                                } else {
-                                    log::error!(
-                                        "Failed to parse wasm target and WASI function name: {}",
-                                        name
-                                    );
-                                }
-                            }
+        for i_name in unresolved_imports {
+            let name_str = i_name.strip_prefix("__wasip1_vfs_");
+            if let Some(name) = name_str {
+                if let Some((wasm_name, plugger, func_name)) =
+                    wasm_names.iter().find_map(|n| {
+                        let func_name =
+                            name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
+                        if func_name == "thread_spawn" {
+                            return Some((
+                                n.as_ref().to_string(),
+                                Wasip1ABIPlugger::PlugThread,
+                                "thread_spawn".to_string(),
+                            ));
                         }
-                    }
+                        let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
+                        Some((
+                            n.as_ref().to_string(),
+                            Wasip1ABIPlugger::from_variant(&func).unwrap(),
+                            func.to_string(),
+                        ))
+                    })
+                {
+                    err_wasm_names
+                        .entry((wasm_name, plugger))
+                        .or_default()
+                        .push(func_name);
+                } else {
+                    // Do not log error here as there are many non-WASI dropped imports
                 }
             }
         }

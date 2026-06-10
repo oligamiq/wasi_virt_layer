@@ -485,6 +485,9 @@ impl StreamPass for PostCombineStreamPass {
             }
         }
 
+        let dropped_names: Vec<&str> = info.dropped_imports.values().map(|s| s.as_str()).collect();
+        crate::abi::is_valid::validate_unresolved_imports(&dropped_names, &self.target_names)?;
+
         // Newly injected functions (memory_copy, etc) go at the end
         for orig_idx in &dropped_func_original_indices {
             func_map.insert(*orig_idx, current_new_idx);
