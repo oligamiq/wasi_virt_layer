@@ -3,7 +3,7 @@ fn main() {
         println!("About to panic!");
         panic!("This is a test panic");
     });
-    
+
     if result.is_err() {
         println!("Caught the panic!");
         std::process::exit(0);

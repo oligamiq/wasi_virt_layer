@@ -28,13 +28,15 @@ impl Guest for ComponentABI {
         }
 
         std::thread::spawn(|| {
-            for _ in 0..2{
+            for _ in 0..2 {
                 set_rustc_opt_args(&["rustc", "###"]);
                 anonymous::_reset();
                 anonymous::_start();
                 anonymous::_main();
             }
-        }).join().unwrap();
+        })
+        .join()
+        .unwrap();
     }
 }
 
@@ -43,11 +45,7 @@ export!(ComponentABI);
 
 static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(8) };
 
-plug_thread!(
-    { &THREAD_POOL },
-    anonymous,
-    self
-);
+plug_thread!({ &THREAD_POOL }, anonymous, self);
 
 mod env {
     use super::*;
@@ -62,8 +60,8 @@ mod env {
 
 mod arg {
     use super::*;
-    use std::sync::LazyLock;
     use parking_lot::Mutex;
+    use std::sync::LazyLock;
     use wasi_virt_layer::plug_args;
 
     pub struct VirtualArgsState {
@@ -93,31 +91,40 @@ mod fs {
     const FILE_COUNT: usize = 10;
 
     #[const_struct]
-    const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> = EmbeddedFiles!([
-        ("/root", [("root.txt", WasiEmbeddedFile::new("This is root"))]),
-        (
-            ".",
-            [
-                ("hey", WasiEmbeddedFile::new("Hey!")),
-                (
-                    "hello",
-                    [
-                        ("world", WasiEmbeddedFile::new("Hello, world!")),
-                        ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
-                    ]
-                )
-            ]
-        ),
-        (
-            "~",
-            [
-                ("home", WasiEmbeddedFile::new("This is home")),
-                ("user", WasiEmbeddedFile::new("This is user")),
-            ]
-        )
-    ]);
+    const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
+        EmbeddedFiles!([
+            (
+                "/root",
+                [("root.txt", WasiEmbeddedFile::new("This is root"))]
+            ),
+            (
+                ".",
+                [
+                    ("hey", WasiEmbeddedFile::new("Hey!")),
+                    (
+                        "hello",
+                        [
+                            ("world", WasiEmbeddedFile::new("Hello, world!")),
+                            ("everyone", WasiEmbeddedFile::new("Hello, everyone!")),
+                        ]
+                    )
+                ]
+            ),
+            (
+                "~",
+                [
+                    ("home", WasiEmbeddedFile::new("This is home")),
+                    ("user", WasiEmbeddedFile::new("This is user")),
+                ]
+            )
+        ]);
 
-    type LFS = StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, FILE_COUNT, DefaultStdIO>;
+    type LFS = StandardEmbeddedNormalLFS<
+        EmbeddedFilesTy,
+        WasiEmbeddedFile<&'static str>,
+        FILE_COUNT,
+        DefaultStdIO,
+    >;
 
     static VIRTUAL_FILE_SYSTEM: StandardEmbeddedFileSystem<LFS, FILE_COUNT> =
         StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
@@ -127,8 +134,8 @@ mod fs {
 
 mod process {
     use super::*;
-    use wasi_virt_layer::prelude::*;
     use wasi_virt_layer::memory::WasmAccessName;
+    use wasi_virt_layer::prelude::*;
     use wasi_virt_layer::wasi::wrap_unreachable::WrapUnreachable;
 
     plug_random!(StandardRandom, anonymous, self);

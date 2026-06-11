@@ -27,13 +27,14 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         vfs_build_opts.no_opt_all = vfs_build_opts.no_opt_all.saturating_add(1);
     }
 
-    let mut target_vfs_build_opts = parsed_args
-        .target_vfs_build_opts
-        .clone()
-        .unwrap_or_else(|| {
-            vec![crate::args::VfsBuildOptions::default(); parsed_args.wasm.len()]
-                .into_boxed_slice()
-        });
+    let mut target_vfs_build_opts =
+        parsed_args
+            .target_vfs_build_opts
+            .clone()
+            .unwrap_or_else(|| {
+                vec![crate::args::VfsBuildOptions::default(); parsed_args.wasm.len()]
+                    .into_boxed_slice()
+            });
 
     for (opt, &unwind) in target_vfs_build_opts
         .iter_mut()

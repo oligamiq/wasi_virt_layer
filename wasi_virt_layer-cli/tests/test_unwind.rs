@@ -1,5 +1,3 @@
-
-
 use assert_cmd::Command;
 use uuid::Uuid;
 
@@ -42,7 +40,7 @@ fn test_unwind_target_compile_with_unwind() -> color_eyre::Result<()> {
 
     let mut cmd = Command::cargo_bin("wasi_virt_layer")?;
     // Build the unwinding target with unwind enabled.
-    // Deno execution is currently disabled because `wit-component` and `walrus` 
+    // Deno execution is currently disabled because `wit-component` and `walrus`
     // strip the Wasm Exception Handling `tag` section, causing `Invalid tag index: 0` at runtime.
     cmd.args([
         "build",

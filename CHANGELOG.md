@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.4] - 2026-06-11
+### Added
+- **Tests**:
+    - Added `test_workspace_overwrite.rs` to verify workspace file preservation.
+- **Documentation**:
+    - Added `docs/plans/handoff_rustc_v_fix.md`.
+
+### Changed
+- **CLI Improvements**:
+    - Refined Wasm file existence checks in the generator to allow non-existent files during certain build phases.
+    - Improved ABI validation and command handling in the CLI tool.
+- **Examples**:
+    - Updated various examples with improved formatting and minor logic refinements.
+- **Dependencies**:
+    - Updated project version and dependencies via `cargo update`.
+
 ## [0.5.3] - 2026-06-11
 ### Added
 - **Unwind Support**:

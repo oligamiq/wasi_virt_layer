@@ -1,7 +1,6 @@
 /// Module for validating WASM modules against the expected WASI ABI.
 pub mod is_valid {
 
-
     /// Validates if unresolved WASI imports remain, ensuring no un-plugged custom WASIP1 imports are dropped silently.
     pub fn validate_unresolved_imports(
         unresolved_imports: &[&str],
@@ -18,30 +17,27 @@ pub mod is_valid {
                         continue;
                     }
                 }
-                
+
                 if name == "wasi_thread_start_entry" {
                     continue;
                 }
 
-                if let Some((wasm_name, plugger, func_name)) =
-                    wasm_names.iter().find_map(|n| {
-                        let func_name =
-                            name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
-                        if func_name == "thread_spawn" {
-                            return Some((
-                                n.as_ref().to_string(),
-                                Wasip1ABIPlugger::PlugThread,
-                                "thread_spawn".to_string(),
-                            ));
-                        }
-                        let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
-                        Some((
+                if let Some((wasm_name, plugger, func_name)) = wasm_names.iter().find_map(|n| {
+                    let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
+                    if func_name == "thread_spawn" {
+                        return Some((
                             n.as_ref().to_string(),
-                            Wasip1ABIPlugger::from_variant(&func).unwrap(),
-                            func.to_string(),
-                        ))
-                    })
-                {
+                            Wasip1ABIPlugger::PlugThread,
+                            "thread_spawn".to_string(),
+                        ));
+                    }
+                    let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
+                    Some((
+                        n.as_ref().to_string(),
+                        Wasip1ABIPlugger::from_variant(&func).unwrap(),
+                        func.to_string(),
+                    ))
+                }) {
                     err_wasm_names
                         .entry((wasm_name, plugger))
                         .or_default()

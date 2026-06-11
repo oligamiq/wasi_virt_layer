@@ -17,7 +17,9 @@ impl Guest for Hello {
         println!("Hello, world!");
     }
     fn add_env(env: String) {}
-    fn get_envs() -> Vec<String> { Vec::new() }
+    fn get_envs() -> Vec<String> {
+        Vec::new()
+    }
     fn main() {
         // There is no _reset or _start or _main in std lib unless we are wrapping a specific ABI.
         // Actually we just run the default command from WASI.
@@ -55,12 +57,7 @@ const FILE_COUNT: usize = 2;
 
 #[const_struct]
 const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-    EmbeddedFiles!([
-        (
-            ".",
-            [("dummy", WasiEmbeddedFile::new("dummy"))]
-        )
-    ]);
+    EmbeddedFiles!([(".", [("dummy", WasiEmbeddedFile::new("dummy"))])]);
 
 mod fs {
     use super::*;

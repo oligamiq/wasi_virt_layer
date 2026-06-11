@@ -40,7 +40,6 @@ plug_sched!(DefaultSched, test_wasm, self);
 const HOST_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState { args: &["test"] };
 plug_args!(@embedded, HostArgsTy, test_wasm, self);
 
-
 #[const_struct]
 const HOST_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     environ: &["HOME=~/"],

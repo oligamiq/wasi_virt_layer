@@ -62,19 +62,42 @@ pub fn main() {
 }
 
 #[const_struct]
-const HOST_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState { args: &["wait_poll_program"] };
+const HOST_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState {
+    args: &["wait_poll_program"],
+};
 plug_args!(@embedded, HostArgsTy, test_poll, self);
 plug_random!(wasi_virt_layer::random::StandardRandom, test_poll, self);
 
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wasip1_vfs___self_sock_recv(_: i32, _: i32, _: i32, _: i32, _: i32, _: i32) -> i32 { 58 }
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_recv(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+) -> i32 {
+    58
+}
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wasip1_vfs___self_sock_send(_: i32, _: i32, _: i32, _: i32, _: i32) -> i32 { 58 }
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_send(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+) -> i32 {
+    58
+}
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wasip1_vfs___self_sock_accept(_: i32, _: i32, _: i32) -> i32 { 58 }
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_accept(_: i32, _: i32, _: i32) -> i32 {
+    58
+}
 #[cfg(target_os = "wasi")]
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn __wasip1_vfs___self_sock_shutdown(_: i32, _: i32) -> i32 { 58 }
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_shutdown(_: i32, _: i32) -> i32 {
+    58
+}

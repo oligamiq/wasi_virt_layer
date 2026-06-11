@@ -1059,7 +1059,11 @@ impl WasmPath {
             eyre::bail!("Wasm file does not have .wasm extension: {path}");
         }
         if !fs::metadata(&path).is_ok() {
-            eyre::bail!("Wasm file does not exist: {path}");
+            // Assume it's an original Wasm file even if it doesn't exist yet
+            return Ok(Self::Original {
+                current: path.clone(),
+                original: path,
+            });
         }
 
         let mut file =
