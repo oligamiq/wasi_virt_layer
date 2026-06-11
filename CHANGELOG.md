@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.3] - 2026-06-11
+### Added
+- **Unwind Support**:
+    - Added support for compiling Wasm modules with exception handling using `-Cpanic=unwind -Cllvm-args=-wasm-use-legacy-eh=false` and `-Zbuild-std=std,panic_unwind`.
+    - Introduced `--wasm-unwind` and `--vfs-unwind` flags to the CLI tool to control unwind compatibility.
+    - Added `test_unwind_target` and `test_unwind_vfs` examples demonstrating `std::panic::catch_unwind` behavior inside virtualized environments.
+    - Implemented integration tests to verify successful builds with the new unwind flags.
+
+
 ## [0.5.2] - 2026-06-11
 ### Added
 - **Example Enhancements**:

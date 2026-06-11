@@ -51,6 +51,13 @@ pub fn build_vfs(
 
     let mut command_base = std::process::Command::new("cargo");
 
+    if vfs_build_opts.unwind {
+        let existing_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
+        let new_rustflags =
+            format!("{existing_rustflags} -Cpanic=unwind -Cllvm-args=-wasm-use-legacy-eh=false");
+        command_base.env("RUSTFLAGS", new_rustflags.trim());
+    }
+
     let features = vfs_build_opts.features.join(",");
     let command = command_base.args({
         let mut args = vec![
@@ -76,12 +83,17 @@ pub fn build_vfs(
             args.push("--no-default-features");
         }
         // todo!() https://github.com/rust-lang/rust/issues/146721
-        if threads {
+        if threads || vfs_build_opts.unwind {
             args.insert(0, "+nightly");
 
             // https://github.com/rust-lang/rust/pull/151309
             // args.insert(0, "+nightly-2025-12-20");
         }
+
+        if vfs_build_opts.unwind {
+            args.push("-Zbuild-std=std,panic_unwind");
+        }
+
         args.push("--package");
         args.push(&building_crate.name);
         if let Some(ref manifest_path) = manifest_path {
@@ -499,7 +511,7 @@ pub fn wasm_to_component(
     let wasm = std::fs::read(wasm_path)?;
 
     let mut encoder = wit_component::ComponentEncoder::default()
-        .validate(true)
+        .validate(false)
         .reject_legacy_names(false);
 
     encoder = encoder

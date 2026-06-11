@@ -111,6 +111,10 @@ pub struct BuildArgs {
     #[arg(long)]
     wasm_memory_hint: Vec<isize>,
 
+    /// Enable unwind for the target WASM modules.
+    #[arg(long = "wasm-unwind")]
+    pub wasm_unwind: Vec<bool>,
+
     /// Output directory for the generated files
     #[arg(long, default_value = "./dist")]
     pub out_dir: Utf8PathBuf,
@@ -165,6 +169,16 @@ impl BuildArgs {
             .iter()
             .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
             .chain(std::iter::repeat(None))
+            .take(self.wasm.len())
+            .collect::<Box<_>>()
+    }
+
+    /// Returns the unwind configuration for each target module.
+    pub fn get_wasm_unwinds(&self) -> Box<[bool]> {
+        self.wasm_unwind
+            .iter()
+            .copied()
+            .chain(std::iter::repeat(false))
             .take(self.wasm.len())
             .collect::<Box<_>>()
     }
@@ -257,6 +271,10 @@ pub struct PreBuildArgs {
     #[arg(long)]
     wasm_memory_hint: Vec<isize>,
 
+    /// Enable unwind for the target WASM modules.
+    #[arg(long = "wasm-unwind")]
+    pub wasm_unwind: Vec<bool>,
+
     /// Output directory for the generated Component WASM
     #[arg(long, default_value = "./dist")]
     pub out_dir: Utf8PathBuf,
@@ -306,6 +324,16 @@ impl PreBuildArgs {
             .iter()
             .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
             .chain(std::iter::repeat(None))
+            .take(self.wasm.len())
+            .collect::<Box<_>>()
+    }
+
+    /// Returns the unwind configuration for each target module.
+    pub fn get_wasm_unwinds(&self) -> Box<[bool]> {
+        self.wasm_unwind
+            .iter()
+            .copied()
+            .chain(std::iter::repeat(false))
             .take(self.wasm.len())
             .collect::<Box<_>>()
     }
@@ -581,6 +609,10 @@ pub struct VfsBuildOptions {
     /// Do not activate the `default` feature of the VFS module.
     #[arg(long, action = clap::ArgAction::Count)]
     pub no_default_features: u8,
+
+    /// Enable unwind for the module.
+    #[arg(long = "vfs-unwind", default_value = "false")]
+    pub unwind: bool,
 
     /// Disable optimization for this specific module.
     #[arg(long, action = clap::ArgAction::Count)]
