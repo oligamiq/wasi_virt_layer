@@ -1018,6 +1018,24 @@ pub trait WasmAccess: WasmAccessRaw {
     /// - memory copied from data-segment
     /// if you call this function,
     /// virtual file system's memory isn't changed
+    /// 
+    /// # WARNING: Multithreading Vulnerabilities
+    /// 
+    /// This function is **NOT thread-safe** and executing it in a multithreaded environment
+    /// (such as `wasi-threads` or `single_memory` mode) causes catastrophic memory corruption:
+    /// 
+    /// 1. **Stack Destruction**: `memory.fill(0)` will indiscriminately zero out the dynamically
+    ///    allocated linear memory, wiping out the call stacks of all other running threads.
+    /// 2. **TLS Deletion**: Thread Local Storage (TLS) for all other threads is also zeroed.
+    /// 3. **Concurrency Primitives**: Mutexes and atomic variables residing in memory are reset,
+    ///    breaking synchronization and leading to data races or deadlocks.
+    /// 4. **Shared Globals**: Simulated shared global pointers (like `ALT_GLOBAL_VAR`) are reset,
+    ///    corrupting the state shared among instances.
+    /// 5. **Memory Bounds**: The expanded memory size (`memory.grow`) is NOT shrunk.
+    /// 
+    /// **Note**: If you configure the panic strategy to use `unwind` rather than `abort`, 
+    /// it is possible to safely use this function by allowing threads to cleanly unwind and terminate
+    /// before `_reset` is invoked, mitigating the immediate corruption of active thread states.
     fn _reset();
 
     /// Calls the initialization function provided.
