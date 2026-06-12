@@ -56,6 +56,7 @@ members = [
     "examples/vfs/minimal_repro",
     "examples/vfs/minimal_repro_virtual",
     "examples/vfs/dynamic_args_vfs",
+    "examples/vfs/four_args_vfs",
     "examples/vfs/lfs_api_test_vfs",
     "examples/vfs/vfs_host_test_vfs",
     "examples/test_wasm/vfs_host_test_target",

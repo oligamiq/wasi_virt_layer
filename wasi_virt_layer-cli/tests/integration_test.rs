@@ -1324,6 +1324,29 @@ fn test_dynamic_args_vfs_example() -> color_eyre::Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_four_args_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("four_args_vfs"),
+        Some("test_args"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run four_args_vfs example")?;
+
+    Ok(())
+}
+
 /// Tests the ConnectVfsHost generator by linking an import in the VFS to an export in the target.
 #[test]
 fn test_vfs_host_import_resolution() -> color_eyre::Result<()> {
