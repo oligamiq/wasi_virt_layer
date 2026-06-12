@@ -993,6 +993,13 @@ pub trait WasmAccess: WasmAccessRaw {
     #[cfg(not(feature = "multi_memory"))]
     fn with_directed_memory_mut<T, R>(ptr: *mut T, f: impl FnOnce(*mut T) -> R) -> R;
 
+    /// Executes the target's reusable main entrypoint when one is available.
+    ///
+    /// If the target does not export `__main_void`, the CLI synthesizes this entrypoint by
+    /// calling `_start()`. In that case `_main()` is not independently reusable and has the same
+    /// execution-context restrictions as `_start()`. The CLI emits a build warning when it uses
+    /// this fallback.
+    ///
     /// wrapping wasm's _start function
     /// By default in Rust code, when _start is called,
     /// the main function is executed.
@@ -1039,6 +1046,10 @@ pub trait WasmAccess: WasmAccessRaw {
     fn _reset();
 
     /// Calls the initialization function provided.
+    ///
+    /// A WASI command `_start()` is generally a process-root entrypoint. Calling it from a
+    /// secondary `wasi_thread_start` instance is only supported when the target runtime explicitly
+    /// permits that usage. For command-style targets, use a fresh root instance or Worker instead.
     /// If you are using the _main function of the same TRAIT,
     /// RUST's main function will not be automatically executed during initialization.
     ///

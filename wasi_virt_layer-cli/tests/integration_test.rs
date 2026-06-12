@@ -536,6 +536,29 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
     Ok(())
 }
 
+#[test]
+fn test_stderr_reentrancy_vfs() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let _dir = run_wasi_virt_layer(
+        Some("stderr_reentrancy_vfs"),
+        None, // it's a self VFS, so the target is itself
+        None,
+        true, // needs threads feature enabled
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run stderr_reentrancy_vfs")?;
+
+    Ok(())
+}
+
 /// Tests a specific edge case: a VFS that enables the "threads" feature flag in wasi_virt_layer
 /// but does not export thread-related functions itself.
 /// This ensures the build process succeeds even if the VFS doesn't fully utilize the threaded capabilities it enables.

@@ -67,7 +67,7 @@ members = [
     "examples/test_wasm/test_mkdir",
     "examples/vfs/mkdir_vfs",
     "examples/test_wasm/test_lib",
-    "examples/vfs/lib_vfs", "dis_wasm", "tmp_test_encoder", "examples/vfs/run_on_thread", "examples/threads/print_args", "examples/test_unwind_target", "examples/test_unwind_vfs",
+    "examples/vfs/lib_vfs", "dis_wasm", "tmp_test_encoder", "examples/vfs/run_on_thread", "examples/threads/print_args", "examples/test_unwind_target", "examples/test_unwind_vfs", "examples/vfs/stderr_reentrancy_vfs",
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]

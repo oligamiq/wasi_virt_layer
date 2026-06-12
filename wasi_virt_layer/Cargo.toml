@@ -27,6 +27,9 @@ embedded-fs = []
 multiple-fs = ["dynamic-fs"]
 dynamic-fs = ["alloc"]
 simple-debug = []
+# Traps when a host-routed, non-recursive WASI call synchronously re-enters
+# another non-recursive WASI call on the same thread.
+detect-wasi-reentrancy = ["std"]
 # this is unstable
 unstable_print_debug = ["std", "dep:backtrace", "trace"]
 

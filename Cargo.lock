@@ -2033,6 +2033,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "stderr_reentrancy_vfs"
+version = "0.5.4"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer 0.5.4",
+]
+
+[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,15 @@
+[package]
+name = "stderr_reentrancy_vfs"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+const_struct = "0.6.4"
+wasi_virt_layer = { workspace = true, features = [
+    "std",
+    "alloc",
+    "embedded-fs",
+    "detect-wasi-reentrancy",
+] }

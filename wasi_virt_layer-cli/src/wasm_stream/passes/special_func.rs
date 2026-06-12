@@ -113,6 +113,13 @@ impl StreamPass for SpecialFuncPreTargetStreamPass {
         let synthesize_main_void = !has_main_void && start_func_idx.is_some();
         if synthesize_main_void {
             *self.is_synthesized.lock().unwrap() = true;
+            log::warn!(
+                "Target `{}` does not export `__main_void`; its generated `_main()` entrypoint \
+                 will call `_start()`. Treat `_main()` as a command start, not as a reusable \
+                 main function, and do not invoke it from a secondary WASI thread unless the \
+                 target explicitly supports that execution context.",
+                self.target_name
+            );
         }
 
         let mut encoder = Module::new();
@@ -282,5 +289,71 @@ impl StreamPass for SpecialFuncPreTargetStreamPass {
         }
 
         Ok(encoder.finish())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_encoder::{CodeSection, ExportSection, FunctionSection};
+    use wasmparser::{ExternalKind, Operator, Payload};
+
+    #[test]
+    fn synthesized_main_void_calls_start() -> eyre::Result<()> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("_start", ExportKind::Func, 0);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut start = Function::new([]);
+        start.instruction(&Instruction::End);
+        code.function(&start);
+        module.section(&code);
+
+        let synthesized = Arc::new(Mutex::new(false));
+        let output = SpecialFuncPreTargetStreamPass::new("target".to_string(), synthesized.clone())
+            .run(&module.finish())?;
+
+        let mut main_void_index = None;
+        let mut bodies = Vec::new();
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                Payload::ExportSection(section) => {
+                    for export in section {
+                        let export = export?;
+                        if export.name == "__wasip1_vfs_target___main_void" {
+                            assert_eq!(export.kind, ExternalKind::Func);
+                            main_void_index = Some(export.index);
+                        }
+                    }
+                }
+                Payload::CodeSectionEntry(body) => {
+                    bodies.push(
+                        body.get_operators_reader()?
+                            .into_iter()
+                            .collect::<Result<Vec<_>, _>>()?,
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        assert!(*synthesized.lock().unwrap());
+        assert_eq!(main_void_index, Some(1));
+        assert!(matches!(bodies[1][0], Operator::Call { function_index: 0 }));
+        assert!(matches!(bodies[1][1], Operator::I32Const { value: 0 }));
+        assert!(matches!(bodies[1][2], Operator::End));
+
+        Ok(())
     }
 }

@@ -255,7 +255,29 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn pre_vfs_rewrites_non_recursive_wasi_import_to_host_wasi() -> eyre::Result<()> {
+        let input =
+            module_with_import(UniqueName::CORE_NON_RECURSIVE_MODULE_ROOT, "fd_write", None);
+        let mut pass = NonRecursiveWasiABIPreVfsStreamPass::new();
+        let output = pass.run(&input)?;
+
+        assert_eq!(
+            first_import(&output)?,
+            ("wasi_snapshot_preview1".to_string(), "fd_write".to_string())
+        );
+        Ok(())
+    }
+
     fn module_with_wasi_import(export_name: Option<&str>) -> Vec<u8> {
+        module_with_import(UniqueName::WASIP1_ABI_MODULE, "fd_write", export_name)
+    }
+
+    fn module_with_import(
+        module_name: &str,
+        import_name: &str,
+        export_name: Option<&str>,
+    ) -> Vec<u8> {
         let mut module = Module::new();
 
         let mut types = TypeSection::new();
@@ -272,8 +294,8 @@ mod tests {
 
         let mut imports = ImportSection::new();
         imports.import(
-            UniqueName::WASIP1_ABI_MODULE,
-            "fd_write",
+            module_name,
+            import_name,
             wasm_encoder::EntityType::Function(0),
         );
         module.section(&imports);

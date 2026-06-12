@@ -9,6 +9,18 @@
 //! - **Virtual File System (VFS)**: Overrides filesystem-related WASI calls to a custom virtualized implementation.
 //! - **Threading**: Provides components that patch how Wasm spawns and manages threads using shared memory.
 //! - **Memory Bridge**: Manages memory boundaries and host-guest interaction.
+//!
+//! # WASI callback re-entrancy
+//!
+//! A host-routed WASI call must not synchronously call back into the same virtualized WASI path.
+//! For example, a virtual `fd_write` implementation that forwards to `std::io::stderr()` can
+//! re-enter `fd_write` when that stderr is itself connected to the VFS. This creates an unbounded
+//! call cycle and commonly appears as a hang or lockup.
+//!
+//! Route such output to a terminal or host sink that bypasses the virtualized WASI ABI. During
+//! diagnosis, enable the `detect-wasi-reentrancy` feature. It adds a thread-local guard around
+//! [`non_recursive_wasi_snapshot_preview1!`] calls and traps immediately when the host path
+//! synchronously re-enters this boundary.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 /// Procedural macros for generating WASIP1 boilerplate.
@@ -499,6 +511,8 @@ pub mod __private {
     pub mod utils {
         pub use crate::utils::EmbeddedArrayBuilder;
         pub use crate::utils::InitOnce;
+        #[cfg(feature = "detect-wasi-reentrancy")]
+        pub use crate::utils::NonRecursiveWasiCallGuard;
         #[cfg(feature = "alloc")]
         pub use crate::utils::alloc_buff;
     }
