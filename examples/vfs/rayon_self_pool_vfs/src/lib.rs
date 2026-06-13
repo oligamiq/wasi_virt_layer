@@ -86,7 +86,11 @@ const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
     ],
 };
 plug_env!(@embedded, VirtualEnvTy, rayon_self_pool_target, self);
-wasi_virt_layer::plug_clock!(wasi_virt_layer::clock::StandardClock, rayon_self_pool_target, self);
+wasi_virt_layer::plug_clock!(
+    wasi_virt_layer::clock::StandardClock,
+    rayon_self_pool_target,
+    self
+);
 
 #[cfg(test)]
 mod tests {

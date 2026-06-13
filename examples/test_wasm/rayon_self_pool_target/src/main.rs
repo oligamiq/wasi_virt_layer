@@ -9,7 +9,10 @@ fn main() {
 
     MY_TLS.with(|v| *v.borrow_mut() = 42);
 
-    let pool = rayon::ThreadPoolBuilder::new().num_threads(2).build().unwrap();
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(2)
+        .build()
+        .unwrap();
 
     let counter = std::sync::Arc::new(AtomicUsize::new(0));
 
@@ -36,6 +39,9 @@ fn main() {
     MY_TLS.with(|v| {
         let val = *v.borrow();
         println!("### Main thread TLS value: {}", val);
-        assert_eq!(val, 42, "TLS was corrupted! Worker threads overwrote main thread's TLS.");
+        assert_eq!(
+            val, 42,
+            "TLS was corrupted! Worker threads overwrote main thread's TLS."
+        );
     });
 }
