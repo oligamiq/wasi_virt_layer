@@ -1,0 +1,15 @@
+[package]
+name = "test_self_thread_pool"
+authors.workspace = true
+version.workspace = true
+edition.workspace = true
+description.workspace = true
+rust-version.workspace = true
+keywords.workspace = true
+repository.workspace = true
+documentation.workspace = true
+homepage.workspace = true
+readme.workspace = true
+
+[dependencies]
+rayon = "1.12.0"

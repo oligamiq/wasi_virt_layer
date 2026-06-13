@@ -1551,3 +1551,49 @@ fn test_build_single_opt() -> color_eyre::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_rayon_self_pool_tls_issue() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+    // force test execution
+
+    let test_dir = run_wasi_virt_layer(
+        Some("rayon_self_pool_vfs"),
+        Some("rayon_self_pool_target"),
+        Some(false),
+        true,
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run Wasi Virt Layer build")?;
+
+    let out_dir = test_dir.0.as_str();
+
+    let output = Command::new("timeout")
+        .args(["5s", "deno", "run", "-A", "test_run.ts"])
+        .current_dir(out_dir)
+        .output()
+        .wrap_err("Failed to execute deno")?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout:\n{stdout}");
+    println!("stderr:\n{stderr}");
+
+    if output.status.success() {
+        println!("Test completed successfully, demonstrating TLS isolation works.");
+    } else {
+        panic!(
+            "Expected successful execution, but it failed.\nSuccess: {},\nCode: {:?},\nstdout: {},\nstderr: {}",
+            output.status.success(),
+            output.status.code(),
+            stdout,
+            stderr
+        );
+    }
+
+    Ok(())
+}

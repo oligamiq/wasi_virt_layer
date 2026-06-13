@@ -9,6 +9,37 @@ use std::{sync::Arc, thread::JoinHandle};
 use crate::{__private::wasip1, memory::WasmAccess};
 use crate::{memory::WasmAccessName, utils::UnsafeOnceCell};
 
+use core::cell::Cell;
+
+/// Extracts the numeric ID from std::thread::ThreadId since as_u64() is unstable.
+fn get_host_thread_id() -> u32 {
+    let id_str = format!("{:?}", std::thread::current().id());
+    id_str
+        .trim_start_matches("ThreadId(")
+        .trim_end_matches(')')
+        .parse()
+        .unwrap_or(1)
+}
+
+thread_local! {
+    static HOST_THREAD_ID: u32 = get_host_thread_id();
+    static THREAD_LOCAL_COUNTER: Cell<u32> = Cell::new(0);
+}
+
+/// Generates a unique thread ID using the host thread ID and a TLS counter.
+fn next_thread_id() -> u32 {
+    let host_id = HOST_THREAD_ID.with(|&id| id);
+    let counter = THREAD_LOCAL_COUNTER.with(|c| {
+        let val = c.get();
+        // Rotate (wrap around) when it reaches 100,000
+        c.set((val + 1) % 100_000);
+        val
+    });
+
+    // Multiply external (host) thread ID by 100,000 and add the local counter
+    host_id.wrapping_mul(100_000).wrapping_add(counter)
+}
+
 /// Trait for a virtual thread implementation.
 pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
     /// Creates a new thread and returns its ID.
@@ -544,9 +575,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     for VirtualThreadPool<ThreadAccessor>
 {
     fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>> {
-        static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
-
-        let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
+        let thread_id = next_thread_id();
 
         let thread_id_nz = NonZero::new(thread_id as u32)?;
 
@@ -630,9 +659,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 {
     // new thread start function call by other wasm
     fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>> {
-        static THREAD_COUNT: AtomicU32 = AtomicU32::new(1);
-
-        let thread_id = THREAD_COUNT.fetch_add(1, Ordering::SeqCst);
+        let thread_id = next_thread_id();
 
         let builder = std::thread::Builder::new();
 
