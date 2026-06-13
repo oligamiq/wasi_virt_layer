@@ -2277,6 +2277,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_write_single"
+version = "0.5.4"
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3568,6 +3572,20 @@ dependencies = [
  "serde_json",
  "unicode-xid",
  "wasmparser 0.251.0",
+]
+
+[[package]]
+name = "write-single-target"
+version = "0.5.4"
+
+[[package]]
+name = "write-single-vfs"
+version = "0.5.4"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer 0.5.4",
+ "wit-bindgen 0.54.0",
 ]
 
 [[package]]

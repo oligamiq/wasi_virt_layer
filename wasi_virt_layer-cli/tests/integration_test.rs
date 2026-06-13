@@ -1597,3 +1597,26 @@ fn test_rayon_self_pool_tls_issue() -> color_eyre::Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_write_single_memory() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("write-single-vfs"),
+        Some("write_single_target"),
+        Some(true), // t_single: true
+        true,       // threads: true
+        OutDir::Random,
+        false, // keep_build_artifacts
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run test_write_single with write-single-vfs and single memory")?;
+
+    Ok(())
+}
