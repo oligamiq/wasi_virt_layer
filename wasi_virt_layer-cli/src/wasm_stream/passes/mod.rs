@@ -18,6 +18,7 @@ pub mod wrap_unreachable;
 pub mod atomic_patch;
 pub mod component_ctx;
 pub mod export_stack;
+pub mod export_stack_arena;
 pub mod extract_mem_sizes;
 pub mod fn_in_starts;
 pub mod memory_post_components;

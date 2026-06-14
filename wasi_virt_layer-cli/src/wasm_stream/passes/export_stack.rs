@@ -2213,26 +2213,138 @@ mod tests {
         wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
             .validate_all(&output)?;
 
-        let mut run_index = None;
-        let mut thread_start_index = None;
-        let mut ensure_index = None;
+        let mut exports = std::collections::HashMap::new();
         for payload in wasmparser::Parser::new(0).parse_all(&output) {
             if let Payload::ExportSection(section) = payload? {
                 for export in section {
                     let export = export?;
-                    match export.name {
-                        "run" => run_index = Some(export.index),
-                        "wasi_thread_start" => thread_start_index = Some(export.index),
-                        ENSURE_EXPORT => ensure_index = Some(export.index),
-                        _ => {}
-                    }
+                    exports.insert(export.name.to_string(), export.index);
                 }
             }
         }
 
-        assert_eq!(ensure_index, Some(3));
-        assert_eq!(run_index, Some(5));
-        assert_eq!(thread_start_index, Some(6));
+        // Original exports remapped to wrappers
+        assert_eq!(exports.get("run"), Some(&5));
+        assert_eq!(exports.get("wasi_thread_start"), Some(&6));
+        // Generated stack management exports
+        assert_eq!(exports.get(ENSURE_EXPORT), Some(&3));
+        assert_eq!(exports.get(CLAIM_TARGET_EXPORT), Some(&4));
+        // After wrappers (5, 6), the release/info/force-release exports follow
+        assert_eq!(exports.get(RELEASE_VFS_EXPORT), Some(&7));
+        assert_eq!(exports.get(RELEASE_TARGET_EXPORT), Some(&8));
+        assert_eq!(exports.get(INFO_VFS_EXPORT), Some(&9));
+        assert_eq!(exports.get(INFO_TARGET_EXPORT), Some(&10));
+        assert_eq!(exports.get(FORCE_RELEASE_VFS_EXPORT), Some(&11));
+        assert_eq!(exports.get(FORCE_RELEASE_TARGET_EXPORT), Some(&12));
+        Ok(())
+    }
+
+    #[test]
+    fn vfs_pass_skips_without_stack_size() -> Result<()> {
+        let output = ExportStackPreVfsStreamPass::new(None).run(&fixture())?;
+        assert_eq!(output, fixture());
+        Ok(())
+    }
+
+    #[test]
+    fn vfs_pass_detects_macro_cfg_size() -> Result<()> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
+        types.ty().function([ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32, ValType::I32], []);
+        module.section(&types);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        functions.function(1);
+        functions.function(2);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 2,
+            maximum: Some(8),
+            memory64: false,
+            shared: true,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+
+        let mut globals = GlobalSection::new();
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &ConstExpr::i32_const(65536),
+        );
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: false,
+                shared: false,
+            },
+            &ConstExpr::i32_const(64),
+        );
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: false,
+                shared: false,
+            },
+            &ConstExpr::i32_const(0),
+        );
+        // Macro config: stack_cfg_size = 65536
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: false,
+                shared: false,
+            },
+            &ConstExpr::i32_const(65536),
+        );
+        module.section(&globals);
+
+        let mut exports = ExportSection::new();
+        exports.export("__stack_pointer", ExportKind::Global, 0);
+        exports.export(HANDOFF_EXPORT, ExportKind::Global, 1);
+        exports.export(TARGET_HANDOFF_EXPORT, ExportKind::Global, 2);
+        exports.export("__wasi_virt_layer_stack_cfg_size", ExportKind::Global, 3);
+        exports.export("cabi_realloc", ExportKind::Func, 0);
+        exports.export("run", ExportKind::Func, 1);
+        exports.export("wasi_thread_start", ExportKind::Func, 2);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut realloc = Function::new([]);
+        realloc.instruction(&Instruction::I32Const(1024));
+        realloc.instruction(&Instruction::End);
+        code.function(&realloc);
+        let mut run = Function::new([]);
+        run.instruction(&Instruction::LocalGet(0));
+        run.instruction(&Instruction::I32Const(1));
+        run.instruction(&Instruction::I32Add);
+        run.instruction(&Instruction::End);
+        code.function(&run);
+        let mut thread_start = Function::new([]);
+        thread_start.instruction(&Instruction::End);
+        code.function(&thread_start);
+        module.section(&code);
+
+        let input = module.finish();
+
+        // Without CLI args but with macro config, the pass should still apply
+        let output = ExportStackPreVfsStreamPass::new(None).run(&input)?;
+        // Output should differ from input (pass applied)
+        assert_ne!(output.len(), input.len());
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)?;
         Ok(())
     }
 }

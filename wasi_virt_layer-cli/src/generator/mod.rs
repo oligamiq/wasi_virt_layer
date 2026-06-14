@@ -663,6 +663,15 @@ impl GeneratorRunner {
                             i as u32,
                             _cloned_ctx.stack_config.target_size(target_name.as_ref()),
                         )));
+                    } else if let (Some(size), Some(slots)) = (
+                        _cloned_ctx.stack_config.target_size(target_name.as_ref()),
+                        _cloned_ctx.stack_config.slots.get(target_name.as_ref()).copied(),
+                    ) {
+                        if slots > 0 {
+                            pipeline.add_pass(Box::new(
+                                crate::wasm_stream::passes::export_stack_arena::ExportStackArenaStreamPass::new(size, slots),
+                            ));
+                        }
                     }
 
                     pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(
