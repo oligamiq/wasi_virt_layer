@@ -1125,10 +1125,6 @@ fn find_function_type(
 
 impl StreamPass for ExportStackPreTargetStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> Result<Vec<u8>> {
-        let Some(stack_size) = self.stack_size else {
-            return Ok(input_wasm.to_vec());
-        };
-
         let mut types = Vec::new();
         let mut function_types = Vec::new();
         let mut imported_functions = 0_u32;
@@ -1138,6 +1134,8 @@ impl StreamPass for ExportStackPreTargetStreamPass {
         let mut stack_pointer = None;
         let mut has_import_section = false;
         let mut raw_exports = Vec::new();
+        let mut global_init_values: Vec<i32> = Vec::new();
+        let mut cfg_size_global_idx = None;
 
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             match payload? {
@@ -1168,12 +1166,28 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                         defined_functions += 1;
                     }
                 }
-                Payload::GlobalSection(section) => local_globals = section.count(),
+                Payload::GlobalSection(section) => {
+                    for global in section {
+                        let global = global?;
+                        local_globals += 1;
+                        let mut value = 0i32;
+                        for operator in global.init_expr.get_operators_reader() {
+                            if let Ok(wasmparser::Operator::I32Const { value: v }) = operator {
+                                value = v;
+                            }
+                        }
+                        global_init_values.push(value);
+                    }
+                }
                 Payload::ExportSection(section) => {
                     for export in section {
                         let export = export?;
                         if export.name == "__stack_pointer" && export.kind == ExternalKind::Global {
                             stack_pointer = Some(export.index);
+                        } else if export.kind == ExternalKind::Global
+                            && export.name == "__wasi_virt_layer_stack_cfg_size"
+                        {
+                            cfg_size_global_idx = Some(export.index);
                         }
                         raw_exports.push((export.name.to_string(), export.kind, export.index));
                     }
@@ -1197,6 +1211,14 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                 _ => {}
             }
         }
+
+        let macro_cfg_size = cfg_size_global_idx
+            .and_then(|idx| global_init_values.get(idx as usize).copied())
+            .map(|v| v as u32);
+        let effective_stack_size = self.stack_size.or(macro_cfg_size);
+        let Some(stack_size) = effective_stack_size else {
+            return Ok(input_wasm.to_vec());
+        };
 
         let Some(stack_pointer) = stack_pointer else {
             log::warn!(
@@ -1610,10 +1632,6 @@ impl StreamPass for ExportStackPreTargetStreamPass {
 
 impl StreamPass for ExportStackPreVfsStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> Result<Vec<u8>> {
-        let Some(stack_size) = self.stack_size else {
-            return Ok(input_wasm.to_vec());
-        };
-
         let mut types = Vec::new();
         let mut function_types = Vec::new();
         let mut import_func_count = 0_u32;
@@ -1626,6 +1644,10 @@ impl StreamPass for ExportStackPreVfsStreamPass {
         let mut realloc = None;
         let mut shared_memory = false;
         let mut raw_exports = Vec::new();
+        let mut global_init_values: Vec<i32> = Vec::new();
+        let mut cfg_size_global_idx = None;
+        let mut cfg_slots_global_idx = None;
+        let mut cfg_allow_release_global_idx = None;
 
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             match payload? {
@@ -1661,7 +1683,19 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         shared_memory |= memory?.shared;
                     }
                 }
-                Payload::GlobalSection(section) => local_global_count = section.count(),
+                Payload::GlobalSection(section) => {
+                    for global in section {
+                        let global = global?;
+                        local_global_count += 1;
+                        let mut value = 0i32;
+                        for operator in global.init_expr.get_operators_reader() {
+                            if let Ok(wasmparser::Operator::I32Const { value: v }) = operator {
+                                value = v;
+                            }
+                        }
+                        global_init_values.push(value);
+                    }
+                }
                 Payload::ExportSection(section) => {
                     for export in section {
                         let export = export?;
@@ -1679,6 +1713,19 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                             && matches!(export.kind, ExternalKind::Func | ExternalKind::FuncExact)
                         {
                             realloc = Some(export.index);
+                        } else if export.kind == ExternalKind::Global {
+                            match export.name {
+                                "__wasi_virt_layer_stack_cfg_size" => {
+                                    cfg_size_global_idx = Some(export.index);
+                                }
+                                "__wasi_virt_layer_stack_cfg_slots" => {
+                                    cfg_slots_global_idx = Some(export.index);
+                                }
+                                "__wasi_virt_layer_stack_cfg_allow_release" => {
+                                    cfg_allow_release_global_idx = Some(export.index);
+                                }
+                                _ => {}
+                            }
                         }
                         raw_exports.push((export.name.to_string(), export.kind, export.index));
                     }
@@ -1702,6 +1749,14 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                 _ => {}
             }
         }
+
+        let macro_cfg_size = cfg_size_global_idx
+            .and_then(|idx| global_init_values.get(idx as usize).copied())
+            .map(|v| v as u32);
+        let effective_stack_size = self.stack_size.or(macro_cfg_size);
+        let Some(stack_size) = effective_stack_size else {
+            return Ok(input_wasm.to_vec());
+        };
 
         let Some(stack_pointer) = stack_pointer else {
             log::warn!(

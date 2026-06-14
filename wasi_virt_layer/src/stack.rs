@@ -293,6 +293,68 @@ pub unsafe fn force_release_wasm_stack(module: StackModule<'_>) -> Result<(), St
     map_errno(unsafe { __wasip1_vfs_stack_force_release(module_id) })
 }
 
+/// Configures export-stack isolation for the current module.
+///
+/// Emits well-known global exports that the `wasi_virt_layer-cli` reads during
+/// build to configure stack size, slots, and release permissions.
+///
+/// # Example
+///
+/// ```ignore
+/// use wasi_virt_layer::configure_wasm_stack;
+///
+/// configure_wasm_stack!(size: 1 * 1024 * 1024);
+/// configure_wasm_stack!(size: 2 * 1024 * 1024, slots: 32, allow_release: true);
+/// ```
+#[macro_export]
+macro_rules! configure_wasm_stack {
+    (size: $size:expr $(, slots: $slots:expr )? $(, allow_release: $allow:expr )? $(,)?) => {
+        #[cfg(target_arch = "wasm32")]
+        mod __wasi_virt_layer_stack_config {
+            #[unsafe(export_name = "__wasi_virt_layer_stack_cfg_size")]
+            pub static __SIZE: u32 = $size;
+            $(
+                #[unsafe(export_name = "__wasi_virt_layer_stack_cfg_slots")]
+                pub static __SLOTS: u32 = $slots;
+            )?
+            $(
+                #[unsafe(export_name = "__wasi_virt_layer_stack_cfg_allow_release")]
+                pub static __ALLOW_RELEASE: u32 = if $allow { 1 } else { 0 };
+            )?
+        }
+    };
+}
+
+/// Marks specific exports for stack protection.
+///
+/// Emits well-known global exports that the `wasi_virt_layer-cli` reads to
+/// determine which function exports should receive stack isolation wrappers.
+///
+/// # Example
+///
+/// ```ignore
+/// use wasi_virt_layer::protect_wasm_exports;
+///
+/// protect_wasm_exports!(run, reset, _main);
+/// ```
+#[macro_export]
+macro_rules! protect_wasm_exports {
+    ( $( $export:ident ),* $(,)? ) => {
+        #[cfg(target_arch = "wasm32")]
+        mod __wasi_virt_layer_protected_exports {
+            $(
+                #[unsafe(
+                    export_name = concat!(
+                        "__wasi_virt_layer_protect_",
+                        stringify!($export)
+                    )
+                )]
+                pub static __PROTECT__ $export : u32 = 0;
+            )*
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
