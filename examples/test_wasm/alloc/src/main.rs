@@ -1,7 +1,7 @@
 fn main() {
     println!("We will try to allocate 500 MB of memory");
     println!("Starting allocation...");
-    
+
     let mut chunks = Vec::new();
     for i in 0..=5 {
         println!("Allocated {} MB", i * 100);
@@ -13,6 +13,6 @@ fn main() {
             chunks.push(chunk);
         }
     }
-    
+
     println!("Success!");
 }

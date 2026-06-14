@@ -217,7 +217,8 @@ pub fn run_wasi_virt_layer(
     timeout: Option<Duration>,
 ) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
-    cmd.arg("build"); println!("COMMAND: {:?}", cmd.get_program());
+    cmd.arg("build");
+    println!("COMMAND: {:?}", cmd.get_program());
 
     if let Some(p_vfs) = p_vfs {
         cmd.args(["-p", p_vfs]);

@@ -6,7 +6,7 @@ fn test_own_memory_expansion() {
     let err = utils::run_wasi_virt_layer(
         Some("own_memory_vfs"),
         None,
-        None, // t_single
+        None,  // t_single
         false, // threads
         OutDir::Random,
         true, // keep_build_artifacts
@@ -14,10 +14,11 @@ fn test_own_memory_expansion() {
         None,
     )
     .unwrap_err();
-    
+
     let err_str = format!("{err:?}");
     assert!(
-        err_str.contains("RuntimeError: unreachable") || err_str.contains("memory allocation of 104857600 bytes failed"),
+        err_str.contains("RuntimeError: unreachable")
+            || err_str.contains("memory allocation of 104857600 bytes failed"),
         "Expected memory allocation failure due to strict own_memory bounds, but got: {}",
         err_str
     );
@@ -27,7 +28,7 @@ fn test_own_memory_expansion() {
     let _dir = utils::run_wasi_virt_layer(
         Some("own_memory_vfs"),
         None,
-        None, // t_single
+        None,  // t_single
         false, // threads
         OutDir::Random,
         true, // keep_build_artifacts
