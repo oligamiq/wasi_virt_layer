@@ -43,6 +43,55 @@ pub struct GeneratorCtx {
     pub main_void_synthesized_targets: Option<std::collections::HashSet<String>>,
     /// Whether own-memory mode is enabled.
     pub own_memory: bool,
+    /// Export-stack isolation configuration keyed by module name.
+    pub stack_config: StackConfig,
+}
+
+/// Normalized export-stack isolation configuration.
+#[derive(Debug, Clone, Default)]
+pub struct StackConfig {
+    /// Stack sizes in bytes. The `vfs` key aliases the actual VFS module name.
+    pub sizes: HashMap<String, u32>,
+    /// Fixed slot counts for multi-memory target modules.
+    pub slots: HashMap<String, u32>,
+}
+
+impl StackConfig {
+    fn from_options(options: args::StackOptions) -> eyre::Result<Self> {
+        let mut config = Self::default();
+        for size in options.sizes {
+            if config
+                .sizes
+                .insert(size.module.clone(), size.bytes)
+                .is_some()
+            {
+                eyre::bail!("duplicate --stack-size for module `{}`", size.module);
+            }
+        }
+        for slots in options.slots {
+            if config
+                .slots
+                .insert(slots.module.clone(), slots.slots)
+                .is_some()
+            {
+                eyre::bail!("duplicate --stack-slots for module `{}`", slots.module);
+            }
+        }
+        Ok(config)
+    }
+
+    /// Returns the configured VFS stack size.
+    pub fn vfs_size(&self, vfs_name: &str) -> Option<u32> {
+        self.sizes
+            .get(vfs_name)
+            .or_else(|| self.sizes.get("vfs"))
+            .copied()
+    }
+
+    /// Returns the configured stack size for a target.
+    pub fn target_size(&self, target_name: &str) -> Option<u32> {
+        self.sizes.get(target_name).copied()
+    }
 }
 
 /// Sub-context for extracting and storing component variables during execution.
@@ -317,6 +366,7 @@ impl GeneratorRunner {
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
         own_memory: bool,
+        stack_options: args::StackOptions,
     ) -> eyre::Result<Self> {
         let target_names_with_self = core::iter::once(Ok(path.name()?.to_compact_string()))
             .chain(targets.iter().map(|t| Ok(t.name()?.to_compact_string())))
@@ -347,6 +397,32 @@ impl GeneratorRunner {
             .zip(target_names.iter().cloned())
             .filter_map(|(hint, name)| hint.map(|h| (name, h)))
             .collect::<HashMap<_, _>>();
+        let stack_config = StackConfig::from_options(stack_options)?;
+
+        if stack_config.slots.contains_key("vfs")
+            || stack_config.slots.contains_key(vfs_name.as_ref())
+        {
+            eyre::bail!("--stack-slots is not valid for the VFS module");
+        }
+        if memory_type == TargetMemoryType::Single && !stack_config.slots.is_empty() {
+            eyre::bail!("--stack-slots is only valid with multi-memory targets");
+        }
+        if memory_type == TargetMemoryType::Single
+            && target_names
+                .iter()
+                .any(|name| stack_config.target_size(name.as_ref()).is_some())
+            && stack_config.vfs_size(vfs_name.as_ref()).is_none()
+        {
+            eyre::bail!("single-memory target stack isolation requires --stack-size vfs=SIZE");
+        }
+        for module in stack_config.sizes.keys().chain(stack_config.slots.keys()) {
+            if module != "vfs"
+                && module != vfs_name.as_ref()
+                && !target_names.iter().any(|name| name.as_ref() == module)
+            {
+                eyre::bail!("stack configuration names unknown module `{module}`");
+            }
+        }
 
         Ok(Self {
             ctx: GeneratorCtx {
@@ -365,6 +441,7 @@ impl GeneratorRunner {
                 wrap_unreachable_targets: std::collections::HashSet::new(),
                 main_void_synthesized_targets: None,
                 own_memory,
+                stack_config,
             },
             path,
             targets,
@@ -487,6 +564,7 @@ impl GeneratorRunner {
                     anonymous::AnonymousStreamPass,
                     check::CheckUseWasiVirtLayerChecker,
                     dummy_injector::DummyInjectorStreamPass,
+                    export_stack::ExportStackPreVfsStreamPass,
                     patch_component::PatchComponentStreamPass,
                     pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
                     starts_pre::StartsPreStreamPass,
@@ -513,6 +591,11 @@ impl GeneratorRunner {
                     true,
                     pipeline_is_library,
                     fn_in_starts.flesh_vfs_start.clone(),
+                )));
+                pipeline.add_pass(Box::new(ExportStackPreVfsStreamPass::new(
+                    cloned_ctx
+                        .stack_config
+                        .vfs_size(cloned_ctx.vfs_name.as_ref()),
                 )));
                 pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
                     fn_in_starts.thread_patch.clone(),
@@ -558,6 +641,7 @@ impl GeneratorRunner {
                         special_func::SpecialFuncPreTargetStreamPass,
                         wrap_unreachable::WrapUnreachablePreTargetStreamPass,
                         atomic_patch::AtomicPatchStreamPass,
+                        export_stack::ExportStackPreTargetStreamPass,
                     };
 
                     pipeline.add_pass(Box::new(ProducerStreamPass::new()));
@@ -571,6 +655,15 @@ impl GeneratorRunner {
                         target_name.to_string(),
                         is_opted_in,
                     )));
+
+                    if _cloned_ctx.target_memory_type == TargetMemoryType::Single {
+                        pipeline.add_pass(Box::new(ExportStackPreTargetStreamPass::new(
+                            target_name.to_string(),
+                            crate::unique_name::UniqueName::WASIP1_ABI_MODULE.to_string(),
+                            i as u32,
+                            _cloned_ctx.stack_config.target_size(target_name.as_ref()),
+                        )));
+                    }
 
                     pipeline.add_pass(Box::new(ConnectWasip1ABIPreTargetStreamPass::new(
                         target_name.to_string(),

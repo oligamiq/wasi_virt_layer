@@ -1,8 +1,108 @@
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Args as ClapArgs, Parser, Subcommand};
 use eyre::Context as _;
+use std::str::FromStr;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
+
+/// A module-specific byte size supplied as `MODULE=SIZE`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleStackSize {
+    /// Module name, or the special alias `vfs`.
+    pub module: String,
+    /// Stack size in bytes.
+    pub bytes: u32,
+}
+
+impl FromStr for ModuleStackSize {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (module, size) = value
+            .split_once('=')
+            .ok_or_else(|| "expected MODULE=SIZE".to_string())?;
+        if module.is_empty() {
+            return Err("module name must not be empty".to_string());
+        }
+
+        let size = size.trim();
+        let (digits, multiplier) = if let Some(digits) = size.strip_suffix("MiB") {
+            (digits, 1024_u64 * 1024)
+        } else if let Some(digits) = size.strip_suffix("KiB") {
+            (digits, 1024)
+        } else if let Some(digits) = size.strip_suffix("M") {
+            (digits, 1024_u64 * 1024)
+        } else if let Some(digits) = size.strip_suffix("K") {
+            (digits, 1024)
+        } else {
+            (size, 1)
+        };
+        let bytes = digits
+            .parse::<u64>()
+            .map_err(|_| format!("invalid stack size `{size}`"))?
+            .checked_mul(multiplier)
+            .ok_or_else(|| format!("stack size `{size}` overflows"))?;
+        let bytes = u32::try_from(bytes)
+            .map_err(|_| format!("stack size `{size}` exceeds the wasm32 address space"))?;
+        if bytes == 0 {
+            return Err("stack size must be greater than zero".to_string());
+        }
+
+        Ok(Self {
+            module: module.to_string(),
+            bytes,
+        })
+    }
+}
+
+/// A module-specific slot count supplied as `MODULE=COUNT`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleStackSlots {
+    /// Target module name.
+    pub module: String,
+    /// Number of fixed stack slots.
+    pub slots: u32,
+}
+
+impl FromStr for ModuleStackSlots {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (module, slots) = value
+            .split_once('=')
+            .ok_or_else(|| "expected MODULE=COUNT".to_string())?;
+        if module.is_empty() {
+            return Err("module name must not be empty".to_string());
+        }
+        let slots = slots
+            .parse::<u32>()
+            .map_err(|_| format!("invalid stack slot count `{slots}`"))?;
+        if slots == 0 {
+            return Err("stack slot count must be greater than zero".to_string());
+        }
+        Ok(Self {
+            module: module.to_string(),
+            slots,
+        })
+    }
+}
+
+/// Export-stack isolation settings.
+#[derive(ClapArgs, Clone, Debug, Default)]
+pub struct StackOptions {
+    /// Enable export-stack isolation for a module and set its stack size.
+    ///
+    /// Accepts bytes or binary suffixes, for example `vfs=1MiB` or
+    /// `worker=512KiB`. May be repeated.
+    #[arg(long = "stack-size", value_name = "MODULE=SIZE")]
+    pub sizes: Vec<ModuleStackSize>,
+
+    /// Set the fixed slot count for a multi-memory target.
+    ///
+    /// This option is invalid for the VFS and for single-memory builds.
+    #[arg(long = "stack-slots", value_name = "MODULE=COUNT")]
+    pub slots: Vec<ModuleStackSlots>,
+}
 
 /// Common interface for post-build (transpilation) arguments.
 pub trait PostBuildContext {
@@ -164,6 +264,10 @@ pub struct BuildArgs {
     /// Enable own-memory mode.
     #[arg(long, default_value = "false")]
     pub own_memory: bool,
+
+    /// Export-stack isolation settings.
+    #[command(flatten)]
+    pub stack_options: StackOptions,
 }
 
 impl BuildArgs {
@@ -323,6 +427,10 @@ pub struct PreBuildArgs {
     /// Enable own-memory mode.
     #[arg(long, default_value = "false")]
     pub own_memory: bool,
+
+    /// Export-stack isolation settings.
+    #[command(flatten)]
+    pub stack_options: StackOptions,
 }
 
 impl PreBuildArgs {

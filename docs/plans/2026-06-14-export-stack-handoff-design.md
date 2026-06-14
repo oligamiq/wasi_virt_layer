@@ -556,6 +556,127 @@ If no stack pointer is found, the CLI warns and leaves the module unchanged, as
 in the current behavior requested for compatibility. A future strict option may
 turn this warning into a build error.
 
+## Validated Preconditions
+
+The following baseline checks were performed on 2026-06-14.
+
+### Negative `i32` stack pointers
+
+A negative `i32` value is not intrinsically invalid as a Wasm pointer. Wasm32
+uses the 32-bit value as an address bit pattern. The generated lowering uses
+`i32.add`, whose result wraps modulo 2^32.
+
+For a module base `B` and physical stack address `P`:
+
+```text
+logical_stack_pointer = P - B mod 2^32
+physical_address = logical_stack_pointer + B mod 2^32
+```
+
+When `P < B`, the logical value is displayed as a negative signed `i32`, but the
+second expression still recovers `P`.
+
+This was verified with:
+
+1. A minimal single-memory Wasm using a negative stack pointer, a frame
+   subtraction, base addition, store, and load.
+2. A generated single-memory Rust core Wasm whose target stack pointer was
+   changed from `1,048,576` to `-589,824`. With target base `1,114,112`, this
+   selected physical stack address `524,288`.
+3. The modified generated core successfully executed Rust `_start`, stack-based
+   WASI `fd_write`, thread creation, and the subsequent compiler-generated
+   `wasi_thread_start`.
+4. A minimal two-memory Wasm using a fixed one-page arena, a negative logical
+   target stack pointer, direct target access, and cross-memory copy with the
+   arena offset.
+
+### Conditions for negative logical pointers
+
+The successful tests do not prove that negative logical stack addresses are
+transparent to every Wasm program. The implementation must enforce or document
+the following conditions:
+
+1. This design currently applies only to wasm32. The lowering emits
+   `memory64: false` and uses `i32` addresses.
+2. Every target dereference must translate the logical address before the
+   memory instruction.
+3. Translation must use wrapping `i32.add`; it must not reject the logical
+   pointer because its signed representation is negative.
+4. Bulk-memory operations, atomic operations, SIMD memory operations, data
+   initialization, and generated memory helpers must use the same translation.
+5. Multi-memory cross-memory helpers such as `memory_copy_from`,
+   `memory_copy_to`, and pointer-director functions must add the target arena
+   offset. Rewriting only instructions inside the original target module is
+   insufficient.
+6. The physical stack frame must remain inside its allocated stack region.
+   Wrapping must occur only in the logical-coordinate calculation, not across
+   the physical beginning or end of the allocated region.
+7. Logical pointer plus length calculations must not be validated with a signed
+   comparison before translation.
+
+There is also an observable semantic difference: casting a negative logical
+stack pointer to Rust `usize` produces a value near 4 GiB. Code that:
+
+- Compares stack and heap addresses.
+- Exposes stack addresses as integers.
+- Computes pointer differences between unrelated allocations.
+- Implements custom stack-bound checks.
+- Assumes all valid pointers are below `i32::MAX`.
+
+may behave differently even though dereferences are translated correctly.
+
+Before enabling this mechanism by default, an eligibility scan or explicit
+opt-in is required. At minimum, generated/runtime stack-bound code and supported
+Rust standard-library versions must be tested. A strict mode should reject
+known signed pointer checks involving the detected stack pointer.
+
+### Existing test baseline
+
+The unmodified repository baseline passed:
+
+```text
+cargo check -r
+cargo nextest run -r --fail-fast
+cargo test -r --doc
+```
+
+Results:
+
+```text
+cargo check: success
+nextest: 103 passed, 0 failed, 2 skipped
+doctests: 12 passed, 0 failed, 2 ignored
+```
+
+These are baseline results only. The handoff implementation does not exist yet,
+so the complete suite has not tested the proposed transformation.
+
+### Bootstrap serialization
+
+The first VFS allocation is safe only if every possible use of the shared
+bootstrap stack obeys the same serialization rule.
+
+The implementation must guarantee:
+
+1. The combined StartSection is stackless for every transformed module.
+2. No ordinary export can enter Rust code before passing through the generated
+   stack wrapper.
+3. The root instance also acquires its managed VFS stack before executing
+   ordinary VFS code concurrently with worker instantiation.
+4. The bootstrap lock is acquired by stackless Wasm code.
+5. The initial allocator call and stack switch remain inside the locked region.
+6. After the switch, no instance returns to the bootstrap stack except through
+   the explicit, serialized release protocol.
+
+The generated single-memory threads fixture examined during this validation had
+a stackless synthesized StartSection. Its calls performed memory/TLS
+initialization, offset initialization, and debug-state initialization without
+subtracting either the VFS or target stack pointer.
+
+This result is fixture-specific. The build must analyze the final StartSection
+and fail or warn if its transitive call graph can modify or use a detected stack
+pointer before stack management is active.
+
 ## Pipeline Placement
 
 The likely implementation points are:
@@ -605,6 +726,15 @@ Required tests:
 12. Trap and `proc_exit` paths prevent normal release.
 13. Missing `__stack_pointer` emits a warning and preserves existing behavior.
 14. Recursive and nested protected exports do not acquire additional stacks.
+15. Negative logical stack pointers survive stack-to-`usize` conversions used
+    by supported Rust/WASI runtime code, or the build rejects the module.
+16. Multi-memory cross-memory helpers translate negative logical stack
+    pointers with the arena offset.
+17. Pointer-plus-length checks at ABI boundaries operate on translated physical
+    addresses or use wrapping logical arithmetic correctly.
+18. The final StartSection and its transitive callees are stackless before stack
+    management becomes active.
+19. Root and worker instances cannot use the bootstrap stack concurrently.
 
 ## Non-Goals
 

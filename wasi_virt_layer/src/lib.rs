@@ -369,6 +369,8 @@ extern crate alloc;
 #[cfg(feature = "threads")]
 /// Shared memory management for zero-copy inter-module memory access.
 pub mod shared_memory;
+/// Export-stack isolation ABI and shared handoff state.
+pub mod stack;
 
 /// Common traits, structs, and macros representing the core functionality.
 pub mod prelude {

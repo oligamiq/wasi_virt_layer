@@ -659,12 +659,14 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                     }
                     encoder.section(&elem_sec);
                 }
-                Payload::DataCountSection { count: _, range } => {
+                Payload::DataCountSection { count, range } => {
                     if !self.lower_memory {
                         encoder.section(&RawSection {
                             id: 12,
                             data: &input_wasm[range],
                         });
+                    } else {
+                        encoder.section(&wasm_encoder::DataCountSection { count });
                     }
                 }
                 Payload::DataSection(s) => {
