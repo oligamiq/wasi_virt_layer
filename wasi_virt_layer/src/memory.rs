@@ -61,6 +61,94 @@ macro_rules! gen_alt_global {
     };
 }
 
+/// A macro to explicitly manage memory growth for multiple WebAssembly targets when the automatic memory expansion is disabled (`--own-memory` mode).
+///
+/// **Important Note on Threading:**
+/// When expanding memory, you MUST ensure that no other threads are actively modifying the memory.
+/// This means memory expansion should ideally be done **before** spawning threads, or while all other threads are paused/locked.
+///
+/// This macro generates `pub fn memory_grow(wasm: &str, pages: i32) -> i32` and `pub fn memory_size(wasm: &str) -> i32`.
+#[macro_export]
+macro_rules! own_memory {
+    ($($name:ident),+ $(,)?) => {
+        $crate::__private::paste::paste! {
+            $(
+                unsafe extern "C" {
+                    fn [<__wasip1_vfs_own_memory_size_ $name>]() -> i32;
+                    fn [<__wasip1_vfs_own_memory_grow_ $name>](pages: i32) -> i32;
+                }
+                #[allow(unsafe_attr_outside_unsafe)]
+                #[unsafe(no_mangle)]
+                pub fn [<__keep_wasip1_vfs_own_memory_ $name>]() -> (*const u8, *const u8) {
+                    (
+                        unsafe { [<__wasip1_vfs_own_memory_size_ $name>] as *const u8 },
+                        unsafe { [<__wasip1_vfs_own_memory_grow_ $name>] as *const u8 },
+                    )
+                }
+            )+
+
+            static __WASIP1_VFS_HOST_OWN_MEMORY_SIZE: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_get() -> i32 {
+                __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.load(core::sync::atomic::Ordering::Relaxed)
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_set(v: i32) {
+                __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.store(v, core::sync::atomic::Ordering::Relaxed);
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_init(v: i32) {
+                let _ = __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.compare_exchange(
+                    -1,
+                    v,
+                    core::sync::atomic::Ordering::Relaxed,
+                    core::sync::atomic::Ordering::Relaxed,
+                );
+            }
+
+            /// Computes the logical memory size of the given target Wasm.
+            pub fn memory_size<Wasm: $crate::memory::WasmAccessName + $crate::memory::WasmAccess>() -> i32 {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    unimplemented!("memory_size is only available on wasm32")
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    match Wasm::NAME {
+                        $(
+                            stringify!($name) => unsafe { [<__wasip1_vfs_own_memory_size_ $name>]() },
+                        )+
+                        _ => panic!("Wasm not found in own_memory! list"),
+                    }
+                }
+            }
+
+            /// Grows the memory of the given target Wasm by expanding the shared physical Wasm memory and shifting the data of subsequent targets.
+            pub fn memory_grow<Wasm: $crate::memory::WasmAccessName + $crate::memory::WasmAccess>(pages: i32) -> i32 {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    unimplemented!("memory_grow is only available on wasm32")
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    match Wasm::NAME {
+                        $(
+                            stringify!($name) => unsafe { [<__wasip1_vfs_own_memory_grow_ $name>](pages) },
+                        )+
+                        _ => panic!("Wasm not found in own_memory! list"),
+                    }
+                }
+            }
+        }
+    };
+}
+
 /// By entering the names of the files to be combined, a bridge for the combination is created.
 /// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
 ///
@@ -166,6 +254,31 @@ macro_rules! import_wasm {
                     #[unsafe(no_mangle)]
                     pub fn [<__wasip1_vfs_ $name _memory_director>](ptr: isize) -> isize;
                 }
+            }
+
+            static [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>]: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_get>]() -> i32 {
+                [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].load(core::sync::atomic::Ordering::Relaxed)
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_set>](v: i32) {
+                [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].store(v, core::sync::atomic::Ordering::Relaxed);
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_init>](v: i32) {
+                let _ = [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].compare_exchange(
+                    -1,
+                    v,
+                    core::sync::atomic::Ordering::Relaxed,
+                    core::sync::atomic::Ordering::Relaxed,
+                );
             }
 
             impl $crate::__private::ConstDefault for $name {

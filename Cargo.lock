@@ -169,6 +169,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
+name = "big_alloc"
+version = "0.5.4"
+dependencies = [
+ "walkdir",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1455,6 +1462,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "my_target"
+version = "0.5.4"
+
+[[package]]
 name = "nix"
 version = "0.31.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1546,6 +1557,16 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
+
+[[package]]
+name = "own_memory_vfs"
+version = "0.5.4"
+dependencies = [
+ "const_struct",
+ "parking_lot",
+ "wasi_virt_layer 0.5.4",
+ "wit-bindgen 0.54.0",
+]
 
 [[package]]
 name = "owo-colors"

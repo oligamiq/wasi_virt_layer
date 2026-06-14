@@ -103,6 +103,9 @@ pub extern "C" fn __wasip1_vfs_memory_lock_write_acquire() {
         match RWLOCK_STATE.compare_exchange_weak(0, -1, Ordering::Acquire, Ordering::Relaxed) {
             Ok(_) => return, // Successfully acquired write lock
             Err(current) => {
+                if current == 0 {
+                    continue; // Spurious failure, retry immediately
+                }
                 // Someone else holds the lock — wait until state changes
                 unsafe {
                     __wvl_atomic_wait32_vfs(

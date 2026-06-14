@@ -31,14 +31,14 @@ pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()
 
     let msg = match child.wait_timeout(timeout)? {
         Some(status) => {
-            if status.success() {
-                return Ok(());
-            }
-
             let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
             let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+            println!(
+                "Process exited with {}.\nstdout: {}\nstderr: {}",
+                status, stdout, stderr
+            );
 
-            if stderr.contains("RuntimeError: unreachable") && stdout.contains("[WASI main]") {
+            if status.success() {
                 return Ok(());
             }
 
@@ -87,8 +87,8 @@ pub fn run_thread(
         .assert()
         .success();
 
-    let mut child = std::process::Command::new(bun_or_npm)
-        .args(["run", "run"])
+    let mut child = std::process::Command::new("deno")
+        .args(["run", "-A", "test_run.ts"])
         .current_dir(out_dir)
         .env("BUN_TMPDIR", bun_tmpdir.as_str())
         .stdout(Stdio::piped())
@@ -97,10 +97,24 @@ pub fn run_thread(
 
     let msg = match child.wait_timeout(timeout)? {
         Some(status) => {
+            use std::io::Read;
+            let mut stdout = String::new();
+            if let Some(mut s) = child.stdout.take() {
+                s.read_to_string(&mut stdout).unwrap_or_default();
+            }
+            let mut stderr = String::new();
+            if let Some(mut s) = child.stderr.take() {
+                s.read_to_string(&mut stderr).unwrap_or_default();
+            }
+            println!(
+                "Process exited with {}.\nstdout: {}\nstderr: {}",
+                status, stdout, stderr
+            );
+
             if status.success() {
                 return Ok(());
             }
-            format!("Process exited with status: {status}")
+            format!("Process exited with status: {status}\nstdout: {stdout}\nstderr: {stderr}")
         }
         None => {
             child.kill()?;
@@ -183,11 +197,11 @@ impl Drop for TestDir {
 
         // The path often contains a "dist" folder which is inside the actual temporary folder.
         // We need to delete the parent of "dist".
-        if let Some(parent) = self.0.parent() {
-            if parent.starts_with(THIS_FOLDER) && parent != Utf8Path::new(THIS_FOLDER) {
-                let _ = std::fs::remove_dir_all(parent);
-            }
-        }
+        // if let Some(parent) = self.0.parent() {
+        //     if parent.starts_with(THIS_FOLDER) && parent != Utf8Path::new(THIS_FOLDER) {
+        //         let _ = std::fs::remove_dir_all(parent);
+        //     }
+        // }
     }
 }
 
@@ -203,7 +217,7 @@ pub fn run_wasi_virt_layer(
     timeout: Option<Duration>,
 ) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
-    cmd.arg("build");
+    cmd.arg("build"); println!("COMMAND: {:?}", cmd.get_program());
 
     if let Some(p_vfs) = p_vfs {
         cmd.args(["-p", p_vfs]);

@@ -55,6 +55,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         parsed_args.get_wasm_memory_hints(),
         &vfs_build_opts,
         target_vfs_build_opts,
+        parsed_args.own_memory,
     )?;
 
     postbuild::run_postbuild(&mut component_runner, &parsed_args, Some(dwarf))?;

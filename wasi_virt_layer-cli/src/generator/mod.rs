@@ -41,6 +41,8 @@ pub struct GeneratorCtx {
     pub vfs_is_library: bool,
     pub wrap_unreachable_targets: std::collections::HashSet<String>,
     pub main_void_synthesized_targets: Option<std::collections::HashSet<String>>,
+    /// Whether own-memory mode is enabled.
+    pub own_memory: bool,
 }
 
 /// Sub-context for extracting and storing component variables during execution.
@@ -60,6 +62,8 @@ pub struct ComponentCtx {
     pub threads: Option<bool>,
     /// Flag for ABI adjustment.
     pub adjust_abi: bool,
+    /// Flag for own-memory mode.
+    pub own_memory: bool,
 }
 
 impl ComponentCtx {
@@ -72,6 +76,7 @@ impl ComponentCtx {
         dwarf: bool,
         threads: bool,
         adjust_abi: bool,
+        own_memory: bool,
     ) -> Self {
         Self {
             vfs_name: Some(vfs_name),
@@ -81,6 +86,7 @@ impl ComponentCtx {
             dwarf,
             threads: Some(threads),
             adjust_abi,
+            own_memory,
         }
     }
 
@@ -310,6 +316,7 @@ impl GeneratorRunner {
         target_vfs_build_opts: Box<[args::VfsBuildOptions]>,
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
+        own_memory: bool,
     ) -> eyre::Result<Self> {
         let target_names_with_self = core::iter::once(Ok(path.name()?.to_compact_string()))
             .chain(targets.iter().map(|t| Ok(t.name()?.to_compact_string())))
@@ -357,6 +364,7 @@ impl GeneratorRunner {
 
                 wrap_unreachable_targets: std::collections::HashSet::new(),
                 main_void_synthesized_targets: None,
+                own_memory,
             },
             path,
             targets,
@@ -684,16 +692,21 @@ impl GeneratorRunner {
             if self.ctx.target_memory_type == TargetMemoryType::Single {
                 println!("Generating single memory Merged Wasm (streaming lowering)...");
                 pipeline.add_pass(Box::new(
-                    crate::wasm_stream::passes::multi_memory_lowering::MultiMemoryLoweringStreamPass::new(self.ctx.threads)
+                    crate::wasm_stream::passes::multi_memory_lowering::MultiMemoryLoweringStreamPass::new(self.ctx.threads, self.ctx.own_memory, target_names.clone(), true)
                 ));
                 pipeline.add_pass(Box::new(
                     crate::wasm_stream::passes::shared_global::SharedGlobalStreamPass::new(self.ctx.threads, target_names)
                 ));
+            } else if self.ctx.own_memory {
+                println!("Adjusting own memory for Multi Memory Merged Wasm (streaming lowering)...");
+                pipeline.add_pass(Box::new(
+                    crate::wasm_stream::passes::multi_memory_lowering::MultiMemoryLoweringStreamPass::new(self.ctx.threads, self.ctx.own_memory, target_names.clone(), false)
+                ));
             }
 
-            let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
+            std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_INPUT.wasm", &input_wasm).unwrap(); let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
 
-            let new_path = old_path.with_extension("lowered.wasm");
+            std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_OUTPUT.wasm", &output_wasm).unwrap(); let new_path = old_path.with_extension("lowered.wasm");
             std::fs::write(&new_path, output_wasm).wrap_err("Failed to write lowered Wasm file")?;
 
             if !keep_build_artifacts {
@@ -847,7 +860,7 @@ impl ComponentRunner {
                 crate::wasm_stream::passes::memory_post_components::PostComponentsMemoryFixStreamPass::new(self.ctx.as_ref().unwrap().threads.unwrap_or(false))
             ));
 
-            let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
+            std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_INPUT.wasm", &input_wasm).unwrap(); let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
             let new_path = old_path.with_extension("post-comp-stream.wasm");
             std::fs::write(&new_path, output_wasm).wrap_err("Failed to write Wasm file")?;
 

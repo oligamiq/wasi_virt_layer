@@ -661,14 +661,27 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>> {
         let thread_id = next_thread_id();
 
-        let builder = std::thread::Builder::new();
+        let thread_id_nz = NonZero::new(thread_id as u32)?;
+        println!("VFS: Spawning thread {} with root_spawn", thread_id);
 
-        root_spawn(builder, move || {
-            accessor.call_wasi_thread_start(runner, NonZero::new(thread_id));
-        })
-        .ok()?;
+        let res = root_spawn(
+            std::thread::Builder::new().name(format!("worker-{}", thread_id_nz)),
+            move || {
+                println!("VFS: inside root_spawn closure for {}", thread_id_nz);
+                accessor.call_wasi_thread_start(runner, Some(thread_id_nz));
+            },
+        );
+        match res {
+            Ok(_) => {
+                println!("VFS: root_spawn succeeded for {}", thread_id_nz);
+            }
+            Err(e) => {
+                println!("VFS: root_spawn failed for {}: {}", thread_id_nz, e);
+                return None;
+            }
+        }
 
-        NonZero::new(thread_id as u32)
+        Some(thread_id_nz)
     }
 }
 
@@ -802,12 +815,14 @@ macro_rules! plug_thread {
                     $crate::__if_feature!(@trace_thread
                         println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
                     );
+                    println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;
 
                     match pool.new_thread(ACCESSOR, $crate::thread::ThreadRunner::__new(data_ptr)) {
                         Some(thread_id) => {
+                            println!("$$$ Successfully spawned thread {}", thread_id);
                             return u32::from(thread_id) as i32;
                         },
                         None => {

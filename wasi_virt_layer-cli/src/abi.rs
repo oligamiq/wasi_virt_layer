@@ -12,7 +12,7 @@ pub mod is_valid {
             let name_str = i_name.strip_prefix("__wasip1_vfs_");
             if let Some(name) = name_str {
                 if let Some(func_name) = name.strip_prefix("__self_") {
-                    if let Ok(func) = func_name.parse::<super::Wasip1ABIFunc>() {
+                    if let Ok(_func) = func_name.parse::<super::Wasip1ABIFunc>() {
                         // self is ignored if not plugged
                         continue;
                     }
@@ -24,11 +24,11 @@ pub mod is_valid {
 
                 if let Some((wasm_name, plugger, func_name)) = wasm_names.iter().find_map(|n| {
                     let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
-                    if func_name == "thread_spawn" {
+                    if func_name == "thread_spawn" || func_name == "wasi_thread_start" {
                         return Some((
                             n.as_ref().to_string(),
                             Wasip1ABIPlugger::PlugThread,
-                            "thread_spawn".to_string(),
+                            func_name.to_string(),
                         ));
                     }
                     let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
@@ -50,7 +50,7 @@ pub mod is_valid {
                     ));
                 }
             } else {
-                if let Ok(func) = i_name.parse::<super::Wasip1ABIFunc>() {
+                if let Ok(_func) = i_name.parse::<super::Wasip1ABIFunc>() {
                     // self is ignored if not plugged
                     continue;
                 } else {

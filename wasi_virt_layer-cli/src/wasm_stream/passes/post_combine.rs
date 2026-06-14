@@ -187,7 +187,10 @@ impl StreamPass for PostCombineStreamPass {
                                         || import.name.ends_with("__start")
                                         || import.name.ends_with("__main_void")
                                         || import.name.ends_with("_memory_director")
-                                        || import.name.ends_with("_reset_on_thread_once")))
+                                        || import.name.ends_with("_reset_on_thread_once")
+                                        || import.name.ends_with("_own_memory_size_get")
+                                        || import.name.ends_with("_own_memory_size_set")
+                                        || import.name.ends_with("_own_memory_size_init")))
                                     || (import.module == "wasip1-vfs_single_memory"
                                         && import.name == "__wasip1_vfs_memory_grow_alt")
                                     || import.module == "wvl_poll"

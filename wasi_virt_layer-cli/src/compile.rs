@@ -51,12 +51,13 @@ pub fn build_vfs(
 
     let mut command_base = std::process::Command::new("cargo");
 
+    let existing_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
+    let mut new_rustflags = format!("{existing_rustflags} -C link-arg=--allow-undefined");
     if vfs_build_opts.unwind {
-        let existing_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
-        let new_rustflags =
-            format!("{existing_rustflags} -Cpanic=unwind -Cllvm-args=-wasm-use-legacy-eh=false");
-        command_base.env("RUSTFLAGS", new_rustflags.trim());
+        new_rustflags =
+            format!("{new_rustflags} -Cpanic=unwind -Cllvm-args=-wasm-use-legacy-eh=false");
     }
+    command_base.env("RUSTFLAGS", new_rustflags.trim());
 
     let features = vfs_build_opts.features.join(",");
     let command = command_base.args({

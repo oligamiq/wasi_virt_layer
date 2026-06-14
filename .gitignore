@@ -26,3 +26,5 @@ _debug_*.wat
 **/*.objdump
 /wasi_virt_layer-cli/tests/dist*/
 /wasi_virt_layer-cli/tests/onetime/
+
+node_modules/

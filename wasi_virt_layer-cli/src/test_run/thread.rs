@@ -265,6 +265,16 @@ if (!isNode) {
 	worker.postMessage({
 		wasi_ref: farm.get_ref(),
 	});
+
+	worker.onmessage = (e) => {
+		if (e.data.type === 'exit') {
+			if (globalThis.process?.exit) {
+				globalThis.process.exit(e.data.code);
+			} else if (globalThis.Deno?.exit) {
+				globalThis.Deno.exit(e.data.code);
+			}
+		}
+	};
 } else {
 	farm = new WASIFarm(
 		new OpenFile(new File([])), // stdin
@@ -278,6 +288,44 @@ if (!isNode) {
 	worker.postMessage({
         wasi_ref: farm.get_ref(),
 	});
+
+	if (typeof worker.on === "function") {
+		worker.on("error", (err: any) => {
+			console.error("Worker error:", err);
+			if (globalThis.process?.exit) {
+				globalThis.process.exit(1);
+			} else if (globalThis.Deno?.exit) {
+				globalThis.Deno.exit(1);
+			}
+		});
+		worker.on("message", (e: any) => {
+			if (e && e.type === 'exit') {
+				if (globalThis.process?.exit) {
+					globalThis.process.exit(e.code);
+				} else if (globalThis.Deno?.exit) {
+					globalThis.Deno.exit(e.code);
+				}
+			}
+		});
+	} else {
+		worker.onerror = (err: any) => {
+			console.error("Worker error:", err);
+			if (globalThis.process?.exit) {
+				globalThis.process.exit(1);
+			} else if (globalThis.Deno?.exit) {
+				globalThis.Deno.exit(1);
+			}
+		};
+		worker.onmessage = (e: any) => {
+			if (e.data && e.data.type === 'exit') {
+				if (globalThis.process?.exit) {
+					globalThis.process.exit(e.data.code);
+				} else if (globalThis.Deno?.exit) {
+					globalThis.Deno.exit(e.data.code);
+				}
+			}
+		};
+	}
 }
 "#
     .trim()
@@ -294,37 +342,43 @@ await set_fake_worker();
 let animal: WASIFarmAnimal | undefined = undefined;
 
 globalThis.onmessage = async (event) => {
-	thread_spawn_on_worker(
-		event.data,
-		async (
-			thread_spawn_wasm: WebAssembly.Module,
-			imports: {
-				env: {
-					[key: string]: WebAssembly.Memory;
-				};
-				wasi: { "thread-spawn": (start_arg: number) => number };
-				// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-				wasi_snapshot_preview1: { [key: string]: (...args: any[]) => unknown };
+	try {
+		await thread_spawn_on_worker(
+			event.data,
+			async (
+				thread_spawn_wasm: WebAssembly.Module,
+				imports: {
+					env: {
+						[key: string]: WebAssembly.Memory;
+					};
+					wasi: { "thread-spawn": (start_arg: number) => number };
+					// biome-ignore lint/suspicious/noExplicitAny: <explanation>
+					wasi_snapshot_preview1: { [key: string]: (...args: any[]) => unknown };
+				},
+			) => {
+				return custom_instantiate(
+					thread_spawn_wasm,
+					imports.wasi_snapshot_preview1,
+					imports.wasi,
+					imports.env,
+					(idx, unknown) => {
+						if (!animal) {
+							console.warn("Animal is not set yet", idx, unknown);
+							return;
+						}
+						return animal.call_unknown_fn(idx, unknown);
+					},
+				);
 			},
-		) => {
-			return custom_instantiate(
-				thread_spawn_wasm,
-				imports.wasi_snapshot_preview1,
-				imports.wasi,
-				imports.env,
-                (idx, unknown) => {
-                    if (!animal) {
-                        console.warn("Animal is not set yet", idx, unknown);
-                        return;
-                    }
-                    return animal.call_unknown_fn(idx, unknown);
-                },
-			);
-		},
-		(new_animal) => {
-			animal = new_animal;
-		}
-	);
+			(new_animal) => {
+				animal = new_animal;
+			}
+		);
+		globalThis.postMessage({ type: 'exit', code: 0 });
+	} catch (e) {
+		console.error("Worker caught error:", e);
+		globalThis.postMessage({ type: 'exit', code: 1 });
+	}
 };
 "#
     .trim()
@@ -428,43 +482,47 @@ async function fetchCompile(url) {{
 }}
 
 globalThis.onmessage = async (message) => {{
-	const {{ wasi_ref }} = message.data;
+    try {{
+        const {{ wasi_ref }} = message.data;
 
-	const wasm_path = "./{wasm_name}.core.wasm";
-	const wasm = await fetchCompile(wasm_path);
+        const wasm_path = "./{wasm_name}.core.wasm";
+        const wasm = await fetchCompile(wasm_path);
 
-	const args = ["bin", "arg1", "arg2"];
-	const env = ["FOO=bar"];
+        const args = ["bin", "arg1", "arg2"];
+        const env = ["FOO=bar"];
 
-	const wasi = new WASIFarmAnimal(
-		wasi_ref,
-		args, // args
-		env, // env
-		{{
-			can_thread_spawn: true,
-			thread_spawn_worker_url: "./thread_spawn.ts",
-			thread_spawn_wasm: wasm,
-			worker_background_worker_url: "./worker_background_worker.ts",
-            share_memory: {{
-{memories}
+        const wasi = new WASIFarmAnimal(
+            wasi_ref,
+            args, // args
+            env, // env
+            {{
+                can_thread_spawn: true,
+                thread_spawn_worker_url: "./thread_spawn.ts",
+                thread_spawn_wasm: wasm,
+                worker_background_worker_url: "./worker_background_worker.ts",
+                share_memory: {{
+    {memories}
+                }},
             }},
-        }},
-	);
+        );
 
-	await wasi.wait_worker_background_worker();
+        await wasi.wait_worker_background_worker();
 
-	const root = await custom_instantiate(
-		wasm,
-		wasi.wasiImport,
-		wasi.wasiThreadImport,
-		wasi.get_share_memory(),
-	);
+        const root = await custom_instantiate(
+            wasm,
+            wasi.wasiImport,
+            wasi.wasiThreadImport,
+            wasi.get_share_memory(),
+        );
 
-	// biome-ignore lint/suspicious/noExplicitAny: <explanation>
-	wasi.start(root as any);
+        // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+        wasi.start(root as any);
 
-    globalThis.process?.exit(0);
-    globalThis.Deno?.exit(0);
+        globalThis.postMessage({{ type: 'exit', code: 0 }});
+    }} catch (e) {{
+        console.error("Worker caught error:", e);
+        globalThis.postMessage({{ type: 'exit', code: 1 }});
+    }}
 }};
 "#
     )

@@ -23,6 +23,9 @@ use wasi_virt_layer_cli::unique_name::UniqueName;
 // multi_memory + threads + unstable_print_debug
 
 static INSTALLED_TARGETS_STABLE: OnceLock<HashSet<String>> = OnceLock::new();
+
+#[path = "common/test_own_memory.rs"]
+pub mod test_own_memory;
 static INSTALLED_TARGETS_NIGHTLY: OnceLock<HashSet<String>> = OnceLock::new();
 
 fn installed_targets(nightly: bool) -> &'static HashSet<String> {

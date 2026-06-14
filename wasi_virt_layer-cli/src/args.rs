@@ -160,6 +160,10 @@ pub struct BuildArgs {
     /// Options for building target Wasm modules.
     #[arg(skip)]
     pub target_vfs_build_opts: Option<Box<[VfsBuildOptions]>>,
+
+    /// Enable own-memory mode.
+    #[arg(long, default_value = "false")]
+    pub own_memory: bool,
 }
 
 impl BuildArgs {
@@ -315,6 +319,10 @@ pub struct PreBuildArgs {
     /// Options for building target Wasm modules.
     #[arg(skip)]
     pub target_vfs_build_opts: Option<Box<[VfsBuildOptions]>>,
+
+    /// Enable own-memory mode.
+    #[arg(long, default_value = "false")]
+    pub own_memory: bool,
 }
 
 impl PreBuildArgs {

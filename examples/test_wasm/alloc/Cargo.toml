@@ -1,0 +1,8 @@
+[package]
+name = "big_alloc"
+version.workspace = true
+edition.workspace = true
+publish=false
+
+[dependencies]
+walkdir = "2.5.0"
