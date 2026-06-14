@@ -672,49 +672,53 @@ fn build_info_function(
 ) -> Function {
     // Params: (result_ptr: i32) -> errno: i32
     // Locals: (1 temp)
+    // For i32.store, stack must be [address, value] (push addr first, value second)
     let mut func = Function::new([(1, ValType::I32), (1, ValType::I32)]);
 
     // Store state at result_ptr + 0
-    func.instruction(&Instruction::GlobalGet(state_global));
     func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::GlobalGet(state_global));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
     // Store stack_size at result_ptr + 4
-    func.instruction(&Instruction::I32Const(stack_size as i32));
     func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::I32Const(4));
     func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Const(stack_size as i32));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
     // Store depth at result_ptr + 8
-    func.instruction(&Instruction::GlobalGet(depth_global));
     func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::I32Const(8));
     func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::GlobalGet(depth_global));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
     // Store generation at result_ptr + 12
-    func.instruction(&Instruction::GlobalGet(generation_global));
     func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::I32Const(12));
     func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::GlobalGet(generation_global));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
     // Store current_base at result_ptr + 16
-    func.instruction(&Instruction::GlobalGet(current_base_global));
     func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::I32Const(16));
     func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::GlobalGet(current_base_global));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
     // Store current_end at result_ptr + 20
-    func.instruction(&Instruction::GlobalGet(current_end_global));
     func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::I32Const(20));
     func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::GlobalGet(current_end_global));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
     // Store next_stack_ready at result_ptr + 24
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(24));
+    func.instruction(&Instruction::I32Add);
     // next_stack_ready = (next_stack_base != 0 && next_stack_base != STANDBY_FAILED)
     func.instruction(&Instruction::GlobalGet(handoff_global));
     func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(4)));
@@ -725,17 +729,174 @@ fn build_info_function(
     func.instruction(&Instruction::I32Const(0));
     func.instruction(&Instruction::I32Ne);
     func.instruction(&Instruction::I32And);
-    func.instruction(&Instruction::LocalGet(0));
-    func.instruction(&Instruction::I32Const(24));
-    func.instruction(&Instruction::I32Add);
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
 
-    // Store slot_index at result_ptr + 28 (always u32::MAX = -1 = no slot)
-    func.instruction(&Instruction::I32Const(-1));
+    // Store slot_index at result_ptr + 28 (u32::MAX)
     func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::I32Const(28));
     func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Const(-1));
     func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::End);
+    func
+}
+
+fn build_info_target_function(stack_size: u32, handoff_global: u32) -> Function {
+    // (module_id, result_ptr) -> i32
+    // Locals: record_addr(2), next_base(3)
+    // i32.store takes [address, value] — push addr first, value second
+    let mut func = Function::new([(2, ValType::I32), (2, ValType::I32)]);
+
+    // Compute record address: handoff_global + module_id * 16
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(4));
+    func.instruction(&Instruction::I32Shl);
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalSet(2));
+
+    // Read base from record offset 4
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(4)));
+    func.instruction(&Instruction::LocalTee(3));
+
+    // Write state: if base != 0, write READY; else write 0 (both branches do store)
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::If(BlockType::Empty));
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+    func.instruction(&Instruction::Else);
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(READY));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+    func.instruction(&Instruction::End);
+
+    // Write stack_size at result_ptr + 4
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(4));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Const(stack_size as i32));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Write depth (always 0) at result_ptr + 8
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(8));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Write generation from record offset 12
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(12));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(12)));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Write current_base from record offset 4 (local 3)
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(16));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Write current_end from record offset 8
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(20));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(8)));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Write next_stack_ready (base != 0) at result_ptr + 24
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(24));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Write slot_index (u32::MAX) at result_ptr + 28
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(28));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Const(-1));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::End);
+    func
+}
+
+fn build_force_release_target_function(handoff_global: u32, realloc: u32) -> Function {
+    // (module_id) -> i32
+    // Locals: module_id(0), record_addr(1), base(2), end(3), size(4)
+    let mut func = Function::new([(1, ValType::I32), (5, ValType::I32)]);
+
+    // Compute record address
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(4));
+    func.instruction(&Instruction::I32Shl);
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalSet(1));
+
+    // Spin-lock record
+    func.instruction(&Instruction::Block(BlockType::Empty));
+    func.instruction(&Instruction::Loop(BlockType::Empty));
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Const(1));
+    func.instruction(&Instruction::I32AtomicRmwCmpxchg(atomic_memarg(0)));
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::BrIf(1));
+    func.instruction(&Instruction::Br(0));
+    func.instruction(&Instruction::End);
+    func.instruction(&Instruction::End);
+
+    // Read base and end from record
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(4)));
+    func.instruction(&Instruction::LocalTee(2));
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::If(BlockType::Empty));
+    // No stack — unlock and return error
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(0)));
+    func.instruction(&Instruction::I32Const(ERR_IN_USE));
+    func.instruction(&Instruction::Return);
+    func.instruction(&Instruction::End);
+
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(8)));
+    func.instruction(&Instruction::LocalTee(3));
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32Sub);
+    func.instruction(&Instruction::LocalSet(4));
+
+    // Clear record
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(4)));
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(8)));
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(0)));
+
+    // Free old stack
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::LocalGet(4));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::Call(realloc));
+    func.instruction(&Instruction::Drop);
 
     func.instruction(&Instruction::I32Const(0));
     func.instruction(&Instruction::End);
@@ -1724,9 +1885,9 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                     output.function(release_vfs_type);
                     output.function(release_target_type);
                     output.function(release_vfs_type); // info uses same (i32) -> i32
-                    output.function(release_vfs_type); // info_target uses same (i32) -> i32
-                    output.function(ensure_type); // force_release uses same () -> i32
-                    output.function(ensure_type); // force_release_target uses same () -> i32
+                    output.function(release_target_type); // info_target: (i32,i32) -> i32
+                    output.function(ensure_type); // force_release_vfs: () -> i32
+                    output.function(release_vfs_type); // force_release_target: (i32) -> i32
                     module.section(&output);
                 }
                 Payload::GlobalSection(section) => {
@@ -1842,22 +2003,6 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         depth_global,
                         generation_global,
                     ));
-                    // Stubs for remaining
-                    let mut stub_no_args = Function::new([]);
-                    stub_no_args.instruction(&Instruction::I32Const(0));
-                    stub_no_args.instruction(&Instruction::End);
-                    let mut stub_one_arg = Function::new([(1, ValType::I32)]);
-                    stub_one_arg.instruction(&Instruction::LocalGet(0));
-                    stub_one_arg.instruction(&Instruction::Drop);
-                    stub_one_arg.instruction(&Instruction::I32Const(0));
-                    stub_one_arg.instruction(&Instruction::End);
-                    let mut stub_two_arg = Function::new([(2, ValType::I32)]);
-                    stub_two_arg.instruction(&Instruction::LocalGet(0));
-                    stub_two_arg.instruction(&Instruction::Drop);
-                    stub_two_arg.instruction(&Instruction::LocalGet(1));
-                    stub_two_arg.instruction(&Instruction::Drop);
-                    stub_two_arg.instruction(&Instruction::I32Const(0));
-                    stub_two_arg.instruction(&Instruction::End);
                     // release_target: (i32, i32) -> i32
                     output.function(&build_release_target_function(
                         target_handoff_global,
@@ -1874,8 +2019,11 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         generation_global,
                         handoff_global,
                     ));
-                    // info_target: (i32) -> i32 (TODO: fix body for target_handoff)
-                    output.function(&stub_one_arg);
+                    // info_target: (i32, i32) -> i32
+                    output.function(&build_info_target_function(
+                        stack_size,
+                        target_handoff_global,
+                    ));
                     // force_release_vfs: () -> i32
                     output.function(&build_force_release_function(
                         state_global,
@@ -1883,8 +2031,11 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         current_end_global,
                         realloc,
                     ));
-                    // force_release_target: () -> i32 (TODO: use target globals)
-                    output.function(&stub_no_args);
+                    // force_release_target: (i32) -> i32
+                    output.function(&build_force_release_target_function(
+                        target_handoff_global,
+                        realloc,
+                    ));
                     module.section(&output);
                 }
                 Payload::CodeSectionEntry(_) => {}
