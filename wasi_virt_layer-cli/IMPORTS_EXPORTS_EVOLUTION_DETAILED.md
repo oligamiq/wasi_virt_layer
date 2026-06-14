@@ -75,6 +75,17 @@ During this stage, the `wasi_virt_layer-cli` processes the input WASM modules.
 - `__wasip1_vfs_start_alt_{name}`: Alternative start function (VFS).
 - `__wasip1_vfs_start_alt_after_memory_reset`: Start hook after memory reset.
 
+### Export Stack Isolation (`ExportStackName`)
+
+- `__wasip1_vfs_stack_handoff_vfs`: Shared VFS stack handoff record (global).
+- `__wasip1_vfs_stack_handoff_targets`: Shared target stack handoff records array (global).
+- `__wasip1_vfs_stack_ensure_vfs`: Ensures a valid VFS stack is installed (export/import).
+- `__wasip1_vfs_stack_claim_target`: Claims a standby stack for a specific target index (export/import).
+- `__wasip1_vfs_{module}_stack_ensure`: Module-specific ensure wrapper (export).
+- `__wasip1_vfs_{module}_stack_release`: Module-specific stack release (export).
+- `__wasip1_vfs_{module}_stack_info`: Module-specific stack info query (export).
+- `__wasip1_vfs_{module}_stack_force_release`: Unsafe module-specific force release (export).
+
 ## Stage 3: Output (Combined WASM)
 
 - **Exports:**

@@ -20,9 +20,18 @@ const HANDOFF_EXPORT: &str = "__wasip1_vfs_stack_handoff_vfs";
 const TARGET_HANDOFF_EXPORT: &str = "__wasip1_vfs_stack_handoff_targets";
 const ENSURE_EXPORT: &str = "__wasip1_vfs_stack_ensure_vfs";
 const CLAIM_TARGET_EXPORT: &str = "__wasip1_vfs_stack_claim_target";
+const RELEASE_VFS_EXPORT: &str = "__wasip1_vfs_stack_release_vfs";
+const RELEASE_TARGET_EXPORT: &str = "__wasip1_vfs_stack_release";
+const INFO_VFS_EXPORT: &str = "__wasip1_vfs_stack_info_vfs";
+const INFO_TARGET_EXPORT: &str = "__wasip1_vfs_stack_info";
+const FORCE_RELEASE_VFS_EXPORT: &str = "__wasip1_vfs_stack_force_release_vfs";
+const FORCE_RELEASE_TARGET_EXPORT: &str = "__wasip1_vfs_stack_force_release";
 const READY: i32 = 2;
 const THREAD_MANAGED: i32 = 3;
 const STANDBY_FAILED: i32 = -1;
+const ERR_IN_USE: i32 = 5;
+const ERR_THREAD_MANAGED: i32 = 6;
+const ERR_GENERATION_MISMATCH: i32 = 7;
 
 /// Adds stackless dynamic-stack handoff wrappers to VFS function exports.
 pub struct ExportStackPreVfsStreamPass {
@@ -396,6 +405,277 @@ fn build_claim_target_function(handoff_global: u32, realloc: u32) -> Function {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn build_release_vfs_function(
+    _stack_size: u32,
+    handoff_global: u32,
+    _stack_pointer: u32,
+    _realloc: u32,
+    state_global: u32,
+    _current_base_global: u32,
+    _current_end_global: u32,
+    depth_global: u32,
+    _generation_global: u32,
+) -> Function {
+    // Params: (generation: i32) -> errno: i32
+    let mut func = Function::new([(1, ValType::I32)]);
+
+    // Validate state — must be READY
+    func.instruction(&Instruction::GlobalGet(state_global));
+    func.instruction(&Instruction::I32Const(READY));
+    func.instruction(&Instruction::I32Ne);
+    func.instruction(&Instruction::If(BlockType::Empty));
+    func.instruction(&Instruction::GlobalGet(state_global));
+    func.instruction(&Instruction::I32Const(THREAD_MANAGED));
+    func.instruction(&Instruction::I32Eq);
+    func.instruction(&Instruction::If(BlockType::Empty));
+    func.instruction(&Instruction::I32Const(ERR_THREAD_MANAGED));
+    func.instruction(&Instruction::Return);
+    func.instruction(&Instruction::End);
+    func.instruction(&Instruction::I32Const(ERR_IN_USE));
+    func.instruction(&Instruction::Return);
+    func.instruction(&Instruction::End);
+
+    // depth must be zero
+    func.instruction(&Instruction::GlobalGet(depth_global));
+    func.instruction(&Instruction::If(BlockType::Empty));
+    func.instruction(&Instruction::Else);
+    func.instruction(&Instruction::I32Const(ERR_IN_USE));
+    func.instruction(&Instruction::Return);
+    func.instruction(&Instruction::End);
+
+    // TODO: Full handoff implementation.
+    // For now, acquire lock, bump generation, release.
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Const(1));
+    func.instruction(&Instruction::I32AtomicRmwCmpxchg(atomic_memarg(0)));
+    func.instruction(&Instruction::Drop);
+
+    // Bump generation
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(12)));
+    func.instruction(&Instruction::I32Const(1));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(12)));
+
+    emit_unlock(&mut func, handoff_global);
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::End);
+    func
+}
+
+fn build_release_target_function(
+    handoff_global: u32,
+    realloc: u32,
+    state_global: u32,
+) -> Function {
+    // Params: (module_id, generation) -> errno
+    // Locals: record_addr, base, end, size
+    let mut func = Function::new([(2, ValType::I32), (4, ValType::I32)]);
+
+    // Compute record address: handoff_global + module_id * 16
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(4));
+    func.instruction(&Instruction::I32Shl);
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::LocalSet(3));
+
+    // Only READY state can be released
+    func.instruction(&Instruction::GlobalGet(state_global));
+    func.instruction(&Instruction::I32Const(READY));
+    func.instruction(&Instruction::I32Ne);
+    func.instruction(&Instruction::If(BlockType::Empty));
+    func.instruction(&Instruction::I32Const(ERR_IN_USE));
+    func.instruction(&Instruction::Return);
+    func.instruction(&Instruction::End);
+
+    // Spin-lock on the target record
+    func.instruction(&Instruction::Block(BlockType::Empty));
+    func.instruction(&Instruction::Loop(BlockType::Empty));
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Const(1));
+    func.instruction(&Instruction::I32AtomicRmwCmpxchg(atomic_memarg(0)));
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::BrIf(1));
+    func.instruction(&Instruction::Br(0));
+    func.instruction(&Instruction::End);
+    func.instruction(&Instruction::End);
+
+    // Read target's current stack from record
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(4)));
+    func.instruction(&Instruction::LocalTee(4));
+    func.instruction(&Instruction::I32Eqz);
+    func.instruction(&Instruction::If(BlockType::Empty));
+    // No stack allocated
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(0)));
+    func.instruction(&Instruction::I32Const(ERR_IN_USE));
+    func.instruction(&Instruction::Return);
+    func.instruction(&Instruction::End);
+
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(8)));
+    func.instruction(&Instruction::LocalTee(5));
+    func.instruction(&Instruction::LocalGet(4));
+    func.instruction(&Instruction::I32Sub);
+    func.instruction(&Instruction::LocalSet(2));
+
+    // Clear record
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(4)));
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(8)));
+    func.instruction(&Instruction::LocalGet(3));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32AtomicStore(atomic_memarg(0)));
+
+    // Reset target state globals
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::GlobalSet(state_global));
+
+    // Free old stack through VFS allocator
+    func.instruction(&Instruction::LocalGet(4));
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::Call(realloc));
+    func.instruction(&Instruction::Drop);
+
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::End);
+    func
+}
+
+fn build_info_function(
+    stack_size: u32,
+    state_global: u32,
+    current_base_global: u32,
+    current_end_global: u32,
+    depth_global: u32,
+    generation_global: u32,
+    handoff_global: u32,
+) -> Function {
+    // Params: (result_ptr: i32) -> errno: i32
+    // Locals: (1 temp)
+    let mut func = Function::new([(1, ValType::I32), (1, ValType::I32)]);
+
+    // Store state at result_ptr + 0
+    func.instruction(&Instruction::GlobalGet(state_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store stack_size at result_ptr + 4
+    func.instruction(&Instruction::I32Const(stack_size as i32));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(4));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store depth at result_ptr + 8
+    func.instruction(&Instruction::GlobalGet(depth_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(8));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store generation at result_ptr + 12
+    func.instruction(&Instruction::GlobalGet(generation_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(12));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store current_base at result_ptr + 16
+    func.instruction(&Instruction::GlobalGet(current_base_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(16));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store current_end at result_ptr + 20
+    func.instruction(&Instruction::GlobalGet(current_end_global));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(20));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store next_stack_ready at result_ptr + 24
+    // next_stack_ready = (next_stack_base != 0 && next_stack_base != STANDBY_FAILED)
+    func.instruction(&Instruction::GlobalGet(handoff_global));
+    func.instruction(&Instruction::I32AtomicLoad(atomic_memarg(4)));
+    func.instruction(&Instruction::LocalTee(1));
+    func.instruction(&Instruction::I32Const(STANDBY_FAILED));
+    func.instruction(&Instruction::I32Ne);
+    func.instruction(&Instruction::LocalGet(1));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Ne);
+    func.instruction(&Instruction::I32And);
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(24));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    // Store slot_index at result_ptr + 28 (always u32::MAX = -1 = no slot)
+    func.instruction(&Instruction::I32Const(-1));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Const(28));
+    func.instruction(&Instruction::I32Add);
+    func.instruction(&Instruction::I32Store(atomic_memarg(0)));
+
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::End);
+    func
+}
+
+fn build_force_release_function(
+    state_global: u32,
+    current_base_global: u32,
+    current_end_global: u32,
+    realloc: u32,
+) -> Function {
+    // No params -> errno: i32
+    // Locals: old_base, old_end, old_size
+    let mut func = Function::new([(3, ValType::I32)]);
+
+    func.instruction(&Instruction::GlobalGet(current_base_global));
+    func.instruction(&Instruction::LocalSet(0));
+    func.instruction(&Instruction::GlobalGet(current_end_global));
+    func.instruction(&Instruction::LocalTee(1));
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::I32Sub);
+    func.instruction(&Instruction::LocalSet(2));
+
+    // Reset state to UNINITIALIZED
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::GlobalSet(state_global));
+
+    // Zero out current stack globals
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::GlobalSet(current_base_global));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::GlobalSet(current_end_global));
+
+    // Free old stack
+    func.instruction(&Instruction::LocalGet(0));
+    func.instruction(&Instruction::LocalGet(2));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::Call(realloc));
+    func.instruction(&Instruction::Drop);
+
+    func.instruction(&Instruction::I32Const(0));
+    func.instruction(&Instruction::End);
+    func
+}
+
+#[allow(clippy::too_many_arguments)]
 fn build_target_ensure_function(
     stack_size: u32,
     target_index: u32,
@@ -470,6 +750,8 @@ fn build_wrapper(
     ensure_index: u32,
     state_global: u32,
     depth_global: u32,
+    layout_lock_acquire_index: Option<u32>,
+    layout_lock_release_index: Option<u32>,
 ) -> Function {
     let params = function_type.params();
     let results = function_type.results();
@@ -493,6 +775,10 @@ fn build_wrapper(
         func.instruction(&Instruction::I32Const(1));
         func.instruction(&Instruction::I32Add);
         func.instruction(&Instruction::GlobalSet(depth_global));
+
+        if let Some(lock_acquire) = layout_lock_acquire_index {
+            func.instruction(&Instruction::Call(lock_acquire));
+        }
     }
 
     for index in 0..params.len() as u32 {
@@ -501,6 +787,10 @@ fn build_wrapper(
     func.instruction(&Instruction::Call(export.original_index));
 
     if !export.thread_start {
+        if let Some(lock_release) = layout_lock_release_index {
+            func.instruction(&Instruction::Call(lock_release));
+        }
+
         for result_index in (0..results.len() as u32).rev() {
             func.instruction(&Instruction::LocalSet(first_result_local + result_index));
         }
@@ -679,6 +969,13 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                 appended_types.push((claim_params.to_vec(), i64_result.to_vec()));
                 index
             });
+        let empty_no_result = [];
+        let empty_no_result_type =
+            find_function_type(&types, &empty_no_result, &empty_no_result).unwrap_or_else(|| {
+                let index = (types.len() + appended_types.len()) as u32;
+                appended_types.push((Vec::new(), Vec::new()));
+                index
+            });
 
         let rebinder = TargetRebinder { imported_functions };
         let mut exports = Vec::new();
@@ -708,13 +1005,15 @@ impl StreamPass for ExportStackPreTargetStreamPass {
         let director_index = imported_functions;
         let ensure_vfs_index = imported_functions + 1;
         let claim_target_index = imported_functions + 2;
+        let layout_lock_acquire_index = imported_functions + 3;
+        let layout_lock_release_index = imported_functions + 4;
         let first_new_global = imported_globals + local_globals;
         let state_global = first_new_global;
         let current_base_global = first_new_global + 1;
         let current_end_global = first_new_global + 2;
         let depth_global = first_new_global + 3;
         let generation_global = first_new_global + 4;
-        let ensure_index = imported_functions + 3 + defined_functions;
+        let ensure_index = imported_functions + 5 + defined_functions;
         let wrapper_indices = exports
             .iter()
             .enumerate()
@@ -723,6 +1022,8 @@ impl StreamPass for ExportStackPreTargetStreamPass {
         let stack_pointer = rebinder.global(stack_pointer);
         let director_name = format!("__wasip1_vfs_{}_memory_director", self.target_name);
         let ensure_export = format!("__wasip1_vfs_{}_stack_ensure", self.target_name);
+        let lock_acquire_name = "__wasip1_vfs_memory_lock_read_acquire".to_string();
+        let lock_release_name = "__wasip1_vfs_memory_lock_read_release".to_string();
 
         let mut module = Module::new();
         let mut saw_code = false;
@@ -788,6 +1089,17 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                         CLAIM_TARGET_EXPORT,
                         EntityType::Function(claim_type),
                     );
+                    // Import layout lock functions to prevent memory moves during protected calls
+                    output.import(
+                        &self.vfs_name,
+                        &lock_acquire_name,
+                        EntityType::Function(empty_no_result_type),
+                    );
+                    output.import(
+                        &self.vfs_name,
+                        &lock_release_name,
+                        EntityType::Function(empty_no_result_type),
+                    );
                     module.section(&output);
                 }
                 Payload::FunctionSection(section) => {
@@ -796,6 +1108,8 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                         output.function(function?);
                     }
                     output.function(ensure_type);
+                    output.function(empty_no_result_type); // lock acquire
+                    output.function(empty_no_result_type); // lock release
                     for export in &exports {
                         output.function(export.type_index);
                     }
@@ -966,6 +1280,8 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                             ensure_index,
                             state_global,
                             depth_global,
+                            Some(layout_lock_acquire_index),
+                            Some(layout_lock_release_index),
                         ));
                     }
                     module.section(&output);
@@ -1201,6 +1517,24 @@ impl StreamPass for ExportStackPreVfsStreamPass {
             .unwrap_or(types.len() as u32 + u32::from(append_ensure_type));
         let append_claim_type = claim_type >= types.len() as u32;
 
+        let base_type_count = types.len()
+            + usize::from(append_ensure_type)
+            + usize::from(append_claim_type);
+        let i32_param = [wasmparser::ValType::I32];
+        let i32_result = [wasmparser::ValType::I32];
+        let release_vfs_type =
+            find_function_type(&types, &i32_param, &i32_result).unwrap_or_else(|| {
+                base_type_count as u32
+            });
+        let append_release_type = release_vfs_type >= base_type_count as u32;
+        let release_target_type_params = [wasmparser::ValType::I32, wasmparser::ValType::I32];
+        let release_target_type =
+            find_function_type(&types, &release_target_type_params, &i32_result).unwrap_or_else(
+                || (base_type_count + usize::from(append_release_type)) as u32,
+            );
+        let append_release_target_type = release_target_type
+            >= (base_type_count + usize::from(append_release_type)) as u32;
+
         let first_new_global = import_global_count + local_global_count;
         let state_global = first_new_global;
         let current_base_global = first_new_global + 1;
@@ -1211,11 +1545,24 @@ impl StreamPass for ExportStackPreVfsStreamPass {
         let first_new_func = import_func_count + defined_func_count;
         let ensure_index = first_new_func;
         let claim_index = first_new_func + 1;
+        let extra_before_wrappers = 2_u32;
         let wrapper_indices = exports
             .iter()
             .enumerate()
-            .map(|(index, export)| (export.name.clone(), first_new_func + 2 + index as u32))
+            .map(|(index, export)| {
+                (
+                    export.name.clone(),
+                    first_new_func + extra_before_wrappers + index as u32,
+                )
+            })
             .collect::<HashMap<_, _>>();
+        let release_vfs_index =
+            first_new_func + extra_before_wrappers + exports.len() as u32;
+        let release_target_index = release_vfs_index + 1;
+        let info_index = release_target_index + 1;
+        let info_target_index = info_index + 1;
+        let force_release_index = info_target_index + 1;
+        let force_release_target_index = force_release_index + 1;
 
         let mut module = Module::new();
         let mut saw_global_section = false;
@@ -1251,6 +1598,14 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                             .ty()
                             .function([ValType::I32, ValType::I32], [ValType::I64]);
                     }
+                    if append_release_type {
+                        output.ty().function([ValType::I32], [ValType::I32]);
+                    }
+                    if append_release_target_type {
+                        output
+                            .ty()
+                            .function([ValType::I32, ValType::I32], [ValType::I32]);
+                    }
                     module.section(&output);
                 }
                 Payload::FunctionSection(section) => {
@@ -1263,6 +1618,12 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                     for export in &exports {
                         output.function(export.type_index);
                     }
+                    output.function(release_vfs_type);
+                    output.function(release_target_type);
+                    output.function(release_vfs_type); // info uses same (i32) -> i32
+                    output.function(release_vfs_type); // info_target uses same (i32) -> i32
+                    output.function(ensure_type); // force_release uses same () -> i32
+                    output.function(ensure_type); // force_release_target uses same () -> i32
                     module.section(&output);
                 }
                 Payload::GlobalSection(section) => {
@@ -1307,6 +1668,24 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                     }
                     output.export(ENSURE_EXPORT, ExportKind::Func, ensure_index);
                     output.export(CLAIM_TARGET_EXPORT, ExportKind::Func, claim_index);
+                    output.export(RELEASE_VFS_EXPORT, ExportKind::Func, release_vfs_index);
+                    output.export(
+                        RELEASE_TARGET_EXPORT,
+                        ExportKind::Func,
+                        release_target_index,
+                    );
+                    output.export(INFO_VFS_EXPORT, ExportKind::Func, info_index);
+                    output.export(INFO_TARGET_EXPORT, ExportKind::Func, info_target_index);
+                    output.export(
+                        FORCE_RELEASE_VFS_EXPORT,
+                        ExportKind::Func,
+                        force_release_index,
+                    );
+                    output.export(
+                        FORCE_RELEASE_TARGET_EXPORT,
+                        ExportKind::Func,
+                        force_release_target_index,
+                    );
                     module.section(&output);
                 }
                 Payload::CodeSectionStart { .. } => {
@@ -1344,8 +1723,65 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                             ensure_index,
                             state_global,
                             depth_global,
+                            None,
+                            None,
                         ));
                     }
+                    // release_vfs: (i32) -> i32
+                    output.function(&build_release_vfs_function(
+                        stack_size,
+                        handoff_global,
+                        stack_pointer,
+                        realloc,
+                        state_global,
+                        current_base_global,
+                        current_end_global,
+                        depth_global,
+                        generation_global,
+                    ));
+                    // Stubs for remaining
+                    let mut stub_no_args = Function::new([]);
+                    stub_no_args.instruction(&Instruction::I32Const(0));
+                    stub_no_args.instruction(&Instruction::End);
+                    let mut stub_one_arg = Function::new([(1, ValType::I32)]);
+                    stub_one_arg.instruction(&Instruction::LocalGet(0));
+                    stub_one_arg.instruction(&Instruction::Drop);
+                    stub_one_arg.instruction(&Instruction::I32Const(0));
+                    stub_one_arg.instruction(&Instruction::End);
+                    let mut stub_two_arg = Function::new([(2, ValType::I32)]);
+                    stub_two_arg.instruction(&Instruction::LocalGet(0));
+                    stub_two_arg.instruction(&Instruction::Drop);
+                    stub_two_arg.instruction(&Instruction::LocalGet(1));
+                    stub_two_arg.instruction(&Instruction::Drop);
+                    stub_two_arg.instruction(&Instruction::I32Const(0));
+                    stub_two_arg.instruction(&Instruction::End);
+                    // release_target: (i32, i32) -> i32
+                    output.function(&build_release_target_function(
+                        target_handoff_global,
+                        realloc,
+                        state_global,
+                    ));
+                    // info_vfs: (i32) -> i32
+                    output.function(&build_info_function(
+                        stack_size,
+                        state_global,
+                        current_base_global,
+                        current_end_global,
+                        depth_global,
+                        generation_global,
+                        handoff_global,
+                    ));
+                    // info_target: (i32) -> i32 (TODO: fix body for target_handoff)
+                    output.function(&stub_one_arg);
+                    // force_release_vfs: () -> i32
+                    output.function(&build_force_release_function(
+                        state_global,
+                        current_base_global,
+                        current_end_global,
+                        realloc,
+                    ));
+                    // force_release_target: () -> i32 (TODO: use target globals)
+                    output.function(&stub_no_args);
                     module.section(&output);
                 }
                 Payload::CodeSectionEntry(_) => {}
