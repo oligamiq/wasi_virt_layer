@@ -1424,11 +1424,20 @@ mod tests {
             },
             &ConstExpr::i32_const(64),
         );
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: false,
+                shared: false,
+            },
+            &ConstExpr::i32_const(0),
+        );
         module.section(&globals);
 
         let mut exports = ExportSection::new();
         exports.export("__stack_pointer", ExportKind::Global, 0);
         exports.export(HANDOFF_EXPORT, ExportKind::Global, 1);
+        exports.export(TARGET_HANDOFF_EXPORT, ExportKind::Global, 2);
         exports.export("cabi_realloc", ExportKind::Func, 0);
         exports.export("run", ExportKind::Func, 1);
         exports.export("wasi_thread_start", ExportKind::Func, 2);
@@ -1477,8 +1486,8 @@ mod tests {
         }
 
         assert_eq!(ensure_index, Some(3));
-        assert_eq!(run_index, Some(4));
-        assert_eq!(thread_start_index, Some(5));
+        assert_eq!(run_index, Some(5));
+        assert_eq!(thread_start_index, Some(6));
         Ok(())
     }
 }
