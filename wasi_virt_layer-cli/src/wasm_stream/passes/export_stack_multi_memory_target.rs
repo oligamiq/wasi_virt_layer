@@ -144,6 +144,7 @@ impl StreamPass for ExportStackMultiMemoryTargetStreamPass {
                         defined_func_count += 1;
                     }
                 }
+                Payload::MemorySection(_) => has_memory = true,
                 Payload::GlobalSection(s) => local_global_count = s.count(),
                 Payload::ExportSection(s) => {
                     for export in s {
@@ -463,14 +464,10 @@ impl StreamPass for ExportStackMultiMemoryTargetStreamPass {
                     let ensure_vfs = import_func_count;
                     let lock_acquire = import_func_count + 1;
                     let lock_release = import_func_count + 2;
-                    // slot_acquire is a local function at known offset:
-                    // original_import_funcs(=import_func_count - 0? the imports already include the arena's size/grow etc.?
-                    // Actually, the import count from the first pass doesn't include arena pass additions.
-                    // But wait, the arena pass modifies the module. This pass runs on the OUTPUT of the arena pass.
-                    // So the import_func_count from scanning this output already includes the original imports.
-                    // The arena pass doesn't add imports — it only adds defined functions.
-                    // So: slot_acquire = import_func_count + defined_func_count + 2 (size_fn, grow_fn)
-                    let slot_acquire_idx = import_func_count + defined_func_count + 2;
+                    // slot_acquire is 3rd of 4 arena-added functions: size(+0), grow(+1), slot_acquire(+2), slot_release(+3)
+                    // Original defined before arena = defined_func_count - 4
+                    let slot_acquire_idx =
+                        (import_func_count + new_import_count) + defined_func_count - 2;
 
                     // Build ensure_target function: () -> i32
                     // Calls: ensure_vfs, slot_acquire, sets up stack pointer
@@ -629,5 +626,188 @@ impl StreamPass for ExportStackMultiMemoryTargetStreamPass {
         }
 
         Ok(module.finish())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_encoder::{GlobalSection, MemorySection, MemoryType};
+
+    fn fixture_correct() -> Vec<u8> {
+        let mut module = Module::new();
+
+        // Types: 0=() -> i32, 1=() -> (), 2=(i32) -> i32, 3=() -> i64, 4=(i32) -> ()
+        let mut types = TypeSection::new();
+        types.ty().function([], [ValType::I32]); // 0
+        types.ty().function([], []); // 1
+        types.ty().function([ValType::I32], [ValType::I32]); // 2
+        types.ty().function([], [ValType::I64]); // 3
+        types.ty().function([ValType::I32], []); // 4
+        module.section(&types);
+
+        let imports = ImportSection::new();
+        module.section(&imports);
+
+        // 2 original + 4 arena functions
+        let mut functions = FunctionSection::new();
+        functions.function(0); // run: () -> i32
+        functions.function(1); // thread_start: () -> ()
+        functions.function(0); // size_fn: () -> i32
+        functions.function(2); // grow_fn: (i32) -> i32
+        functions.function(3); // slot_acquire: () -> i64
+        functions.function(4); // slot_release: (i32) -> ()
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 7,
+            maximum: Some(16),
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+
+        let mut globals = GlobalSection::new();
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &ConstExpr::i32_const(1048576),
+        );
+        module.section(&globals);
+
+        let mut exports = wasm_encoder::ExportSection::new();
+        exports.export("__stack_pointer", ExportKind::Global, 0);
+        exports.export("run", ExportKind::Func, 0);
+        exports.export("wasi_thread_start", ExportKind::Func, 1);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut run = Function::new([]);
+        run.instruction(&Instruction::I32Const(42));
+        run.instruction(&Instruction::End);
+        code.function(&run);
+        let mut ts = Function::new([]);
+        ts.instruction(&Instruction::End);
+        code.function(&ts);
+        let mut sz = Function::new([]);
+        sz.instruction(&Instruction::MemorySize(0));
+        sz.instruction(&Instruction::I32Const(3));
+        sz.instruction(&Instruction::I32Sub);
+        sz.instruction(&Instruction::End);
+        code.function(&sz);
+        let mut gw = Function::new([(1, ValType::I32)]);
+        gw.instruction(&Instruction::LocalGet(0));
+        gw.instruction(&Instruction::MemoryGrow(0));
+        gw.instruction(&Instruction::End);
+        code.function(&gw);
+        let mut sa = Function::new([]);
+        sa.instruction(&Instruction::I64Const(0x2000000100000));
+        sa.instruction(&Instruction::End);
+        code.function(&sa);
+        let mut sr = Function::new([(1, ValType::I32)]);
+        sr.instruction(&Instruction::LocalGet(0));
+        sr.instruction(&Instruction::Drop);
+        sr.instruction(&Instruction::End);
+        code.function(&sr);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    #[test]
+    fn wrapper_pass_validates() -> Result<()> {
+        let fixture = fixture_correct();
+        // Validate the fixture first
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&fixture)?;
+
+        let mut pass = ExportStackMultiMemoryTargetStreamPass::new(
+            "target".to_string(),
+            "vfs".to_string(),
+            196608, // 3 pages arena
+            65536,
+        );
+        let output = pass.run(&fixture)?;
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)?;
+
+        // Check that the ensure export exists
+        let mut found_ensure = false;
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let Payload::ExportSection(s) = payload? {
+                for export in s {
+                    if export?.name == "__wasip1_vfs_target_stack_ensure" {
+                        found_ensure = true;
+                    }
+                }
+            }
+        }
+        assert!(found_ensure);
+        Ok(())
+    }
+
+    #[test]
+    fn wrapper_pass_skips_without_exports() -> Result<()> {
+        // Module with memory but no exports to protect
+        let mut module = Module::new();
+        let mut types = TypeSection::new();
+        types.ty().function([], [ValType::I32]);
+        module.section(&types);
+        module.section(&ImportSection::new());
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        functions.function(0);
+        functions.function(0);
+        functions.function(0);
+        module.section(&functions);
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 7,
+            maximum: Some(16),
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+        let mut globals = GlobalSection::new();
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &ConstExpr::i32_const(65536),
+        );
+        module.section(&globals);
+        let mut exports = wasm_encoder::ExportSection::new();
+        exports.export("__stack_pointer", ExportKind::Global, 0);
+        // Only export "memory" — no protectable function exports
+        exports.export("memory", ExportKind::Memory, 0);
+        module.section(&exports);
+        let mut code = CodeSection::new();
+        for _ in 0..4 {
+            let mut f = Function::new([]);
+            f.instruction(&Instruction::I32Const(0));
+            f.instruction(&Instruction::End);
+            code.function(&f);
+        }
+        module.section(&code);
+        let fixture = module.finish();
+
+        let mut pass = ExportStackMultiMemoryTargetStreamPass::new(
+            "target".to_string(),
+            "vfs".to_string(),
+            196608,
+            65536,
+        );
+        let output = pass.run(&fixture)?;
+        // Should return unchanged since no exports to protect
+        assert_eq!(output, fixture);
+        Ok(())
     }
 }
