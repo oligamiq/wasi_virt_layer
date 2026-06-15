@@ -668,8 +668,16 @@ impl GeneratorRunner {
                         _cloned_ctx.stack_config.slots.get(target_name.as_ref()).copied(),
                     ) {
                         if slots > 0 {
+                            let arena_pass = crate::wasm_stream::passes::export_stack_arena::ExportStackArenaStreamPass::new(size, slots);
+                            let arena_size = arena_pass.arena_offset() as u32;
+                            pipeline.add_pass(Box::new(arena_pass));
                             pipeline.add_pass(Box::new(
-                                crate::wasm_stream::passes::export_stack_arena::ExportStackArenaStreamPass::new(size, slots),
+                                crate::wasm_stream::passes::export_stack_multi_memory_target::ExportStackMultiMemoryTargetStreamPass::new(
+                                    target_name.to_string(),
+                                    crate::unique_name::UniqueName::WASIP1_ABI_MODULE.to_string(),
+                                    arena_size,
+                                    size,
+                                ),
                             ));
                         }
                     }

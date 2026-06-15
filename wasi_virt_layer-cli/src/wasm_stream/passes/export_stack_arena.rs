@@ -40,14 +40,14 @@ impl ExportStackArenaStreamPass {
         Self { stack_size, slots }
     }
 
-    fn arena_pages(&self) -> u32 {
+    pub fn arena_pages(&self) -> u32 {
         let bitmap_words = (self.slots + 31) / 32;
         let bitmap_bytes = bitmap_words * 4;
         let slots_bytes = self.stack_size * self.slots;
         (bitmap_bytes + slots_bytes).div_ceil(65536)
     }
 
-    fn arena_offset(&self) -> u64 {
+    pub fn arena_offset(&self) -> u64 {
         (self.arena_pages() as u64) * 65536
     }
 }
