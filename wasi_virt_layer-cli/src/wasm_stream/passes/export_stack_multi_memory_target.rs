@@ -431,26 +431,30 @@ impl StreamPass for ExportStackMultiMemoryTargetStreamPass {
                     }
                     module.section(&out);
                 }
-                Payload::CodeSectionStart { .. } => {
+                Payload::CodeSectionStart { range, .. } => {
                     saw_code = true;
                     let mut out = CodeSection::new();
 
-                    for nested in wasmparser::Parser::new(0).parse_all(input_wasm) {
-                        if let Payload::CodeSectionEntry(body) = nested? {
-                            let locals = body
-                                .get_locals_reader()?
-                                .into_iter()
-                                .map(|l| {
-                                    let (c, t) = l?;
-                                    Ok((c, translate_val_type(t, &DefaultRebinder)))
-                                })
-                                .collect::<Result<Vec<_>>>()?;
-                            let mut func = Function::new(locals);
-                            for op in body.get_operators_reader()? {
-                                func.instruction(&translate(&op?, &rebinder));
-                            }
-                            out.function(&func);
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
+                    let code_reader = wasmparser::CodeSectionReader::new(reader)?;
+                    for body in code_reader {
+                        let body = body?;
+                        let locals = body
+                            .get_locals_reader()?
+                            .into_iter()
+                            .map(|l| {
+                                let (c, t) = l?;
+                                Ok((c, translate_val_type(t, &DefaultRebinder)))
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        let mut func = Function::new(locals);
+                        for op in body.get_operators_reader()? {
+                            func.instruction(&translate(&op?, &rebinder));
                         }
+                        out.function(&func);
                     }
 
                     let first_new_global = import_global_count + local_global_count;

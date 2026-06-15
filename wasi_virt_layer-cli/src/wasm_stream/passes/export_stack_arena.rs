@@ -602,69 +602,73 @@ impl StreamPass for ExportStackArenaStreamPass {
                     }
                     module.section(&out);
                 }
-                Payload::CodeSectionStart { .. } => {
+                Payload::CodeSectionStart { range, .. } => {
                     code_seen = true;
                     let mut out = CodeSection::new();
 
-                    for nested in wasmparser::Parser::new(0).parse_all(input_wasm) {
-                        if let Payload::CodeSectionEntry(body) = nested? {
-                            let orig_locals = body
-                                .get_locals_reader()?
-                                .into_iter()
-                                .map(|l| {
-                                    let (c, t) = l?;
-                                    Ok((c, translate_val_type(t, &DefaultRebinder)))
-                                })
-                                .collect::<Result<Vec<_>>>()?;
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
+                    let code_reader = wasmparser::CodeSectionReader::new(reader)?;
+                    for body in code_reader {
+                        let body = body?;
+                        let orig_locals = body
+                            .get_locals_reader()?
+                            .into_iter()
+                            .map(|l| {
+                                let (c, t) = l?;
+                                Ok((c, translate_val_type(t, &DefaultRebinder)))
+                            })
+                            .collect::<Result<Vec<_>>>()?;
 
-                            let orig_count: u32 = orig_locals.iter().map(|(c, _)| *c as u32).sum();
-                            let mut locals = orig_locals.clone();
-                            locals.push((1, ValType::I32)); // temp_i32
-                            locals.push((1, ValType::I64)); // temp_i64
-                            let temps = Temps {
-                                i32_idx: orig_count,
-                                i64_idx: orig_count + 1,
-                                total_locals: orig_count + 2,
-                            };
+                        let orig_count: u32 = orig_locals.iter().map(|(c, _)| *c as u32).sum();
+                        let mut locals = orig_locals.clone();
+                        locals.push((1, ValType::I32)); // temp_i32
+                        locals.push((1, ValType::I64)); // temp_i64
+                        let temps = Temps {
+                            i32_idx: orig_count,
+                            i64_idx: orig_count + 1,
+                            total_locals: orig_count + 2,
+                        };
 
-                            let mut func = Function::new(locals);
-                            for operator in body.get_operators_reader()? {
-                                let op = operator?;
+                        let mut func = Function::new(locals);
+                        for operator in body.get_operators_reader()? {
+                            let op = operator?;
 
-                                if let Some(mem_info) = mem_info_fn(&op) {
-                                    if mem_info.memory == 0 {
-                                        let val_ops = &mem_info.value_operands;
+                            if let Some(mem_info) = mem_info_fn(&op) {
+                                if mem_info.memory == 0 {
+                                    let val_ops = &mem_info.value_operands;
 
-                                        // Save value operands to temp locals (in reverse)
-                                        for ty in val_ops.iter().rev() {
-                                            func.instruction(&local_set_for(*ty, &temps));
-                                        }
-
-                                        // Add arena offset to address
-                                        func.instruction(&Instruction::I32Const(arena_off_i32));
-                                        func.instruction(&Instruction::I32Add);
-
-                                        // Restore value operands from temp locals (in original order)
-                                        for ty in val_ops.iter() {
-                                            func.instruction(&local_get_for(*ty, &temps));
-                                        }
+                                    // Save value operands to temp locals (in reverse)
+                                    for ty in val_ops.iter().rev() {
+                                        func.instruction(&local_set_for(*ty, &temps));
                                     }
-                                }
 
-                                match op {
-                                    wasmparser::Operator::MemorySize { mem } if mem == 0 => {
-                                        func.instruction(&Instruction::Call(size_fn_idx));
-                                    }
-                                    wasmparser::Operator::MemoryGrow { mem } if mem == 0 => {
-                                        func.instruction(&Instruction::Call(grow_fn_idx));
-                                    }
-                                    _ => {
-                                        func.instruction(&translate(&op, &rebinder));
+                                    // Add arena offset to address
+                                    func.instruction(&Instruction::I32Const(arena_off_i32));
+                                    func.instruction(&Instruction::I32Add);
+
+                                    // Restore value operands from temp locals (in original order)
+                                    for ty in val_ops.iter() {
+                                        func.instruction(&local_get_for(*ty, &temps));
                                     }
                                 }
                             }
-                            out.function(&func);
+
+                            match op {
+                                wasmparser::Operator::MemorySize { mem } if mem == 0 => {
+                                    func.instruction(&Instruction::Call(size_fn_idx));
+                                }
+                                wasmparser::Operator::MemoryGrow { mem } if mem == 0 => {
+                                    func.instruction(&Instruction::Call(grow_fn_idx));
+                                }
+                                _ => {
+                                    func.instruction(&translate(&op, &rebinder));
+                                }
+                            }
                         }
+                        out.function(&func);
                     }
 
                     let mut size_fn = Function::new([]);

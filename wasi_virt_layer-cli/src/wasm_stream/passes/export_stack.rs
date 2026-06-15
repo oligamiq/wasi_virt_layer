@@ -1399,8 +1399,6 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                         output.function(function?);
                     }
                     output.function(ensure_type);
-                    output.function(empty_no_result_type); // lock acquire
-                    output.function(empty_no_result_type); // lock release
                     for export in &exports {
                         output.function(export.type_index);
                     }
@@ -1522,25 +1520,29 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                     }
                     module.section(&output);
                 }
-                Payload::CodeSectionStart { .. } => {
+                Payload::CodeSectionStart { range, .. } => {
                     saw_code = true;
                     let mut output = CodeSection::new();
-                    for nested in wasmparser::Parser::new(0).parse_all(input_wasm) {
-                        if let Payload::CodeSectionEntry(body) = nested? {
-                            let locals = body
-                                .get_locals_reader()?
-                                .into_iter()
-                                .map(|local| {
-                                    let (count, ty) = local?;
-                                    Ok((count, translate_val_type(ty, &DefaultRebinder)))
-                                })
-                                .collect::<Result<Vec<_>>>()?;
-                            let mut function = Function::new(locals);
-                            for operator in body.get_operators_reader()? {
-                                function.instruction(&translate(&operator?, &rebinder));
-                            }
-                            output.function(&function);
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
+                    let code_reader = wasmparser::CodeSectionReader::new(reader)?;
+                    for body in code_reader {
+                        let body = body?;
+                        let locals = body
+                            .get_locals_reader()?
+                            .into_iter()
+                            .map(|local| {
+                                let (count, ty) = local?;
+                                Ok((count, translate_val_type(ty, &DefaultRebinder)))
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        let mut function = Function::new(locals);
+                        for operator in body.get_operators_reader()? {
+                            function.instruction(&translate(&operator?, &rebinder));
                         }
+                        output.function(&function);
                     }
                     output.function(&build_target_ensure_function(
                         stack_size,
@@ -2007,14 +2009,17 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                     );
                     module.section(&output);
                 }
-                Payload::CodeSectionStart { .. } => {
+                Payload::CodeSectionStart { range, .. } => {
                     saw_code_section = true;
                     let mut output = CodeSection::new();
-                    // Entries are consumed by the following parser payloads.
-                    for nested in wasmparser::Parser::new(0).parse_all(input_wasm) {
-                        if let Payload::CodeSectionEntry(body) = nested? {
-                            output.raw(&input_wasm[body.range().start..body.range().end]);
-                        }
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
+                    let code_reader = wasmparser::CodeSectionReader::new(reader)?;
+                    for body in code_reader {
+                        let body = body?;
+                        output.raw(&input_wasm[body.range().start..body.range().end]);
                     }
                     output.function(&build_ensure_function(
                         stack_size,
