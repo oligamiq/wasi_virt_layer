@@ -113,6 +113,190 @@ fn find_i32_param_i32_result(types: &[wasmparser::SubType]) -> Option<u32> {
         .map(|i| i as u32)
 }
 
+fn find_i64_result_type(types: &[wasmparser::SubType]) -> Option<u32> {
+    types
+        .iter()
+        .position(|ty| {
+            matches!(
+                &ty.composite_type.inner,
+                wasmparser::CompositeInnerType::Func(f)
+                    if f.params().is_empty()
+                        && f.results() == [wasmparser::ValType::I64]
+            )
+        })
+        .map(|i| i as u32)
+}
+
+fn find_i32_param_void_result(types: &[wasmparser::SubType]) -> Option<u32> {
+    types
+        .iter()
+        .position(|ty| {
+            matches!(
+                &ty.composite_type.inner,
+                wasmparser::CompositeInnerType::Func(f)
+                    if f.params() == [wasmparser::ValType::I32]
+                        && f.results().is_empty()
+            )
+        })
+        .map(|i| i as u32)
+}
+
+fn build_slot_acquire(bitmap_bytes: u32, slot_count: u32, stack_size: u32) -> Function {
+    // () -> i64: packed (base << 32) | end, or 0 if no free slots
+    // Locals: bitmap(i32), slot(i32), base(i32)
+    let mut f = Function::new([(3, ValType::I32)]);
+
+    // Outer labels:
+    //   Block $done = label 2 (or deeper depending on nesting)
+    //     Loop $retry = label 1
+    //       Loop $try_slot = label 0 (inside $retry, directly)
+
+    f.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty)); // $done
+    f.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $retry
+
+    // Load bitmap atomically: local 0 = i32.atomic.load(0)
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::I32AtomicLoad(wasm_encoder::MemArg {
+        offset: 0,
+        align: 2,
+        memory_index: 0,
+    }));
+    f.instruction(&Instruction::LocalSet(0));
+
+    // slot = 0
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::LocalSet(1));
+
+    // $try_slot loop
+    f.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty)); // $try_slot
+
+    // If slot >= slot_count → no free slots, return 0
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::I32Const(slot_count as i32));
+    f.instruction(&Instruction::I32GeU);
+    f.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+    f.instruction(&Instruction::I64Const(0));
+    f.instruction(&Instruction::Return);
+    f.instruction(&Instruction::End);
+
+    // If (bitmap & (1 << slot)) != 0 → skip, try next
+    f.instruction(&Instruction::LocalGet(0));
+    f.instruction(&Instruction::I32Const(1));
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::I32Shl);
+    f.instruction(&Instruction::I32And);
+    f.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+    // Slot taken — increment and retry
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::I32Const(1));
+    f.instruction(&Instruction::I32Add);
+    f.instruction(&Instruction::LocalSet(1));
+    f.instruction(&Instruction::Br(1)); // back to $try_slot
+    f.instruction(&Instruction::End);
+
+    // Slot is free. Try atomic CAS
+    // cmpxchg(addr=0, expected=local0, replacement=local0 | (1 << slot))
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::LocalGet(0));
+    f.instruction(&Instruction::LocalGet(0));
+    f.instruction(&Instruction::I32Const(1));
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::I32Shl);
+    f.instruction(&Instruction::I32Or);
+    f.instruction(&Instruction::I32AtomicRmwCmpxchg(wasm_encoder::MemArg {
+        offset: 0,
+        align: 2,
+        memory_index: 0,
+    }));
+
+    // If old != bitmap → CAS failed, retry from bitmap load
+    f.instruction(&Instruction::LocalGet(0));
+    f.instruction(&Instruction::I32Ne);
+    f.instruction(&Instruction::BrIf(2)); // break to $retry (label 2)
+
+    // CAS succeeded! Compute base = bitmap_bytes + slot * stack_size
+    f.instruction(&Instruction::I32Const(bitmap_bytes as i32));
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::I32Const(stack_size as i32));
+    f.instruction(&Instruction::I32Mul);
+    f.instruction(&Instruction::I32Add);
+    f.instruction(&Instruction::LocalSet(2));
+
+    // Return pack(base, base + size)
+    f.instruction(&Instruction::LocalGet(2));
+    f.instruction(&Instruction::I64ExtendI32U);
+    f.instruction(&Instruction::I64Const(32));
+    f.instruction(&Instruction::I64Shl);
+    f.instruction(&Instruction::LocalGet(2));
+    f.instruction(&Instruction::I32Const(stack_size as i32));
+    f.instruction(&Instruction::I32Add);
+    f.instruction(&Instruction::I64ExtendI32U);
+    f.instruction(&Instruction::I64Or);
+    f.instruction(&Instruction::Return);
+
+    // End $try_slot, $retry
+    f.instruction(&Instruction::End);
+    f.instruction(&Instruction::End);
+
+    // End $done
+    f.instruction(&Instruction::End);
+
+    // No free slots
+    f.instruction(&Instruction::I64Const(0));
+    f.instruction(&Instruction::End);
+    f
+}
+
+fn build_slot_release(_bitmap_bytes: u32) -> Function {
+    // (slot_index: i32) → ()
+    // Locals: bitmap(i32), cleared(i32)
+    let mut f = Function::new([(1, ValType::I32), (2, ValType::I32)]);
+
+    f.instruction(&Instruction::Block(wasm_encoder::BlockType::Empty));
+    f.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
+
+    // Load bitmap atomically: [bitmap], local 1 = bitmap
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::I32AtomicLoad(wasm_encoder::MemArg {
+        offset: 0,
+        align: 2,
+        memory_index: 0,
+    }));
+    f.instruction(&Instruction::LocalTee(1));
+
+    // Compute cleared = bitmap & ~(1 << slot_index)
+    f.instruction(&Instruction::I32Const(1));
+    f.instruction(&Instruction::LocalGet(0)); // param = slot_index
+    f.instruction(&Instruction::I32Shl);
+    f.instruction(&Instruction::I32Const(-1));
+    f.instruction(&Instruction::I32Xor);
+    f.instruction(&Instruction::I32And);
+    f.instruction(&Instruction::LocalSet(2));
+
+    // CAS: cmpxchg(0, local1 (old bitmap), local2 (cleared))
+    f.instruction(&Instruction::I32Const(0));
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::LocalGet(2));
+    f.instruction(&Instruction::I32AtomicRmwCmpxchg(wasm_encoder::MemArg {
+        offset: 0,
+        align: 2,
+        memory_index: 0,
+    }));
+
+    // Retry if old != bitmap
+    f.instruction(&Instruction::LocalGet(1));
+    f.instruction(&Instruction::I32Ne);
+    f.instruction(&Instruction::BrIf(0));
+
+    // Success
+    f.instruction(&Instruction::Return);
+
+    f.instruction(&Instruction::End);
+    f.instruction(&Instruction::End);
+    f.instruction(&Instruction::End);
+    f
+}
+
 impl StreamPass for ExportStackArenaStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> Result<Vec<u8>> {
         if self.slots == 0 {
@@ -196,8 +380,17 @@ impl StreamPass for ExportStackArenaStreamPass {
         };
         let append_grow_type = append_size_type
             || grow_fn_type >= (base_type_idx + usize::from(append_size_type)) as u32;
+        let after_grow =
+            base_type_idx + usize::from(append_size_type) + usize::from(append_grow_type);
+        let slot_acquire_type = find_i64_result_type(&types).unwrap_or_else(|| after_grow as u32);
+        let append_slot_acquire_type = slot_acquire_type >= after_grow as u32;
+        let after_slot_acquire = after_grow + usize::from(append_slot_acquire_type);
+        let slot_release_type =
+            find_i32_param_void_result(&types).unwrap_or_else(|| after_slot_acquire as u32);
+        let append_slot_release_type =
+            append_slot_acquire_type || slot_release_type >= after_slot_acquire as u32;
 
-        let extra_funcs = 2_u32;
+        let extra_funcs = 4_u32;
         let rebinder = OffsetRebinder {
             imported_funcs: import_func_count,
             extra_funcs,
@@ -205,6 +398,8 @@ impl StreamPass for ExportStackArenaStreamPass {
 
         let size_fn_idx = import_func_count + defined_func_count;
         let grow_fn_idx = size_fn_idx + 1;
+        let slot_acquire_idx = grow_fn_idx + 1;
+        let slot_release_idx = slot_acquire_idx + 1;
 
         let mem_info_fn = crate::wasm_stream::mem_info::memory_op_info;
 
@@ -227,6 +422,12 @@ impl StreamPass for ExportStackArenaStreamPass {
                     }
                     if append_grow_type {
                         out.ty().function([ValType::I32], [ValType::I32]);
+                    }
+                    if append_slot_acquire_type {
+                        out.ty().function([], [ValType::I64]);
+                    }
+                    if append_slot_release_type {
+                        out.ty().function([ValType::I32], []);
                     }
                     module.section(&out);
                 }
@@ -273,6 +474,8 @@ impl StreamPass for ExportStackArenaStreamPass {
                     }
                     out.function(size_fn_type);
                     out.function(grow_fn_type);
+                    out.function(slot_acquire_type);
+                    out.function(slot_release_type);
                     module.section(&out);
                 }
                 Payload::MemorySection(s) => {
@@ -476,6 +679,14 @@ impl StreamPass for ExportStackArenaStreamPass {
                     grow_fn.instruction(&Instruction::MemoryGrow(0));
                     grow_fn.instruction(&Instruction::End);
                     out.function(&grow_fn);
+
+                    let bitmap_bytes = ((self.slots + 31) / 32) * 4;
+                    out.function(&build_slot_acquire(
+                        bitmap_bytes,
+                        self.slots,
+                        self.stack_size,
+                    ));
+                    out.function(&build_slot_release(bitmap_bytes));
 
                     module.section(&out);
                 }
