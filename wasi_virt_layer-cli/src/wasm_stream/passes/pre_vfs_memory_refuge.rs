@@ -257,3 +257,150 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
         Ok(module.finish())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wasm_encoder::{EntityType, ExportKind, ExportSection, ImportSection, MemoryType, Module, TypeSection};
+
+    fn fixture(shared: bool) -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "env",
+            "memory",
+            EntityType::Memory(MemoryType {
+                minimum: 1,
+                maximum: Some(2),
+                memory64: false,
+                shared,
+                page_size_log2: None,
+            }),
+        );
+        imports.import("env", "dummy_func", EntityType::Function(0));
+        module.section(&imports);
+
+        let mut exports = ExportSection::new();
+        exports.export("memory", ExportKind::Memory, 0);
+        module.section(&exports);
+
+        module.finish()
+    }
+
+    #[test]
+    fn test_refuge_memory_non_shared() -> eyre::Result<()> {
+        let input = fixture(false);
+        let mut pass = TemporaryRefugeMemoryStreamPass::new(None);
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)?;
+
+        assert_eq!(pass.memory_count, 1);
+        assert!(!pass.had_shared);
+
+        // Verify imports and exports
+        let mut has_mem_import = false;
+        let mut has_local_mem = false;
+        let mut memory_shared = false;
+        let mut memory_export_name = String::new();
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(s) => {
+                    for group in s {
+                        for i in group? {
+                            let (_, import) = i?;
+                            if let wasmparser::TypeRef::Memory(_) = import.ty {
+                                has_mem_import = true;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::MemorySection(s) => {
+                    for mem in s {
+                        has_local_mem = true;
+                        memory_shared = mem?.shared;
+                    }
+                }
+                wasmparser::Payload::ExportSection(s) => {
+                    for export in s {
+                        let export = export?;
+                        if export.kind == wasmparser::ExternalKind::Memory {
+                            memory_export_name = export.name.to_string();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        assert!(!has_mem_import, "Imported memory should be removed");
+        assert!(has_local_mem, "Memory should become local");
+        assert!(!memory_shared, "Memory should not be shared");
+        assert_eq!(memory_export_name, "memory");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_refuge_memory_shared_and_renamed() -> eyre::Result<()> {
+        let input = fixture(true);
+        let mut pass = TemporaryRefugeMemoryStreamPass::new(Some("vfs_memory".to_string()));
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)?;
+
+        assert_eq!(pass.memory_count, 1);
+        assert!(pass.had_shared);
+
+        let mut has_mem_import = false;
+        let mut has_local_mem = false;
+        let mut memory_shared = true;
+        let mut memory_export_name = String::new();
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(s) => {
+                    for group in s {
+                        for i in group? {
+                            let (_, import) = i?;
+                            if let wasmparser::TypeRef::Memory(_) = import.ty {
+                                has_mem_import = true;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::MemorySection(s) => {
+                    for mem in s {
+                        has_local_mem = true;
+                        memory_shared = mem?.shared;
+                    }
+                }
+                wasmparser::Payload::ExportSection(s) => {
+                    for export in s {
+                        let export = export?;
+                        if export.kind == wasmparser::ExternalKind::Memory {
+                            memory_export_name = export.name.to_string();
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        assert!(!has_mem_import, "Imported memory should be removed");
+        assert!(has_local_mem, "Memory should become local");
+        assert!(!memory_shared, "Memory should not be shared in output");
+        assert_eq!(memory_export_name, "vfs_memory");
+
+        Ok(())
+    }
+}
+

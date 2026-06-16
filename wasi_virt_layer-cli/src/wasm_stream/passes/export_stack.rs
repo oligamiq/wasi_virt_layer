@@ -2317,4 +2317,197 @@ mod tests {
             .validate_all(&output)?;
         Ok(())
     }
+
+    fn target_fixture() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+            [ValType::I32],
+        );
+        types.ty().function([ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32, ValType::I32], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        // Add a dummy import so it has an ImportSection
+        imports.import("env", "dummy", EntityType::Function(1));
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        functions.function(1);
+        functions.function(2);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        memories.memory(MemoryType {
+            minimum: 2,
+            maximum: Some(8),
+            memory64: false,
+            shared: true,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+
+        let mut globals = GlobalSection::new();
+        globals.global(
+            GlobalType {
+                val_type: ValType::I32,
+                mutable: true,
+                shared: false,
+            },
+            &ConstExpr::i32_const(65536),
+        );
+        module.section(&globals);
+
+        let mut exports = ExportSection::new();
+        exports.export("__stack_pointer", ExportKind::Global, 0);
+        exports.export("cabi_realloc", ExportKind::Func, 1);
+        exports.export("run", ExportKind::Func, 2);
+        exports.export("wasi_thread_start", ExportKind::Func, 3);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut realloc = Function::new([]);
+        realloc.instruction(&Instruction::I32Const(1024));
+        realloc.instruction(&Instruction::End);
+        code.function(&realloc);
+        let mut run = Function::new([]);
+        run.instruction(&Instruction::LocalGet(0));
+        run.instruction(&Instruction::I32Const(1));
+        run.instruction(&Instruction::I32Add);
+        run.instruction(&Instruction::End);
+        code.function(&run);
+        let mut thread_start = Function::new([]);
+        thread_start.instruction(&Instruction::End);
+        code.function(&thread_start);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    #[test]
+    fn target_pass_generated_module_validates() -> Result<()> {
+        let input = target_fixture();
+        let mut pass = ExportStackPreTargetStreamPass::new(
+            "target".to_string(),
+            "vfs".to_string(),
+            0,
+            Some(65536),
+        );
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)?;
+
+        let mut imports = std::collections::HashSet::new();
+        let mut exports = std::collections::HashMap::new();
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                Payload::ImportSection(section) => {
+                    for group in section {
+                        for import in group? {
+                            let (_, import) = import?;
+                            imports.insert(import.name.to_string());
+                        }
+                    }
+                }
+                Payload::ExportSection(section) => {
+                    for export in section {
+                        let export = export?;
+                        exports.insert(export.name.to_string(), export.index);
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // Verify that the memory director and handoff functions are imported
+        assert!(imports.contains("__wasip1_vfs_target_memory_director"));
+        assert!(imports.contains(ENSURE_EXPORT));
+        assert!(imports.contains(CLAIM_TARGET_EXPORT));
+        assert!(imports.contains("__wasip1_vfs_memory_lock_read_acquire"));
+        assert!(imports.contains("__wasip1_vfs_memory_lock_read_release"));
+
+        // Verify that original exports are remapped to new wrapper functions
+        assert_eq!(exports.get("cabi_realloc"), Some(&6)); // Not protected, shifted by 5
+        assert!(exports.get("run").unwrap() > &6); // Remapped to wrapper
+        assert!(exports.get("wasi_thread_start").unwrap() > &6); // Remapped to wrapper
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_pass_skips_without_stack_size() -> Result<()> {
+        let input = target_fixture();
+        let mut pass = ExportStackPreTargetStreamPass::new(
+            "target".to_string(),
+            "vfs".to_string(),
+            0,
+            None,
+        );
+        let output = pass.run(&input)?;
+        assert_eq!(output, input);
+        Ok(())
+    }
+
+    #[test]
+    fn target_pass_handles_memory_growth_edge_cases() -> Result<()> {
+        let input = target_fixture();
+        let mut pass = ExportStackPreTargetStreamPass::new(
+            "target".to_string(),
+            "vfs".to_string(),
+            0,
+            Some(65536),
+        );
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)?;
+
+        // Find the generated ensure function (at index 9) and verify its code
+        let mut ensure_func_body = None;
+        let mut defined_func_idx = 0;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let Payload::CodeSectionEntry(body) = payload? {
+                // The first 3 functions (defined_func_idx 0, 1, 2) are cabi_realloc, run, wasi_thread_start.
+                // The 4th function (defined_func_idx 3) is target_ensure (which is function index 9 overall).
+                if defined_func_idx == 3 {
+                    ensure_func_body = Some(body);
+                    break;
+                }
+                defined_func_idx += 1;
+            }
+        }
+
+        let body = ensure_func_body.expect("target_ensure function body not found");
+        let mut ops = Vec::new();
+        for op in body.get_operators_reader()? {
+            ops.push(op?);
+        }
+
+        // Verify that target_ensure calls the memory director (which is at index 1)
+        let has_director_call = ops.iter().any(|op| {
+            matches!(op, wasmparser::Operator::Call { function_index: 1 })
+        });
+        assert!(has_director_call, "ensure function must call memory director to get dynamic memory offset");
+
+        // Verify that it subtracts the director result from current_end to get local stack address
+        let has_i32_sub = ops.iter().any(|op| {
+            matches!(op, wasmparser::Operator::I32Sub)
+        });
+        assert!(has_i32_sub, "ensure function must subtract memory offset");
+
+        // Verify that it sets the __stack_pointer global (which is at index 0)
+        let has_stack_pointer_set = ops.iter().any(|op| {
+            matches!(op, wasmparser::Operator::GlobalSet { global_index: 0 })
+        });
+        assert!(has_stack_pointer_set, "ensure function must set __stack_pointer");
+
+        Ok(())
+    }
 }
