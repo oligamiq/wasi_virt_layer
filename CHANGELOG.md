@@ -5,6 +5,39 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.5] - 2026-06-16
+### Added
+- **Memory Expansion & own_memory!**:
+    - Implemented `own_memory!` macro in `wasi_virt_layer` allowing VFS modules to expand target memory.
+    - Added `own_memory_lowering` and `check_range` stream passes to the CLI to support memory expansion.
+- **Export Stack Handoff Isolation**:
+    - Implemented export stack handoff design and ABI to protect exported Wasm functions from stack collisions when sharing linear memory.
+    - Added `ExportStackArenaStreamPass` for multi-memory target arena isolation (including atomic slot acquire/release).
+    - Integrated `ExportStackMultiMemoryTargetStreamPass` into the generator.
+    - Added `configure_wasm_stack!` and `protect_wasm_exports!` macros along with CLI argument parsing for configuring stack sizes and isolation.
+- **Threading & Execution**:
+    - Improved thread ID generation using host thread IDs and a TLS counter to ensure unique IDs across thread pools, preventing Rayon TLS isolation issues.
+    - Added WASI re-entrancy detection feature (`detect-wasi-reentrancy`) to trap synchronous re-entries of `non_recursive_wasi_snapshot_preview1!` calls via thread-local guards.
+    - Added synthesis warnings when a `__main_void` entrypoint is generated.
+- **Tests**:
+    - Added integration tests for single memory virtualization, 4 argument passing, and `stderr_reentrancy_vfs`.
+    - Added unit tests for memory growth edge cases and stack size skip logic in `ExportStackPreTargetStreamPass`.
+    - Added unit tests for memory strip, localization, and renaming logic in `TemporaryRefugeMemoryStreamPass`.
+    - Added comprehensive unit tests for `ExportStackMultiMemoryTargetStreamPass`.
+    - Added component validation tests and `wit-component` trampoline regression tests.
+
+### Fixed
+- **Stack Export Passes**:
+    - Fixed `CodeSectionStart` parsing by using `CodeSectionReader` with the correct range, resolving function body corruption in various export stack passes.
+    - Corrected `TargetRebinder` shift offset in `ExportStackPreTargetStreamPass` to prevent incorrect function indices in `call` instructions.
+    - Fixed incorrect function index calculation for `slot_acquire` in the stack ensure wrapper.
+- **Memory Passes**:
+    - Fixed `MultiMemoryLoweringStreamPass` function index rebinding and element section handling.
+    - Fixed refuge pass by adding explicit `TypeSection` pre-scan and `CodeSectionStart` handler.
+    - Unconditionally cleared the `shared` flag in the refuge pass.
+- **Dependencies**:
+    - Upgraded `wit-component` to 0.252.0 and `js-component-bindgen` to 2.0.1.
+
 ## [0.5.4] - 2026-06-11
 ### Added
 - **Tests**:

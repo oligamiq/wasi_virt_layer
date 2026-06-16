@@ -40,11 +40,11 @@ dependencies = [
 
 [[package]]
 name = "anonymous_threads_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -106,14 +106,14 @@ checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
 
 [[package]]
 name = "args"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "args-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -134,10 +134,10 @@ dependencies = [
 
 [[package]]
 name = "atomic_wait_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -170,7 +170,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "big_alloc"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "walkdir",
 ]
@@ -327,11 +327,11 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "changeable-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -440,11 +440,11 @@ dependencies = [
 
 [[package]]
 name = "complex-threads-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -769,7 +769,7 @@ dependencies = [
 
 [[package]]
 name = "dis_wasm"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "wasmparser 0.121.2",
 ]
@@ -788,19 +788,19 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "dynamic-wasm-multiple"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -810,7 +810,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -883,11 +883,11 @@ version = "0.1.0"
 
 [[package]]
 name = "example_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -957,7 +957,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1274,17 +1274,17 @@ dependencies = [
  "const_struct",
  "parking_lot",
  "smallstr",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.36.0",
 ]
 
 [[package]]
 name = "lib_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
@@ -1340,34 +1340,34 @@ checksum = "953f07c43838f8e6f9758cab68bf5bed85465e7587ebe0b823f1bcd81978ad3a"
 
 [[package]]
 name = "ls"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "ls-threads"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "ls-threads-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "ls-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "ls2"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "memchr"
@@ -1377,21 +1377,21 @@ checksum = "6b947ae49db0d222b1dbc6b113ce7248a3fc3a6ca21b696717bfc000ba4484d8"
 
 [[package]]
 name = "minimal_repro"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "minimal_repro_virtual"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1406,10 +1406,10 @@ dependencies = [
 
 [[package]]
 name = "mkdir_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1446,31 +1446,31 @@ name = "multi-location-vfs"
 version = "0.1.0"
 dependencies = [
  "wasi",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
 name = "multiple-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "parking_lot",
  "smallstr",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "multiple_calls_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "my_target"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "nix"
@@ -1486,19 +1486,19 @@ dependencies = [
 
 [[package]]
 name = "no_std_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "no_thread_with_thread_feature_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1567,11 +1567,11 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "own_memory_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1618,11 +1618,11 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pool-threads-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1692,7 +1692,7 @@ dependencies = [
 
 [[package]]
 name = "print_args"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "proc-macro2"
@@ -1752,18 +1752,18 @@ dependencies = [
 
 [[package]]
 name = "rayon_self_pool_target"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "rayon_self_pool_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1821,23 +1821,23 @@ name = "repro-float-load"
 version = "0.1.0"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "repro_multi_target_table_bug"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "run_on_thread"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1853,10 +1853,10 @@ checksum = "b50b8869d9fc858ce7266cce0194bd74df58b9d0e3f6df3a9fc8eb470d95c09d"
 
 [[package]]
 name = "rustc_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -1908,35 +1908,35 @@ checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
 name = "self-rw-threads-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "self-rw-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "self_rw_example"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "self_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -2042,14 +2042,14 @@ dependencies = [
 
 [[package]]
 name = "spawn_vfs_and_body_example"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "spawn_vfs_and_body_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -2079,10 +2079,10 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stderr_reentrancy_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
@@ -2199,7 +2199,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "wasi",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
@@ -2218,34 +2218,34 @@ dependencies = [
 
 [[package]]
 name = "test_args"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "walkdir",
 ]
 
 [[package]]
 name = "test_atomic_wait"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "test_helper_shared_memory_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "test_helper_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "test_lib"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "test_mkdir"
@@ -2253,31 +2253,31 @@ version = "0.1.0"
 
 [[package]]
 name = "test_new_bare"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.57.1",
 ]
 
 [[package]]
 name = "test_poll"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "test_pool_thread"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "test_rayon_tls_project"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "test_threads"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "test_unreachable_target"
@@ -2285,28 +2285,28 @@ version = "0.1.0"
 
 [[package]]
 name = "test_unwind_target"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "test_unwind_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "test_wasm"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "walkdir",
 ]
 
 [[package]]
 name = "test_write_single"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "thiserror"
@@ -2350,35 +2350,35 @@ dependencies = [
 
 [[package]]
 name = "thread_direct_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "thread_pool_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "threads_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
 [[package]]
 name = "tmp_test_encoder"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "wasm-encoder 0.218.1",
 ]
@@ -2422,10 +2422,10 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tree"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.57.1",
 ]
 
@@ -2464,7 +2464,7 @@ name = "unreachable-multi-target-vfs"
 version = "0.1.0"
 dependencies = [
  "wasi",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
@@ -2477,7 +2477,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "wasi",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
@@ -2514,7 +2514,7 @@ version = "0.1.0"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
@@ -2528,10 +2528,10 @@ dependencies = [
 
 [[package]]
 name = "wait_poll_vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
 ]
 
 [[package]]
@@ -2572,7 +2572,7 @@ dependencies = [
 
 [[package]]
 name = "wasi_virt_layer"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "backtrace",
  "const_for",
@@ -2591,7 +2591,7 @@ dependencies = [
 
 [[package]]
 name = "wasi_virt_layer-cli"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -3627,15 +3627,15 @@ dependencies = [
 
 [[package]]
 name = "write-single-target"
-version = "0.5.4"
+version = "0.5.5"
 
 [[package]]
 name = "write-single-vfs"
-version = "0.5.4"
+version = "0.5.5"
 dependencies = [
  "const_struct",
  "parking_lot",
- "wasi_virt_layer 0.5.4",
+ "wasi_virt_layer 0.5.5",
  "wit-bindgen 0.54.0",
 ]
 
