@@ -12,4 +12,4 @@ homepage.workspace = true
 readme.workspace = true
 
 [dependencies]
-wasm-encoder = "0.218.0"
+wasm-encoder = "0.252.0"

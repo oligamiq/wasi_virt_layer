@@ -12,4 +12,4 @@ homepage.workspace = true
 readme.workspace = true
 
 [dependencies]
-wasmparser = "0.121.2"
+wasmparser = "0.252.0"
