@@ -6,6 +6,7 @@ pub struct TemporaryRefugeMemoryStreamPass {
     pub memory_count: usize,
     pub had_shared: bool,
     pub rename_memory_export: Option<String>,
+    type_section_data: Vec<u8>,
 }
 
 impl TemporaryRefugeMemoryStreamPass {
@@ -14,23 +15,53 @@ impl TemporaryRefugeMemoryStreamPass {
             memory_count: 0,
             had_shared: false,
             rename_memory_export,
+            type_section_data: Vec::new(),
         }
     }
 }
 
 impl StreamPass for TemporaryRefugeMemoryStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
+        // Pre-scan type section bytes from the binary header.
+        // wasmparser::Payload::TypeSection does not reliably expose these
+        // through as_section(), so we read the section manually.
+        self.type_section_data = {
+            let mut offset = 8; // skip magic + version
+            let mut result = Vec::new();
+            while offset + 1 < input_wasm.len() {
+                let id = input_wasm[offset];
+                offset += 1;
+                let mut size: u64 = 0;
+                let mut shift = 0;
+                while offset < input_wasm.len() {
+                    let byte = input_wasm[offset];
+                    offset += 1;
+                    size |= ((byte & 0x7f) as u64) << shift;
+                    shift += 7;
+                    if byte & 0x80 == 0 {
+                        break;
+                    }
+                }
+                let content_end = offset + size as usize;
+                if id == 1 && content_end <= input_wasm.len() {
+                    result = input_wasm[offset..content_end].to_vec();
+                    break;
+                }
+                offset = content_end;
+            }
+            result
+        };
+
         let mut module = Module::new();
         let mut mem_names: HashMap<u32, String> = HashMap::new();
-
-        let parser = wasmparser::Parser::new(0);
         let mut memory_types = Vec::new();
         let mut mem_idx = 0;
         let mut is_first = false;
 
-        for payload in parser.parse_all(input_wasm) {
+        for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
             let payload = payload?;
             match payload {
+                // ── Memory imports → local memories ──────────────────
                 wasmparser::Payload::ImportSection(s) => {
                     let mut imports = ImportSection::new();
                     for group in s {
@@ -38,7 +69,6 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
                             let (_, import) = i?;
                             match import.ty {
                                 wasmparser::TypeRef::Memory(mut mem_ty) => {
-                                    // Save name logic
                                     let name = import.name.to_string();
                                     if mem_names.values().any(|s| *s == name) {
                                         let n = (1..)
@@ -52,20 +82,16 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
                                     } else {
                                         mem_names.insert(mem_idx, name);
                                     }
-
-                                    // Turn off shared
                                     if mem_ty.shared {
                                         if !is_first {
                                             is_first = true;
                                             log::warn!(
-                                                "Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is."
+                                                "Transpiling with threads is not supported yet."
                                             );
                                         }
                                         self.had_shared = true;
                                         mem_ty.shared = false;
                                     }
-
-                                    // Instead of importing, we will define it as a local memory.
                                     memory_types.push(mem_ty);
                                     mem_idx += 1;
                                 }
@@ -98,15 +124,15 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
                         module.section(&imports);
                     }
                 }
+
+                // ── Memory section ──────────────────────────────────
                 wasmparser::Payload::MemorySection(s) => {
                     for mem_ty in s {
                         let mut mem_ty = mem_ty?;
                         if mem_ty.shared {
                             if !is_first {
                                 is_first = true;
-                                log::warn!(
-                                    "Transpiling with threads is not supported yet. so this wasm off memory shared flag and can't be used as it is."
-                                );
+                                log::warn!("Transpiling with threads is not supported yet.");
                             }
                             self.had_shared = true;
                             mem_ty.shared = false;
@@ -115,15 +141,45 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
                         mem_idx += 1;
                     }
                 }
+
+                // ── Type section (pre-scanned bytes) ────────────────
+                wasmparser::Payload::TypeSection(_) => {
+                    if !self.type_section_data.is_empty() {
+                        module.section(&RawSection {
+                            id: 1,
+                            data: &self.type_section_data,
+                        });
+                        self.type_section_data.clear();
+                    }
+                }
+
+                // ── Code section (copy raw) ─────────────────────────
+                wasmparser::Payload::CodeSectionStart { range, .. } => {
+                    if !memory_types.is_empty() {
+                        let mut memories = MemorySection::new();
+                        for mt in &memory_types {
+                            memories
+                                .memory(crate::wasm_stream::translator::translate_memory_type(*mt));
+                        }
+                        module.section(&memories);
+                        memory_types.clear();
+                    }
+                    module.section(&RawSection {
+                        id: 10,
+                        data: &input_wasm[range],
+                    });
+                }
+                wasmparser::Payload::CodeSectionEntry(_) => {}
+
+                // ── Everything else ─────────────────────────────────
                 _ => {
-                    // Emit memories right before GlobalSection or any section after MemorySection (ID 5)
-                    // If we encounter ID >= 6 (Global, Export, Start, Element, Code, Data, DataCount)
+                    // Emit pending memories
                     if let Some((id, _)) = payload.as_section() {
                         if id >= 6 && !memory_types.is_empty() {
                             let mut memories = MemorySection::new();
-                            for mem_ty in &memory_types {
+                            for mt in &memory_types {
                                 memories.memory(
-                                    crate::wasm_stream::translator::translate_memory_type(*mem_ty),
+                                    crate::wasm_stream::translator::translate_memory_type(*mt),
                                 );
                             }
                             module.section(&memories);
@@ -140,10 +196,6 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
                                 if export.kind == wasmparser::ExternalKind::Memory
                                     && name == "memory"
                                 {
-                                    log::info!(
-                                        "Found memory export. rename_memory_export is {:?}",
-                                        self.rename_memory_export
-                                    );
                                     if let Some(ref new_name) = self.rename_memory_export {
                                         name = new_name;
                                     }
@@ -183,7 +235,7 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
                             if let Some((id, range)) = payload.as_section() {
                                 module.section(&RawSection {
                                     id,
-                                    data: &input_wasm[range.clone()],
+                                    data: &input_wasm[range],
                                 });
                             }
                         }
@@ -194,13 +246,10 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
 
         if !memory_types.is_empty() {
             let mut memories = MemorySection::new();
-            for mem_ty in &memory_types {
-                memories.memory(crate::wasm_stream::translator::translate_memory_type(
-                    *mem_ty,
-                ));
+            for mt in &memory_types {
+                memories.memory(crate::wasm_stream::translator::translate_memory_type(*mt));
             }
             module.section(&memories);
-            memory_types.clear();
         }
 
         self.memory_count = mem_idx as usize;

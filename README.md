@@ -68,7 +68,7 @@ install deno
 
 # Notes and Caveats
 - **Thread & Memory Modes**: `single_memory` mode can sometimes fail in scenarios where `multi_memory` succeeds. A sequence like `_reset(); _start(); _main();` in multi-threaded environments has been observed to trigger issues in single-memory mode.
-- **Build Cache**: The build process may benefit from a `--no-cache` option (currently a TODO) if the target directory caching causes stale builds.
+- **Build Cache**: Caching build artifacts in `target/` to speed up subsequent builds is under consideration (not yet implemented).
 - **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.
 - **CLI Arguments**: Very long argument lists might still cause issues in some environments.
 - **Self-Calling Fallback**: The tool supports a fallback mechanism for `wasm-opt` by calling itself if the binary is not found in the PATH.

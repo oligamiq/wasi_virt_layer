@@ -145,7 +145,24 @@ impl StreamPass for CheckUnusedThreadsStreamPass {
                         if export_names.contains(&export.name) {
                             continue; // Remove this export
                         }
-                        new_export_section.export(export.name, export.kind.into(), export.index);
+                        new_export_section.export(
+                            export.name,
+                            match export.kind {
+                                wasmparser::ExternalKind::Func
+                                | wasmparser::ExternalKind::FuncExact => {
+                                    wasm_encoder::ExportKind::Func
+                                }
+                                wasmparser::ExternalKind::Table => wasm_encoder::ExportKind::Table,
+                                wasmparser::ExternalKind::Memory => {
+                                    wasm_encoder::ExportKind::Memory
+                                }
+                                wasmparser::ExternalKind::Global => {
+                                    wasm_encoder::ExportKind::Global
+                                }
+                                wasmparser::ExternalKind::Tag => wasm_encoder::ExportKind::Tag,
+                            },
+                            export.index,
+                        );
                     }
                     module.section(&new_export_section);
                 }

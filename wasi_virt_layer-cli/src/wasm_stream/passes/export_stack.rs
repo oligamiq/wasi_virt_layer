@@ -118,12 +118,27 @@ fn emit_unlock(func: &mut Function, handoff_global: u32) {
     func.instruction(&Instruction::I32AtomicStore(atomic_memarg(0)));
 }
 
+fn emit_stack_buffer_addr(func: &mut Function, stack_size: u32) {
+    func.instruction(&Instruction::MemorySize(0));
+    func.instruction(&Instruction::I32Const(16));
+    func.instruction(&Instruction::I32Shl);
+    func.instruction(&Instruction::I32Const(stack_size as i32));
+    func.instruction(&Instruction::I32Sub);
+}
+
+fn emit_stack_buffer_addr_param(func: &mut Function, param_idx: u32) {
+    func.instruction(&Instruction::MemorySize(0));
+    func.instruction(&Instruction::I32Const(16));
+    func.instruction(&Instruction::I32Shl);
+    func.instruction(&Instruction::LocalGet(param_idx));
+    func.instruction(&Instruction::I32Sub);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn build_ensure_function(
     stack_size: u32,
     handoff_global: u32,
     stack_pointer: u32,
-    realloc: u32,
     state_global: u32,
     current_base_global: u32,
     current_end_global: u32,
@@ -191,13 +206,8 @@ fn build_ensure_function(
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
 
-    // Initial bootstrap allocation. The lock makes the otherwise shared
-    // compiler stack exclusive for this allocator call.
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(16));
-    func.instruction(&Instruction::I32Const(stack_size as i32));
-    func.instruction(&Instruction::Call(realloc));
+    // Initial bootstrap allocation. Stack buffer at memory_end - stack_size.
+    emit_stack_buffer_addr(&mut func, stack_size);
     func.instruction(&Instruction::LocalTee(0));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
@@ -236,11 +246,7 @@ fn build_ensure_function(
 
     // This allocation runs after the stack switch and prepares the next
     // instance's stack.
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(16));
-    func.instruction(&Instruction::I32Const(stack_size as i32));
-    func.instruction(&Instruction::Call(realloc));
+    emit_stack_buffer_addr(&mut func, stack_size);
     func.instruction(&Instruction::LocalTee(2));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
@@ -278,7 +284,7 @@ fn build_ensure_function(
     func
 }
 
-fn build_claim_target_function(handoff_global: u32, realloc: u32) -> Function {
+fn build_claim_target_function(handoff_global: u32) -> Function {
     // Params: target index, stack size.
     // Locals: base, end, replacement base, record address, generation.
     let mut func = Function::new([(5, ValType::I32)]);
@@ -317,11 +323,7 @@ fn build_claim_target_function(handoff_global: u32, realloc: u32) -> Function {
     func.instruction(&Instruction::LocalGet(2));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(16));
-    func.instruction(&Instruction::LocalGet(1));
-    func.instruction(&Instruction::Call(realloc));
+    emit_stack_buffer_addr_param(&mut func, 1);
     func.instruction(&Instruction::LocalTee(2));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
@@ -351,11 +353,7 @@ fn build_claim_target_function(handoff_global: u32, realloc: u32) -> Function {
     func.instruction(&Instruction::End);
 
     // Allocate the next standby while still executing on the VFS stack.
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(16));
-    func.instruction(&Instruction::LocalGet(1));
-    func.instruction(&Instruction::Call(realloc));
+    emit_stack_buffer_addr_param(&mut func, 1);
     func.instruction(&Instruction::LocalTee(4));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
@@ -409,7 +407,6 @@ fn build_release_vfs_function(
     stack_size: u32,
     handoff_global: u32,
     stack_pointer: u32,
-    realloc: u32,
     state_global: u32,
     current_base_global: u32,
     current_end_global: u32,
@@ -485,11 +482,7 @@ fn build_release_vfs_function(
     func.instruction(&Instruction::LocalGet(3));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(16));
-    func.instruction(&Instruction::I32Const(stack_size as i32));
-    func.instruction(&Instruction::Call(realloc));
+    emit_stack_buffer_addr(&mut func, stack_size);
     func.instruction(&Instruction::LocalTee(3));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
@@ -521,11 +514,7 @@ fn build_release_vfs_function(
     func.instruction(&Instruction::GlobalSet(state_global));
 
     // ---- Allocate replacement standby ----
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(16));
-    func.instruction(&Instruction::I32Const(stack_size as i32));
-    func.instruction(&Instruction::Call(realloc));
+    emit_stack_buffer_addr(&mut func, stack_size);
     func.instruction(&Instruction::LocalTee(5));
     func.instruction(&Instruction::I32Eqz);
     func.instruction(&Instruction::If(BlockType::Empty));
@@ -567,9 +556,7 @@ fn build_release_vfs_function(
     func.instruction(&Instruction::LocalSet(7));
     func.instruction(&Instruction::LocalGet(1));
     func.instruction(&Instruction::LocalGet(7));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::Call(realloc));
+    func.instruction(&Instruction::Drop);
     func.instruction(&Instruction::Drop);
 
     func.instruction(&Instruction::I32Const(0));
@@ -577,7 +564,7 @@ fn build_release_vfs_function(
     func
 }
 
-fn build_release_target_function(handoff_global: u32, realloc: u32, state_global: u32) -> Function {
+fn build_release_target_function(handoff_global: u32, state_global: u32) -> Function {
     // Params: (module_id, generation) -> errno
     // Locals: record_addr, base, end, size
     let mut func = Function::new([(2, ValType::I32), (4, ValType::I32)]);
@@ -648,12 +635,8 @@ fn build_release_target_function(handoff_global: u32, realloc: u32, state_global
     func.instruction(&Instruction::I32Const(0));
     func.instruction(&Instruction::GlobalSet(state_global));
 
-    // Free old stack through VFS allocator
-    func.instruction(&Instruction::LocalGet(4));
+    // Free old stack. No-op (stack buffer is at memory_end).
     func.instruction(&Instruction::LocalGet(2));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::Call(realloc));
     func.instruction(&Instruction::Drop);
 
     func.instruction(&Instruction::I32Const(0));
@@ -832,7 +815,7 @@ fn build_info_target_function(stack_size: u32, handoff_global: u32) -> Function 
     func
 }
 
-fn build_force_release_target_function(handoff_global: u32, realloc: u32) -> Function {
+fn build_force_release_target_function(handoff_global: u32) -> Function {
     // (module_id) -> i32
     // Locals: module_id(0), record_addr(1), base(2), end(3), size(4)
     let mut func = Function::new([(1, ValType::I32), (5, ValType::I32)]);
@@ -891,11 +874,7 @@ fn build_force_release_target_function(handoff_global: u32, realloc: u32) -> Fun
     func.instruction(&Instruction::I32AtomicStore(atomic_memarg(0)));
 
     // Free old stack
-    func.instruction(&Instruction::LocalGet(2));
     func.instruction(&Instruction::LocalGet(4));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::Call(realloc));
     func.instruction(&Instruction::Drop);
 
     func.instruction(&Instruction::I32Const(0));
@@ -907,7 +886,6 @@ fn build_force_release_function(
     state_global: u32,
     current_base_global: u32,
     current_end_global: u32,
-    realloc: u32,
 ) -> Function {
     // No params -> errno: i32
     // Locals: old_base, old_end, old_size
@@ -932,11 +910,7 @@ fn build_force_release_function(
     func.instruction(&Instruction::GlobalSet(current_end_global));
 
     // Free old stack
-    func.instruction(&Instruction::LocalGet(0));
     func.instruction(&Instruction::LocalGet(2));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::I32Const(0));
-    func.instruction(&Instruction::Call(realloc));
     func.instruction(&Instruction::Drop);
 
     func.instruction(&Instruction::I32Const(0));
@@ -1078,6 +1052,7 @@ fn build_wrapper(
 
 struct TargetRebinder {
     imported_functions: u32,
+    extra_imports: u32,
 }
 
 impl Rebind for TargetRebinder {
@@ -1085,7 +1060,7 @@ impl Rebind for TargetRebinder {
         if index < self.imported_functions {
             index
         } else {
-            index + 3
+            index + self.extra_imports
         }
     }
 
@@ -1268,7 +1243,15 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                 index
             });
 
-        let rebinder = TargetRebinder { imported_functions };
+        // Five new imports are added below: director, stack_ensure,
+        // stack_claim, lock_acquire, lock_release. Local function
+        // call targets must shift by this count.
+        let extra_imports = 5;
+
+        let rebinder = TargetRebinder {
+            imported_functions,
+            extra_imports,
+        };
         let mut exports = Vec::new();
         for (name, kind, index) in &raw_exports {
             if matches!(kind, ExternalKind::Func | ExternalKind::FuncExact)
@@ -1643,7 +1626,6 @@ impl StreamPass for ExportStackPreVfsStreamPass {
         let mut stack_pointer = None;
         let mut handoff_global = None;
         let mut target_handoff_global = None;
-        let mut realloc = None;
         let mut shared_memory = false;
         let mut raw_exports = Vec::new();
         let mut global_init_values: Vec<i32> = Vec::new();
@@ -1711,10 +1693,6 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                             && export.kind == ExternalKind::Global
                         {
                             target_handoff_global = Some(export.index);
-                        } else if export.name == "cabi_realloc"
-                            && matches!(export.kind, ExternalKind::Func | ExternalKind::FuncExact)
-                        {
-                            realloc = Some(export.index);
                         } else if export.kind == ExternalKind::Global {
                             match export.name {
                                 "__wasi_virt_layer_stack_cfg_size" => {
@@ -1775,12 +1753,6 @@ impl StreamPass for ExportStackPreVfsStreamPass {
         let Some(target_handoff_global) = target_handoff_global else {
             log::warn!(
                 "export-stack isolation requested for VFS, but `{TARGET_HANDOFF_EXPORT}` was not found; leaving VFS exports unchanged"
-            );
-            return Ok(input_wasm.to_vec());
-        };
-        let Some(realloc) = realloc else {
-            log::warn!(
-                "export-stack isolation requested for VFS, but `cabi_realloc` was not found; leaving VFS exports unchanged"
             );
             return Ok(input_wasm.to_vec());
         };
@@ -2025,13 +1997,12 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         stack_size,
                         handoff_global,
                         stack_pointer,
-                        realloc,
                         state_global,
                         current_base_global,
                         current_end_global,
                         generation_global,
                     ));
-                    output.function(&build_claim_target_function(target_handoff_global, realloc));
+                    output.function(&build_claim_target_function(target_handoff_global));
                     for export in &exports {
                         let function_type =
                             match &types[export.type_index as usize].composite_type.inner {
@@ -2056,7 +2027,6 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         stack_size,
                         handoff_global,
                         stack_pointer,
-                        realloc,
                         state_global,
                         current_base_global,
                         current_end_global,
@@ -2066,7 +2036,6 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                     // release_target: (i32, i32) -> i32
                     output.function(&build_release_target_function(
                         target_handoff_global,
-                        realloc,
                         state_global,
                     ));
                     // info_vfs: (i32) -> i32
@@ -2089,13 +2058,9 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         state_global,
                         current_base_global,
                         current_end_global,
-                        realloc,
                     ));
                     // force_release_target: (i32) -> i32
-                    output.function(&build_force_release_target_function(
-                        target_handoff_global,
-                        realloc,
-                    ));
+                    output.function(&build_force_release_target_function(target_handoff_global));
                     module.section(&output);
                 }
                 Payload::CodeSectionEntry(_) => {}

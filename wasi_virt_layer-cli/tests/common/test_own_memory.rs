@@ -24,7 +24,6 @@ fn test_own_memory_expansion() {
     );
 
     // When the memory is manually expanded (via feature), the test should succeed.
-    // TODO But test failed
     let _dir = utils::run_wasi_virt_layer(
         Some("own_memory_vfs"),
         None,
