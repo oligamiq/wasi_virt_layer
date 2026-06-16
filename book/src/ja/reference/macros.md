@@ -43,3 +43,28 @@ plug_env!(env_implementation, target_wasm, self);
 ## `plug_thread!`
 
 仮想スレッドサポートを接続します（`threads` フィーチャーが必要）。
+
+## `configure_wasm_stack!`
+
+CLIビルドツールがモジュールのスタックサイズ、スロット数、およびリリース許可を構成できるようにするための、既知のグローバル変数をエクスポートします。
+
+### 使用法
+```rust
+configure_wasm_stack!(
+    size: 1048576,    // スタックサイズ（バイト単位、例: 1MiB）
+    slots: 10,        // マルチメモリ環境用のスタックスロット数
+    allow_release: true // スタックを動的に解放できるかどうか
+);
+```
+
+## `protect_wasm_exports!`
+
+特定のエクスポートされた関数がスタック分離ラッパーを受け取る必要があることを `wasi_virt_layer-cli` に通知するための静的マーカーをエクスポートします。
+
+### 使用法
+```rust
+protect_wasm_exports!(
+    "my_exported_function",
+    "another_function"
+);
+```

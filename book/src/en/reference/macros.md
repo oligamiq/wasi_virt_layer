@@ -43,3 +43,28 @@ Connects virtual process management (e.g., exit handlers).
 ## `plug_thread!`
 
 Connects virtual threading support. (Requires the `threads` feature).
+
+## `configure_wasm_stack!`
+
+Exports well-known global variables to allow the CLI build tool to configure the stack size, slots, and release permissions for the module.
+
+### Usage
+```rust
+configure_wasm_stack!(
+    size: 1048576,    // Stack size in bytes (e.g., 1MiB)
+    slots: 10,        // Number of stack slots for multi-memory environments
+    allow_release: true // Whether the stack can be dynamically released
+);
+```
+
+## `protect_wasm_exports!`
+
+Exports static markers to signal the `wasi_virt_layer-cli` that specific exported functions must receive stack isolation wrappers.
+
+### Usage
+```rust
+protect_wasm_exports!(
+    "my_exported_function",
+    "another_function"
+);
+```

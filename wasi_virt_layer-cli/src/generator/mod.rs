@@ -45,6 +45,8 @@ pub struct GeneratorCtx {
     pub own_memory: bool,
     /// Export-stack isolation configuration keyed by module name.
     pub stack_config: StackConfig,
+    /// Whether to validate generated Wasm modules.
+    pub validate: bool,
 }
 
 /// Normalized export-stack isolation configuration.
@@ -210,6 +212,7 @@ pub(crate) trait WrapRunner<T> {
         dwarf: bool,
         keep_build_artifacts: bool,
         stream_pipeline: Option<crate::wasm_stream::pipeline::Pipeline>,
+        validate: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -222,6 +225,7 @@ impl<T, F: FnOnce() -> eyre::Result<T>> WrapRunner<T> for F {
         _dwarf: bool,
         keep_build_artifacts: bool,
         mut stream_pipeline: Option<crate::wasm_stream::pipeline::Pipeline>,
+        validate: bool,
     ) -> eyre::Result<T> {
         let old_path = path.path()?.clone();
 
@@ -242,6 +246,12 @@ impl<T, F: FnOnce() -> eyre::Result<T>> WrapRunner<T> for F {
 
             std::fs::write(&new_path, &output_wasm)
                 .wrap_err_with(|| format!("Failed to write adjusted Wasm to {new_path}"))?;
+
+            if validate {
+                wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+                    .validate_all(&output_wasm)
+                    .wrap_err_with(|| format!("Wasm validation failed for {}", new_path))?;
+            }
 
             if !keep_build_artifacts && !path.is_original(&old_path) {
                 std::fs::remove_file(&old_path).unwrap_or_else(|e| {
@@ -264,6 +274,7 @@ pub(crate) trait EndWithOpt<T> {
         dwarf: bool,
         keep_build_artifacts: bool,
         skip_opt: bool,
+        validate: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -277,6 +288,7 @@ pub(crate) trait EndWithOpt<T> {
         dwarf: bool,
         keep_build_artifacts: bool,
         skip_opt: bool,
+        validate: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized;
@@ -289,6 +301,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         dwarf: bool,
         keep_build_artifacts: bool,
         skip_opt: bool,
+        validate: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
@@ -304,6 +317,14 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let old_path = path.path()?.clone();
         let new_path = compile::optimize_wasm(&old_path, &[], false, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
+
+        if validate {
+            let optimized_wasm = std::fs::read(&new_path)
+                .wrap_err_with(|| format!("Failed to read optimized Wasm from {new_path}"))?;
+            wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+                .validate_all(&optimized_wasm)
+                .wrap_err_with(|| format!("Wasm validation failed for {}", new_path))?;
+        }
 
         if !keep_build_artifacts && old_path != new_path && !path.is_original(&old_path) {
             std::fs::remove_file(&old_path)
@@ -323,6 +344,7 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         dwarf: bool,
         keep_build_artifacts: bool,
         skip_opt: bool,
+        validate: bool,
     ) -> eyre::Result<T>
     where
         Self: Sized,
@@ -338,6 +360,14 @@ impl<T, F: FnOnce(&mut WasmPath) -> eyre::Result<T>> EndWithOpt<T> for F {
         let old_path = path.path()?.clone();
         let new_path = compile::optimize_wasm(&old_path, args, require_update, dwarf)
             .wrap_err("Failed to optimize Wasm")?;
+
+        if validate {
+            let optimized_wasm = std::fs::read(&new_path)
+                .wrap_err_with(|| format!("Failed to read optimized Wasm from {new_path}"))?;
+            wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+                .validate_all(&optimized_wasm)
+                .wrap_err_with(|| format!("Wasm validation failed for {}", new_path))?;
+        }
 
         if !keep_build_artifacts && old_path != new_path && !path.is_original(&old_path) {
             std::fs::remove_file(&old_path)
@@ -367,6 +397,7 @@ impl GeneratorRunner {
         memory_hint: Box<[Option<usize>]>,
         own_memory: bool,
         stack_options: args::StackOptions,
+        validate: bool,
     ) -> eyre::Result<Self> {
         let target_names_with_self = core::iter::once(Ok(path.name()?.to_compact_string()))
             .chain(targets.iter().map(|t| Ok(t.name()?.to_compact_string())))
@@ -442,6 +473,7 @@ impl GeneratorRunner {
                 main_void_synthesized_targets: None,
                 own_memory,
                 stack_config,
+                validate,
             },
             path,
             targets,
@@ -502,6 +534,7 @@ impl GeneratorRunner {
             .wrap_err("Failed to restore toml files")?;
 
         let dwarf = self.ctx.dwarf;
+        let validate = self.ctx.validate;
 
         println!("Remove existing output directory...");
         if std::fs::metadata(&out_dir).is_ok() {
@@ -605,9 +638,9 @@ impl GeneratorRunner {
                 ])));
                 pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(None)));
                 Some(pipeline)
-            })
+            }, cloned_ctx.validate)
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_vfs_opt)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_vfs_opt, validate)?;
 
         println!("Adjusting target Wasm...");
 
@@ -719,9 +752,9 @@ impl GeneratorRunner {
                     ))));
 
                     Some(pipeline)
-                })
+                }, _cloned_ctx.validate)
             })
-            .with_opt(target, dwarf, keep_build_artifacts, skip_target_opt)?;
+            .with_opt(target, dwarf, keep_build_artifacts, skip_target_opt, validate)?;
 
             if *is_synthesized.lock().unwrap() {
                 self.ctx
@@ -778,7 +811,7 @@ impl GeneratorRunner {
 
             path.set_path(output.into())
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
+        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt, validate)?;
 
         println!("Adjusting Merged Wasm (streaming pipeline)...");
 
@@ -817,7 +850,13 @@ impl GeneratorRunner {
             std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_INPUT.wasm", &input_wasm).unwrap(); let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
 
             std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_OUTPUT.wasm", &output_wasm).unwrap(); let new_path = old_path.with_extension("lowered.wasm");
-            std::fs::write(&new_path, output_wasm).wrap_err("Failed to write lowered Wasm file")?;
+            std::fs::write(&new_path, &output_wasm).wrap_err("Failed to write lowered Wasm file")?;
+
+            if self.ctx.validate {
+                wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+                    .validate_all(&output_wasm)
+                    .wrap_err_with(|| format!("Wasm validation failed for {}", new_path))?;
+            }
 
             if !keep_build_artifacts {
                 std::fs::remove_file(&old_path).wrap_err_with(|| format!("Failed to remove existing file {old_path}"))?;
@@ -825,7 +864,7 @@ impl GeneratorRunner {
 
             path.set_path(new_path)?;
             Ok(())
-        }).with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt)?;
+        }).with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt, validate)?;
 
         println!("Translating Wasm to Component...");
         let old_path = self.path.path()?.clone();
@@ -839,6 +878,12 @@ impl GeneratorRunner {
                 &self.ctx,
             )?;
         std::fs::write(&new_component, &component_bytes_with_ctx)?;
+
+        if self.ctx.validate {
+            wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+                .validate_all(&component_bytes_with_ctx)
+                .wrap_err_with(|| format!("Wasm validation failed for {}", new_component))?;
+        }
 
         if !keep_build_artifacts {
             std::fs::remove_file(&component)
@@ -951,6 +996,7 @@ impl ComponentRunner {
             dwarf,
             parsed_args.keep_build_artifacts(),
             parsed_args.dev(),
+            parsed_args.validate(),
         )?;
 
         let mem_sizes = {
@@ -972,7 +1018,13 @@ impl ComponentRunner {
 
             std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_INPUT.wasm", &input_wasm).unwrap(); let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
             let new_path = old_path.with_extension("post-comp-stream.wasm");
-            std::fs::write(&new_path, output_wasm).wrap_err("Failed to write Wasm file")?;
+            std::fs::write(&new_path, &output_wasm).wrap_err("Failed to write Wasm file")?;
+
+            if parsed_args.validate() {
+                wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+                    .validate_all(&output_wasm)
+                    .wrap_err_with(|| format!("Wasm validation failed for {}", new_path))?;
+            }
 
             if !parsed_args.keep_build_artifacts() {
                 std::fs::remove_file(&old_path).unwrap_or_default();
@@ -986,6 +1038,7 @@ impl ComponentRunner {
             dwarf,
             parsed_args.keep_build_artifacts(),
             parsed_args.dev(),
+            parsed_args.validate(),
         )?;
 
         let _dwarf = {

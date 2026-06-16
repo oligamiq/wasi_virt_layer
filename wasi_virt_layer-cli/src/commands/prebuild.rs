@@ -26,6 +26,7 @@ pub(crate) fn run_prebuild_internal(
     target_vfs_build_opts: Box<[crate::args::VfsBuildOptions]>,
     own_memory: bool,
     stack_options: crate::args::StackOptions,
+    validate: bool,
 ) -> eyre::Result<(generator::ComponentRunner, bool)> {
     let vfs_package = package
         .clone()
@@ -129,6 +130,7 @@ pub(crate) fn run_prebuild_internal(
         wasm_memory_hints,
         own_memory,
         stack_options,
+        validate,
     )?;
 
     let component_runner = generator
@@ -181,6 +183,7 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         target_vfs_build_opts,
         parsed_args.own_memory,
         parsed_args.stack_options.clone(),
+        parsed_args.validate,
     )?;
 
     let path = component_runner.path.path()?;

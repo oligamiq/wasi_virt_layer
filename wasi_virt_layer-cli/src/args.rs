@@ -120,6 +120,8 @@ pub trait PostBuildContext {
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error>;
     /// Returns whether to skip Wasm optimization (dev mode).
     fn dev(&self) -> bool;
+    /// Returns whether to validate generated Wasm modules.
+    fn validate(&self) -> bool;
 }
 
 /// The main command-line interface for `wasi_virt_layer-cli`.
@@ -253,6 +255,10 @@ pub struct BuildArgs {
     #[arg(long, default_value = "false")]
     pub dev: bool,
 
+    /// Validate the generated Wasm modules.
+    #[arg(long, default_value = "false")]
+    pub validate: bool,
+
     /// Options for building the VFS module.
     #[command(flatten)]
     pub vfs_build_opts: VfsBuildOptions,
@@ -346,6 +352,10 @@ impl PostBuildContext for BuildArgs {
     fn dev(&self) -> bool {
         self.dev
     }
+
+    fn validate(&self) -> bool {
+        self.validate
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -415,6 +425,10 @@ pub struct PreBuildArgs {
     /// Enable development mode (skips Wasm optimization).
     #[arg(long, default_value = "false")]
     pub dev: bool,
+
+    /// Validate the generated Wasm modules.
+    #[arg(long, default_value = "false")]
+    pub validate: bool,
 
     /// Options for building the VFS module.
     #[command(flatten)]
@@ -524,6 +538,10 @@ pub struct PostBuildArgs {
     /// Enable development mode (skips Wasm optimization).
     #[arg(long, default_value = "false")]
     pub dev: bool,
+
+    /// Validate the generated Wasm modules.
+    #[arg(long, default_value = "false")]
+    pub validate: bool,
 }
 
 impl PostBuildContext for PostBuildArgs {
@@ -549,6 +567,10 @@ impl PostBuildContext for PostBuildArgs {
 
     fn dev(&self) -> bool {
         self.dev
+    }
+
+    fn validate(&self) -> bool {
+        self.validate
     }
 }
 
