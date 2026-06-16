@@ -73,10 +73,12 @@ macro_rules! own_memory {
     ($($name:ident),+ $(,)?) => {
         $crate::__private::paste::paste! {
             $(
+                #[cfg(target_arch = "wasm32")]
                 unsafe extern "C" {
                     fn [<__wasip1_vfs_own_memory_size_ $name>]() -> i32;
                     fn [<__wasip1_vfs_own_memory_grow_ $name>](pages: i32) -> i32;
                 }
+                #[cfg(target_arch = "wasm32")]
                 #[allow(unsafe_attr_outside_unsafe)]
                 #[unsafe(no_mangle)]
                 pub fn [<__keep_wasip1_vfs_own_memory_ $name>]() -> (*const u8, *const u8) {
