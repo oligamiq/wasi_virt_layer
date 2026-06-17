@@ -13,10 +13,10 @@ wasi_virt_layer::own_memory!(smoke_target);
 
 impl Guest for ComponentABI {
     fn main() {
-        // Expand memory for smoke_target to handle allocations
-        println!("Expanding memory by 320 pages (approx 20MB) for smoke_target...");
+        // Expand memory for smoke_target to handle allocations and thread stacks
+        println!("Expanding memory by 3200 pages (approx 200MB) for smoke_target...");
         // Use the generated memory_grow function
-        let res = memory_grow::<smoke_target>(320);
+        let res = memory_grow::<smoke_target>(3200);
         println!("Memory grow result: {:?}", res);
 
         smoke_target::_reset();
@@ -32,6 +32,14 @@ mod plug {
     use super::*;
     use wasi_virt_layer::process::*;
     use wasi_virt_layer::file::*;
+    use wasi_virt_layer::thread::*;
+
+    // Threading support
+    plug_thread!(
+        { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
+        smoke_target,
+        self
+    );
 
     plug_process!(StandardProcess, smoke_target, self);
     plug_random!(StandardRandom, smoke_target, self);
@@ -55,7 +63,13 @@ mod plug {
     // Minimal env
     #[const_struct]
     const DEFAULT_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
-        environ: &["HOME=/"],
+        environ: &["HOME=/", "RUST_BACKTRACE=1"],
     };
     plug_env!(@embedded, DefaultEnvTy, smoke_target, self);
 }
+
+// Enable shared memory management for threads
+use wasi_virt_layer::shared_memory::SharedMemoryManagerTrait;
+static SHARED_MEMORY_HOLDER: wasi_virt_layer::shared_memory::StandardSharedMemoryHolder = 
+    wasi_virt_layer::shared_memory::StandardSharedMemoryHolder::new();
+wasi_virt_layer::export_shared_memory_manager!(SHARED_MEMORY_HOLDER);
