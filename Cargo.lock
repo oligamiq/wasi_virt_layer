@@ -2041,6 +2041,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "smoke_target"
+version = "0.5.5"
+
+[[package]]
+name = "smoke_vfs"
+version = "0.5.5"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "spawn_vfs_and_body_example"
 version = "0.5.5"
 

@@ -131,14 +131,14 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let mut own_memory_grow_idx_to_mem = std::collections::HashMap::new();
         if self.own_memory {
             for (target, idx) in &own_memory_size_imports {
-                // TODO: use `.replace("-", "_")`
-                if let Some(pos) = self.target_names.iter().position(|t| t == target) {
+                let normalized = target.replace("-", "_");
+                if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
                     own_memory_size_idx_to_mem.insert(*idx, (pos + 1) as u32);
                 }
             }
             for (target, idx) in &own_memory_grow_imports {
-                // TODO: use `.replace("-", "_")`
-                if let Some(pos) = self.target_names.iter().position(|t| t == target) {
+                let normalized = target.replace("-", "_");
+                if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
                     own_memory_grow_idx_to_mem.insert(*idx, (pos + 1) as u32);
                 }
             }
