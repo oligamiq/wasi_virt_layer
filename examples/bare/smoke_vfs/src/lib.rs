@@ -1,5 +1,5 @@
-use wasi_virt_layer::prelude::*;
 use const_struct::const_struct;
+use wasi_virt_layer::prelude::*;
 
 wit_bindgen::generate!({
     world: "component-abi",
@@ -30,27 +30,23 @@ export!(ComponentABI);
 // Plug standard WASI imports for smoke_target
 mod plug {
     use super::*;
-    use wasi_virt_layer::process::*;
     use wasi_virt_layer::file::*;
+    use wasi_virt_layer::process::*;
     use wasi_virt_layer::thread::*;
 
     // Threading support
-    plug_thread!(
-        { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
-        smoke_target,
-        self
-    );
+    static THREAD_POOL: wasi_virt_layer::thread::DirectThreadPool<ThreadAccessor> =
+        wasi_virt_layer::thread::DirectThreadPool::new_const();
+    plug_thread!({ &THREAD_POOL }, smoke_target, self);
 
     plug_process!(StandardProcess, smoke_target, self);
     plug_random!(StandardRandom, smoke_target, self);
     wasi_virt_layer::plug_clock!(wasi_virt_layer::clock::StandardClock, smoke_target, self);
-    
+
     // Use StandardEmbeddedFiles with FLAT_LEN=2
     #[const_struct]
     const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, 2> =
-        EmbeddedFiles!([
-            (".", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])
-        ]);
+        EmbeddedFiles!([(".", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])]);
 
     type LFS =
         StandardEmbeddedNormalLFS<EmbeddedFilesTy, WasiEmbeddedFile<&'static str>, 2, DefaultStdIO>;
@@ -59,7 +55,7 @@ mod plug {
         StandardEmbeddedFileSystem::new_const(StandardEmbeddedNormalLFS::new_const());
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, smoke_target, self);
-    
+
     // Minimal env
     #[const_struct]
     const DEFAULT_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
@@ -70,6 +66,6 @@ mod plug {
 
 // Enable shared memory management for threads
 use wasi_virt_layer::shared_memory::SharedMemoryManagerTrait;
-static SHARED_MEMORY_HOLDER: wasi_virt_layer::shared_memory::StandardSharedMemoryHolder = 
+static SHARED_MEMORY_HOLDER: wasi_virt_layer::shared_memory::StandardSharedMemoryHolder =
     wasi_virt_layer::shared_memory::StandardSharedMemoryHolder::new();
 wasi_virt_layer::export_shared_memory_manager!(SHARED_MEMORY_HOLDER);
