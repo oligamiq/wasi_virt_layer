@@ -64,10 +64,13 @@ macro_rules! gen_alt_global {
 /// A macro to explicitly manage memory growth for multiple WebAssembly targets when the automatic memory expansion is disabled (`--own-memory` mode).
 ///
 /// **Important Note on Threading:**
-/// When expanding memory, you MUST ensure that no other threads are actively modifying the memory.
-/// This means memory expansion should ideally be done **before** spawning threads, or while all other threads are paused/locked.
+/// When physically expanding memory, you MUST ensure that no other threads can
+/// access the affected target memories. This means memory expansion should be
+/// done **before** spawning threads, or while all other threads are externally
+/// paused/quiesced.
 ///
 /// This macro generates `pub fn memory_grow(wasm: &str, pages: i32) -> i32` and `pub fn memory_size(wasm: &str) -> i32`.
+#[cfg(feature = "own-memory")]
 #[macro_export]
 macro_rules! own_memory {
     ($($name:ident),+ $(,)?) => {
@@ -86,6 +89,47 @@ macro_rules! own_memory {
                         unsafe { [<__wasip1_vfs_own_memory_size_ $name>] as *const u8 },
                         unsafe { [<__wasip1_vfs_own_memory_grow_ $name>] as *const u8 },
                     )
+                }
+
+                static [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>]: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_get>]() -> i32 {
+                    [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].load(core::sync::atomic::Ordering::Relaxed)
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_set>](v: i32) {
+                    [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].store(v, core::sync::atomic::Ordering::Relaxed);
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_init>](v: i32) {
+                    let _ = [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].compare_exchange(
+                        -1,
+                        v,
+                        core::sync::atomic::Ordering::Relaxed,
+                        core::sync::atomic::Ordering::Relaxed,
+                    );
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_compare_exchange>](
+                    expected: i32,
+                    new: i32,
+                ) -> i32 {
+                    match [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].compare_exchange(
+                        expected,
+                        new,
+                        core::sync::atomic::Ordering::Relaxed,
+                        core::sync::atomic::Ordering::Relaxed,
+                    ) {
+                        Ok(old) | Err(old) => old,
+                    }
                 }
             )+
 
@@ -112,6 +156,22 @@ macro_rules! own_memory {
                     core::sync::atomic::Ordering::Relaxed,
                     core::sync::atomic::Ordering::Relaxed,
                 );
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_compare_exchange(
+                expected: i32,
+                new: i32,
+            ) -> i32 {
+                match __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.compare_exchange(
+                    expected,
+                    new,
+                    core::sync::atomic::Ordering::Relaxed,
+                    core::sync::atomic::Ordering::Relaxed,
+                ) {
+                    Ok(old) | Err(old) => old,
+                }
             }
 
             /// Computes the logical memory size of the given target Wasm.
@@ -256,31 +316,6 @@ macro_rules! import_wasm {
                     #[unsafe(no_mangle)]
                     pub fn [<__wasip1_vfs_ $name _memory_director>](ptr: isize) -> isize;
                 }
-            }
-
-            static [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>]: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
-
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_get>]() -> i32 {
-                [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].load(core::sync::atomic::Ordering::Relaxed)
-            }
-
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_set>](v: i32) {
-                [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].store(v, core::sync::atomic::Ordering::Relaxed);
-            }
-
-            #[cfg(target_os = "wasi")]
-            #[unsafe(no_mangle)]
-            pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_init>](v: i32) {
-                let _ = [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].compare_exchange(
-                    -1,
-                    v,
-                    core::sync::atomic::Ordering::Relaxed,
-                    core::sync::atomic::Ordering::Relaxed,
-                );
             }
 
             impl $crate::__private::ConstDefault for $name {

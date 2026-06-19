@@ -588,59 +588,70 @@ impl GeneratorRunner {
 
                 Ok(())
             })
-            .wrap_run(path, dwarf, keep_build_artifacts, {
-                let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
-                use crate::wasm_stream::passes::{
-                    abi_connect::{
-                        ConnectWasip1ABIPreVfsStreamPass, NonRecursiveWasiABIPreVfsStreamPass,
-                    },
-                    anonymous::AnonymousStreamPass,
-                    check::CheckUseWasiVirtLayerChecker,
-                    dummy_injector::DummyInjectorStreamPass,
-                    export_stack::ExportStackPreVfsStreamPass,
-                    patch_component::PatchComponentStreamPass,
-                    pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
-                    starts_pre::StartsPreStreamPass,
-                };
+            .wrap_run(
+                path,
+                dwarf,
+                keep_build_artifacts,
+                {
+                    let mut pipeline = crate::wasm_stream::pipeline::Pipeline::new();
+                    use crate::wasm_stream::passes::{
+                        abi_connect::{
+                            ConnectWasip1ABIPreVfsStreamPass, NonRecursiveWasiABIPreVfsStreamPass,
+                        },
+                        anonymous::AnonymousStreamPass,
+                        check::CheckUseWasiVirtLayerChecker,
+                        dummy_injector::DummyInjectorStreamPass,
+                        export_stack::ExportStackPreVfsStreamPass,
+                        patch_component::PatchComponentStreamPass,
+                        pre_vfs_memory_refuge::TemporaryRefugeMemoryStreamPass,
+                        starts_pre::StartsPreStreamPass,
+                    };
 
-                let check_pass =
-                    crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(vec![Box::new(
-                        CheckUseWasiVirtLayerChecker::new(),
-                    )]);
-                pipeline.add_pass(Box::new(check_pass));
-                pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx.clone())));
-                pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
-                pipeline.add_pass(Box::new(
+                    let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(
+                        vec![Box::new(CheckUseWasiVirtLayerChecker::new())],
+                    );
+                    pipeline.add_pass(Box::new(check_pass));
+                    pipeline.add_pass(Box::new(AnonymousStreamPass::new(cloned_ctx.clone())));
+                    pipeline.add_pass(Box::new(ConnectWasip1ABIPreVfsStreamPass::new()));
+                    pipeline.add_pass(Box::new(
                     crate::wasm_stream::passes::threads_spawn::ThreadsSpawnPreVfsStreamPass::new(
                         cloned_ctx.threads,
                     ),
                 ));
-                pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
-                pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
+                    pipeline.add_pass(Box::new(NonRecursiveWasiABIPreVfsStreamPass::new()));
+                    pipeline.add_pass(Box::new(PatchComponentStreamPass::new()));
 
-                let fn_in_starts =
-                    crate::wasm_stream::passes::fn_in_starts::FnInStarts::new::<String>(&[]);
-                pipeline.add_pass(Box::new(StartsPreStreamPass::new(
-                    true,
-                    pipeline_is_library,
-                    fn_in_starts.flesh_vfs_start.clone(),
-                )));
-                pipeline.add_pass(Box::new(ExportStackPreVfsStreamPass::new(
-                    cloned_ctx
-                        .stack_config
-                        .vfs_size(cloned_ctx.vfs_name.as_ref()),
-                )));
-                pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
-                    fn_in_starts.thread_patch.clone(),
-                    fn_in_starts.init_offset_global.clone(),
-                    fn_in_starts.save_target_memory.clone(),
-                    fn_in_starts.simple_debug_pre_init.clone(),
-                ])));
-                pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(None)));
-                Some(pipeline)
-            }, cloned_ctx.validate)
+                    let fn_in_starts =
+                        crate::wasm_stream::passes::fn_in_starts::FnInStarts::new::<String>(&[]);
+                    pipeline.add_pass(Box::new(StartsPreStreamPass::new(
+                        true,
+                        pipeline_is_library,
+                        fn_in_starts.flesh_vfs_start.clone(),
+                    )));
+                    pipeline.add_pass(Box::new(ExportStackPreVfsStreamPass::new(
+                        cloned_ctx
+                            .stack_config
+                            .vfs_size(cloned_ctx.vfs_name.as_ref()),
+                    )));
+                    pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
+                        fn_in_starts.thread_patch.clone(),
+                        fn_in_starts.init_offset_global.clone(),
+                        fn_in_starts.save_target_memory.clone(),
+                        fn_in_starts.simple_debug_pre_init.clone(),
+                    ])));
+                    pipeline.add_pass(Box::new(TemporaryRefugeMemoryStreamPass::new(None)));
+                    Some(pipeline)
+                },
+                cloned_ctx.validate,
+            )
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_vfs_opt, validate)?;
+        .with_opt(
+            &mut self.path,
+            dwarf,
+            keep_build_artifacts,
+            skip_vfs_opt,
+            validate,
+        )?;
 
         println!("Adjusting target Wasm...");
 
@@ -811,7 +822,13 @@ impl GeneratorRunner {
 
             path.set_path(output.into())
         })
-        .with_opt(&mut self.path, dwarf, keep_build_artifacts, skip_all_opt, validate)?;
+        .with_opt(
+            &mut self.path,
+            dwarf,
+            keep_build_artifacts,
+            skip_all_opt,
+            validate,
+        )?;
 
         println!("Adjusting Merged Wasm (streaming pipeline)...");
 
@@ -838,7 +855,7 @@ impl GeneratorRunner {
                     crate::wasm_stream::passes::multi_memory_lowering::MultiMemoryLoweringStreamPass::new(self.ctx.threads, self.ctx.own_memory, target_names.clone(), true)
                 ));
                 pipeline.add_pass(Box::new(
-                    crate::wasm_stream::passes::shared_global::SharedGlobalStreamPass::new(self.ctx.threads, target_names)
+                    crate::wasm_stream::passes::shared_global::SharedGlobalStreamPass::new(self.ctx.threads, self.ctx.own_memory, target_names)
                 ));
             } else if self.ctx.own_memory {
                 println!("Adjusting own memory for Multi Memory Merged Wasm (streaming lowering)...");
@@ -847,9 +864,11 @@ impl GeneratorRunner {
                 ));
             }
 
-            std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_INPUT.wasm", &input_wasm).unwrap(); let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
+            let output_wasm = pipeline
+                .run(&input_wasm)
+                .wrap_err("Failed to run StreamPipeline")?;
 
-            std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_OUTPUT.wasm", &output_wasm).unwrap(); let new_path = old_path.with_extension("lowered.wasm");
+            let new_path = old_path.with_extension("lowered.wasm");
             std::fs::write(&new_path, &output_wasm).wrap_err("Failed to write lowered Wasm file")?;
 
             if self.ctx.validate {
@@ -1016,7 +1035,9 @@ impl ComponentRunner {
                 crate::wasm_stream::passes::memory_post_components::PostComponentsMemoryFixStreamPass::new(self.ctx.as_ref().unwrap().threads.unwrap_or(false))
             ));
 
-            std::fs::write("/home/oligami/projects/wasi_virt_layer/DEBUG_INPUT.wasm", &input_wasm).unwrap(); let output_wasm = pipeline.run(&input_wasm).wrap_err("Failed to run StreamPipeline")?;
+            let output_wasm = pipeline
+                .run(&input_wasm)
+                .wrap_err("Failed to run StreamPipeline")?;
             let new_path = old_path.with_extension("post-comp-stream.wasm");
             std::fs::write(&new_path, &output_wasm).wrap_err("Failed to write Wasm file")?;
 

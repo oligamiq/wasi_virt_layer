@@ -81,20 +81,40 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         match subcmd {
             "build" => {
                 if let args::Command::Build(ref mut build_args) = parsed_args.command {
-                    let (vfs_opts, target_opts) = crate::feature_extractor::extract_features(
+                    let (mut vfs_opts, target_opts) = crate::feature_extractor::extract_features(
                         sub_matches,
                         build_args.wasm.len(),
                     );
+                    if build_args.own_memory
+                        && !vfs_opts
+                            .features
+                            .iter()
+                            .any(|f| f == "wasi_virt_layer/own-memory")
+                    {
+                        vfs_opts
+                            .features
+                            .push("wasi_virt_layer/own-memory".to_string());
+                    }
                     build_args.vfs_build_opts = vfs_opts;
                     build_args.target_vfs_build_opts = Some(target_opts);
                 }
             }
             "prebuild" => {
                 if let args::Command::Prebuild(ref mut prebuild_args) = parsed_args.command {
-                    let (vfs_opts, target_opts) = crate::feature_extractor::extract_features(
+                    let (mut vfs_opts, target_opts) = crate::feature_extractor::extract_features(
                         sub_matches,
                         prebuild_args.wasm.len(),
                     );
+                    if prebuild_args.own_memory
+                        && !vfs_opts
+                            .features
+                            .iter()
+                            .any(|f| f == "wasi_virt_layer/own-memory")
+                    {
+                        vfs_opts
+                            .features
+                            .push("wasi_virt_layer/own-memory".to_string());
+                    }
                     prebuild_args.vfs_build_opts = vfs_opts;
                     prebuild_args.target_vfs_build_opts = Some(target_opts);
                 }

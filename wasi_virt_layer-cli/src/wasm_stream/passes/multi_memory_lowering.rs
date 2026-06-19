@@ -60,6 +60,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let mut own_memory_size_get = std::collections::HashMap::new();
         let mut own_memory_size_set = std::collections::HashMap::new();
         let mut own_memory_size_init = std::collections::HashMap::new();
+        let mut own_memory_size_compare_exchange = std::collections::HashMap::new();
 
         let mut func_types = Vec::new();
         let mut types = Vec::new();
@@ -232,6 +233,10 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                 own_memory_size_set.insert(0, export.index);
                             } else if export.name == "__wasip1_vfs_host_own_memory_size_init" {
                                 own_memory_size_init.insert(0, export.index);
+                            } else if export.name
+                                == "__wasip1_vfs_host_own_memory_size_compare_exchange"
+                            {
+                                own_memory_size_compare_exchange.insert(0, export.index);
                             } else if export.name.starts_with("__wasip1_vfs_")
                                 && export.name.ends_with("_own_memory_size_get")
                             {
@@ -273,6 +278,21 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                     .position(|t| t.replace("-", "_") == target_name)
                                 {
                                     own_memory_size_init.insert((pos + 1) as u32, export.index);
+                                }
+                            } else if export.name.starts_with("__wasip1_vfs_")
+                                && export.name.ends_with("_own_memory_size_compare_exchange")
+                            {
+                                let target_name = export
+                                    .name
+                                    .trim_start_matches("__wasip1_vfs_")
+                                    .trim_end_matches("_own_memory_size_compare_exchange");
+                                if let Some(pos) = self
+                                    .target_names
+                                    .iter()
+                                    .position(|t| t.replace("-", "_") == target_name)
+                                {
+                                    own_memory_size_compare_exchange
+                                        .insert((pos + 1) as u32, export.index);
                                 }
                             }
 
@@ -836,7 +856,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         )); // dst
 
                                         // Acquire read lock if threaded
-                                        if threads {
+                                        if threads && !self.own_memory {
                                             if let Some(acq) = lock_acquire_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     acq,
@@ -877,7 +897,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         });
 
                                         // Release read lock if threaded
-                                        if threads {
+                                        if threads && !self.own_memory {
                                             if let Some(rel) = lock_release_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     rel,
@@ -910,7 +930,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         )); // dst
 
                                         // Acquire read lock if threaded
-                                        if threads {
+                                        if threads && !self.own_memory {
                                             if let Some(acq) = lock_acquire_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     acq,
@@ -935,7 +955,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         func.instruction(&wasm_encoder::Instruction::MemoryFill(0));
 
                                         // Release read lock if threaded
-                                        if threads {
+                                        if threads && !self.own_memory {
                                             if let Some(rel) = lock_release_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     rel,
@@ -968,7 +988,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         )); // dst
 
                                         // Acquire read lock if threaded
-                                        if threads {
+                                        if threads && !self.own_memory {
                                             if let Some(acq) = lock_acquire_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     acq,
@@ -996,7 +1016,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         });
 
                                         // Release read lock if threaded
-                                        if threads {
+                                        if threads && !self.own_memory {
                                             if let Some(rel) = lock_release_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     rel,
@@ -1069,7 +1089,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             ));
 
                                             // Acquire lock if threaded
-                                            if threads {
+                                            if threads && !self.own_memory {
                                                 if let Some(acq) = lock_acquire_fn {
                                                     func.instruction(
                                                         &wasm_encoder::Instruction::Call(acq),
@@ -1107,7 +1127,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             func.instruction(&enc_op);
 
                                             // Release lock if threaded
-                                            if threads {
+                                            if threads && !self.own_memory {
                                                 if let Some(rel) = lock_release_fn {
                                                     // If there's a result, save it, release, restore
                                                     if let Some(res_ty) = info.result_type {
@@ -1248,7 +1268,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         func.instruction(&Instruction::Call(new_func_count + idx));
                         func.instruction(&Instruction::LocalSet(return_size));
 
-                        if threads {
+                        if threads && !self.own_memory {
                             if let Some(acq) = lock_write_acquire_fn {
                                 func.instruction(&Instruction::Call(acq));
                             }
@@ -1264,7 +1284,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                             func.instruction(&Instruction::I32Const(-1));
                             func.instruction(&Instruction::I32Eq);
                             func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                            if threads {
+                            if threads && !self.own_memory {
                                 if let Some(rel) = lock_write_release_fn {
                                     func.instruction(&Instruction::Call(rel));
                                 }
@@ -1328,7 +1348,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                             func.instruction(&Instruction::Drop); // We only care about logical size
                         }
 
-                        if threads {
+                        if threads && !self.own_memory {
                             if let Some(rel) = lock_write_release_fn {
                                 func.instruction(&Instruction::Call(rel));
                             }
@@ -1343,33 +1363,34 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         for idx in 0..memory_count {
                             let mut func = Function::new(vec![
                                 (1, wasm_encoder::ValType::I32), // return_size
+                                (1, wasm_encoder::ValType::I32), // max_allowed
+                                (1, wasm_encoder::ValType::I32), // new_size
+                                (1, wasm_encoder::ValType::I32), // observed
                             ]);
                             let page_delta = 0;
                             let return_size = 1;
+                            let max_allowed = 2;
+                            let new_size = 3;
+                            let observed = 4;
 
                             let logical_size_get_fn =
                                 crate::wasm_stream::translator::Rebind::function(
                                     &rebinder,
                                     *own_memory_size_get.get(&(idx as u32)).unwrap(),
                                 );
-                            let logical_size_set_fn =
+                            let logical_size_compare_exchange_fn =
                                 crate::wasm_stream::translator::Rebind::function(
                                     &rebinder,
-                                    *own_memory_size_set.get(&(idx as u32)).unwrap(),
+                                    *own_memory_size_compare_exchange.get(&(idx as u32)).unwrap(),
                                 );
 
-                            // Acquire lock if threaded
-                            if threads {
-                                if let Some(acq) = lock_write_acquire_fn {
-                                    func.instruction(&Instruction::Call(acq));
-                                }
-                            }
+                            func.instruction(&Instruction::Loop(wasm_encoder::BlockType::Empty));
 
                             // return_size = logical_size_get()
                             func.instruction(&Instruction::Call(logical_size_get_fn));
                             func.instruction(&Instruction::LocalSet(return_size));
 
-                            // max_allowed
+                            // max_allowed = currently available physical quota for this memory.
                             if !self.lower_memory || memory_count == 1 {
                                 func.instruction(&Instruction::MemorySize(idx as u32));
                             } else if idx == 0 {
@@ -1393,37 +1414,38 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                 func.instruction(&Instruction::I32Const(16));
                                 func.instruction(&Instruction::I32ShrU);
                             }
+                            func.instruction(&Instruction::LocalSet(max_allowed));
 
-                            // Stack: [max_allowed]
                             func.instruction(&Instruction::LocalGet(return_size));
                             func.instruction(&Instruction::LocalGet(page_delta));
                             func.instruction(&Instruction::I32Add);
-                            // Stack: [max_allowed, new_size]
-                            func.instruction(&Instruction::I32GeU);
+                            func.instruction(&Instruction::LocalSet(new_size));
 
+                            // if new_size > max_allowed { return -1; }
+                            func.instruction(&Instruction::LocalGet(new_size));
+                            func.instruction(&Instruction::LocalGet(max_allowed));
+                            func.instruction(&Instruction::I32GtU);
                             func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                            // success
-                            func.instruction(&Instruction::Call(logical_size_get_fn));
-                            func.instruction(&Instruction::LocalGet(page_delta));
-                            func.instruction(&Instruction::I32Add);
-                            func.instruction(&Instruction::Call(logical_size_set_fn));
+                            func.instruction(&Instruction::I32Const(-1));
+                            func.instruction(&Instruction::Return);
+                            func.instruction(&Instruction::End);
 
-                            if threads {
-                                if let Some(rel) = lock_write_release_fn {
-                                    func.instruction(&Instruction::Call(rel));
-                                }
-                            }
+                            // Try to claim the logical size update. If another thread won,
+                            // retry with its observed size.
+                            func.instruction(&Instruction::LocalGet(return_size));
+                            func.instruction(&Instruction::LocalGet(new_size));
+                            func.instruction(&Instruction::Call(logical_size_compare_exchange_fn));
+                            func.instruction(&Instruction::LocalSet(observed));
+                            func.instruction(&Instruction::LocalGet(observed));
+                            func.instruction(&Instruction::LocalGet(return_size));
+                            func.instruction(&Instruction::I32Eq);
+                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                             func.instruction(&Instruction::LocalGet(return_size));
                             func.instruction(&Instruction::Return);
-                            func.instruction(&Instruction::End); // end if
-
-                            // failure
-                            if threads {
-                                if let Some(rel) = lock_write_release_fn {
-                                    func.instruction(&Instruction::Call(rel));
-                                }
-                            }
-                            func.instruction(&Instruction::I32Const(-1));
+                            func.instruction(&Instruction::End);
+                            func.instruction(&Instruction::Br(0));
+                            func.instruction(&Instruction::End); // end loop
+                            func.instruction(&Instruction::Unreachable);
                             func.instruction(&Instruction::End);
 
                             new_code_sec.function(&func);

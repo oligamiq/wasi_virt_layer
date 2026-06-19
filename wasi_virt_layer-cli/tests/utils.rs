@@ -106,6 +106,14 @@ pub fn run_thread(
             if let Some(mut s) = child.stderr.take() {
                 s.read_to_string(&mut stderr).unwrap_or_default();
             }
+            std::fs::write(
+                Utf8Path::new(out_dir).join(".deno-test-stdout.log"),
+                &stdout,
+            )?;
+            std::fs::write(
+                Utf8Path::new(out_dir).join(".deno-test-stderr.log"),
+                &stderr,
+            )?;
             println!(
                 "Process exited with {}.\nstdout: {}\nstderr: {}",
                 status, stdout, stderr

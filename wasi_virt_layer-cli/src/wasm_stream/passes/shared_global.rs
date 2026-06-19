@@ -55,13 +55,15 @@ struct SharedGlobalFns {
 #[derive(Debug, Default)]
 pub struct SharedGlobalStreamPass {
     pub threads: bool,
+    pub own_memory: bool,
     pub target_names: Vec<String>,
 }
 
 impl SharedGlobalStreamPass {
-    pub fn new(threads: bool, target_names: Vec<String>) -> Self {
+    pub fn new(threads: bool, own_memory: bool, target_names: Vec<String>) -> Self {
         Self {
             threads,
+            own_memory,
             target_names,
         }
     }
@@ -275,12 +277,14 @@ impl StreamPass for SharedGlobalStreamPass {
                                 }
                                 wasmparser::Operator::GlobalGet { global_index } => {
                                     if let Some(fns) = global_mappings.get(&global_index) {
-                                        let get_fn =
-                                            if helper_kind == Some(LoweringHelperKind::Grow) {
-                                                fns.get_no_wait
-                                            } else {
-                                                fns.get_with_lock
-                                            };
+                                        let get_fn = if helper_kind
+                                            == Some(LoweringHelperKind::Grow)
+                                            || self.own_memory
+                                        {
+                                            fns.get_no_wait
+                                        } else {
+                                            fns.get_with_lock
+                                        };
                                         func.instruction(&Instruction::Call(get_fn));
                                     } else {
                                         func.instruction(&Instruction::GlobalGet(global_index));
@@ -288,12 +292,14 @@ impl StreamPass for SharedGlobalStreamPass {
                                 }
                                 wasmparser::Operator::GlobalSet { global_index } => {
                                     if let Some(fns) = global_mappings.get(&global_index) {
-                                        let set_fn =
-                                            if helper_kind == Some(LoweringHelperKind::Grow) {
-                                                fns.set_no_lock
-                                            } else {
-                                                fns.set_with_lock
-                                            };
+                                        let set_fn = if helper_kind
+                                            == Some(LoweringHelperKind::Grow)
+                                            || self.own_memory
+                                        {
+                                            fns.set_no_lock
+                                        } else {
+                                            fns.set_with_lock
+                                        };
                                         func.instruction(&Instruction::Call(set_fn));
                                     } else {
                                         func.instruction(&Instruction::GlobalSet(global_index));
