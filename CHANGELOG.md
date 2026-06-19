@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.7] - 2026-06-20
+### Added
+- **ThreadID Collision Safety**:
+    - Introduced `ThreadIdGenerator` trait with `ReservedRangeThreadIdGenerator` (default base 1,000,000) for configurable guest thread ID generation in `VirtualThreadPool`.
+    - Added `new_const_with_thread_id_generator()` constructor for custom ID generation.
+    - `plug_thread!` now returns `ERRNO_AGAIN` instead of panicking on ID exhaustion.
+    - `root_spawn`/`root_spawn_unchecked` use `RootSpawnFlagGuard` (Drop guard) for correct nested root-spawn state management.
+- **Documentation**:
+    - Documented collision contract: guest runtime uses a single thread-ID namespace shared by external (WasiRunner) and pool (VFS) threads.
+
+### Changed
+- **VirtualThreadPool refactoring**:
+    - Thread ID generation moved from host-thread-derived `next_thread_id()` to configurable `Generator` field in the pool struct.
+    - Added generic `Generator: ThreadIdGenerator` parameter to `VirtualThreadPool`.
+
+### Removed
+- Removed `VirtualThreadPool` dependency on `get_host_thread_id()` / `next_thread_id()` / `THREAD_LOCAL_COUNTER`.
+
 ## [0.5.6] - 2026-06-19
 ### Added
 - **Feature Gating**:
