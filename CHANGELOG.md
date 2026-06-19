@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.8] - 2026-06-20
+### Added
+- **Self/Host own-memory API**:
+    - `own_memory!` now unconditionally supports `memory_size_self()`, `memory_grow_self()`, and `memory_size::<__self>()` / `memory_grow::<__self>()` for querying and expanding the VFS/host own memory without passing a target Wasm.
+    - `__self` marker type publicly re-exported via `wasi_virt_layer::prelude::*`.
+- **Compile-time guard**: `own_memory!(self, ...)` and `own_memory!(__self, ...)` now produce a clear `compile_error!` with guidance.
+
+### Changed
+- CLI lowering (`own_memory_lowering`, `multi_memory_lowering`) maps `__self` imports to memory index 0, aligning host memory with the existing host logical exports.
+
 ## [0.5.7] - 2026-06-20
 ### Added
 - **ThreadID Collision Safety**:

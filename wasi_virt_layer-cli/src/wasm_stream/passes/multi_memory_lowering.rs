@@ -148,15 +148,23 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let mut own_memory_grow_idx_to_mem = std::collections::HashMap::new();
         if self.own_memory {
             for (target, idx) in &own_memory_size_imports {
-                let normalized = target.replace("-", "_");
-                if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
-                    own_memory_size_idx_to_mem.insert(*idx, (pos + 1) as u32);
+                if target == "__self" {
+                    own_memory_size_idx_to_mem.insert(*idx, 0);
+                } else {
+                    let normalized = target.replace("-", "_");
+                    if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
+                        own_memory_size_idx_to_mem.insert(*idx, (pos + 1) as u32);
+                    }
                 }
             }
             for (target, idx) in &own_memory_grow_imports {
-                let normalized = target.replace("-", "_");
-                if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
-                    own_memory_grow_idx_to_mem.insert(*idx, (pos + 1) as u32);
+                if target == "__self" {
+                    own_memory_grow_idx_to_mem.insert(*idx, 0);
+                } else {
+                    let normalized = target.replace("-", "_");
+                    if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
+                        own_memory_grow_idx_to_mem.insert(*idx, (pos + 1) as u32);
+                    }
                 }
             }
         }
@@ -371,13 +379,19 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
 
         if self.own_memory {
             for (target, orig_idx) in own_memory_size_imports.iter() {
-                let target_idx =
-                    self.target_names.iter().position(|n| n == target).unwrap() as u32 + 1;
+                let target_idx = if target == "__self" {
+                    0
+                } else {
+                    self.target_names.iter().position(|n| n == target).unwrap() as u32 + 1
+                };
                 func_map.insert(*orig_idx, new_func_count + target_idx);
             }
             for (target, orig_idx) in own_memory_grow_imports.iter() {
-                let target_idx =
-                    self.target_names.iter().position(|n| n == target).unwrap() as u32 + 1;
+                let target_idx = if target == "__self" {
+                    0
+                } else {
+                    self.target_names.iter().position(|n| n == target).unwrap() as u32 + 1
+                };
                 func_map.insert(*orig_idx, new_func_count + memory_count + target_idx);
             }
         }

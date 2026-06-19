@@ -374,6 +374,7 @@ pub mod stack;
 
 /// Common traits, structs, and macros representing the core functionality.
 pub mod prelude {
+    pub use crate::__self::__self;
     pub use crate::memory::WasmAccess;
     #[cfg(feature = "threads")]
     pub use crate::plug_thread;

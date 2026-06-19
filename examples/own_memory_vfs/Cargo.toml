@@ -18,3 +18,5 @@ crate-type = ["cdylib"]
 
 [features]
 manual_expand_memory = []
+self_own_memory_api = []
+invalid_self_own_memory_arg = []

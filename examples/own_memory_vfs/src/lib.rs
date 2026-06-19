@@ -50,6 +50,16 @@ impl Guest for Hello {
             println!("memory_grow result: {}", res as isize);
         }
 
+        #[cfg(feature = "self_own_memory_api")]
+        {
+            let self_size = crate::memory_size_self();
+            let self_grow = crate::memory_grow_self(0);
+            let generic_self_grow = crate::memory_grow::<__self>(0);
+            println!(
+                "self own-memory API results: size={self_size}, grow={self_grow}, generic_grow={generic_self_grow}"
+            );
+        }
+
         big_alloc::_reset();
         big_alloc::_start();
         big_alloc::_main();
@@ -149,4 +159,8 @@ mod fs {
     plug_fs!(&VIRTUAL_FILE_SYSTEM, big_alloc);
 }
 
+#[cfg(feature = "invalid_self_own_memory_arg")]
+wasi_virt_layer::own_memory!(self, big_alloc);
+
+#[cfg(not(feature = "invalid_self_own_memory_arg"))]
 wasi_virt_layer::own_memory!(big_alloc);

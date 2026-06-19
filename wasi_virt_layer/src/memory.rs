@@ -73,8 +73,35 @@ macro_rules! gen_alt_global {
 #[cfg(feature = "own-memory")]
 #[macro_export]
 macro_rules! own_memory {
+    (@reject_self) => {};
+    (@reject_self self $(, $rest:ident)*) => {
+        compile_error!("own_memory! does not accept `self`; use memory_size_self(), memory_grow_self(), or memory_grow::<__self>() instead");
+    };
+    (@reject_self __self $(, $rest:ident)*) => {
+        compile_error!("own_memory! does not accept `__self`; use memory_size_self(), memory_grow_self(), or memory_grow::<__self>() instead");
+    };
+    (@reject_self $name:ident $(, $rest:ident)*) => {
+        $crate::own_memory!(@reject_self $($rest),*);
+    };
     ($($name:ident),+ $(,)?) => {
+        $crate::own_memory!(@reject_self $($name),+);
         $crate::__private::paste::paste! {
+            #[cfg(target_arch = "wasm32")]
+            unsafe extern "C" {
+                fn __wasip1_vfs_own_memory_size___self() -> i32;
+                fn __wasip1_vfs_own_memory_grow___self(pages: i32) -> i32;
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            #[allow(unsafe_attr_outside_unsafe)]
+            #[unsafe(no_mangle)]
+            pub fn __keep_wasip1_vfs_own_memory___self() -> (*const u8, *const u8) {
+                (
+                    unsafe { __wasip1_vfs_own_memory_size___self as *const u8 },
+                    unsafe { __wasip1_vfs_own_memory_grow___self as *const u8 },
+                )
+            }
+
             $(
                 #[cfg(target_arch = "wasm32")]
                 unsafe extern "C" {
@@ -183,6 +210,7 @@ macro_rules! own_memory {
                 #[cfg(target_arch = "wasm32")]
                 {
                     match Wasm::NAME {
+                        "__self" => unsafe { __wasip1_vfs_own_memory_size___self() },
                         $(
                             stringify!($name) => unsafe { [<__wasip1_vfs_own_memory_size_ $name>]() },
                         )+
@@ -200,12 +228,23 @@ macro_rules! own_memory {
                 #[cfg(target_arch = "wasm32")]
                 {
                     match Wasm::NAME {
+                        "__self" => unsafe { __wasip1_vfs_own_memory_grow___self(pages) },
                         $(
                             stringify!($name) => unsafe { [<__wasip1_vfs_own_memory_grow_ $name>](pages) },
                         )+
                         _ => panic!("Wasm not found in own_memory! list"),
                     }
                 }
+            }
+
+            /// Computes the logical memory size of the VFS/host Wasm itself.
+            pub fn memory_size_self() -> i32 {
+                memory_size::<$crate::__private::__self>()
+            }
+
+            /// Grows the logical memory of the VFS/host Wasm itself.
+            pub fn memory_grow_self(pages: i32) -> i32 {
+                memory_grow::<$crate::__private::__self>(pages)
             }
         }
     };
