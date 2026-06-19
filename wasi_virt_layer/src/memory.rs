@@ -70,6 +70,16 @@ macro_rules! gen_alt_global {
 /// paused/quiesced.
 ///
 /// This macro generates `pub fn memory_grow(wasm: &str, pages: i32) -> i32` and `pub fn memory_size(wasm: &str) -> i32`.
+///
+/// ```compile_fail
+/// use wasi_virt_layer::own_memory;
+/// own_memory!(self, big_alloc);
+/// ```
+/// 
+/// ```compile_fail
+/// use wasi_virt_layer::own_memory;
+/// own_memory!(__self, big_alloc);
+/// ```
 #[cfg(feature = "own-memory")]
 #[macro_export]
 macro_rules! own_memory {

@@ -159,8 +159,4 @@ mod fs {
     plug_fs!(&VIRTUAL_FILE_SYSTEM, big_alloc);
 }
 
-#[cfg(feature = "invalid_self_own_memory_arg")]
-wasi_virt_layer::own_memory!(self, big_alloc);
-
-#[cfg(not(feature = "invalid_self_own_memory_arg"))]
 wasi_virt_layer::own_memory!(big_alloc);

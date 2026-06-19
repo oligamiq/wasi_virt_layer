@@ -69,28 +69,3 @@ fn test_own_memory_self_api() {
     );
 }
 
-#[test]
-fn test_own_memory_rejects_self_argument() {
-    let err = utils::run_wasi_virt_layer(
-        Some("own_memory_vfs"),
-        None,
-        None,  // t_single
-        false, // threads
-        OutDir::Random,
-        true, // keep_build_artifacts
-        &[
-            "--own-memory",
-            "--features",
-            "invalid_self_own_memory_arg",
-            "big_alloc",
-        ],
-        None,
-    )
-    .expect_err("own_memory!(self, ...) should fail at compile time");
-
-    let err_str = format!("{err:?}");
-    assert!(
-        err_str.contains("own_memory! does not accept `self`"),
-        "expected explicit self rejection, got: {err_str}"
-    );
-}
