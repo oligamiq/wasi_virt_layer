@@ -8,7 +8,7 @@ fn main() {
     let mut num_imports = 0;
     for payload in Parser::new(0).parse_all(&bytes) {
         if let Ok(Payload::ImportSection(s)) = payload {
-            for import in s {
+            for import in s.into_imports() {
                 let import = import.unwrap();
                 if let wasmparser::TypeRef::Func(_) = import.ty {
                     num_imports += 1;
