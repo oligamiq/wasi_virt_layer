@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.6] - 2026-06-19
+### Added
+- **Feature Gating**:
+    - Added `own-memory` Cargo feature to `wasi_virt_layer` to gate `own_memory!` macro, functions, and exports.
+    - CLI `build` and `prebuild` now automatically inject `wasi_virt_layer/own-memory` for `--own-memory` builds.
+
+### Changed
+- **Memory Expansion & own_memory!**:
+    - Moved own-memory logical-size exports out of `import_wasm!` and into `own_memory!` macro.
+    - Rewrote own-memory logical `memory.grow` wrapper to use Atomic Compare-and-Swap (CAS) loop instead of layout locks.
+    - Restored physical `memory_grow` contract to caller-quiesced execution without inserting broad layout locks.
+    - Optimized `SharedGlobalStreamPass` to use lock-free/wait-free globals under `--own-memory` + threads.
+- **Testing & Execution**:
+    - Strengthened `test_own_memory_smoke_new_example` integration test to assert threaded worker run success and clean exit.
+    - Threaded integration test runs now write and preserve Deno worker output to `.deno-test-stdout.log` / `.deno-test-stderr.log`.
+
+### Removed
+- **Debug Artifacts**:
+    - Removed pre-existing hardcoded debug file generation (`DEBUG_INPUT.wasm`, `DEBUG_OUTPUT.wasm`) from core stream pipeline.
+
 ## [0.5.5] - 2026-06-16
 ### Added
 - **Memory Expansion & own_memory!**:
