@@ -40,6 +40,101 @@ fn next_thread_id() -> u32 {
     host_id.wrapping_mul(100_000).wrapping_add(counter)
 }
 
+/// Generates guest-visible thread IDs for virtual thread pools.
+///
+/// # Collision contract
+///
+/// The guest runtime maintains a **single namespace** for thread IDs. IDs
+/// returned by this generator must never collide with IDs assigned by the
+/// external `WasiRunner` (host) for unmanaged threads, nor with IDs from
+/// other [`VirtualThreadPool`] instances sharing the same guest namespace.
+/// Any collision causes the guest runtime to confuse two different threads,
+/// resulting in TLS corruption, `thread_join` / `thread_exit` errors,
+/// scheduler panics, or undefined behavior.
+///
+/// The default [`ReservedRangeThreadIdGenerator`] uses a base offset of
+/// 1,000,000 to avoid common host-side ID ranges. Custom implementors *must*
+/// coordinate with the host runner to guarantee disjoint ID allocation, or
+/// accept the risk of collisions.
+pub trait ThreadIdGenerator: Send + Sync + 'static {
+    /// Returns the next thread ID for the given thread accessor namespace.
+    fn next_thread_id(&self, accessor: usize) -> Option<NonZero<u32>>;
+}
+
+/// Thread ID generator that allocates from a reserved positive `i32` range.
+///
+/// IDs are intentionally not reused because the generator cannot know when the
+/// guest runtime has fully released a thread ID. If multiple virtual pools run
+/// in the same guest thread namespace, use a shared custom generator or
+/// disjoint ranges to avoid duplicate IDs.
+///
+/// # Collision with external (host) thread IDs
+///
+/// The guest runtime maintains a **single namespace** for thread IDs shared
+/// between threads spawned by the external `WasiRunner` (host) and threads
+/// spawned through this pool (VFS). If a host-side thread and a pool-side
+/// thread receive the **same guest-visible ThreadID**, the guest runtime
+/// will confuse the two — causing corruption in thread-local storage (TLS),
+/// incorrect `thread_join` / `thread_exit` tracking, scheduler panics,
+/// or arbitrary undefined behavior.
+///
+/// The default base of 1,000,000 is chosen to stay above the range that
+/// typical host-side (WasiRunner) generators produce (usually small
+/// monotonically increasing IDs). This is a **convention, not a guarantee**.
+/// `WasiRunner` must also avoid allocating IDs within the pool's reserved
+/// range. When this guarantee cannot be enforced (e.g. third-party runner),
+/// use a custom [`ThreadIdGenerator`] that coordinates with the runner
+/// (e.g. via a shared atomic counter or a disjoint bit‑partitioned scheme).
+///
+/// If the same guest-visible thread namespace contains **multiple**
+/// `VirtualThreadPool` instances, each must use either a shared generator
+/// or disjoint ranges to avoid cross-pool collisions.
+pub struct ReservedRangeThreadIdGenerator {
+    next: AtomicU32,
+    max: u32,
+}
+
+impl ReservedRangeThreadIdGenerator {
+    /// Creates a generator that starts at `base` and stops at `max`.
+    pub const fn new(base: u32, max: u32) -> Self {
+        Self {
+            next: AtomicU32::new(if base == 0 { 1 } else { base }),
+            max: if max > i32::MAX as u32 {
+                i32::MAX as u32
+            } else {
+                max
+            },
+        }
+    }
+
+    /// Creates the default generator for IDs reserved away from external runners.
+    pub const fn new_default() -> Self {
+        Self::new(1_000_000, i32::MAX as u32)
+    }
+}
+
+impl ThreadIdGenerator for ReservedRangeThreadIdGenerator {
+    fn next_thread_id(&self, _accessor: usize) -> Option<NonZero<u32>> {
+        let mut current = self.next.load(Ordering::Relaxed);
+        loop {
+            if current > self.max {
+                return None;
+            }
+
+            let next = current + 1;
+            match self.next.compare_exchange_weak(
+                current,
+                next,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => return NonZero::new(current),
+                Err(actual) => current = actual,
+            }
+        }
+    }
+}
+
 /// Trait for a virtual thread implementation.
 pub trait VirtualThread<ThreadAccessor: ThreadAccess> {
     /// Creates a new thread and returns its ID.
@@ -261,18 +356,30 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
 }
 
 /// A thread pool implementation for virtual threads.
-pub struct VirtualThreadPool<ThreadAccessor: ThreadAccess> {
+pub struct VirtualThreadPool<
+    ThreadAccessor: ThreadAccess,
+    Generator: ThreadIdGenerator = ReservedRangeThreadIdGenerator,
+> {
     max_threads: AtomicUsize,
     read_kept_workers_pool_size: AtomicUsize,
     queue: parking_lot::Mutex<Option<flume::Sender<VirtualThreadPoolMessage<ThreadAccessor>>>>,
     queue_receiver: UnsafeOnceCell<flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>>,
     kept_workers_pool: UnsafeOnceCell<JoinPoolHandle>,
+    thread_id_generator: Generator,
 }
 
-unsafe impl<ThreadAccessor: ThreadAccess> Send for VirtualThreadPool<ThreadAccessor> {}
-unsafe impl<ThreadAccessor: ThreadAccess> Sync for VirtualThreadPool<ThreadAccessor> {}
+unsafe impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator> Send
+    for VirtualThreadPool<ThreadAccessor, Generator>
+{
+}
+unsafe impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator> Sync
+    for VirtualThreadPool<ThreadAccessor, Generator>
+{
+}
 
-impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
+impl<ThreadAccessor: ThreadAccess>
+    VirtualThreadPool<ThreadAccessor, ReservedRangeThreadIdGenerator>
+{
     /// Creates a new `VirtualThreadPool` without initialization.
     pub const unsafe fn new_const(max_threads: usize) -> Self {
         VirtualThreadPool {
@@ -281,6 +388,26 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPool<ThreadAccessor> {
             queue: parking_lot::Mutex::new(None),
             queue_receiver: UnsafeOnceCell::new(),
             read_kept_workers_pool_size: AtomicUsize::new(0),
+            thread_id_generator: ReservedRangeThreadIdGenerator::new_default(),
+        }
+    }
+}
+
+impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
+    VirtualThreadPool<ThreadAccessor, Generator>
+{
+    /// Creates a new `VirtualThreadPool` without initialization, using a custom thread ID generator.
+    pub const unsafe fn new_const_with_thread_id_generator(
+        max_threads: usize,
+        generator: Generator,
+    ) -> Self {
+        VirtualThreadPool {
+            max_threads: AtomicUsize::new(max_threads),
+            kept_workers_pool: UnsafeOnceCell::new(),
+            queue: parking_lot::Mutex::new(None),
+            queue_receiver: UnsafeOnceCell::new(),
+            read_kept_workers_pool_size: AtomicUsize::new(0),
+            thread_id_generator: generator,
         }
     }
 
@@ -569,15 +696,87 @@ mod tests {
         assert_eq!(pool.capacity(), 0);
         assert_eq!(pool.worker_count(), 0);
     }
+
+    #[test]
+    fn test_reserved_range_thread_id_generator_default() {
+        let generator = ReservedRangeThreadIdGenerator::new_default();
+        let id1 = generator.next_thread_id(0).unwrap();
+        assert_eq!(id1.get(), 1_000_000);
+        let id2 = generator.next_thread_id(0).unwrap();
+        assert_eq!(id2.get(), 1_000_001);
+    }
+
+    #[test]
+    fn test_reserved_range_thread_id_generator_exhaustion() {
+        let generator = ReservedRangeThreadIdGenerator::new(10, 11);
+        assert_eq!(generator.next_thread_id(0).unwrap().get(), 10);
+        assert_eq!(generator.next_thread_id(0).unwrap().get(), 11);
+        assert!(generator.next_thread_id(0).is_none());
+    }
+
+    #[test]
+    fn test_reserved_range_thread_id_generator_skips_zero() {
+        let generator = ReservedRangeThreadIdGenerator::new(0, 2);
+        assert_eq!(generator.next_thread_id(0).unwrap().get(), 1);
+        assert_eq!(generator.next_thread_id(0).unwrap().get(), 2);
+        assert!(generator.next_thread_id(0).is_none());
+    }
+
+    #[test]
+    fn test_reserved_range_thread_id_generator_rejects_negative_i32_range() {
+        let generator = ReservedRangeThreadIdGenerator::new(i32::MAX as u32, u32::MAX);
+        assert_eq!(generator.next_thread_id(0).unwrap().get(), i32::MAX as u32);
+        assert!(generator.next_thread_id(0).is_none());
+    }
+
+    #[test]
+    fn test_virtual_thread_pool_custom_generator() {
+        let generator = ReservedRangeThreadIdGenerator::new(50, 60);
+        let pool = unsafe {
+            VirtualThreadPool::<TestThreadAccessor, _>::new_const_with_thread_id_generator(
+                2, generator,
+            )
+        };
+        assert_eq!(
+            pool.thread_id_generator.next_thread_id(0).unwrap().get(),
+            50
+        );
+    }
+
+    struct OutOfRangeThreadIdGenerator;
+
+    impl ThreadIdGenerator for OutOfRangeThreadIdGenerator {
+        fn next_thread_id(&self, _accessor: usize) -> Option<NonZero<u32>> {
+            NonZero::new(i32::MAX as u32 + 1)
+        }
+    }
+
+    #[test]
+    fn virtual_thread_pool_rejects_custom_generator_ids_outside_i32_range() {
+        let pool = unsafe {
+            VirtualThreadPool::<TestThreadAccessor, _>::new_const_with_thread_id_generator(
+                0,
+                OutOfRangeThreadIdGenerator,
+            )
+        };
+        let mut runner = Box::new(|| {}) as Box<dyn FnOnce()>;
+
+        assert!(pool
+            .new_thread(TestThreadAccessor, ThreadRunner::__new(&mut runner))
+            .is_none());
+    }
 }
 
-impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
-    for VirtualThreadPool<ThreadAccessor>
+impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator> VirtualThread<ThreadAccessor>
+    for VirtualThreadPool<ThreadAccessor, Generator>
 {
     fn new_thread(&self, accessor: ThreadAccessor, runner: ThreadRunner) -> Option<NonZero<u32>> {
-        let thread_id = next_thread_id();
-
-        let thread_id_nz = NonZero::new(thread_id as u32)?;
+        let thread_id_nz = self
+            .thread_id_generator
+            .next_thread_id(accessor.as_usize())?;
+        if thread_id_nz.get() > i32::MAX as u32 {
+            return None;
+        }
 
         self.run(accessor, runner, thread_id_nz);
 
@@ -605,6 +804,23 @@ mod spawn {
         static IS_ROOT_THREAD: UnsafeCell<bool> = UnsafeCell::new(false);
     }
 
+    struct RootSpawnFlagGuard(bool);
+
+    impl RootSpawnFlagGuard {
+        fn new() -> Self {
+            let previous = IS_ROOT_THREAD.with(|flag| unsafe { flag.get().replace(true) });
+            Self(previous)
+        }
+    }
+
+    impl Drop for RootSpawnFlagGuard {
+        fn drop(&mut self) {
+            IS_ROOT_THREAD.with(|flag| {
+                unsafe { flag.get().write(self.0) };
+            });
+        }
+    }
+
     /// Spawn a new thread.
     /// If you call `std::thread::spawn` in ThreadPool, it will be looped.
     /// So, you should use `root_spawn` instead.
@@ -617,10 +833,7 @@ mod spawn {
         F: Send + 'static,
         T: Send + 'static,
     {
-        IS_ROOT_THREAD.with(|flag| {
-            unsafe { flag.get().write(true) };
-        });
-
+        let _guard = RootSpawnFlagGuard::new();
         builder.spawn(f)
     }
 
@@ -634,10 +847,7 @@ mod spawn {
         F: Send,
         T: Send,
     {
-        IS_ROOT_THREAD.with(|flag| {
-            unsafe { flag.get().write(true) };
-        });
-
+        let _guard = RootSpawnFlagGuard::new();
         unsafe { builder.spawn_unchecked(f) }
     }
 
@@ -811,6 +1021,7 @@ macro_rules! plug_thread {
                     data_ptr: *mut Box<dyn FnOnce()>,
                 ) -> i32 {
                     use $crate::thread::{VirtualThread, ThreadAccess};
+                    const ERRNO_AGAIN: i32 = -6;
                     const ACCESSOR: ThreadAccessor = ThreadAccessor::$wasm;
                     $crate::__if_feature!(@trace_thread
                         println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
@@ -826,7 +1037,7 @@ macro_rules! plug_thread {
                             return u32::from(thread_id) as i32;
                         },
                         None => {
-                            panic!("Failed to create a new thread");
+                            return ERRNO_AGAIN;
                         }
                     }
                 }
