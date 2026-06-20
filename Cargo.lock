@@ -1616,6 +1616,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "pool_own_mem_target"
+version = "0.0.1"
+
+[[package]]
+name = "pool_own_mem_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
