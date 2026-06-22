@@ -3,6 +3,7 @@
 - [はじめに](index.md)
 - [アーキテクチャ](architecture/index.md)
     - [共有メモリ ABI](architecture/shared-memory-abi.md)
+    - [Own Memory アーキテクチャ](architecture/own-memory.md)
     - [スタック分離](architecture/stack-isolation.md)
 - [使用法](usage/index.md)
     - [ターゲットの準備](usage/prepare-target.md)
