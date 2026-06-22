@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.10] - 2026-06-22
+### Fixed
+- **Dynamic LFS UTF-8 filename corruption**:
+    - Fixed a bug where raw UTF-8 path bytes were cast to `char` via `b as char`, causing Latin-1 reinterpretation and byte-doubling for all non-ASCII sequences. Files created with Unicode names (e.g. `あ`, `👋`) were stored under garbled keys and became unfindable (`ENOENT`) on subsequent lookups.
+    - Replaced byte-by-byte `push(b as char)` with a `bytes_to_smallstring` helper that preserves raw UTF-8 bytes via `core::str::from_utf8`.
+    - Added regression tests for Unicode filename create, lookup, DirMap key verification, and 4-byte emoji handling.
+
 ## [0.5.9] - 2026-06-22
 ### Added
 - **Documentation**:
