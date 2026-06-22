@@ -46,17 +46,17 @@ impl Guest for Hello {
         #[cfg(feature = "manual_expand_memory")]
         {
             println!("Expanding memory by 8000 pages for big_alloc...");
-            let res = crate::memory_grow::<big_alloc>(8000);
-            println!("memory_grow result: {}", res as isize);
+            let res = crate::memory_reserve::<big_alloc>(8000);
+            println!("memory_reserve result: {}", res as isize);
         }
 
         #[cfg(feature = "self_own_memory_api")]
         {
             let self_size = crate::memory_size_self();
-            let self_grow = crate::memory_grow_self(0);
-            let generic_self_grow = crate::memory_grow::<__self>(0);
+            let self_reserve = crate::memory_reserve_self(0);
+            let generic_self_reserve = crate::memory_reserve::<__self>(0);
             println!(
-                "self own-memory API results: size={self_size}, grow={self_grow}, generic_grow={generic_self_grow}"
+                "self own-memory API results: size={self_size}, reserve={self_reserve}, generic_reserve={generic_self_reserve}"
             );
         }
 

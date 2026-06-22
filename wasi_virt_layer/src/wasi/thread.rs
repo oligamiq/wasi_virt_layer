@@ -761,9 +761,10 @@ mod tests {
         };
         let mut runner = Box::new(|| {}) as Box<dyn FnOnce()>;
 
-        assert!(pool
-            .new_thread(TestThreadAccessor, ThreadRunner::__new(&mut runner))
-            .is_none());
+        assert!(
+            pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut runner))
+                .is_none()
+        );
     }
 }
 
@@ -1026,14 +1027,12 @@ macro_rules! plug_thread {
                     $crate::__if_feature!(@trace_thread
                         println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
                     );
-                    println!("$$$ Spawning a new thread in {}", ACCESSOR.as_name());
 
                     #[allow(unused_mut)]
                     let mut pool = $pool;
 
                     match pool.new_thread(ACCESSOR, $crate::thread::ThreadRunner::__new(data_ptr)) {
                         Some(thread_id) => {
-                            println!("$$$ Successfully spawned thread {}", thread_id);
                             return u32::from(thread_id) as i32;
                         },
                         None => {

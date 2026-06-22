@@ -16,9 +16,20 @@ static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPo
 impl Guest for ComponentABI {
     fn main() {
         pool_own_mem_target::_reset();
+
+        let self_reserve = crate::memory_reserve::<__self>(1024);
+        println!("self reserve = {self_reserve}");
+
+        let target_reserve = crate::memory_reserve::<pool_own_mem_target>(1024);
+        println!("target reserve = {target_reserve}");
+
+        assert_ne!(self_reserve, -1);
+        assert_ne!(target_reserve, -1);
+
         unsafe { THREAD_POOL.init_with_capacity_and_wait(5) };
         println!("Pool threads initialized.");
         pool_own_mem_target::_start();
+        pool_own_mem_target::_main();
     }
 }
 
@@ -28,11 +39,19 @@ export!(ComponentABI);
 plug_thread!({ &THREAD_POOL }, pool_own_mem_target, self);
 plug_poll!(DefaultWaitPoll, pool_own_mem_target);
 
-wasi_virt_layer::plug_clock!(wasi_virt_layer::clock::StandardClock, pool_own_mem_target, self);
+wasi_virt_layer::plug_clock!(
+    wasi_virt_layer::clock::StandardClock,
+    pool_own_mem_target,
+    self
+);
 
 mod process {
     use super::*;
-    plug_process!(wasi_virt_layer::process::StandardProcess, pool_own_mem_target, self);
+    plug_process!(
+        wasi_virt_layer::process::StandardProcess,
+        pool_own_mem_target,
+        self
+    );
 }
 
 mod env {

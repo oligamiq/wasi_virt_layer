@@ -15,7 +15,7 @@ fn test_validate_flag_success() -> color_eyre::Result<()> {
         Some("args-vfs"),
         Some("args"),
         Some(true), // multi memory single
-        false,       // no threads
+        false,      // no threads
         OutDir::Random,
         false,
         &["--validate"], // other_args
@@ -36,8 +36,11 @@ fn has_required_wasi_targets(threads: bool) -> bool {
     if threads {
         targets.push("wasm32-wasip1-threads");
     }
-    
-    let Ok(output) = std::process::Command::new("rustup").args(["target", "list", "--installed"]).output() else {
+
+    let Ok(output) = std::process::Command::new("rustup")
+        .args(["target", "list", "--installed"])
+        .output()
+    else {
         return false;
     };
     let stdout = String::from_utf8_lossy(&output.stdout);

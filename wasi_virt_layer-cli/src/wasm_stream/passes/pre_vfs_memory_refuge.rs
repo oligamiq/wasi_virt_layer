@@ -261,7 +261,9 @@ impl StreamPass for TemporaryRefugeMemoryStreamPass {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wasm_encoder::{EntityType, ExportKind, ExportSection, ImportSection, MemoryType, Module, TypeSection};
+    use wasm_encoder::{
+        EntityType, ExportKind, ExportSection, ImportSection, MemoryType, Module, TypeSection,
+    };
 
     fn fixture(shared: bool) -> Vec<u8> {
         let mut module = Module::new();
@@ -403,4 +405,3 @@ mod tests {
         Ok(())
     }
 }
-

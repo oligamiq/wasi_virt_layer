@@ -404,8 +404,8 @@ pub mod thread {
     #[cfg(target_os = "wasi")]
     pub use crate::wasi::thread::__wasip1_vfs_is_root_spawn;
     pub use crate::wasi::thread::{
-        root_spawn, root_spawn_unchecked, DirectThreadPool, ReservedRangeThreadIdGenerator,
-        ThreadAccess, ThreadIdGenerator, ThreadRunner, VirtualThread, VirtualThreadPool,
+        DirectThreadPool, ReservedRangeThreadIdGenerator, ThreadAccess, ThreadIdGenerator,
+        ThreadRunner, VirtualThread, VirtualThreadPool, root_spawn, root_spawn_unchecked,
     };
 }
 
@@ -413,8 +413,8 @@ pub mod thread {
 pub mod file {
     #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
     pub use crate::wasi::file::{
-        stdio::DefaultStdIO, BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon,
-        NoAddInfo, OpenFdInfo, OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait,
+        BoxedInode, DefaultAddInfo, FilestatWithoutDevice, InodeIdCommon, NoAddInfo, OpenFdInfo,
+        OpenFdInfoWithInode, WasiAddInfo, Wasip1FileSystem, Wasip1FileTrait, stdio::DefaultStdIO,
     };
 
     #[cfg(not(any(feature = "embedded-fs", feature = "dynamic-fs")))]
@@ -438,7 +438,7 @@ pub mod file {
 
     #[cfg(feature = "multiple-fs")]
     pub use crate::wasi::file::multiple::{
-        self, dynamic_wasm::*, inode::BoxedInodeNormal, StandardMultipleFileSystem,
+        self, StandardMultipleFileSystem, dynamic_wasm::*, inode::BoxedInodeNormal,
     };
 }
 
@@ -512,11 +512,11 @@ pub mod __private {
     }
 
     pub mod utils {
-        #[cfg(feature = "alloc")]
-        pub use crate::utils::alloc_buff;
         pub use crate::utils::EmbeddedArrayBuilder;
         pub use crate::utils::InitOnce;
         #[cfg(feature = "detect-wasi-reentrancy")]
         pub use crate::utils::NonRecursiveWasiCallGuard;
+        #[cfg(feature = "alloc")]
+        pub use crate::utils::alloc_buff;
     }
 }

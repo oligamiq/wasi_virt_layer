@@ -69,13 +69,13 @@ macro_rules! gen_alt_global {
 /// done **before** spawning threads, or while all other threads are externally
 /// paused/quiesced.
 ///
-/// This macro generates `pub fn memory_grow(wasm: &str, pages: i32) -> i32` and `pub fn memory_size(wasm: &str) -> i32`.
+/// This macro generates `pub fn memory_reserve(wasm: &str, pages: i32) -> i32` and `pub fn memory_size(wasm: &str) -> i32`.
 ///
 /// ```compile_fail
 /// use wasi_virt_layer::own_memory;
 /// own_memory!(self, big_alloc);
 /// ```
-/// 
+///
 /// ```compile_fail
 /// use wasi_virt_layer::own_memory;
 /// own_memory!(__self, big_alloc);
@@ -85,10 +85,10 @@ macro_rules! gen_alt_global {
 macro_rules! own_memory {
     (@reject_self) => {};
     (@reject_self self $(, $rest:ident)*) => {
-        compile_error!("own_memory! does not accept `self`; use memory_size_self(), memory_grow_self(), or memory_grow::<__self>() instead");
+        compile_error!("own_memory! does not accept `self`; use memory_size_self(), memory_reserve_self(), or memory_reserve::<__self>() instead");
     };
     (@reject_self __self $(, $rest:ident)*) => {
-        compile_error!("own_memory! does not accept `__self`; use memory_size_self(), memory_grow_self(), or memory_grow::<__self>() instead");
+        compile_error!("own_memory! does not accept `__self`; use memory_size_self(), memory_reserve_self(), or memory_reserve::<__self>() instead");
     };
     (@reject_self $name:ident $(, $rest:ident)*) => {
         $crate::own_memory!(@reject_self $($rest),*);
@@ -229,11 +229,11 @@ macro_rules! own_memory {
                 }
             }
 
-            /// Grows the memory of the given target Wasm by expanding the shared physical Wasm memory and shifting the data of subsequent targets.
-            pub fn memory_grow<Wasm: $crate::memory::WasmAccessName + $crate::memory::WasmAccess>(pages: i32) -> i32 {
+            /// Reserves additional physical pages for the given target Wasm without changing its logical own-memory size.
+            pub fn memory_reserve<Wasm: $crate::memory::WasmAccessName + $crate::memory::WasmAccess>(pages: i32) -> i32 {
                 #[cfg(not(target_arch = "wasm32"))]
                 {
-                    unimplemented!("memory_grow is only available on wasm32")
+                    unimplemented!("memory_reserve is only available on wasm32")
                 }
                 #[cfg(target_arch = "wasm32")]
                 {
@@ -252,9 +252,9 @@ macro_rules! own_memory {
                 memory_size::<$crate::__private::__self>()
             }
 
-            /// Grows the logical memory of the VFS/host Wasm itself.
-            pub fn memory_grow_self(pages: i32) -> i32 {
-                memory_grow::<$crate::__private::__self>(pages)
+            /// Reserves additional physical pages for the VFS/host Wasm itself.
+            pub fn memory_reserve_self(pages: i32) -> i32 {
+                memory_reserve::<$crate::__private::__self>(pages)
             }
         }
     };

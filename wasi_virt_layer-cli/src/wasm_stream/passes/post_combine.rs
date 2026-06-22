@@ -251,7 +251,8 @@ impl StreamPass for PostCombineStreamPass {
                         let export = export?;
                         if export.kind == wasmparser::ExternalKind::Func {
                             info.exported_funcs
-                                .insert(export.name.to_string(), export.index);
+                                .entry(export.name.to_string())
+                                .or_insert(export.index);
                             match export.name {
                                 "__flesh_vfs_start" => {
                                     info.start_funcs.flesh_vfs_start = Some(export.index)
@@ -879,7 +880,6 @@ impl StreamPass for PostCombineStreamPass {
                         ));
                     }
                     let mut func = wasm_encoder::Function::new(locals);
-
                     let mut mem_idx = 0;
                     let mut cumulative = 0;
                     for (i, &count) in self.defined_funcs_counts.iter().enumerate() {
@@ -889,6 +889,21 @@ impl StreamPass for PostCombineStreamPass {
                             break;
                         }
                     }
+                    let target_thread_spawn_hook = if mem_idx > 0 {
+                        self.target_names
+                            .get((mem_idx - 1) as usize)
+                            .and_then(|target_name| {
+                                info.exported_funcs.get(&format!(
+                                    "__wasip1_vfs_wasi_thread_spawn_{}",
+                                    target_name.replace("-", "_")
+                                ))
+                            })
+                            .and_then(|orig_idx| {
+                                func_map.get(orig_idx).map(|new_idx| (*orig_idx, *new_idx))
+                            })
+                    } else {
+                        None
+                    };
 
                     for op in body.get_operators_reader()? {
                         let op_unwrapped = op?;
@@ -908,8 +923,26 @@ impl StreamPass for PostCombineStreamPass {
                         }
 
                         if !skip {
-                            let mut enc_op =
-                                crate::wasm_stream::translator::translate(&op_unwrapped, &rebinder);
+                            let mut enc_op = if let (
+                                wasmparser::Operator::Call { function_index },
+                                Some((target_hook_orig_idx, target_hook_idx)),
+                            ) = (&op_unwrapped, target_thread_spawn_hook)
+                            {
+                                if func_orig_idx != target_hook_orig_idx
+                                    && info.dropped_imports.get(function_index).is_some_and(
+                                        |name| name == "__wasip1_vfs_wasi_thread_spawn_wrapper",
+                                    )
+                                {
+                                    wasm_encoder::Instruction::Call(target_hook_idx)
+                                } else {
+                                    crate::wasm_stream::translator::translate(
+                                        &op_unwrapped,
+                                        &rebinder,
+                                    )
+                                }
+                            } else {
+                                crate::wasm_stream::translator::translate(&op_unwrapped, &rebinder)
+                            };
 
                             if mem_idx > 0 {
                                 if let Some(mem_info) =
@@ -921,6 +954,39 @@ impl StreamPass for PostCombineStreamPass {
                                             mem_idx,
                                         );
                                     }
+                                }
+
+                                match (&op_unwrapped, &mut enc_op) {
+                                    (
+                                        wasmparser::Operator::MemorySize { mem: 0, .. }
+                                        | wasmparser::Operator::MemoryGrow { mem: 0, .. }
+                                        | wasmparser::Operator::MemoryFill { mem: 0 }
+                                        | wasmparser::Operator::MemoryDiscard { mem: 0 },
+                                        encoded,
+                                    ) => {
+                                        crate::wasm_stream::mem_info::set_memory_index(
+                                            encoded, mem_idx,
+                                        );
+                                    }
+                                    (
+                                        wasmparser::Operator::MemoryInit { mem: 0, .. },
+                                        wasm_encoder::Instruction::MemoryInit { mem, .. },
+                                    ) => *mem = mem_idx,
+                                    (
+                                        wasmparser::Operator::MemoryCopy { dst_mem, src_mem },
+                                        wasm_encoder::Instruction::MemoryCopy {
+                                            dst_mem: encoded_dst_mem,
+                                            src_mem: encoded_src_mem,
+                                        },
+                                    ) => {
+                                        if *dst_mem == 0 {
+                                            *encoded_dst_mem = mem_idx;
+                                        }
+                                        if *src_mem == 0 {
+                                            *encoded_src_mem = mem_idx;
+                                        }
+                                    }
+                                    _ => {}
                                 }
                             }
 
@@ -1358,7 +1424,8 @@ impl StreamPass for PostCombineStreamPass {
 mod tests {
     use super::*;
     use wasm_encoder::{
-        CodeSection, ExportKind, Function, FunctionSection, Instruction, Module, TypeSection,
+        CodeSection, DataCountSection, DataSection, ExportKind, ExportSection, Function,
+        FunctionSection, ImportSection, Instruction, MemorySection, Module, TypeSection,
     };
 
     #[test]
@@ -1568,6 +1635,198 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn duplicate_root_spawn_exports_keep_first_vfs_predicate_for_wrapper() -> eyre::Result<()> {
+        let input = module_with_thread_spawn_wrapper_and_duplicate_root_spawn_exports();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["target".to_string()],
+            vec![3],
+            true,
+        );
+        let output = pass.run(&input)?;
+
+        let mut wrapper_calls = None;
+        let mut imported_funcs = 0;
+        let mut defined_func_idx = 0;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(imports) => {
+                    for group in imports {
+                        for import in group?.into_iter() {
+                            let (_, import) = import?;
+                            if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                                imported_funcs += 1;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(_) => {
+                    let absolute_idx = imported_funcs + defined_func_idx;
+                    let calls = function_calls(&output, absolute_idx)?;
+                    if calls.len() == 3 && calls[1] == 0 && calls[2] == 3 {
+                        wrapper_calls = Some(calls);
+                    }
+                    defined_func_idx += 1;
+                }
+                _ => {}
+            }
+        }
+
+        assert_eq!(wrapper_calls, Some(vec![1, 0, 3]));
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_thread_spawn_import_resolves_to_target_specific_hook() -> eyre::Result<()> {
+        let input = module_with_target_thread_spawn_import_and_hook();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["target".to_string()],
+            vec![3],
+            true,
+        );
+        let output = pass.run(&input)?;
+
+        let mut target_hook = None;
+        let mut caller = None;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let wasmparser::Payload::ExportSection(exports) = payload? {
+                for export in exports {
+                    let export = export?;
+                    if export.name == "__wasip1_vfs_wasi_thread_spawn_target" {
+                        target_hook = Some(export.index);
+                    }
+                    if export.name == "target_spawn_caller" {
+                        caller = Some(export.index);
+                    }
+                }
+            }
+        }
+
+        let target_hook = target_hook.expect("target hook export should remain available");
+        let caller = caller.expect("test caller export should remain available");
+        assert_eq!(function_calls(&output, caller)?, vec![target_hook]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_wasi_thread_start_import_resolves_to_target_export() -> eyre::Result<()> {
+        let input = module_with_target_wasi_thread_start_import_and_export();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["target".to_string()],
+            vec![3],
+            true,
+        );
+        let output = pass.run(&input)?;
+
+        let mut target_start = None;
+        let mut caller = None;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let wasmparser::Payload::ExportSection(exports) = payload? {
+                for export in exports {
+                    let export = export?;
+                    if export.name == "__wasip1_vfs_target_wasi_thread_start" {
+                        target_start = Some(export.index);
+                    }
+                    if export.name == "target_wasi_thread_start_caller" {
+                        caller = Some(export.index);
+                    }
+                }
+            }
+        }
+
+        let target_start =
+            target_start.expect("target wasi_thread_start export should remain available");
+        let caller = caller.expect("test caller export should remain available");
+        assert_eq!(function_calls(&output, caller)?, vec![target_start]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_defined_generic_thread_spawn_wrapper_call_resolves_to_target_hook() -> eyre::Result<()>
+    {
+        let input = module_with_vfs_and_target_generic_thread_spawn_wrapper_callers();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["target".to_string()],
+            vec![3, 2],
+            true,
+        );
+        let output = pass.run(&input)?;
+
+        let mut target_hook = None;
+        let mut vfs_caller = None;
+        let mut target_caller = None;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let wasmparser::Payload::ExportSection(exports) = payload? {
+                for export in exports {
+                    let export = export?;
+                    match export.name {
+                        "vfs_spawn_caller" => vfs_caller = Some(export.index),
+                        "target_spawn_caller" => target_caller = Some(export.index),
+                        "__wasip1_vfs_wasi_thread_spawn_target" => target_hook = Some(export.index),
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        let target_hook = target_hook.expect("target hook export should remain available");
+        let vfs_caller = vfs_caller.expect("vfs caller export should remain available");
+        let target_caller = target_caller.expect("target caller export should remain available");
+        let vfs_calls = function_calls(&output, vfs_caller)?;
+        let target_hook_calls = function_calls(&output, target_hook)?;
+
+        assert_eq!(function_calls(&output, target_caller)?, vec![target_hook]);
+        assert_eq!(vfs_calls.len(), 1);
+        assert_ne!(vfs_calls, vec![target_hook]);
+        assert_eq!(target_hook_calls.len(), 1);
+        assert_ne!(target_hook_calls, vec![target_hook]);
+
+        Ok(())
+    }
+
+    #[test]
+    fn target_defined_bulk_memory_ops_are_scoped_to_target_memory() -> eyre::Result<()> {
+        let input = module_with_target_bulk_memory_ops();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["target".to_string()],
+            vec![1, 1],
+            false,
+        );
+        let output = pass.run(&input)?;
+
+        let ops = function_ops(&output, "target_bulk_ops")?;
+
+        assert!(ops.iter().any(|op| matches!(
+            op,
+            wasmparser::Operator::MemoryCopy {
+                dst_mem: 1,
+                src_mem: 1,
+            }
+        )));
+        assert!(
+            ops.iter()
+                .any(|op| matches!(op, wasmparser::Operator::MemoryFill { mem: 1 }))
+        );
+        assert!(
+            ops.iter()
+                .any(|op| matches!(op, wasmparser::Operator::MemoryInit { mem: 1, .. }))
+        );
+
+        Ok(())
+    }
+
     fn start_calls(output: &[u8]) -> eyre::Result<Vec<u32>> {
         let mut start = None;
         let mut calls = Vec::new();
@@ -1587,6 +1846,87 @@ mod tests {
                         }
                     }
                     func_idx += 1;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(calls)
+    }
+
+    fn function_ops<'a>(
+        output: &'a [u8],
+        export_name: &str,
+    ) -> eyre::Result<Vec<wasmparser::Operator<'a>>> {
+        let mut imported_funcs = 0;
+        let mut target_func_idx = None;
+        let mut defined_func_idx = 0;
+
+        for payload in wasmparser::Parser::new(0).parse_all(output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(imports) => {
+                    for group in imports {
+                        for import in group?.into_iter() {
+                            let (_, import) = import?;
+                            if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                                imported_funcs += 1;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::ExportSection(exports) => {
+                    for export in exports {
+                        let export = export?;
+                        if export.name == export_name {
+                            target_func_idx = Some(export.index);
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(body) => {
+                    let absolute_idx = imported_funcs + defined_func_idx;
+                    if Some(absolute_idx) == target_func_idx {
+                        return body
+                            .get_operators_reader()?
+                            .into_iter()
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(Into::into);
+                    }
+                    defined_func_idx += 1;
+                }
+                _ => {}
+            }
+        }
+
+        eyre::bail!("exported function {export_name:?} not found")
+    }
+
+    fn function_calls(output: &[u8], target_func_idx: u32) -> eyre::Result<Vec<u32>> {
+        let mut calls = Vec::new();
+        let mut imported_funcs = 0;
+        let mut defined_func_idx = 0;
+
+        for payload in wasmparser::Parser::new(0).parse_all(output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(imports) => {
+                    for group in imports {
+                        for import in group?.into_iter() {
+                            let (_, import) = import?;
+                            if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                                imported_funcs += 1;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(body) => {
+                    let absolute_idx = imported_funcs + defined_func_idx;
+                    if absolute_idx == target_func_idx {
+                        for op in body.get_operators_reader()? {
+                            if let wasmparser::Operator::Call { function_index } = op? {
+                                calls.push(function_index);
+                            }
+                        }
+                    }
+                    defined_func_idx += 1;
                 }
                 _ => {}
             }
@@ -1675,6 +2015,279 @@ mod tests {
             code.function(&func);
         }
         module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_thread_spawn_wrapper_and_duplicate_root_spawn_exports() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types
+            .ty()
+            .function([wasm_encoder::ValType::I32], [wasm_encoder::ValType::I32]);
+        types.ty().function([], [wasm_encoder::ValType::I32]);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "env",
+            "__wasip1_vfs_wasi_thread_spawn_wrapper",
+            wasm_encoder::EntityType::Function(0),
+        );
+        imports.import(
+            "wasip1-vfs:host/virtual-file-system-wasip1-threads-import",
+            "[static]wasip1-threads.thread-spawn-import",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(1);
+        functions.function(1);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("__wasip1_vfs_is_root_spawn", ExportKind::Func, 2);
+        exports.export("__wasip1_vfs_is_root_spawn", ExportKind::Func, 3);
+        exports.export("__wasip1_vfs_wasi_thread_spawn___self", ExportKind::Func, 4);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut vfs_predicate = Function::new([]);
+        vfs_predicate.instruction(&Instruction::I32Const(1));
+        vfs_predicate.instruction(&Instruction::End);
+        code.function(&vfs_predicate);
+
+        let mut duplicate_predicate = Function::new([]);
+        duplicate_predicate.instruction(&Instruction::I32Const(0));
+        duplicate_predicate.instruction(&Instruction::End);
+        code.function(&duplicate_predicate);
+
+        let mut self_spawn = Function::new([]);
+        self_spawn.instruction(&Instruction::LocalGet(0));
+        self_spawn.instruction(&Instruction::End);
+        code.function(&self_spawn);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_target_thread_spawn_import_and_hook() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types
+            .ty()
+            .function([wasm_encoder::ValType::I32], [wasm_encoder::ValType::I32]);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "__wasip1_vfs-host",
+            "__wasip1_vfs_wasi_thread_spawn_target",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("target_spawn_caller", ExportKind::Func, 1);
+        exports.export("__wasip1_vfs_wasi_thread_spawn_target", ExportKind::Func, 2);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut caller = Function::new([]);
+        caller.instruction(&Instruction::LocalGet(0));
+        caller.instruction(&Instruction::Call(0));
+        caller.instruction(&Instruction::End);
+        code.function(&caller);
+
+        let mut target_hook = Function::new([]);
+        target_hook.instruction(&Instruction::LocalGet(0));
+        target_hook.instruction(&Instruction::End);
+        code.function(&target_hook);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_vfs_and_target_generic_thread_spawn_wrapper_callers() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types
+            .ty()
+            .function([wasm_encoder::ValType::I32], [wasm_encoder::ValType::I32]);
+        types.ty().function([], [wasm_encoder::ValType::I32]);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "env",
+            "__wasip1_vfs_wasi_thread_spawn_wrapper",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(1);
+        functions.function(0);
+        functions.function(0);
+        functions.function(0);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("__wasip1_vfs_is_root_spawn", ExportKind::Func, 1);
+        exports.export("__wasip1_vfs_wasi_thread_spawn___self", ExportKind::Func, 2);
+        exports.export("vfs_spawn_caller", ExportKind::Func, 3);
+        exports.export("target_spawn_caller", ExportKind::Func, 4);
+        exports.export("__wasip1_vfs_wasi_thread_spawn_target", ExportKind::Func, 5);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut vfs_predicate = Function::new([]);
+        vfs_predicate.instruction(&Instruction::I32Const(0));
+        vfs_predicate.instruction(&Instruction::End);
+        code.function(&vfs_predicate);
+
+        let mut self_spawn = Function::new([]);
+        self_spawn.instruction(&Instruction::LocalGet(0));
+        self_spawn.instruction(&Instruction::End);
+        code.function(&self_spawn);
+
+        let mut vfs_caller = Function::new([]);
+        vfs_caller.instruction(&Instruction::LocalGet(0));
+        vfs_caller.instruction(&Instruction::Call(0));
+        vfs_caller.instruction(&Instruction::End);
+        code.function(&vfs_caller);
+
+        let mut target_caller = Function::new([]);
+        target_caller.instruction(&Instruction::LocalGet(0));
+        target_caller.instruction(&Instruction::Call(0));
+        target_caller.instruction(&Instruction::End);
+        code.function(&target_caller);
+
+        let mut target_hook = Function::new([]);
+        target_hook.instruction(&Instruction::LocalGet(0));
+        target_hook.instruction(&Instruction::Call(0));
+        target_hook.instruction(&Instruction::End);
+        code.function(&target_hook);
+
+        module.section(&code);
+        module.finish()
+    }
+
+    fn module_with_target_wasi_thread_start_import_and_export() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types
+            .ty()
+            .function([wasm_encoder::ValType::I32, wasm_encoder::ValType::I32], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "wasip1-vfs",
+            "__wasip1_vfs_target_wasi_thread_start",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("target_wasi_thread_start_caller", ExportKind::Func, 1);
+        exports.export("__wasip1_vfs_target_wasi_thread_start", ExportKind::Func, 2);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut caller = Function::new([]);
+        caller.instruction(&Instruction::LocalGet(0));
+        caller.instruction(&Instruction::LocalGet(1));
+        caller.instruction(&Instruction::Call(0));
+        caller.instruction(&Instruction::End);
+        code.function(&caller);
+
+        let mut target_start = Function::new([]);
+        target_start.instruction(&Instruction::End);
+        code.function(&target_start);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_target_bulk_memory_ops() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut functions = FunctionSection::new();
+        functions.function(0);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        for _ in 0..2 {
+            memories.memory(wasm_encoder::MemoryType {
+                minimum: 1,
+                maximum: None,
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            });
+        }
+        module.section(&memories);
+
+        let mut exports = ExportSection::new();
+        exports.export("target_bulk_ops", ExportKind::Func, 1);
+        module.section(&exports);
+
+        module.section(&DataCountSection { count: 1 });
+
+        let mut code = CodeSection::new();
+        let mut vfs_func = Function::new([]);
+        vfs_func.instruction(&Instruction::End);
+        code.function(&vfs_func);
+
+        let mut target_func = Function::new([]);
+        target_func.instruction(&Instruction::I32Const(0));
+        target_func.instruction(&Instruction::I32Const(4));
+        target_func.instruction(&Instruction::I32Const(8));
+        target_func.instruction(&Instruction::MemoryCopy {
+            dst_mem: 0,
+            src_mem: 0,
+        });
+        target_func.instruction(&Instruction::I32Const(16));
+        target_func.instruction(&Instruction::I32Const(0));
+        target_func.instruction(&Instruction::I32Const(4));
+        target_func.instruction(&Instruction::MemoryFill(0));
+        target_func.instruction(&Instruction::I32Const(32));
+        target_func.instruction(&Instruction::I32Const(0));
+        target_func.instruction(&Instruction::I32Const(4));
+        target_func.instruction(&Instruction::MemoryInit {
+            mem: 0,
+            data_index: 0,
+        });
+        target_func.instruction(&Instruction::End);
+        code.function(&target_func);
+        module.section(&code);
+
+        let mut data = DataSection::new();
+        data.passive([1, 2, 3, 4]);
+        module.section(&data);
 
         module.finish()
     }

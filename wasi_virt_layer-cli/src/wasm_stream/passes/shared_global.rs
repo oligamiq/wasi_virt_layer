@@ -91,8 +91,15 @@ impl StreamPass for SharedGlobalStreamPass {
                     for group in s.clone() {
                         for i in group?.into_iter() {
                             let (_, i) = i?;
-                            if let wasmparser::TypeRef::Func(_) = i.ty {
-                                imported_func_count += 1;
+                            match i.ty {
+                                wasmparser::TypeRef::Func(_)
+                                | wasmparser::TypeRef::FuncExact(_) => {
+                                    imported_func_count += 1;
+                                }
+                                wasmparser::TypeRef::Global(_) => {
+                                    global_count += 1;
+                                }
+                                _ => {}
                             }
                         }
                     }
@@ -111,13 +118,14 @@ impl StreamPass for SharedGlobalStreamPass {
                     });
                 }
                 Payload::GlobalSection(s) => {
-                    global_count = s.count();
+                    let global_index_base = global_count;
+                    global_count += s.count();
                     for (i, g) in s.clone().into_iter().enumerate() {
                         let g = g?;
                         let mut reader = g.init_expr.get_operators_reader();
                         let op = reader.read()?;
                         if let wasmparser::Operator::I32Const { value } = op {
-                            global_inits.insert(i as u32, value);
+                            global_inits.insert(global_index_base + i as u32, value);
                         }
                     }
                     let range = s.range();

@@ -2443,12 +2443,8 @@ mod tests {
     #[test]
     fn target_pass_skips_without_stack_size() -> Result<()> {
         let input = target_fixture();
-        let mut pass = ExportStackPreTargetStreamPass::new(
-            "target".to_string(),
-            "vfs".to_string(),
-            0,
-            None,
-        );
+        let mut pass =
+            ExportStackPreTargetStreamPass::new("target".to_string(), "vfs".to_string(), 0, None);
         let output = pass.run(&input)?;
         assert_eq!(output, input);
         Ok(())
@@ -2491,22 +2487,28 @@ mod tests {
         }
 
         // Verify that target_ensure calls the memory director (which is at index 1)
-        let has_director_call = ops.iter().any(|op| {
-            matches!(op, wasmparser::Operator::Call { function_index: 1 })
-        });
-        assert!(has_director_call, "ensure function must call memory director to get dynamic memory offset");
+        let has_director_call = ops
+            .iter()
+            .any(|op| matches!(op, wasmparser::Operator::Call { function_index: 1 }));
+        assert!(
+            has_director_call,
+            "ensure function must call memory director to get dynamic memory offset"
+        );
 
         // Verify that it subtracts the director result from current_end to get local stack address
-        let has_i32_sub = ops.iter().any(|op| {
-            matches!(op, wasmparser::Operator::I32Sub)
-        });
+        let has_i32_sub = ops
+            .iter()
+            .any(|op| matches!(op, wasmparser::Operator::I32Sub));
         assert!(has_i32_sub, "ensure function must subtract memory offset");
 
         // Verify that it sets the __stack_pointer global (which is at index 0)
-        let has_stack_pointer_set = ops.iter().any(|op| {
-            matches!(op, wasmparser::Operator::GlobalSet { global_index: 0 })
-        });
-        assert!(has_stack_pointer_set, "ensure function must set __stack_pointer");
+        let has_stack_pointer_set = ops
+            .iter()
+            .any(|op| matches!(op, wasmparser::Operator::GlobalSet { global_index: 0 }));
+        assert!(
+            has_stack_pointer_set,
+            "ensure function must set __stack_pointer"
+        );
 
         Ok(())
     }

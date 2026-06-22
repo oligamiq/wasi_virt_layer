@@ -26,7 +26,9 @@ fn test_pool_own_memory() -> color_eyre::Result<()> {
             let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
             println!("Captured stdout:\n{}", stdout);
 
-            assert!(stdout.contains("Starting 5 threads test with VirtualThreadPool and own-memory"));
+            assert!(
+                stdout.contains("Starting 5 threads test with VirtualThreadPool and own-memory")
+            );
             assert!(stdout.contains("All 5 threads completed successfully."));
             Ok(())
         }

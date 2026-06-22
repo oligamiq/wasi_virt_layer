@@ -569,8 +569,11 @@ pub struct MemoryOpInfo {
 }
 
 /// Given a `wasm_encoder::Instruction` that references a memory, set its memory
-/// index to 0.  Used after multi-memory lowering so that all instructions target
-/// the single remaining memory.
+/// index to the provided value. Used after multi-memory lowering so that all
+/// instructions target the single remaining memory.
+///
+/// Cross-memory `memory.copy` is intentionally left unchanged here; callers that
+/// need to collapse both operands after lowering should use [`clear_memory_index`].
 pub fn set_memory_index(op: &mut wasm_encoder::Instruction, index: u32) {
     match op {
         wasm_encoder::Instruction::I32Load(memarg) => memarg.memory_index = index,
@@ -676,15 +679,15 @@ pub fn set_memory_index(op: &mut wasm_encoder::Instruction, index: u32) {
         wasm_encoder::Instruction::V128Load32Zero(memarg) => memarg.memory_index = index,
         wasm_encoder::Instruction::V128Load64Zero(memarg) => memarg.memory_index = index,
         wasm_encoder::Instruction::V128Store(memarg) => memarg.memory_index = index,
-        wasm_encoder::Instruction::MemorySize(mem) => *mem = 0,
-        wasm_encoder::Instruction::MemoryGrow(mem) => *mem = 0,
-        wasm_encoder::Instruction::MemoryInit { mem, .. } => *mem = 0,
-        wasm_encoder::Instruction::MemoryCopy { dst_mem, src_mem } => {
-            *dst_mem = 0;
-            *src_mem = 0;
+        wasm_encoder::Instruction::MemorySize(mem) => *mem = index,
+        wasm_encoder::Instruction::MemoryGrow(mem) => *mem = index,
+        wasm_encoder::Instruction::MemoryInit { mem, .. } => *mem = index,
+        wasm_encoder::Instruction::MemoryCopy { dst_mem, src_mem } if *dst_mem == *src_mem => {
+            *dst_mem = index;
+            *src_mem = index;
         }
-        wasm_encoder::Instruction::MemoryFill(mem) => *mem = 0,
-        wasm_encoder::Instruction::MemoryDiscard(mem) => *mem = 0,
+        wasm_encoder::Instruction::MemoryFill(mem) => *mem = index,
+        wasm_encoder::Instruction::MemoryDiscard(mem) => *mem = index,
         _ => {}
     }
 }
@@ -710,6 +713,11 @@ pub fn temp_local_for_type(
 }
 
 pub fn clear_memory_index(op: &mut wasm_encoder::Instruction) {
+    if let wasm_encoder::Instruction::MemoryCopy { dst_mem, src_mem } = op {
+        *dst_mem = 0;
+        *src_mem = 0;
+        return;
+    }
     set_memory_index(op, 0);
 }
 

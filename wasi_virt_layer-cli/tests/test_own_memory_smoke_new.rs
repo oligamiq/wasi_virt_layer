@@ -28,7 +28,7 @@ fn test_own_memory_smoke_new_example() -> color_eyre::Result<()> {
 
     assert!(stdout.contains("Starting smoke_target with threads..."));
     assert!(stdout.contains("Expanding memory by 3200 pages"));
-    assert!(stdout.contains("$$$ Successfully spawned thread"));
+    assert!(stdout.contains("Hello from a child thread!"));
     assert!(stdout.contains("VFS: inside root_spawn closure"));
     assert!(stdout.contains("[WASI main] done."));
 

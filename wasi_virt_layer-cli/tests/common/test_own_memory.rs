@@ -68,4 +68,3 @@ fn test_own_memory_self_api() {
         "expected self own-memory API output, got: {stdout}"
     );
 }
-

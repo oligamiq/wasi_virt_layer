@@ -53,6 +53,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let mut own_memory_size_get = std::collections::HashMap::new();
         let mut own_memory_size_set = std::collections::HashMap::new();
         let mut own_memory_size_init = std::collections::HashMap::new();
+        let mut memory_director_funcs = std::collections::HashMap::new();
 
         let mut func_types = Vec::new();
         let mut types = Vec::new();
@@ -238,6 +239,11 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                 let target_name = export.name.trim_start_matches("__wasip1_vfs_").trim_end_matches("_own_memory_size_init");
                                 if let Some(pos) = self.target_names.iter().position(|t| t.replace("-", "_") == target_name) {
                                     own_memory_size_init.insert((pos + 1) as u32, export.index);
+                                }
+                            } else if export.name.starts_with("__wasip1_vfs_") && export.name.ends_with("_memory_director") {
+                                let target_name = export.name.trim_start_matches("__wasip1_vfs_").trim_end_matches("_memory_director");
+                                if let Some(pos) = self.target_names.iter().position(|t| t.replace("-", "_") == target_name) {
+                                    memory_director_funcs.insert(export.index, (pos + 1) as u32);
                                 }
                             }
 
@@ -711,6 +717,21 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         locals.push((1, wasm_encoder::ValType::I64)); // tmp_i64_2
 
                         let mut func = Function::new(locals);
+                        let synthesized_director_memory = post_combine_memory_director_memory(&body)?;
+
+                        if let Some(idx) = memory_director_funcs
+                            .get(&(imported_funcs + i as u32))
+                            .copied()
+                            .or(synthesized_director_memory)
+                        {
+                            func.instruction(&Instruction::LocalGet(0));
+                            if idx > 0 {
+                                func.instruction(&Instruction::GlobalGet(orig_global_count + idx - 1));
+                                func.instruction(&Instruction::I32Add);
+                            }
+                            func.instruction(&Instruction::End);
+                            return Ok(func);
+                        }
 
                         if self.own_memory && Some(imported_funcs + i as u32) == init_offset_global_fid {
                             // Call init for host
@@ -738,7 +759,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                     ));
                                 }
                                 wasmparser::Operator::MemoryGrow { mem, .. } => {
-                                    if self.own_memory && mem != 0 {
+                                    if self.own_memory {
                                         func.instruction(&wasm_encoder::Instruction::Call(
                                             new_func_count + 2 * memory_count + mem as u32,
                                         ));
@@ -1228,11 +1249,13 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                     if self.own_memory {
                         for idx in 0..memory_count {
                             let mut func = Function::new(vec![
-                                (1, wasm_encoder::ValType::I32), // return_size
+                                (3, wasm_encoder::ValType::I32), // return_size, max_allowed, new_size
                             ]);
                             let page_delta = 0;
                             let return_size = 1;
-                            
+                            let max_allowed = 2;
+                            let new_size = 3;
+
                             let logical_size_get_fn = crate::wasm_stream::translator::Rebind::function(&rebinder, *own_memory_size_get.get(&(idx as u32)).unwrap());
                             let logical_size_set_fn = crate::wasm_stream::translator::Rebind::function(&rebinder, *own_memory_size_set.get(&(idx as u32)).unwrap());
 
@@ -1272,12 +1295,20 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                 func.instruction(&Instruction::I32ShrU);
                             }
 
-                            // Stack: [max_allowed]
                             func.instruction(&Instruction::LocalGet(return_size));
                             func.instruction(&Instruction::LocalGet(page_delta));
                             func.instruction(&Instruction::I32Add);
-                            // Stack: [max_allowed, new_size]
+                            func.instruction(&Instruction::LocalSet(new_size));
+                            func.instruction(&Instruction::LocalSet(max_allowed));
+
+                            // success if new_size did not wrap and new_size <= max_allowed
+                            func.instruction(&Instruction::LocalGet(new_size));
+                            func.instruction(&Instruction::LocalGet(return_size));
                             func.instruction(&Instruction::I32GeU);
+                            func.instruction(&Instruction::LocalGet(max_allowed));
+                            func.instruction(&Instruction::LocalGet(new_size));
+                            func.instruction(&Instruction::I32GeU);
+                            func.instruction(&Instruction::I32And);
 
                             func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
                             // success
@@ -1337,5 +1368,52 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         }
 
         Ok(encoder.finish())
+    }
+}
+
+fn post_combine_memory_director_memory(
+    body: &wasmparser::FunctionBody<'_>,
+) -> Result<Option<u32>, wasmparser::BinaryReaderError> {
+    let ops = body
+        .get_operators_reader()?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut ops = ops.as_slice();
+
+    if !matches!(ops.first(), Some(wasmparser::Operator::LocalGet { local_index: 0 })) {
+        return Ok(None);
+    }
+    ops = &ops[1..];
+
+    let mut last_summed_memory = 0;
+    if !matches!(ops.first(), Some(wasmparser::Operator::MemorySize { mem: 0, .. })) {
+        return Ok(None);
+    }
+    ops = &ops[1..];
+
+    while let Some(wasmparser::Operator::MemorySize { mem, .. }) = ops.first() {
+        if *mem != last_summed_memory + 1 {
+            return Ok(None);
+        }
+        last_summed_memory = *mem;
+        ops = &ops[1..];
+        if !matches!(ops.first(), Some(wasmparser::Operator::I32Add)) {
+            return Ok(None);
+        }
+        ops = &ops[1..];
+    }
+
+    if matches!(
+        ops,
+        [
+            wasmparser::Operator::I32Const { value: 65536 },
+            wasmparser::Operator::I32Mul,
+            wasmparser::Operator::I32Add,
+            wasmparser::Operator::End
+        ]
+    ) {
+        Ok(Some(last_summed_memory + 1))
+    } else {
+        Ok(None)
     }
 }

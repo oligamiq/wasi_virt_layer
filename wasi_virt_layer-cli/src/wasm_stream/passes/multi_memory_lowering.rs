@@ -61,6 +61,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let mut own_memory_size_set = std::collections::HashMap::new();
         let mut own_memory_size_init = std::collections::HashMap::new();
         let mut own_memory_size_compare_exchange = std::collections::HashMap::new();
+        let mut memory_director_funcs = std::collections::HashMap::new();
 
         let mut func_types = Vec::new();
         let mut types = Vec::new();
@@ -301,6 +302,20 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                 {
                                     own_memory_size_compare_exchange
                                         .insert((pos + 1) as u32, export.index);
+                                }
+                            } else if export.name.starts_with("__wasip1_vfs_")
+                                && export.name.ends_with("_memory_director")
+                            {
+                                let target_name = export
+                                    .name
+                                    .trim_start_matches("__wasip1_vfs_")
+                                    .trim_end_matches("_memory_director");
+                                if let Some(pos) = self
+                                    .target_names
+                                    .iter()
+                                    .position(|t| t.replace("-", "_") == target_name)
+                                {
+                                    memory_director_funcs.insert(export.index, (pos + 1) as u32);
                                 }
                             }
 
@@ -802,6 +817,29 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         locals.push((1, wasm_encoder::ValType::I64)); // tmp_i64_2
 
                         let mut func = Function::new(locals);
+                        let synthesized_director_memory = if self.lower_memory {
+                            post_combine_memory_director_memory(&func_body)?
+                        } else {
+                            None
+                        };
+
+                        if self.lower_memory {
+                            if let Some(idx) = memory_director_funcs
+                                .get(&(imported_funcs + i as u32))
+                                .copied()
+                                .or(synthesized_director_memory)
+                            {
+                                func.instruction(&Instruction::LocalGet(0));
+                                if idx > 0 {
+                                    func.instruction(&Instruction::GlobalGet(
+                                        orig_global_count + idx - 1,
+                                    ));
+                                    func.instruction(&Instruction::I32Add);
+                                }
+                                func.instruction(&Instruction::End);
+                                return Ok(func);
+                            }
+                        }
 
                         if self.own_memory
                             && Some(imported_funcs + i as u32) == init_offset_global_fid
@@ -845,7 +883,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                     ));
                                 }
                                 wasmparser::Operator::MemoryGrow { mem, .. } => {
-                                    if self.own_memory && mem != 0 {
+                                    if self.own_memory {
                                         func.instruction(&wasm_encoder::Instruction::Call(
                                             new_func_count + 2 * memory_count + mem as u32,
                                         ));
@@ -870,7 +908,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         )); // dst
 
                                         // Acquire read lock if threaded
-                                        if threads && !self.own_memory {
+                                        if threads {
                                             if let Some(acq) = lock_acquire_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     acq,
@@ -911,7 +949,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         });
 
                                         // Release read lock if threaded
-                                        if threads && !self.own_memory {
+                                        if threads {
                                             if let Some(rel) = lock_release_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     rel,
@@ -944,7 +982,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         )); // dst
 
                                         // Acquire read lock if threaded
-                                        if threads && !self.own_memory {
+                                        if threads {
                                             if let Some(acq) = lock_acquire_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     acq,
@@ -969,7 +1007,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         func.instruction(&wasm_encoder::Instruction::MemoryFill(0));
 
                                         // Release read lock if threaded
-                                        if threads && !self.own_memory {
+                                        if threads {
                                             if let Some(rel) = lock_release_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     rel,
@@ -1002,7 +1040,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         )); // dst
 
                                         // Acquire read lock if threaded
-                                        if threads && !self.own_memory {
+                                        if threads {
                                             if let Some(acq) = lock_acquire_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     acq,
@@ -1030,7 +1068,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                         });
 
                                         // Release read lock if threaded
-                                        if threads && !self.own_memory {
+                                        if threads {
                                             if let Some(rel) = lock_release_fn {
                                                 func.instruction(&wasm_encoder::Instruction::Call(
                                                     rel,
@@ -1103,7 +1141,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             ));
 
                                             // Acquire lock if threaded
-                                            if threads && !self.own_memory {
+                                            if threads {
                                                 if let Some(acq) = lock_acquire_fn {
                                                     func.instruction(
                                                         &wasm_encoder::Instruction::Call(acq),
@@ -1141,7 +1179,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                             func.instruction(&enc_op);
 
                                             // Release lock if threaded
-                                            if threads && !self.own_memory {
+                                            if threads {
                                                 if let Some(rel) = lock_release_fn {
                                                     // If there's a result, save it, release, restore
                                                     if let Some(res_ty) = info.result_type {
@@ -1282,7 +1320,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         func.instruction(&Instruction::Call(new_func_count + idx));
                         func.instruction(&Instruction::LocalSet(return_size));
 
-                        if threads && !self.own_memory {
+                        if threads {
                             if let Some(acq) = lock_write_acquire_fn {
                                 func.instruction(&Instruction::Call(acq));
                             }
@@ -1298,7 +1336,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                             func.instruction(&Instruction::I32Const(-1));
                             func.instruction(&Instruction::I32Eq);
                             func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
-                            if threads && !self.own_memory {
+                            if threads {
                                 if let Some(rel) = lock_write_release_fn {
                                     func.instruction(&Instruction::Call(rel));
                                 }
@@ -1359,10 +1397,23 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                         } else {
                             func.instruction(&Instruction::LocalGet(page_delta));
                             func.instruction(&Instruction::MemoryGrow(idx as u32));
-                            func.instruction(&Instruction::Drop); // We only care about logical size
+                            func.instruction(&Instruction::LocalSet(combined_size));
+
+                            func.instruction(&Instruction::LocalGet(combined_size));
+                            func.instruction(&Instruction::I32Const(-1));
+                            func.instruction(&Instruction::I32Eq);
+                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                            if threads {
+                                if let Some(rel) = lock_write_release_fn {
+                                    func.instruction(&Instruction::Call(rel));
+                                }
+                            }
+                            func.instruction(&Instruction::I32Const(-1));
+                            func.instruction(&Instruction::Return);
+                            func.instruction(&Instruction::End); // end if
                         }
 
-                        if threads && !self.own_memory {
+                        if threads {
                             if let Some(rel) = lock_write_release_fn {
                                 func.instruction(&Instruction::Call(rel));
                             }
@@ -1435,6 +1486,15 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                             func.instruction(&Instruction::I32Add);
                             func.instruction(&Instruction::LocalSet(new_size));
 
+                            // if new_size wrapped below return_size { return -1; }
+                            func.instruction(&Instruction::LocalGet(new_size));
+                            func.instruction(&Instruction::LocalGet(return_size));
+                            func.instruction(&Instruction::I32LtU);
+                            func.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
+                            func.instruction(&Instruction::I32Const(-1));
+                            func.instruction(&Instruction::Return);
+                            func.instruction(&Instruction::End);
+
                             // if new_size > max_allowed { return -1; }
                             func.instruction(&Instruction::LocalGet(new_size));
                             func.instruction(&Instruction::LocalGet(max_allowed));
@@ -1495,5 +1555,571 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         }
 
         Ok(encoder.finish())
+    }
+}
+
+fn post_combine_memory_director_memory(
+    body: &wasmparser::FunctionBody<'_>,
+) -> Result<Option<u32>, wasmparser::BinaryReaderError> {
+    let ops = body
+        .get_operators_reader()?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut ops = ops.as_slice();
+
+    if !matches!(
+        ops.first(),
+        Some(wasmparser::Operator::LocalGet { local_index: 0 })
+    ) {
+        return Ok(None);
+    }
+    ops = &ops[1..];
+
+    let mut last_summed_memory = 0;
+    if !matches!(
+        ops.first(),
+        Some(wasmparser::Operator::MemorySize { mem: 0, .. })
+    ) {
+        return Ok(None);
+    }
+    ops = &ops[1..];
+
+    while let Some(wasmparser::Operator::MemorySize { mem, .. }) = ops.first() {
+        if *mem != last_summed_memory + 1 {
+            return Ok(None);
+        }
+        last_summed_memory = *mem;
+        ops = &ops[1..];
+        if !matches!(ops.first(), Some(wasmparser::Operator::I32Add)) {
+            return Ok(None);
+        }
+        ops = &ops[1..];
+    }
+
+    if matches!(
+        ops,
+        [
+            wasmparser::Operator::I32Const { value: 65536 },
+            wasmparser::Operator::I32Mul,
+            wasmparser::Operator::I32Add,
+            wasmparser::Operator::End
+        ]
+    ) {
+        Ok(Some(last_summed_memory + 1))
+    } else {
+        Ok(None)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MultiMemoryLoweringStreamPass;
+    use crate::wasm_stream::passes::post_combine::PostCombineStreamPass;
+    use crate::wasm_stream::pipeline::StreamPass;
+    use wasm_encoder::{
+        CodeSection, EntityType, ExportKind, ExportSection, Function, FunctionSection,
+        ImportSection, Instruction, MemorySection, MemoryType, Module, TypeSection, ValType,
+    };
+    use wasmparser::Payload;
+
+    #[test]
+    fn own_memory_physical_reserve_does_not_update_self_logical_size() -> eyre::Result<()> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([], [ValType::I32]);
+        types.ty().function([ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_size___self",
+            EntityType::Function(0),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_grow___self",
+            EntityType::Function(1),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_size_target",
+            EntityType::Function(0),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_grow_target",
+            EntityType::Function(1),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        for _ in 0..2 {
+            functions.function(0);
+            functions.function(2);
+            functions.function(2);
+            functions.function(1);
+        }
+        functions.function(1);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        for _ in 0..2 {
+            memories.memory(MemoryType {
+                minimum: 1,
+                maximum: Some(10),
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            });
+        }
+        module.section(&memories);
+
+        let mut exports = ExportSection::new();
+        exports.export("__wasip1_vfs_host_own_memory_size_get", ExportKind::Func, 4);
+        exports.export("__wasip1_vfs_host_own_memory_size_set", ExportKind::Func, 5);
+        exports.export(
+            "__wasip1_vfs_host_own_memory_size_init",
+            ExportKind::Func,
+            6,
+        );
+        exports.export(
+            "__wasip1_vfs_host_own_memory_size_compare_exchange",
+            ExportKind::Func,
+            7,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_get",
+            ExportKind::Func,
+            8,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_set",
+            ExportKind::Func,
+            9,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_init",
+            ExportKind::Func,
+            10,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_compare_exchange",
+            ExportKind::Func,
+            11,
+        );
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        for defined_idx in 0..8 {
+            match defined_idx {
+                0 | 4 => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::I32Const(1));
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+                3 | 7 => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::LocalGet(0));
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+                _ => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+            }
+        }
+        let mut grow_user = Function::new([]);
+        grow_user.instruction(&Instruction::I32Const(1));
+        grow_user.instruction(&Instruction::MemoryGrow(0));
+        grow_user.instruction(&Instruction::Drop);
+        grow_user.instruction(&Instruction::End);
+        code.function(&grow_user);
+        module.section(&code);
+
+        let output =
+            MultiMemoryLoweringStreamPass::new(true, true, vec!["target".to_string()], true)
+                .run(&module.finish())?;
+
+        let mut calls = Vec::new();
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let Payload::CodeSectionEntry(body) = payload? {
+                let mut function_calls = Vec::new();
+                for op in body.get_operators_reader()? {
+                    if let wasmparser::Operator::Call { function_index } = op? {
+                        function_calls.push(function_index);
+                    }
+                }
+                calls.push(function_calls);
+            }
+        }
+
+        let physical_grow_mem0_calls = &calls[11];
+        assert!(!physical_grow_mem0_calls.contains(&13));
+
+        Ok(())
+    }
+
+    #[test]
+    fn own_memory_target_grow_routes_through_logical_grow() -> eyre::Result<()> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([], [ValType::I32]);
+        types.ty().function([ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_size___self",
+            EntityType::Function(0),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_grow___self",
+            EntityType::Function(1),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_size_target",
+            EntityType::Function(0),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_grow_target",
+            EntityType::Function(1),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        for _ in 0..2 {
+            functions.function(0);
+            functions.function(2);
+            functions.function(2);
+            functions.function(1);
+        }
+        functions.function(1);
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        for _ in 0..2 {
+            memories.memory(MemoryType {
+                minimum: 1,
+                maximum: Some(10),
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            });
+        }
+        module.section(&memories);
+
+        let mut exports = ExportSection::new();
+        exports.export("__wasip1_vfs_host_own_memory_size_get", ExportKind::Func, 4);
+        exports.export("__wasip1_vfs_host_own_memory_size_set", ExportKind::Func, 5);
+        exports.export(
+            "__wasip1_vfs_host_own_memory_size_init",
+            ExportKind::Func,
+            6,
+        );
+        exports.export(
+            "__wasip1_vfs_host_own_memory_size_compare_exchange",
+            ExportKind::Func,
+            7,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_get",
+            ExportKind::Func,
+            8,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_set",
+            ExportKind::Func,
+            9,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_init",
+            ExportKind::Func,
+            10,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_compare_exchange",
+            ExportKind::Func,
+            11,
+        );
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        for defined_idx in 0..8 {
+            match defined_idx {
+                0 | 4 => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::I32Const(1));
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+                3 | 7 => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::LocalGet(0));
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+                _ => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+            }
+        }
+        let mut grow_user = Function::new([]);
+        grow_user.instruction(&Instruction::I32Const(1));
+        grow_user.instruction(&Instruction::MemoryGrow(1));
+        grow_user.instruction(&Instruction::Drop);
+        grow_user.instruction(&Instruction::End);
+        code.function(&grow_user);
+        module.section(&code);
+
+        let input = module.finish();
+
+        let output =
+            MultiMemoryLoweringStreamPass::new(true, true, vec!["target".to_string()], false)
+                .run(&input)?;
+
+        let mut calls = Vec::new();
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let Payload::CodeSectionEntry(body) = payload? {
+                let mut function_calls = Vec::new();
+                for op in body.get_operators_reader()? {
+                    if let wasmparser::Operator::Call { function_index } = op? {
+                        function_calls.push(function_index);
+                    }
+                }
+                calls.push(function_calls);
+            }
+        }
+
+        let target_grow_user_calls = &calls[8];
+        assert!(target_grow_user_calls.contains(&14));
+        assert!(!target_grow_user_calls.contains(&12));
+
+        let output =
+            MultiMemoryLoweringStreamPass::new(true, true, vec!["target".to_string()], true)
+                .run(&input)?;
+
+        let mut calls = Vec::new();
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let Payload::CodeSectionEntry(body) = payload? {
+                let mut function_calls = Vec::new();
+                for op in body.get_operators_reader()? {
+                    if let wasmparser::Operator::Call { function_index } = op? {
+                        function_calls.push(function_index);
+                    }
+                }
+                calls.push(function_calls);
+            }
+        }
+
+        let target_grow_user_calls = &calls[8];
+        assert!(target_grow_user_calls.contains(&14));
+        assert!(!target_grow_user_calls.contains(&12));
+
+        Ok(())
+    }
+
+    #[test]
+    fn own_memory_target_director_uses_physical_offset_after_import_removal() -> eyre::Result<()> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([], [ValType::I32]);
+        types.ty().function([ValType::I32], [ValType::I32]);
+        types.ty().function([ValType::I32], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_size___self",
+            EntityType::Function(0),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_grow___self",
+            EntityType::Function(1),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_size_target",
+            EntityType::Function(0),
+        );
+        imports.import(
+            "env",
+            "__wasip1_vfs_own_memory_grow_target",
+            EntityType::Function(1),
+        );
+        imports.import(
+            "wasip1-vfs",
+            "__wasip1_vfs_target_memory_director",
+            EntityType::Function(1),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        for _ in 0..2 {
+            functions.function(0);
+            functions.function(2);
+            functions.function(2);
+            functions.function(1);
+        }
+        module.section(&functions);
+
+        let mut memories = MemorySection::new();
+        for _ in 0..2 {
+            memories.memory(MemoryType {
+                minimum: 1,
+                maximum: Some(10),
+                memory64: false,
+                shared: false,
+                page_size_log2: None,
+            });
+        }
+        module.section(&memories);
+
+        let mut exports = ExportSection::new();
+        exports.export("__wasip1_vfs_host_own_memory_size_get", ExportKind::Func, 5);
+        exports.export("__wasip1_vfs_host_own_memory_size_set", ExportKind::Func, 6);
+        exports.export(
+            "__wasip1_vfs_host_own_memory_size_init",
+            ExportKind::Func,
+            7,
+        );
+        exports.export(
+            "__wasip1_vfs_host_own_memory_size_compare_exchange",
+            ExportKind::Func,
+            8,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_get",
+            ExportKind::Func,
+            9,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_set",
+            ExportKind::Func,
+            10,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_init",
+            ExportKind::Func,
+            11,
+        );
+        exports.export(
+            "__wasip1_vfs_target_own_memory_size_compare_exchange",
+            ExportKind::Func,
+            12,
+        );
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        for defined_idx in 0..8 {
+            match defined_idx {
+                0 | 4 => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::I32Const(1));
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+                3 | 7 => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::LocalGet(0));
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+                _ => {
+                    let mut f = Function::new([]);
+                    f.instruction(&Instruction::End);
+                    code.function(&f);
+                }
+            }
+        }
+        module.section(&code);
+
+        let post_combined = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["target".to_string()],
+            vec![8],
+            false,
+        )
+        .run(&module.finish())?;
+        let mut matched_post_combine_director = false;
+        for payload in wasmparser::Parser::new(0).parse_all(&post_combined) {
+            if let Payload::CodeSectionEntry(body) = payload? {
+                matched_post_combine_director |=
+                    super::post_combine_memory_director_memory(&body)?.is_some();
+            }
+        }
+        assert!(matched_post_combine_director);
+
+        let output =
+            MultiMemoryLoweringStreamPass::new(true, true, vec!["target".to_string()], true)
+                .run(&post_combined)?;
+
+        let mut imported_funcs = 0;
+        let mut defined_func_idx = 0;
+        let mut found_physical_director = false;
+        let mut found_stale_size_director = false;
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                Payload::ImportSection(imports) => {
+                    for group in imports {
+                        for import in group?.into_iter() {
+                            let (_, import) = import?;
+                            if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                                imported_funcs += 1;
+                            }
+                        }
+                    }
+                }
+                Payload::CodeSectionEntry(body) => {
+                    let ops = body
+                        .get_operators_reader()?
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()?;
+                    found_physical_director |= matches!(
+                        ops.as_slice(),
+                        [
+                            wasmparser::Operator::LocalGet { local_index: 0 },
+                            wasmparser::Operator::GlobalGet { global_index: 0 },
+                            wasmparser::Operator::I32Add,
+                            wasmparser::Operator::End
+                        ]
+                    );
+                    found_stale_size_director |= ops.windows(4).any(|ops| {
+                        matches!(
+                            ops,
+                            [
+                                wasmparser::Operator::I32Const { value: 65536 },
+                                wasmparser::Operator::I32Mul,
+                                wasmparser::Operator::I32Add,
+                                wasmparser::Operator::End
+                            ]
+                        )
+                    });
+                    defined_func_idx += 1;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(found_physical_director);
+        assert!(!found_stale_size_director);
+
+        Ok(())
     }
 }

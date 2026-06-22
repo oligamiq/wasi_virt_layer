@@ -29,11 +29,19 @@ export!(ComponentABI);
 plug_thread!({ &THREAD_POOL }, vtp_5threads_target, self);
 plug_poll!(DefaultWaitPoll, vtp_5threads_target);
 
-wasi_virt_layer::plug_clock!(wasi_virt_layer::clock::StandardClock, vtp_5threads_target, self);
+wasi_virt_layer::plug_clock!(
+    wasi_virt_layer::clock::StandardClock,
+    vtp_5threads_target,
+    self
+);
 
 mod process {
     use super::*;
-    plug_process!(wasi_virt_layer::process::StandardProcess, vtp_5threads_target, self);
+    plug_process!(
+        wasi_virt_layer::process::StandardProcess,
+        vtp_5threads_target,
+        self
+    );
 }
 
 mod env {

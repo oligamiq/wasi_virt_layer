@@ -13,11 +13,15 @@ wasi_virt_layer::own_memory!(smoke_target);
 
 impl Guest for ComponentABI {
     fn main() {
+        println!("Reserving 1024 pages for VFS thread stacks...");
+        let self_res = memory_reserve::<__self>(1024);
+        println!("VFS memory reserve result: {:?}", self_res);
+
         // Expand memory for smoke_target to handle allocations and thread stacks
         println!("Expanding memory by 3200 pages (approx 200MB) for smoke_target...");
-        // Use the generated memory_grow function
-        let res = memory_grow::<smoke_target>(3200);
-        println!("Memory grow result: {:?}", res);
+        // Use the generated memory_reserve function
+        let res = memory_reserve::<smoke_target>(3200);
+        println!("Memory reserve result: {:?}", res);
 
         smoke_target::_reset();
         smoke_target::_start();
