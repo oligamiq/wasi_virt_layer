@@ -1,3 +1,4 @@
+use crate::wasm_stream::own_memory_abi;
 use crate::wasm_stream::passes::fn_in_starts::{FnInStarts, ResolvedStartFuncs};
 use crate::wasm_stream::pipeline::StreamPass;
 use crate::wasm_stream::translator::Rebind;
@@ -186,11 +187,23 @@ impl StreamPass for PostCombineStreamPass {
                                         || import.name.ends_with("_reset")
                                         || import.name.ends_with("__start")
                                         || import.name.ends_with("__main_void")
-                                        || import.name.ends_with("_memory_director")
+                                        || own_memory_abi::parse_memory_director_export(
+                                            import.name,
+                                        )
+                                        .is_some()
                                         || import.name.ends_with("_reset_on_thread_once")
-                                        || import.name.ends_with("_own_memory_size_get")
-                                        || import.name.ends_with("_own_memory_size_set")
-                                        || import.name.ends_with("_own_memory_size_init")))
+                                        || import.name.ends_with(
+                                            own_memory_abi::TARGET_OWN_MEMORY_SIZE_GET_SUFFIX,
+                                        )
+                                        || import.name.ends_with(
+                                            own_memory_abi::TARGET_OWN_MEMORY_SIZE_SET_SUFFIX,
+                                        )
+                                        || import.name.ends_with(
+                                            own_memory_abi::TARGET_OWN_MEMORY_SIZE_INIT_SUFFIX,
+                                        )
+                                        || import.name.ends_with(
+                                            own_memory_abi::TARGET_OWN_MEMORY_SIZE_COMPARE_EXCHANGE_SUFFIX,
+                                        )))
                                     || (import.module == "wasip1-vfs_single_memory"
                                         && import.name == "__wasip1_vfs_memory_grow_alt")
                                     || import.module == "wvl_poll"
@@ -895,7 +908,7 @@ impl StreamPass for PostCombineStreamPass {
                             .and_then(|target_name| {
                                 info.exported_funcs.get(&format!(
                                     "__wasip1_vfs_wasi_thread_spawn_{}",
-                                    target_name.replace("-", "_")
+                                    own_memory_abi::sanitize_target_name(target_name)
                                 ))
                             })
                             .and_then(|orig_idx| {
@@ -1087,16 +1100,14 @@ impl StreamPass for PostCombineStreamPass {
                     real_proc_exit_new_idx.unwrap(),
                 ));
                 func.instruction(&wasm_encoder::Instruction::End);
-            } else if name.ends_with("_memory_copy_from") {
-                let target_name = name
-                    .strip_prefix("__wasip1_vfs_")
-                    .unwrap()
-                    .strip_suffix("_memory_copy_from")
-                    .unwrap();
+            } else if let Some(target_name) = own_memory_abi::parse_prefixed_target_export(
+                name,
+                own_memory_abi::TARGET_MEMORY_COPY_FROM_SUFFIX,
+            ) {
                 let wasm_mem = self
                     .target_names
                     .iter()
-                    .position(|n| n.replace("-", "_") == target_name)
+                    .position(|n| own_memory_abi::sanitize_target_name(n) == target_name)
                     .ok_or_else(|| eyre::eyre!("Target name '{}' not found in provided targets. Ensure the VFS import matches the provided Wasm filename.", target_name))? as u32
                     + 1;
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
@@ -1107,16 +1118,14 @@ impl StreamPass for PostCombineStreamPass {
                     dst_mem: wasm_mem,
                 });
                 func.instruction(&wasm_encoder::Instruction::End);
-            } else if name.ends_with("_memory_copy_to") {
-                let target_name = name
-                    .strip_prefix("__wasip1_vfs_")
-                    .unwrap()
-                    .strip_suffix("_memory_copy_to")
-                    .unwrap();
+            } else if let Some(target_name) = own_memory_abi::parse_prefixed_target_export(
+                name,
+                own_memory_abi::TARGET_MEMORY_COPY_TO_SUFFIX,
+            ) {
                 let wasm_mem = self
                     .target_names
                     .iter()
-                    .position(|n| n.replace("-", "_") == target_name)
+                    .position(|n| own_memory_abi::sanitize_target_name(n) == target_name)
                     .ok_or_else(|| {
                         eyre::eyre!(
                             "Target name '{}' not found in provided targets.",
@@ -1132,17 +1141,17 @@ impl StreamPass for PostCombineStreamPass {
                     dst_mem: 0,
                 });
                 func.instruction(&wasm_encoder::Instruction::End);
-            } else if name.ends_with("_memory_director") {
-                let target_name = name
-                    .strip_prefix("__wasip1_vfs_")
-                    .unwrap()
-                    .strip_suffix("_memory_director")
-                    .unwrap();
+            } else if let Some(target_name) = own_memory_abi::parse_memory_director_export(name) {
                 let wasm_mem = self
                     .target_names
                     .iter()
-                    .position(|n| n.replace("-", "_") == target_name)
-                    .unwrap() as u32
+                    .position(|n| own_memory_abi::sanitize_target_name(n) == target_name)
+                    .ok_or_else(|| {
+                        eyre::eyre!(
+                            "Target name '{}' not found in provided targets.",
+                            target_name
+                        )
+                    })? as u32
                     + 1;
 
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
@@ -1331,14 +1340,19 @@ impl StreamPass for PostCombineStreamPass {
             } else if name.ends_with("_reset") {
                 let target_name = name
                     .strip_prefix("__wasip1_vfs_")
-                    .unwrap_or_else(|| panic!("Failed prefix strip: {}", name))
+                    .ok_or_else(|| eyre::eyre!("Failed prefix strip: {}", name))?
                     .strip_suffix("_reset")
-                    .unwrap_or_else(|| panic!("Failed to strip suffix from {}", name));
+                    .ok_or_else(|| eyre::eyre!("Failed to strip suffix from {}", name))?;
                 let wasm_mem = self
                     .target_names
                     .iter()
-                    .position(|n| n.replace("-", "_") == target_name)
-                    .unwrap() as u32
+                    .position(|n| own_memory_abi::sanitize_target_name(n) == target_name)
+                    .ok_or_else(|| {
+                        eyre::eyre!(
+                            "Target name '{}' not found in provided targets.",
+                            target_name
+                        )
+                    })? as u32
                     + 1;
 
                 // 1. Reset globals

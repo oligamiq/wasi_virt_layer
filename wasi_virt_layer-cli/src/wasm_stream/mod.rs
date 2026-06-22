@@ -1,5 +1,6 @@
 pub mod mem_info;
 pub mod merge;
+pub mod own_memory_abi;
 pub mod passes;
 pub mod pipeline;
 pub mod tracker;

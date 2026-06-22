@@ -1,3 +1,4 @@
+use crate::wasm_stream::own_memory_abi;
 use crate::wasm_stream::pipeline::{StreamPass, par_process_code_section};
 use crate::wasm_stream::translator::Rebind;
 use eyre::Result;
@@ -75,23 +76,10 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
         let mut own_memory_grow_imports = std::collections::HashMap::new();
         let mut original_imported_funcs = 0;
         let mut own_memory_size_imports = std::collections::HashMap::new();
-
-        let is_own_memory_size = |name: &str| name.starts_with("__wasip1_vfs_own_memory_size_");
-        let is_own_memory_grow = |name: &str| name.starts_with("__wasip1_vfs_own_memory_grow_");
-        let get_target_name = |name: &str| {
-            if is_own_memory_size(name) {
-                Some(
-                    name.trim_start_matches("__wasip1_vfs_own_memory_size_")
-                        .to_string(),
-                )
-            } else if is_own_memory_grow(name) {
-                Some(
-                    name.trim_start_matches("__wasip1_vfs_own_memory_grow_")
-                        .to_string(),
-                )
-            } else {
-                None
-            }
+        let target_position = |target_name: &str| {
+            self.target_names
+                .iter()
+                .position(|target| own_memory_abi::sanitize_target_name(target) == target_name)
         };
 
         if self.own_memory {
@@ -104,19 +92,18 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                                 if let Ok(i) = i {
                                     if matches!(i.1.ty, TypeRef::Func(_) | TypeRef::FuncExact(_)) {
                                         let name = i.1.name;
-                                        if is_own_memory_size(name) || is_own_memory_grow(name) {
+                                        if let Some(target_name) =
+                                            own_memory_abi::parse_own_memory_size_import(name)
+                                        {
                                             own_memory_removed_imports += 1;
-                                            if is_own_memory_size(name) {
-                                                own_memory_size_imports.insert(
-                                                    get_target_name(name).unwrap(),
-                                                    current_idx,
-                                                );
-                                            } else {
-                                                own_memory_grow_imports.insert(
-                                                    get_target_name(name).unwrap(),
-                                                    current_idx,
-                                                );
-                                            }
+                                            own_memory_size_imports
+                                                .insert(target_name.to_string(), current_idx);
+                                        } else if let Some(target_name) =
+                                            own_memory_abi::parse_own_memory_grow_import(name)
+                                        {
+                                            own_memory_removed_imports += 1;
+                                            own_memory_grow_imports
+                                                .insert(target_name.to_string(), current_idx);
                                         } else {
                                             func_map.insert(
                                                 current_idx,
@@ -134,13 +121,14 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
             }
 
             for target in &self.target_names {
-                if !own_memory_grow_imports.contains_key(target)
-                    || !own_memory_size_imports.contains_key(target)
+                let abi_target = own_memory_abi::sanitize_target_name(target);
+                if !own_memory_grow_imports.contains_key(&abi_target)
+                    || !own_memory_size_imports.contains_key(&abi_target)
                 {
-                    panic!(
+                    return Err(eyre::eyre!(
                         "VFS module is missing `own_memory!` configuration for target Wasm: {}. Make sure you pass all target wasms to `own_memory!` in your VFS.",
                         target
-                    );
+                    ));
                 }
             }
         }
@@ -152,8 +140,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                 if target == "__self" {
                     own_memory_size_idx_to_mem.insert(*idx, 0);
                 } else {
-                    let normalized = target.replace("-", "_");
-                    if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
+                    if let Some(pos) = target_position(target) {
                         own_memory_size_idx_to_mem.insert(*idx, (pos + 1) as u32);
                     }
                 }
@@ -162,8 +149,7 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                 if target == "__self" {
                     own_memory_grow_idx_to_mem.insert(*idx, 0);
                 } else {
-                    let normalized = target.replace("-", "_");
-                    if let Some(pos) = self.target_names.iter().position(|t| t == &normalized) {
+                    if let Some(pos) = target_position(target) {
                         own_memory_grow_idx_to_mem.insert(*idx, (pos + 1) as u32);
                     }
                 }
@@ -236,85 +222,57 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                     for export in s {
                         let export = export?;
                         if let wasmparser::ExternalKind::Func = export.kind {
-                            if export.name == "__wasip1_vfs_host_own_memory_size_get" {
+                            if export.name == own_memory_abi::HOST_OWN_MEMORY_SIZE_GET {
                                 own_memory_size_get.insert(0, export.index);
-                            } else if export.name == "__wasip1_vfs_host_own_memory_size_set" {
+                            } else if export.name == own_memory_abi::HOST_OWN_MEMORY_SIZE_SET {
                                 own_memory_size_set.insert(0, export.index);
-                            } else if export.name == "__wasip1_vfs_host_own_memory_size_init" {
+                            } else if export.name == own_memory_abi::HOST_OWN_MEMORY_SIZE_INIT {
                                 own_memory_size_init.insert(0, export.index);
                             } else if export.name
-                                == "__wasip1_vfs_host_own_memory_size_compare_exchange"
+                                == own_memory_abi::HOST_OWN_MEMORY_SIZE_COMPARE_EXCHANGE
                             {
                                 own_memory_size_compare_exchange.insert(0, export.index);
-                            } else if export.name.starts_with("__wasip1_vfs_")
-                                && export.name.ends_with("_own_memory_size_get")
+                            } else if let Some(target_name) =
+                                own_memory_abi::parse_prefixed_target_export(
+                                    export.name,
+                                    own_memory_abi::TARGET_OWN_MEMORY_SIZE_GET_SUFFIX,
+                                )
                             {
-                                let target_name = export
-                                    .name
-                                    .trim_start_matches("__wasip1_vfs_")
-                                    .trim_end_matches("_own_memory_size_get");
-                                if let Some(pos) = self
-                                    .target_names
-                                    .iter()
-                                    .position(|t| t.replace("-", "_") == target_name)
-                                {
+                                if let Some(pos) = target_position(target_name) {
                                     own_memory_size_get.insert((pos + 1) as u32, export.index);
                                 }
-                            } else if export.name.starts_with("__wasip1_vfs_")
-                                && export.name.ends_with("_own_memory_size_set")
+                            } else if let Some(target_name) =
+                                own_memory_abi::parse_prefixed_target_export(
+                                    export.name,
+                                    own_memory_abi::TARGET_OWN_MEMORY_SIZE_SET_SUFFIX,
+                                )
                             {
-                                let target_name = export
-                                    .name
-                                    .trim_start_matches("__wasip1_vfs_")
-                                    .trim_end_matches("_own_memory_size_set");
-                                if let Some(pos) = self
-                                    .target_names
-                                    .iter()
-                                    .position(|t| t.replace("-", "_") == target_name)
-                                {
+                                if let Some(pos) = target_position(target_name) {
                                     own_memory_size_set.insert((pos + 1) as u32, export.index);
                                 }
-                            } else if export.name.starts_with("__wasip1_vfs_")
-                                && export.name.ends_with("_own_memory_size_init")
+                            } else if let Some(target_name) =
+                                own_memory_abi::parse_prefixed_target_export(
+                                    export.name,
+                                    own_memory_abi::TARGET_OWN_MEMORY_SIZE_INIT_SUFFIX,
+                                )
                             {
-                                let target_name = export
-                                    .name
-                                    .trim_start_matches("__wasip1_vfs_")
-                                    .trim_end_matches("_own_memory_size_init");
-                                if let Some(pos) = self
-                                    .target_names
-                                    .iter()
-                                    .position(|t| t.replace("-", "_") == target_name)
-                                {
+                                if let Some(pos) = target_position(target_name) {
                                     own_memory_size_init.insert((pos + 1) as u32, export.index);
                                 }
-                            } else if export.name.starts_with("__wasip1_vfs_")
-                                && export.name.ends_with("_own_memory_size_compare_exchange")
+                            } else if let Some(target_name) =
+                                own_memory_abi::parse_prefixed_target_export(
+                                    export.name,
+                                    own_memory_abi::TARGET_OWN_MEMORY_SIZE_COMPARE_EXCHANGE_SUFFIX,
+                                )
                             {
-                                let target_name = export
-                                    .name
-                                    .trim_start_matches("__wasip1_vfs_")
-                                    .trim_end_matches("_own_memory_size_compare_exchange");
-                                if let Some(pos) = self
-                                    .target_names
-                                    .iter()
-                                    .position(|t| t.replace("-", "_") == target_name)
-                                {
+                                if let Some(pos) = target_position(target_name) {
                                     own_memory_size_compare_exchange
                                         .insert((pos + 1) as u32, export.index);
                                 }
-                            } else if export.name.starts_with("__wasip1_vfs_")
-                                && export.name.ends_with("_memory_director")
+                            } else if let Some(target_name) =
+                                own_memory_abi::parse_memory_director_export(export.name)
                             {
-                                let target_name = export
-                                    .name
-                                    .trim_start_matches("__wasip1_vfs_")
-                                    .trim_end_matches("_memory_director");
-                                if let Some(pos) = self
-                                    .target_names
-                                    .iter()
-                                    .position(|t| t.replace("-", "_") == target_name)
-                                {
+                                if let Some(pos) = target_position(target_name) {
                                     memory_director_funcs.insert(export.index, (pos + 1) as u32);
                                 }
                             }
@@ -397,7 +355,14 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                 let target_idx = if target == "__self" {
                     0
                 } else {
-                    self.target_names.iter().position(|n| n == target).unwrap() as u32 + 1
+                    target_position(target)
+                        .ok_or_else(|| {
+                            eyre::eyre!(
+                                "VFS module has `own_memory!` configuration for unknown target Wasm: {}.",
+                                target
+                            )
+                        })? as u32
+                        + 1
                 };
                 func_map.insert(*orig_idx, new_func_count + target_idx);
             }
@@ -405,7 +370,14 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                 let target_idx = if target == "__self" {
                     0
                 } else {
-                    self.target_names.iter().position(|n| n == target).unwrap() as u32 + 1
+                    target_position(target)
+                        .ok_or_else(|| {
+                            eyre::eyre!(
+                                "VFS module has `own_memory!` configuration for unknown target Wasm: {}.",
+                                target
+                            )
+                        })? as u32
+                        + 1
                 };
                 func_map.insert(*orig_idx, new_func_count + memory_count + target_idx);
             }
@@ -490,7 +462,9 @@ impl StreamPass for MultiMemoryLoweringStreamPass {
                             let (_, i) = i?;
                             if self.own_memory {
                                 if matches!(i.ty, TypeRef::Func(_) | TypeRef::FuncExact(_)) {
-                                    if is_own_memory_size(i.name) || is_own_memory_grow(i.name) {
+                                    if own_memory_abi::parse_own_memory_import_target(i.name)
+                                        .is_some()
+                                    {
                                         println!("SKIPPING IMPORT: {}::{}", i.module, i.name);
                                         continue;
                                     }
@@ -1645,12 +1619,12 @@ mod tests {
         );
         imports.import(
             "env",
-            "__wasip1_vfs_own_memory_size_target",
+            "__wasip1_vfs_own_memory_size_target_wasm",
             EntityType::Function(0),
         );
         imports.import(
             "env",
-            "__wasip1_vfs_own_memory_grow_target",
+            "__wasip1_vfs_own_memory_grow_target_wasm",
             EntityType::Function(1),
         );
         module.section(&imports);
@@ -1691,22 +1665,22 @@ mod tests {
             7,
         );
         exports.export(
-            "__wasip1_vfs_target_own_memory_size_get",
+            "__wasip1_vfs_target_wasm_own_memory_size_get",
             ExportKind::Func,
             8,
         );
         exports.export(
-            "__wasip1_vfs_target_own_memory_size_set",
+            "__wasip1_vfs_target_wasm_own_memory_size_set",
             ExportKind::Func,
             9,
         );
         exports.export(
-            "__wasip1_vfs_target_own_memory_size_init",
+            "__wasip1_vfs_target_wasm_own_memory_size_init",
             ExportKind::Func,
             10,
         );
         exports.export(
-            "__wasip1_vfs_target_own_memory_size_compare_exchange",
+            "__wasip1_vfs_target_wasm_own_memory_size_compare_exchange",
             ExportKind::Func,
             11,
         );
@@ -1743,7 +1717,7 @@ mod tests {
         module.section(&code);
 
         let output =
-            MultiMemoryLoweringStreamPass::new(true, true, vec!["target".to_string()], true)
+            MultiMemoryLoweringStreamPass::new(true, true, vec!["target-wasm".to_string()], true)
                 .run(&module.finish())?;
 
         let mut calls = Vec::new();
