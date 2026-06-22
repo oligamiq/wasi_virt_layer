@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.9] - 2026-06-22
+### Added
+- **Documentation**:
+    - Added a detailed Japanese mdBook architecture page (`book/src/ja/architecture/own-memory.md`) explaining the final own-memory architecture, physical vs logical memory bounds, lowering contracts, remapping, and regression testing checkpoints.
+    - Integrated the own-memory architecture section into the Japanese `SUMMARY.md` and Index pages.
+
+### Changed
+- **Refactoring & Own-Memory ABI Alignment**:
+    - Centralized all own-memory ABI prefixes/suffixes, host exports, memory director exports/parsers, target sanitization, and copy helpers into a new single contract helper module (`wasi_virt_layer-cli/src/wasm_stream/own_memory_abi.rs`).
+    - Eliminated manual `replace("-", "_")` target-name mutations in `multi_memory_lowering.rs` and `post_combine.rs` in favor of consistent `own_memory_abi::sanitize_target_name` helpers, resolving several silent hyphenated target lookups/start/reset failures.
+    - Replaced CLI-crashing `.unwrap()` and `panic!` invocations during target positions and string splits with safe `Result::Err(eyre::Error)` propagations.
+- **Cleanup**:
+    - Deleted obsolete script `rewrite.py` and dead duplicate lowering pass `own_memory_lowering.rs`.
+
 ## [0.5.8] - 2026-06-20
 ### Added
 - **Self/Host own-memory API**:
