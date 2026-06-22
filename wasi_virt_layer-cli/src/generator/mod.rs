@@ -548,6 +548,7 @@ impl GeneratorRunner {
             let wasm_bytes = std::fs::read(&path.path()?).unwrap();
             let mut vfs_is_library = true;
             let mut wrap_unreachable_targets = std::collections::HashSet::new();
+            let mut detected_own_memory = self.ctx.own_memory;
             for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
                 if let Ok(wasmparser::Payload::StartSection { .. }) = payload {
                     vfs_is_library = false;
@@ -557,6 +558,10 @@ impl GeneratorRunner {
                         if let Ok(e) = e {
                             if e.name == "_start" {
                                 vfs_is_library = false;
+                            }
+                            if crate::wasm_stream::own_memory_abi::is_own_memory_mode_export(e.name)
+                            {
+                                detected_own_memory = true;
                             }
                             for target in self.ctx.target_names.iter() {
                                 let marker = format!(
@@ -573,6 +578,7 @@ impl GeneratorRunner {
             }
             self.ctx.vfs_is_library = vfs_is_library;
             self.ctx.wrap_unreachable_targets = wrap_unreachable_targets;
+            self.ctx.own_memory = detected_own_memory;
             let pipeline_is_library = vfs_is_library;
             let cloned_ctx = self.ctx.clone();
 

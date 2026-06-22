@@ -42,6 +42,10 @@ pub fn parse_own_memory_import_target(name: &str) -> Option<&str> {
     parse_own_memory_size_import(name).or_else(|| parse_own_memory_grow_import(name))
 }
 
+pub fn is_own_memory_mode_export(name: &str) -> bool {
+    name == HOST_OWN_MEMORY_SIZE_GET
+}
+
 pub fn memory_director_export_name(target: &str) -> String {
     format!(
         "{MEMORY_DIRECTOR_PREFIX}{}{MEMORY_DIRECTOR_SUFFIX}",
@@ -128,6 +132,15 @@ mod tests {
             HOST_OWN_MEMORY_SIZE_COMPARE_EXCHANGE,
             "__wasip1_vfs_host_own_memory_size_compare_exchange"
         );
+    }
+
+    #[test]
+    fn detects_host_own_memory_mode_export() {
+        assert!(is_own_memory_mode_export(HOST_OWN_MEMORY_SIZE_GET));
+        assert!(!is_own_memory_mode_export("_start"));
+        assert!(!is_own_memory_mode_export(
+            "__wasip1_vfs_other_target_own_memory_size_get"
+        ));
     }
 
     #[test]
