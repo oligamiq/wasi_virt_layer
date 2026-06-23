@@ -1,4 +1,5 @@
 use core::{
+    cell::Cell,
     num::NonZero,
     ptr::NonNull,
     sync::atomic::{AtomicU32, AtomicUsize, Ordering},
@@ -9,7 +10,12 @@ use std::{sync::Arc, thread::JoinHandle};
 use crate::{__private::wasip1, memory::WasmAccess};
 use crate::{memory::WasmAccessName, utils::UnsafeOnceCell};
 
-use core::cell::Cell;
+/// Per-worker flag tracking whether this worker thread has already
+/// processed a `Run` message. Used to detect thread pool worker reuse
+/// and trigger Wasm start-section reinitialization.
+thread_local! {
+    static WORKER_HAS_RUN_BEFORE: Cell<bool> = const { Cell::new(false) };
+}
 
 /// Extracts the numeric ID from std::thread::ThreadId since as_u64() is unstable.
 fn get_host_thread_id() -> u32 {
@@ -185,6 +191,15 @@ impl ThreadRunner {
 pub trait ThreadAccess: Send + 'static + Copy {
     /// Calls the `wasi_thread_start` exported function in the WASM module.
     fn call_wasi_thread_start(&self, ptr: ThreadRunner, thread_id: Option<NonZero<u32>>);
+
+    /// Calls the Wasm start section function to reinitialize the worker thread.
+    ///
+    /// This is called by `VirtualThreadPool` before `call_wasi_thread_start`
+    /// when reusing a worker thread for a new logical thread. It re-runs
+    /// global constructors and TLS initialization that would otherwise
+    /// be lost because the worker thread was not freshly spawned.
+    fn call_thread_start_init(&self);
+
     /// Returns the name of the WASM module.
     fn as_name(&self) -> &'static str;
 
@@ -297,6 +312,16 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
         match self {
             VirtualThreadPoolMessage::Run(runner, accessor_wrapper, thread_id) => {
                 let accessor = accessor_wrapper.as_accessor();
+                // Track whether this worker thread has already processed a Run
+                // message. On the first Run, the Wasm start section was already
+                // executed during module instantiation. On subsequent Runs, the
+                // worker is being reused and needs start-section reinitialization.
+                WORKER_HAS_RUN_BEFORE.with(|flag| {
+                    if flag.get() {
+                        accessor.call_thread_start_init();
+                    }
+                    flag.set(true);
+                });
                 accessor.call_wasi_thread_start(runner, Some(thread_id));
             }
             VirtualThreadPoolMessage::AddThread(count, ref sender, ref kept_workers_pool) => {
@@ -602,6 +627,11 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
     }
 
     /// Runs a thread runner on an available worker thread.
+    ///
+    /// When a worker thread is reused (has already processed a previous `Run`),
+    /// the Wasm start section function is re-executed before
+    /// `wasi_thread_start` to reinitialize global constructors and TLS state.
+    /// Reuse detection is per-worker via a `thread_local` flag.
     pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
         let need_expansion = {
             let mut sender_lock = self.queue.lock();
@@ -651,6 +681,8 @@ mod tests {
 
     impl ThreadAccess for TestThreadAccessor {
         fn call_wasi_thread_start(&self, _ptr: ThreadRunner, _thread_id: Option<NonZero<u32>>) {}
+
+        fn call_thread_start_init(&self) {}
 
         fn as_name(&self) -> &'static str {
             "test-thread-accessor"
@@ -966,6 +998,27 @@ macro_rules! plug_thread {
                     }
                 }
 
+                fn call_thread_start_init(&self) {
+                    #[cfg(target_os = "wasi")]
+                    {
+                        match *self {
+                            $(
+                                Self::$wasm => {
+                                    $crate::__if_feature!(@trace_thread
+                                        println!("$$$ Calling thread_start_init in {}", self.as_name());
+                                    );
+                                    unsafe { [<__wasip1_vfs_ $wasm __thread_start>]() }
+                                }
+                            )*
+                        }
+                    }
+
+                    #[cfg(not(target_os = "wasi"))]
+                    {
+                        panic!("This function is only available on WASI");
+                    }
+                }
+
                 fn as_name(&self) -> &'static str {
                     match *self {
                         $(
@@ -1003,6 +1056,8 @@ macro_rules! plug_thread {
                         thread_id: i32,
                         ptr: i32,
                     );
+
+                    pub fn [<__wasip1_vfs_ $wasm __thread_start>]();
                 }
 
                 #[cfg(target_os = "wasi")]

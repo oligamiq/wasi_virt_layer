@@ -753,11 +753,12 @@ impl GeneratorRunner {
                     pipeline.add_pass(Box::new(check_pass));
 
                     let export_name = format!("__flesh_{}_start", target_name);
-                    pipeline.add_pass(Box::new(StartsPreStreamPass::new(
-                        false,
-                        false,
-                        export_name.clone(),
-                    )));
+                    let thread_start_export_name =
+                        format!("__wasip1_vfs_{}__thread_start", target_name);
+                    pipeline.add_pass(Box::new(
+                        StartsPreStreamPass::new(false, false, export_name.clone())
+                            .with_thread_start_export_name(thread_start_export_name),
+                    ));
                     pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![export_name])));
                     let new_memory_name =
                         crate::generator::UniqueName::Memory(&MemoryUniqueName::Memory(

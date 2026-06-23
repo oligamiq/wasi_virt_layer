@@ -5,6 +5,13 @@ pub struct StartsPreStreamPass {
     pub is_vfs: bool,
     pub is_library: bool,
     pub start_export_name: String,
+    /// Additional export name for the Wasm start section function.
+    ///
+    /// When set (non-VFS targets only), the Wasm start section function is
+    /// exported under this name in addition to `start_export_name`. This
+    /// allows the VFS to call the start section initializer independently
+    /// for reused pool worker threads.
+    pub thread_start_export_name: Option<String>,
 }
 
 impl StartsPreStreamPass {
@@ -13,7 +20,18 @@ impl StartsPreStreamPass {
             is_vfs,
             is_library,
             start_export_name,
+            thread_start_export_name: None,
         }
+    }
+
+    /// Sets the additional thread-start export name for target modules.
+    ///
+    /// When set, the Wasm start section function is also exported under
+    /// this name so that `VirtualThreadPool` can call it before reusing
+    /// a worker thread for a new logical thread.
+    pub fn with_thread_start_export_name(mut self, name: String) -> Self {
+        self.thread_start_export_name = Some(name);
+        self
     }
 }
 
@@ -61,6 +79,12 @@ impl StreamPass for StartsPreStreamPass {
                     }
                     if let Some(func_id) = start_func_id {
                         exports.export(&self.start_export_name, ExportKind::Func, func_id);
+                        // For target modules, also export the Wasm start section
+                        // function under a separate name so that VirtualThreadPool
+                        // can call it when reusing a worker thread.
+                        if let Some(ref thread_start_name) = self.thread_start_export_name {
+                            exports.export(thread_start_name, ExportKind::Func, func_id);
+                        }
                     } else if !self.is_library {
                         // If there is no start function and it's not a library, we'd need to generate a dummy start.
                         // Generating a dummy start here is complex because it requires modifying Function/Code sections.
@@ -95,6 +119,9 @@ impl StreamPass for StartsPreStreamPass {
                 ExportKind::Func,
                 start_func_id.unwrap(),
             );
+            if let Some(ref thread_start_name) = self.thread_start_export_name {
+                exports.export(thread_start_name, ExportKind::Func, start_func_id.unwrap());
+            }
             module.section(&exports);
         }
 

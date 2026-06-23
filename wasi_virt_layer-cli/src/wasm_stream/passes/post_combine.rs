@@ -118,6 +118,7 @@ fn should_drop_export(name: &str) -> bool {
     }
 
     if (name.starts_with("__flesh_") && name.ends_with("_start"))
+        || (name.starts_with("__wasip1_vfs_") && name.ends_with("__thread_start"))
         || (name.starts_with("__wasip1_virt_layer_") && name.ends_with("_wrap_unreachable"))
     {
         return true;
@@ -186,6 +187,7 @@ impl StreamPass for PostCombineStreamPass {
                                         || import.name.ends_with("_memory_trap")
                                         || import.name.ends_with("_reset")
                                         || import.name.ends_with("__start")
+                                        || import.name.ends_with("__thread_start")
                                         || import.name.ends_with("__main_void")
                                         || own_memory_abi::parse_memory_director_export(
                                             import.name,
@@ -1191,6 +1193,18 @@ impl StreamPass for PostCombineStreamPass {
             } else if name.ends_with("_memory_grow_alt") {
                 func.instruction(&wasm_encoder::Instruction::LocalGet(0));
                 func.instruction(&wasm_encoder::Instruction::MemoryGrow(0));
+                func.instruction(&wasm_encoder::Instruction::End);
+            } else if name.ends_with("__thread_start") {
+                let target_name = name
+                    .strip_prefix("__wasip1_vfs_")
+                    .ok_or_else(|| eyre::eyre!("Failed prefix strip: {}", name))?
+                    .strip_suffix("__thread_start")
+                    .ok_or_else(|| eyre::eyre!("Failed to strip suffix from {}", name))?;
+                if let Some(&flesh_idx) = info.start_funcs.flesh_target_starts.get(target_name) {
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(flesh_idx),
+                    ));
+                }
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if name.ends_with("__start") {
                 let target_name = name
