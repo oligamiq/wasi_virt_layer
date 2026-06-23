@@ -504,6 +504,12 @@ impl StreamPass for PostCombineStreamPass {
             } else if wrap_unreachable_proc_exit_target(name, &info).is_some() {
                 dropped_func_original_indices.push(*import_idx);
                 info.dropped_imports.insert(*import_idx, name.clone());
+            } else if parse_target_wasi_thread_start_name(name).is_some_and(|target_name| {
+                info.target_runtime_starts.contains_key(target_name)
+                    && info.exported_funcs.contains_key(name)
+            }) {
+                dropped_func_original_indices.push(*import_idx);
+                info.dropped_imports.insert(*import_idx, name.clone());
             } else if let Some(export_orig_idx) = resolve_host_export(name, &info) {
                 let export_new_idx = func_map.get(&export_orig_idx).copied().unwrap();
                 func_map.insert(*import_idx, export_new_idx);
@@ -1176,6 +1182,17 @@ impl StreamPass for PostCombineStreamPass {
                     func.instruction(&wasm_encoder::Instruction::I32Add);
                 }
                 func.instruction(&wasm_encoder::Instruction::End);
+            } else if let Some(target_name) = parse_target_wasi_thread_start_name(name) {
+                let orig_start_idx = info.target_runtime_starts.get(target_name).unwrap();
+                func.instruction(&wasm_encoder::Instruction::Call(
+                    rebinder.function(*orig_start_idx),
+                ));
+                let orig_thread_start_idx = info.exported_funcs.get(name).unwrap();
+                let thread_start_new_idx = func_map.get(orig_thread_start_idx).unwrap();
+                func.instruction(&wasm_encoder::Instruction::LocalGet(0));
+                func.instruction(&wasm_encoder::Instruction::LocalGet(1));
+                func.instruction(&wasm_encoder::Instruction::Call(*thread_start_new_idx));
+                func.instruction(&wasm_encoder::Instruction::End);
             } else if name == "__wasip1_vfs_wasi_thread_start_entry" {
                 if let Some(&start_idx) = info.exported_funcs.get("wasi_thread_start") {
                     let start_new_idx = func_map.get(&start_idx).unwrap();
@@ -1773,6 +1790,66 @@ mod tests {
     }
 
     #[test]
+    fn target_wasi_thread_start_import_resolves_to_starting_wrapper() -> eyre::Result<()> {
+        let input = module_with_target_wasi_thread_start_import_export_and_runtime_start();
+        let mut pass = PostCombineStreamPass::new(
+            "test_vfs".to_string(),
+            vec!["target".to_string()],
+            vec![1, 3],
+            true,
+        );
+
+        let output = pass.run(&input)?;
+        let mut runtime_start = None;
+        let mut target_start = None;
+        let mut caller = None;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            if let wasmparser::Payload::ExportSection(exports) = payload? {
+                for export in exports {
+                    let export = export?;
+                    match export.name {
+                        "__wasip1_vfs_target__start" => runtime_start = Some(export.index),
+                        "__wasip1_vfs_target_wasi_thread_start" => {
+                            target_start = Some(export.index)
+                        }
+                        "target_wasi_thread_start_caller" => caller = Some(export.index),
+                        _ => {}
+                    }
+                }
+            }
+        }
+
+        let runtime_start = runtime_start.expect("target runtime start export should remain");
+        let target_start = target_start.expect("target thread start export should remain");
+        let caller = caller.expect("caller export should remain");
+        let caller_calls = function_calls(&output, caller)?;
+
+        assert_eq!(caller_calls.len(), 1);
+        assert_ne!(caller_calls[0], target_start);
+        let wrapper_ops = function_ops_by_index(&output, caller_calls[0])?;
+        assert!(
+            matches!(
+                wrapper_ops.as_slice(),
+                [
+                    wasmparser::Operator::Call {
+                        function_index: first_call,
+                    },
+                    wasmparser::Operator::LocalGet { local_index: 0 },
+                    wasmparser::Operator::LocalGet { local_index: 1 },
+                    wasmparser::Operator::Call {
+                        function_index: second_call,
+                    },
+                    wasmparser::Operator::End,
+                ] if *first_call == runtime_start && *second_call == target_start
+            ),
+            "wrapper ops should call runtime start, forward both parameters, then call target thread start: {wrapper_ops:?}"
+        );
+
+        Ok(())
+    }
+
+    #[test]
     fn target_defined_generic_thread_spawn_wrapper_call_resolves_to_target_hook() -> eyre::Result<()>
     {
         let input = module_with_vfs_and_target_generic_thread_spawn_wrapper_callers();
@@ -1950,6 +2027,43 @@ mod tests {
         }
 
         eyre::bail!("exported function {export_name:?} not found")
+    }
+
+    fn function_ops_by_index<'a>(
+        output: &'a [u8],
+        target_func_idx: u32,
+    ) -> eyre::Result<Vec<wasmparser::Operator<'a>>> {
+        let mut imported_funcs = 0;
+        let mut defined_func_idx = 0;
+
+        for payload in wasmparser::Parser::new(0).parse_all(output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(imports) => {
+                    for group in imports {
+                        for import in group?.into_iter() {
+                            let (_, import) = import?;
+                            if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                                imported_funcs += 1;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(body) => {
+                    let absolute_idx = imported_funcs + defined_func_idx;
+                    if absolute_idx == target_func_idx {
+                        return body
+                            .get_operators_reader()?
+                            .into_iter()
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(Into::into);
+                    }
+                    defined_func_idx += 1;
+                }
+                _ => {}
+            }
+        }
+
+        eyre::bail!("function index {target_func_idx} not found")
     }
 
     fn function_calls(output: &[u8], target_func_idx: u32) -> eyre::Result<Vec<u32>> {
@@ -2274,6 +2388,59 @@ mod tests {
         let mut target_start = Function::new([]);
         target_start.instruction(&Instruction::End);
         code.function(&target_start);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_target_wasi_thread_start_import_export_and_runtime_start() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        let thread_start_type = types.len();
+        types
+            .ty()
+            .function([wasm_encoder::ValType::I32, wasm_encoder::ValType::I32], []);
+        let void_type = types.len();
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "wasip1-vfs",
+            "__wasip1_vfs_target_wasi_thread_start",
+            wasm_encoder::EntityType::Function(thread_start_type),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(void_type);
+        functions.function(thread_start_type);
+        functions.function(void_type);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("__flesh_vfs_start", ExportKind::Func, 1);
+        exports.export("__wasip1_vfs_target__start", ExportKind::Func, 1);
+        exports.export("__wasip1_vfs_target_wasi_thread_start", ExportKind::Func, 2);
+        exports.export("target_wasi_thread_start_caller", ExportKind::Func, 3);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut runtime_start = Function::new([]);
+        runtime_start.instruction(&Instruction::End);
+        code.function(&runtime_start);
+
+        let mut target_thread_start = Function::new([]);
+        target_thread_start.instruction(&Instruction::End);
+        code.function(&target_thread_start);
+
+        let mut caller = Function::new([]);
+        caller.instruction(&Instruction::I32Const(7));
+        caller.instruction(&Instruction::I32Const(11));
+        caller.instruction(&Instruction::Call(0));
+        caller.instruction(&Instruction::End);
+        code.function(&caller);
         module.section(&code);
 
         module.finish()
