@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.11] - 2026-06-23
+### Fixed
+- **VirtualThreadPool worker reuse skipping Wasm start-section reinitialization**:
+    - When a `VirtualThreadPool` worker thread processed multiple logical threads sequentially (via `Run` messages in the shared queue), the Wasm start section was called only on the first logical thread. Subsequent logical threads on the same worker skipped TLS initialization and global constructors, causing runtime errors (e.g., `unreachable` traps in downstream threading projects).
+    - Added per-worker `thread_local! WORKER_HAS_RUN_BEFORE: Cell<bool>` to detect reuse; on non-first `Run` messages, `call_thread_start_init()` invokes the Wasm start section function (exported as `__wasip1_vfs_<target>__thread_start`) before executing the logical thread body.
+    - Added `StartsPreStreamPass` to dual-export the Wasm start section as both `__flesh_<target>_start` (preserving existing contract) and `__wasip1_vfs_<target>__thread_start` (reuse detection contract).
+    - Added `post_combine.rs` classification for `__thread_start` imports/exports to resolve the cross-module call chain.
+    - `DirectThreadPool` and `TestThreadAccessor` implement `call_thread_start_init` as no-ops (fresh threads don't need re-init).
+    - Added integration test `test_pool_thread_reinitialization` with a WAT target whose start section clears a marker, verifying that the marker is cleared on every logical thread, not just the first.
+
 ## [0.5.10] - 2026-06-22
 ### Fixed
 - **Dynamic LFS UTF-8 filename corruption**:
