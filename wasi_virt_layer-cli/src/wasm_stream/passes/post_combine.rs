@@ -505,9 +505,7 @@ impl StreamPass for PostCombineStreamPass {
                 dropped_func_original_indices.push(*import_idx);
                 info.dropped_imports.insert(*import_idx, name.clone());
             } else if parse_target_wasi_thread_start_name(name).is_some_and(|target_name| {
-                info.start_funcs
-                    .flesh_target_starts
-                    .contains_key(target_name)
+                info.target_runtime_starts.contains_key(target_name)
                     && info.exported_funcs.contains_key(name)
             }) {
                 dropped_func_original_indices.push(*import_idx);
@@ -1185,11 +1183,7 @@ impl StreamPass for PostCombineStreamPass {
                 }
                 func.instruction(&wasm_encoder::Instruction::End);
             } else if let Some(target_name) = parse_target_wasi_thread_start_name(name) {
-                let orig_start_idx = info
-                    .start_funcs
-                    .flesh_target_starts
-                    .get(target_name)
-                    .expect("target wasi_thread_start wrapper requires target module start");
+                let orig_start_idx = info.target_runtime_starts.get(target_name).unwrap();
                 func.instruction(&wasm_encoder::Instruction::Call(
                     rebinder.function(*orig_start_idx),
                 ));
@@ -1806,7 +1800,7 @@ mod tests {
         );
 
         let output = pass.run(&input)?;
-        let mut exported_start = None;
+        let mut runtime_start = None;
         let mut target_start = None;
         let mut caller = None;
 
@@ -1815,7 +1809,7 @@ mod tests {
                 for export in exports {
                     let export = export?;
                     match export.name {
-                        "__wasip1_vfs_target__start" => exported_start = Some(export.index),
+                        "__wasip1_vfs_target__start" => runtime_start = Some(export.index),
                         "__wasip1_vfs_target_wasi_thread_start" => {
                             target_start = Some(export.index)
                         }
@@ -1826,7 +1820,7 @@ mod tests {
             }
         }
 
-        let exported_start = exported_start.expect("target exported start should remain");
+        let runtime_start = runtime_start.expect("target runtime start export should remain");
         let target_start = target_start.expect("target thread start export should remain");
         let caller = caller.expect("caller export should remain");
         let caller_calls = function_calls(&output, caller)?;
@@ -1847,21 +1841,10 @@ mod tests {
                         function_index: second_call,
                     },
                     wasmparser::Operator::End,
-                ] if *first_call != exported_start && *second_call == target_start
+                ] if *first_call == runtime_start && *second_call == target_start
             ),
-            "wrapper ops should call target module start, not exported _start, then forward both parameters to target thread start: {wrapper_ops:?}"
+            "wrapper ops should call runtime start, forward both parameters, then call target thread start: {wrapper_ops:?}"
         );
-        let wasmparser::Operator::Call { function_index } = wrapper_ops[0] else {
-            unreachable!("wrapper shape assertion above requires first op to be call")
-        };
-        assert!(matches!(
-            function_ops_by_index(&output, function_index)?.as_slice(),
-            [
-                wasmparser::Operator::I32Const { value: 123 },
-                wasmparser::Operator::Drop,
-                wasmparser::Operator::End,
-            ]
-        ));
 
         Ok(())
     }
@@ -2432,36 +2415,21 @@ mod tests {
 
         let mut functions = FunctionSection::new();
         functions.function(void_type);
-        functions.function(void_type);
-        functions.function(void_type);
         functions.function(thread_start_type);
         functions.function(void_type);
         module.section(&functions);
 
         let mut exports = ExportSection::new();
         exports.export("__flesh_vfs_start", ExportKind::Func, 1);
-        exports.export("__flesh_target_start", ExportKind::Func, 2);
-        exports.export("__wasip1_vfs_target__start", ExportKind::Func, 3);
-        exports.export("__wasip1_vfs_target_wasi_thread_start", ExportKind::Func, 4);
-        exports.export("target_wasi_thread_start_caller", ExportKind::Func, 5);
+        exports.export("__wasip1_vfs_target__start", ExportKind::Func, 1);
+        exports.export("__wasip1_vfs_target_wasi_thread_start", ExportKind::Func, 2);
+        exports.export("target_wasi_thread_start_caller", ExportKind::Func, 3);
         module.section(&exports);
 
         let mut code = CodeSection::new();
-        let mut vfs_start = Function::new([]);
-        vfs_start.instruction(&Instruction::End);
-        code.function(&vfs_start);
-
-        let mut target_module_start = Function::new([]);
-        target_module_start.instruction(&Instruction::I32Const(123));
-        target_module_start.instruction(&Instruction::Drop);
-        target_module_start.instruction(&Instruction::End);
-        code.function(&target_module_start);
-
-        let mut exported_start = Function::new([]);
-        exported_start.instruction(&Instruction::I32Const(456));
-        exported_start.instruction(&Instruction::Drop);
-        exported_start.instruction(&Instruction::End);
-        code.function(&exported_start);
+        let mut runtime_start = Function::new([]);
+        runtime_start.instruction(&Instruction::End);
+        code.function(&runtime_start);
 
         let mut target_thread_start = Function::new([]);
         target_thread_start.instruction(&Instruction::End);
