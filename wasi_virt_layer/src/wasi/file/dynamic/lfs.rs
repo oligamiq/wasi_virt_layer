@@ -1806,7 +1806,8 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                         &components[0]
                     {
                         let name_bytes: Vec<u8> = (0..name.len()).map(|j| name.get(j)).collect();
-                        let s = SmallString::from_str(core::str::from_utf8(&name_bytes).unwrap_or(""));
+                        let s =
+                            SmallString::from_str(core::str::from_utf8(&name_bytes).unwrap_or(""));
 
                         let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
                         let filetype = if is_dir {
@@ -2398,8 +2399,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> DynamicLF
 mod tests {
     use super::*;
     use crate::memory::WasmAccessFaker;
-    use crate::wasi::file::stdio::DefaultStdIO;
     use crate::wasi::file::Wasip1LFSBase;
+    use crate::wasi::file::stdio::DefaultStdIO;
 
     fn make_lfs() -> (StandardDynamicLFS<DefaultStdIO, DefaultAddInfo>, InodeId) {
         let lfs = StandardDynamicLFS::<DefaultStdIO, DefaultAddInfo>::new();
@@ -2413,11 +2414,7 @@ mod tests {
         let name = "あ";
         let _file_id = lfs.add_file(root, name, Vec::new()).unwrap();
         let bytes = name.as_bytes();
-        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(
-            &root,
-            bytes.as_ptr(),
-            bytes.len(),
-        );
+        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(&root, bytes.as_ptr(), bytes.len());
         assert!(
             lookup.is_some(),
             "get_inode_for_path failed to find Unicode filename 'あ'"
@@ -2439,11 +2436,17 @@ mod tests {
             wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_FD_WRITE,
             0u16,
         );
-        assert!(create_result.is_ok(), "path_open_raw CREAT failed: {:?}", create_result.err());
+        assert!(
+            create_result.is_ok(),
+            "path_open_raw CREAT failed: {:?}",
+            create_result.err()
+        );
         let dir_keys: Vec<alloc::string::String> = lfs
             .read_inode(&root, |node| {
                 if let InodeData::Dir(map) = &node.data {
-                    map.keys().map(|k| alloc::string::String::from(k.as_str())).collect()
+                    map.keys()
+                        .map(|k| alloc::string::String::from(k.as_str()))
+                        .collect()
                 } else {
                     Vec::new()
                 }
@@ -2462,11 +2465,7 @@ mod tests {
         let name = "👋";
         let _file_id = lfs.add_file(root, name, Vec::new()).unwrap();
         let bytes = name.as_bytes();
-        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(
-            &root,
-            bytes.as_ptr(),
-            bytes.len(),
-        );
+        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(&root, bytes.as_ptr(), bytes.len());
         assert!(
             lookup.is_some(),
             "get_inode_for_path failed to find emoji filename '👋'"
@@ -2489,11 +2488,7 @@ mod tests {
             0u16,
         );
         assert!(create_result.is_ok());
-        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(
-            &root,
-            bytes.as_ptr(),
-            bytes.len(),
-        );
+        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(&root, bytes.as_ptr(), bytes.len());
         assert!(
             lookup.is_some(),
             "get_inode_for_path failed after creating Unicode filename 'あ'"
