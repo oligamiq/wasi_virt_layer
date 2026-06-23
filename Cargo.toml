@@ -72,7 +72,8 @@ members = [
     "wasi_virt_layer-cli/tests/fixtures/pool_own_mem_target",
     "wasi_virt_layer-cli/tests/fixtures/pool_own_mem_vfs",
     "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_target",
-    "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_vfs"
+    "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/pool_reused_start_vfs"
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]

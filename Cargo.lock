@@ -1629,6 +1629,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pool_reused_start_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "portable-atomic"
 version = "1.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2639,6 +2648,7 @@ dependencies = [
  "wasm-encoder 0.252.0",
  "wasm-opt",
  "wasmparser 0.252.0",
+ "wat",
  "windows-sys",
  "wit-component 0.252.0",
 ]
