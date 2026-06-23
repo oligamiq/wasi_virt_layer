@@ -16,23 +16,29 @@ static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPo
 impl Guest for ComponentABI {
     fn main() {
         // spawn_main_target::_reset();
-        unsafe { THREAD_POOL.init_with_capacity_and_wait(5) };
+        unsafe { THREAD_POOL.init_with_capacity_and_wait(10) };
         println!("Custom Pool threads initialized.");
 
         #[cfg(feature = "spawn_main")]
         {
             println!("Spawning main in a new thread.");
-            let handle = std::thread::spawn(|| {
-                spawn_main_target::_start();
-                spawn_main_target::_main();
-            });
-            handle.join().unwrap();
+            for _ in 0..2 {
+                let handle = std::thread::spawn(|| {
+                    spawn_main_target::_reset();
+                    spawn_main_target::_start();
+                    spawn_main_target::_main();
+                });
+                handle.join().unwrap();
+            }
         }
 
         #[cfg(not(feature = "spawn_main"))]
         {
-            spawn_main_target::_start();
-            spawn_main_target::_main();
+            for _ in 0..2 {
+                spawn_main_target::_reset();
+                spawn_main_target::_start();
+                spawn_main_target::_main();
+            }
         }
     }
 }

@@ -2,12 +2,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 fn main() {
-    println!("### Starting custom 5 threads test with VirtualThreadPool");
+    println!("### Starting custom 8 threads test with VirtualThreadPool");
 
     let counter = Arc::new(AtomicU32::new(0));
     let mut handles = vec![];
 
-    for i in 0..5 {
+    for i in 0..8 {
         let counter = Arc::clone(&counter);
         handles.push(std::thread::spawn(move || {
             println!("### Custom thread {i} starting");
@@ -20,6 +20,6 @@ fn main() {
         handle.join().unwrap();
     }
 
-    assert_eq!(counter.load(Ordering::SeqCst), 5);
-    println!("### All custom 5 threads completed successfully.");
+    assert_eq!(counter.load(Ordering::SeqCst), 8);
+    println!("### All custom 8 threads completed successfully.");
 }

@@ -26,8 +26,8 @@ fn test_spawn_main() -> color_eyre::Result<()> {
             let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
             println!("Captured stdout without feature:\n{}", stdout);
 
-            assert!(stdout.contains("### Starting custom 5 threads test with VirtualThreadPool"));
-            assert!(stdout.contains("### All custom 5 threads completed successfully."));
+            assert!(stdout.contains("### Starting custom 8 threads test with VirtualThreadPool"));
+            assert!(stdout.contains("### All custom 8 threads completed successfully."));
             assert!(!stdout.contains("Spawning main in a new thread."));
         }
         Err(e) => {
@@ -44,7 +44,12 @@ fn test_spawn_main() -> color_eyre::Result<()> {
         true, // Enable threads
         OutDir::Random,
         false,
-        &["--features", "spawn_main", "spawn_main_target", "--validate"],
+        &[
+            "--features",
+            "spawn_main",
+            "spawn_main_target",
+            "--validate",
+        ],
         None,
     );
 
@@ -54,8 +59,8 @@ fn test_spawn_main() -> color_eyre::Result<()> {
             println!("Captured stdout with feature:\n{}", stdout);
 
             assert!(stdout.contains("Spawning main in a new thread."));
-            assert!(stdout.contains("### Starting custom 5 threads test with VirtualThreadPool"));
-            assert!(stdout.contains("### All custom 5 threads completed successfully."));
+            assert!(stdout.contains("### Starting custom 8 threads test with VirtualThreadPool"));
+            assert!(stdout.contains("### All custom 8 threads completed successfully."));
         }
         Err(e) => {
             println!("Runtime error (with feature): {}", e);
