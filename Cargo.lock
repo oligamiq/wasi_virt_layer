@@ -2065,6 +2065,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "spawn_main_target"
+version = "0.0.1"
+
+[[package]]
+name = "spawn_main_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "spawn_vfs_and_body_example"
 version = "0.5.11"
 

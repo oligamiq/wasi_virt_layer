@@ -1,0 +1,10 @@
+[package]
+name = "spawn_main_target"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[features]
+spawn_main = []
+
+[dependencies]
