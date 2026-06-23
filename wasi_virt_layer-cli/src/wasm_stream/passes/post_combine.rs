@@ -86,6 +86,14 @@ fn resolve_host_export(name: &str, info: &ParsedInfo) -> Option<u32> {
     None
 }
 
+fn parse_target_wasi_thread_start_name(name: &str) -> Option<&str> {
+    let target_name = name
+        .strip_prefix("__wasip1_vfs_")?
+        .strip_suffix("_wasi_thread_start")?;
+
+    (!target_name.is_empty()).then_some(target_name)
+}
+
 fn data_segments_for_memory(
     data_segments: &[(u32, i32, Vec<u8>)],
     memory_index: u32,
@@ -1839,6 +1847,36 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    #[test]
+    fn parse_target_wasi_thread_start_name_accepts_target_specific_hook() {
+        assert_eq!(
+            parse_target_wasi_thread_start_name(
+                "__wasip1_vfs_pool_reused_start_target_wasi_thread_start"
+            ),
+            Some("pool_reused_start_target")
+        );
+    }
+
+    #[test]
+    fn parse_target_wasi_thread_start_name_rejects_non_target_hooks() {
+        assert_eq!(
+            parse_target_wasi_thread_start_name("wasi_thread_start"),
+            None
+        );
+        assert_eq!(
+            parse_target_wasi_thread_start_name("__wasip1_vfs_wasi_thread_start_entry"),
+            None
+        );
+        assert_eq!(
+            parse_target_wasi_thread_start_name("__wasip1_vfs_wasi_thread_start"),
+            None
+        );
+        assert_eq!(
+            parse_target_wasi_thread_start_name("__wasip1_vfs__wasi_thread_start"),
+            None
+        );
     }
 
     fn start_calls(output: &[u8]) -> eyre::Result<Vec<u32>> {
