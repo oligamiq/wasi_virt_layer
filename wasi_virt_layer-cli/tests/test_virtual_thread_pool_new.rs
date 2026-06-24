@@ -1,4 +1,5 @@
 pub mod utils;
+use std::time::Duration;
 use utils::*;
 
 #[test]
@@ -35,6 +36,33 @@ fn test_virtual_thread_pool_new() -> color_eyre::Result<()> {
             Err(e)
         }
     }
+}
+
+#[test]
+fn test_virtual_thread_pool_nested_spawn_starvation() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let dir = run_wasi_virt_layer(
+        Some("vtp_nested_spawn_vfs"),
+        Some("vtp_nested_spawn_target"),
+        None,
+        true,
+        OutDir::Random,
+        false,
+        &["--validate"],
+        Some(Duration::from_secs(10)),
+    )?;
+
+    let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
+    println!("Captured stdout:\n{}", stdout);
+
+    assert!(stdout.contains("Starting nested spawn VirtualThreadPool test"));
+    assert!(stdout.contains("Nested spawn VirtualThreadPool test completed."));
+    Ok(())
 }
 
 fn has_required_wasi_targets(threads: bool) -> bool {

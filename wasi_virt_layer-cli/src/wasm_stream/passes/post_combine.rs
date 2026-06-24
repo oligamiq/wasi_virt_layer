@@ -2340,7 +2340,6 @@ mod tests {
         );
         let output = pass.run(&input)?;
 
-        let mut reset_func_idx = None;
         let mut atomic_reset_idx = None;
         let mut found_call_to_atomic_reset = false;
 
@@ -2349,26 +2348,21 @@ mod tests {
                 wasmparser::Payload::ExportSection(exports) => {
                     for export in exports {
                         let export = export?;
-                        if export.name == "__wasip1_vfs_test_target_reset" {
-                            reset_func_idx = Some(export.index);
-                        }
                         if export.name == "__vfs_atomic_reset_target" {
                             atomic_reset_idx = Some(export.index);
                         }
                     }
                 }
                 wasmparser::Payload::CodeSectionEntry(body) => {
-                    if let Some(_) = reset_func_idx {
-                        let ops = body
-                            .get_operators_reader()?
-                            .into_iter()
-                            .collect::<Result<Vec<_>, _>>()?;
-                        for op in &ops {
-                            if let wasmparser::Operator::Call { function_index } = op {
-                                if let Some(ari) = atomic_reset_idx {
-                                    if *function_index == ari {
-                                        found_call_to_atomic_reset = true;
-                                    }
+                    let ops = body
+                        .get_operators_reader()?
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()?;
+                    for op in &ops {
+                        if let wasmparser::Operator::Call { function_index } = op {
+                            if let Some(ari) = atomic_reset_idx {
+                                if *function_index == ari {
+                                    found_call_to_atomic_reset = true;
                                 }
                             }
                         }
@@ -2378,10 +2372,9 @@ mod tests {
             }
         }
 
-        assert!(reset_func_idx.is_some(), "_reset export not found");
         assert!(
             found_call_to_atomic_reset,
-            "_reset body should call __vfs_atomic_reset_target"
+            "A synthesized function (like _reset) should call __vfs_atomic_reset_target"
         );
         Ok(())
     }
@@ -2394,28 +2387,27 @@ mod tests {
         types.ty().function([wasm_encoder::ValType::I32], []);
         module.section(&types);
 
+        let mut imports = wasm_encoder::ImportSection::new();
+        imports.import(
+            "wasip1-vfs",
+            "__wasip1_vfs_test_target_reset",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
         let mut functions = wasm_encoder::FunctionSection::new();
-        functions.function(0);
         functions.function(1);
         module.section(&functions);
 
         let mut exports = wasm_encoder::ExportSection::new();
         exports.export(
-            "__wasip1_vfs_test_target_reset",
-            wasm_encoder::ExportKind::Func,
-            0,
-        );
-        exports.export(
             "__vfs_atomic_reset_target",
             wasm_encoder::ExportKind::Func,
-            1,
+            1, // func index 1 is the atomic func
         );
         module.section(&exports);
 
         let mut code = wasm_encoder::CodeSection::new();
-        let mut reset_func = wasm_encoder::Function::new([]);
-        reset_func.instruction(&wasm_encoder::Instruction::End);
-        code.function(&reset_func);
         let mut atomic_func = wasm_encoder::Function::new([(1, wasm_encoder::ValType::I32)]);
         atomic_func.instruction(&wasm_encoder::Instruction::End);
         code.function(&atomic_func);

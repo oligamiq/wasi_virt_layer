@@ -133,6 +133,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atomic_wait_reset_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "atomic_wait_vfs"
 version = "0.5.12"
 dependencies = [
@@ -2621,6 +2630,19 @@ version = "0.0.1"
 
 [[package]]
 name = "vtp_5threads_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
+name = "vtp_nested_spawn_target"
+version = "0.0.1"
+
+[[package]]
+name = "vtp_nested_spawn_vfs"
 version = "0.0.1"
 dependencies = [
  "const_struct",
