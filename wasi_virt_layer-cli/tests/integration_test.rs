@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use eyre::Context;
 use glob;
 use itertools::Itertools;
-use std::{collections::HashSet, process::Command, sync::OnceLock, time::Duration};
+use std::{process::Command, time::Duration};
 use utils::*;
 use uuid::Uuid;
 use wasi_virt_layer_cli::unique_name::UniqueName;
@@ -22,59 +22,10 @@ use wasi_virt_layer_cli::unique_name::UniqueName;
 // threads + unstable_print_debug
 // multi_memory + threads + unstable_print_debug
 
-static INSTALLED_TARGETS_STABLE: OnceLock<HashSet<String>> = OnceLock::new();
 
 #[path = "common/test_own_memory.rs"]
 pub mod test_own_memory;
-static INSTALLED_TARGETS_NIGHTLY: OnceLock<HashSet<String>> = OnceLock::new();
 
-fn installed_targets(nightly: bool) -> &'static HashSet<String> {
-    let list = || {
-        let mut cmd = Command::new("rustup");
-        if nightly {
-            cmd.arg("+nightly");
-        }
-        let output = cmd.args(["target", "list", "--installed"]).output();
-
-        let Ok(output) = output else {
-            return HashSet::new();
-        };
-        if output.status.success() {
-            return HashSet::new();
-        }
-
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(ToOwned::to_owned)
-            .collect()
-    };
-
-    if nightly {
-        INSTALLED_TARGETS_NIGHTLY.get_or_init(list)
-    } else {
-        INSTALLED_TARGETS_STABLE.get_or_init(list)
-    }
-}
-
-fn has_required_wasi_targets(threads: bool) -> bool {
-    if !installed_targets(false).contains("wasm32-wasip1") {
-        eprintln!(
-            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
-        );
-        return false;
-    }
-
-    if threads && !installed_targets(true).contains("wasm32-wasip1-threads") {
-        eprintln!(
-            "Skipping test: missing nightly rust target `wasm32-wasip1-threads` (install with `rustup +nightly target add wasm32-wasip1-threads`)"
-        );
-        return false;
-    }
-
-    true
-}
 
 /// Tests the build process with the `--out-dir` argument, ensuring output is directed to a specific temporary directory.
 #[test]

@@ -104,35 +104,6 @@ fn build_and_validate_dev(
     Ok(())
 }
 
-fn has_required_wasi_targets(threads: bool) -> bool {
-    let mut cmd = Command::new("rustup");
-    let output = cmd
-        .args(["+stable", "target", "list", "--installed"])
-        .output()
-        .ok();
-    let has_wasip1 = output.as_ref().map_or(false, |o| {
-        String::from_utf8_lossy(&o.stdout).contains("wasm32-wasip1")
-    });
-    if !has_wasip1 {
-        eprintln!("Skipping test: missing rust target `wasm32-wasip1`");
-        return false;
-    }
-
-    if threads {
-        let output = Command::new("rustup")
-            .args(["+nightly", "target", "list", "--installed"])
-            .output()
-            .ok();
-        let has_threads = output.as_ref().map_or(false, |o| {
-            String::from_utf8_lossy(&o.stdout).contains("wasm32-wasip1-threads")
-        });
-        if !has_threads {
-            eprintln!("Skipping test: missing nightly rust target `wasm32-wasip1-threads`");
-            return false;
-        }
-    }
-    true
-}
 
 // ── Component validation tests ────────────────────────────────────────────
 

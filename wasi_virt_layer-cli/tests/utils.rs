@@ -10,6 +10,57 @@ use wait_timeout::ChildExt;
 pub const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
 
+static INSTALLED_TARGETS_STABLE: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+static INSTALLED_TARGETS_NIGHTLY: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+
+fn installed_targets(nightly: bool) -> &'static std::collections::HashSet<String> {
+    let list = || {
+        let mut cmd = std::process::Command::new("rustup");
+        if nightly {
+            cmd.arg("+nightly");
+        }
+        let output = cmd.args(["target", "list", "--installed"]).output();
+
+        let Ok(output) = output else {
+            return std::collections::HashSet::new();
+        };
+        if !output.status.success() {
+            return std::collections::HashSet::new();
+        }
+
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect()
+    };
+
+    if nightly {
+        INSTALLED_TARGETS_NIGHTLY.get_or_init(list)
+    } else {
+        INSTALLED_TARGETS_STABLE.get_or_init(list)
+    }
+}
+
+pub fn has_required_wasi_targets(threads: bool) -> bool {
+    if !installed_targets(false).contains("wasm32-wasip1") {
+        eprintln!(
+            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
+        );
+        return false;
+    }
+
+    if threads && !installed_targets(true).contains("wasm32-wasip1-threads") {
+        eprintln!(
+            "Skipping test: missing nightly rust target `wasm32-wasip1-threads` (install with `rustup +nightly target add wasm32-wasip1-threads`)"
+        );
+        return false;
+    }
+
+    true
+}
+
 pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
     std::process::Command::new("deno")
         .args(["add", "npm:@bjorn3/browser_wasi_shim@0.4"])

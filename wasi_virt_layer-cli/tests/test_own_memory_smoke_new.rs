@@ -86,18 +86,3 @@ fn test_own_memory_smoke_auto_detects_exports_without_flag() -> color_eyre::Resu
     Ok(())
 }
 
-fn has_required_wasi_targets(threads: bool) -> bool {
-    let mut targets = vec!["wasm32-wasip1"];
-    if threads {
-        targets.push("wasm32-wasip1-threads");
-    }
-
-    let Ok(output) = std::process::Command::new("rustup")
-        .args(["target", "list", "--installed"])
-        .output()
-    else {
-        return false;
-    };
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    targets.into_iter().all(|t| stdout.contains(t))
-}

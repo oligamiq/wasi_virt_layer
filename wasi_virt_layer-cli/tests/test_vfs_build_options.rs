@@ -35,9 +35,3 @@ fn test_vfs_features_invalid() -> color_eyre::Result<()> {
     Ok(())
 }
 
-fn has_required_wasi_targets(_threads: bool) -> bool {
-    // Basic implementation or import from integration_test if possible.
-    // Since integration_test.rs is not a library, I'll just re-implement or use a simplified version.
-    // Actually, I can just check if rustup targets are present.
-    true // For now, assume they are there as they were for other tests
-}
