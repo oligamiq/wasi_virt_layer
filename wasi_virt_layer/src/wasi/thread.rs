@@ -1269,4 +1269,62 @@ pub mod vfs_atomic {
         };
         unsafe { __wvl_atomic_notify_vfs(ptr, count) }
     }
+
+    /// Resets the atomic-wait state for a single target, freeing its wait cells.
+    ///
+    /// Called from the generated `_reset` body. For each wait cell belonging to
+    /// `wasm_id`, this first notifies (wakes) all threads parked on the cell so
+    /// they are removed from the runtime's wait queue, then removes the cell from
+    /// `WAIT_MAP`, freeing the VFS memory it occupied.
+    ///
+    /// This prevents a stale wait queue entry from being woken when the target is
+    /// re-run after reset: without the notify, a zombie thread parked on a
+    /// reused address would be woken instead of the new thread.
+    ///
+    /// # Safety
+    ///
+    /// Must only be called when no thread is still blocked on those cells -- i.e.
+    /// under the same preconditions as `_reset()`.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn __vfs_atomic_reset_target(wasm_id: u32) {
+        let cells: Vec<(u64, *const u32)> = WAIT_MAP
+            .iter()
+            .filter(|e| (*e.key() >> 32) as u32 == wasm_id)
+            .map(|e| (*e.key(), &**e.value() as *const u32))
+            .collect();
+
+        for (_, ptr) in &cells {
+            unsafe { __wvl_atomic_notify_vfs(*ptr, u32::MAX) };
+        }
+
+        for (key, _) in cells {
+            WAIT_MAP.remove(&key);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn reset_target_removes_only_matching_wasm_id_entries() {
+            WAIT_MAP.clear();
+            let key_a = (1u64 << 32) | 0x100;
+            let key_b = (1u64 << 32) | 0x200;
+            let key_c = (2u64 << 32) | 0x100;
+            WAIT_MAP.insert(key_a, Box::new(0));
+            WAIT_MAP.insert(key_b, Box::new(0));
+            WAIT_MAP.insert(key_c, Box::new(0));
+            assert_eq!(WAIT_MAP.len(), 3);
+
+            unsafe { __vfs_atomic_reset_target(1) };
+
+            assert!(!WAIT_MAP.contains_key(&key_a));
+            assert!(!WAIT_MAP.contains_key(&key_b));
+            assert!(WAIT_MAP.contains_key(&key_c));
+            assert_eq!(WAIT_MAP.len(), 1);
+
+            WAIT_MAP.clear();
+        }
+    }
 }
