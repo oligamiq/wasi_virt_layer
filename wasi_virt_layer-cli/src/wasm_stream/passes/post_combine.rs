@@ -1351,6 +1351,7 @@ impl StreamPass for PostCombineStreamPass {
                     })? as u32
                     + 1;
 
+                // 0. Clear atomic wait state
                 if let Some(&reset_atomic_idx) =
                     info.exported_funcs.get("__vfs_atomic_reset_target")
                 {
@@ -2358,8 +2359,12 @@ mod tests {
                         .get_operators_reader()?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()?;
-                    for op in &ops {
-                        if let wasmparser::Operator::Call { function_index } = op {
+                    for window in ops.windows(2) {
+                        if let (
+                            wasmparser::Operator::I32Const { value: 0 },
+                            wasmparser::Operator::Call { function_index },
+                        ) = (&window[0], &window[1])
+                        {
                             if let Some(ari) = atomic_reset_idx {
                                 if *function_index == ari {
                                     found_call_to_atomic_reset = true;
