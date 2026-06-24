@@ -73,9 +73,12 @@ members = [
     "wasi_virt_layer-cli/tests/fixtures/pool_own_mem_vfs",
     "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_target",
     "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/vtp_nested_spawn_target",
+    "wasi_virt_layer-cli/tests/fixtures/vtp_nested_spawn_vfs",
     "wasi_virt_layer-cli/tests/fixtures/spawn_main_target",
     "wasi_virt_layer-cli/tests/fixtures/spawn_main_vfs",
-    "wasi_virt_layer-cli/tests/fixtures/pool_reused_start_vfs"
+    "wasi_virt_layer-cli/tests/fixtures/pool_reused_start_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/atomic_wait_reset_vfs"
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
