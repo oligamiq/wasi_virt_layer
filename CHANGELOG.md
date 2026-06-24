@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.13] - 2026-06-24
+### Fixed
+- **Atomic Wait State Reset**:
+    - Cleared `WAIT_MAP` state on `_reset()` calls per-target using `__vfs_atomic_reset_target` to prevent stale zombie threads from stealing atomic notify signals on subsequent runs.
+- **Tests**:
+    - Fixed a bug in `has_required_wasi_targets` that incorrectly skipped tests when WASI targets were successfully detected.
+    - Deduplicated `has_required_wasi_targets` logic across the test suite into `utils.rs` to improve performance and stability.
+    - Tightened `post_combine` codegen tests to assert exact argument instructions.
+
+### Added
+- **Tests**:
+    - Added `test_atomic_wait_reset.rs` integration test to ensure `_reset()` correctly clears memory.atomic wait states for a target.
+
 ## [0.5.12] - 2026-06-24
 ### Fixed
 - **Thread spawning and pooling logic**:

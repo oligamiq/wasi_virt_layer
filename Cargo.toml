@@ -85,7 +85,7 @@ default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]
-version = "0.5.12"
+version = "0.5.13"
 edition = "2024"
 description = ""
 rust-version = "1.89.0"
