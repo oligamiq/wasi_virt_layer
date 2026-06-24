@@ -1354,9 +1354,7 @@ impl StreamPass for PostCombineStreamPass {
                 if let Some(&reset_atomic_idx) =
                     info.exported_funcs.get("__vfs_atomic_reset_target")
                 {
-                    func.instruction(&wasm_encoder::Instruction::I32Const(
-                        wasm_mem as i32 - 1,
-                    ));
+                    func.instruction(&wasm_encoder::Instruction::I32Const(wasm_mem as i32 - 1));
                     func.instruction(&wasm_encoder::Instruction::Call(
                         rebinder.function(reset_atomic_idx),
                     ));

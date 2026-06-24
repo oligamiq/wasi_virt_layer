@@ -1,7 +1,5 @@
 use const_struct::const_struct;
-use wasi_virt_layer::{
-    file::*, poll::*, prelude::*, process::*, thread::VirtualThreadPool,
-};
+use wasi_virt_layer::{file::*, poll::*, prelude::*, process::*, thread::VirtualThreadPool};
 
 struct ComponentABI;
 
@@ -11,8 +9,7 @@ wit_bindgen::generate!({
 
 import_wasm!(atomic_wait_reset_target);
 
-static THREAD_POOL: VirtualThreadPool<ThreadAccessor> =
-    unsafe { VirtualThreadPool::new_const(2) };
+static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(2) };
 
 impl Guest for ComponentABI {
     fn main() {

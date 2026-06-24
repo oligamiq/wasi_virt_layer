@@ -788,8 +788,7 @@ mod tests {
         assert!(result.is_some());
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !ran.load(std::sync::atomic::Ordering::SeqCst)
-            && std::time::Instant::now() < deadline
+        while !ran.load(std::sync::atomic::Ordering::SeqCst) && std::time::Instant::now() < deadline
         {
             std::thread::yield_now();
         }
@@ -801,7 +800,7 @@ mod tests {
 
     #[test]
     fn virtual_thread_pool_expands_when_existing_worker_is_blocked() {
-        use std::sync::{atomic::AtomicBool, Barrier};
+        use std::sync::{Barrier, atomic::AtomicBool};
 
         let pool = unsafe { VirtualThreadPool::<TestThreadAccessor>::new_const(1) };
         unsafe { pool.init_with_capacity_and_wait(1) };
@@ -830,8 +829,7 @@ mod tests {
         assert!(result2.is_some());
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !ran.load(std::sync::atomic::Ordering::SeqCst)
-            && std::time::Instant::now() < deadline
+        while !ran.load(std::sync::atomic::Ordering::SeqCst) && std::time::Instant::now() < deadline
         {
             std::thread::yield_now();
         }
