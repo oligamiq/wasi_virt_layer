@@ -1351,6 +1351,17 @@ impl StreamPass for PostCombineStreamPass {
                     })? as u32
                     + 1;
 
+                if let Some(&reset_atomic_idx) =
+                    info.exported_funcs.get("__vfs_atomic_reset_target")
+                {
+                    func.instruction(&wasm_encoder::Instruction::I32Const(
+                        wasm_mem as i32 - 1,
+                    ));
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(reset_atomic_idx),
+                    ));
+                }
+
                 // 1. Reset globals
                 if let Some(&reset_globals_idx) = info.reset_globals_funcs.get(target_name) {
                     func.instruction(&wasm_encoder::Instruction::Call(
@@ -2318,5 +2329,100 @@ mod tests {
         module.section(&code);
 
         module.finish()
+    }
+
+    #[test]
+    fn reset_body_calls_atomic_reset_target() -> eyre::Result<()> {
+        let input = module_with_flesh_vfs_start_and_reset();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["test_target".to_string()],
+            vec![1],
+            true,
+        );
+        let output = pass.run(&input)?;
+
+        let mut reset_func_idx = None;
+        let mut atomic_reset_idx = None;
+        let mut found_call_to_atomic_reset = false;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                wasmparser::Payload::ExportSection(exports) => {
+                    for export in exports {
+                        let export = export?;
+                        if export.name == "__wasip1_vfs_test_target_reset" {
+                            reset_func_idx = Some(export.index);
+                        }
+                        if export.name == "__vfs_atomic_reset_target" {
+                            atomic_reset_idx = Some(export.index);
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(body) => {
+                    if let Some(_) = reset_func_idx {
+                        let ops = body
+                            .get_operators_reader()?
+                            .into_iter()
+                            .collect::<Result<Vec<_>, _>>()?;
+                        for op in &ops {
+                            if let wasmparser::Operator::Call { function_index } = op {
+                                if let Some(ari) = atomic_reset_idx {
+                                    if *function_index == ari {
+                                        found_call_to_atomic_reset = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        assert!(reset_func_idx.is_some(), "_reset export not found");
+        assert!(
+            found_call_to_atomic_reset,
+            "_reset body should call __vfs_atomic_reset_target"
+        );
+        Ok(())
+    }
+
+    fn module_with_flesh_vfs_start_and_reset() -> Vec<u8> {
+        let mut module = wasm_encoder::Module::new();
+
+        let mut types = wasm_encoder::TypeSection::new();
+        types.ty().function([], []);
+        types.ty().function([wasm_encoder::ValType::I32], []);
+        module.section(&types);
+
+        let mut functions = wasm_encoder::FunctionSection::new();
+        functions.function(0);
+        functions.function(1);
+        module.section(&functions);
+
+        let mut exports = wasm_encoder::ExportSection::new();
+        exports.export(
+            "__wasip1_vfs_test_target_reset",
+            wasm_encoder::ExportKind::Func,
+            0,
+        );
+        exports.export(
+            "__vfs_atomic_reset_target",
+            wasm_encoder::ExportKind::Func,
+            1,
+        );
+        module.section(&exports);
+
+        let mut code = wasm_encoder::CodeSection::new();
+        let mut reset_func = wasm_encoder::Function::new([]);
+        reset_func.instruction(&wasm_encoder::Instruction::End);
+        code.function(&reset_func);
+        let mut atomic_func = wasm_encoder::Function::new([(1, wasm_encoder::ValType::I32)]);
+        atomic_func.instruction(&wasm_encoder::Instruction::End);
+        code.function(&atomic_func);
+        module.section(&code);
+
+        module.finish().to_vec()
     }
 }
