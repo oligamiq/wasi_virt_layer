@@ -323,6 +323,8 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
                     flag.set(true);
                 });
                 accessor.call_wasi_thread_start(runner, Some(thread_id));
+                #[cfg(feature = "trace-thread")]
+                println!("[] Thread pool worker finished Run for thread {thread_id}");
             }
             VirtualThreadPoolMessage::AddThread(count, ref sender, ref kept_workers_pool) => {
                 // Passing an iterator to kept_workers_pool causes the lock to hold for too long.
@@ -547,64 +549,28 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
             #[cfg(feature = "trace-thread")]
             println!("[] Increasing thread pool size from {current_len} to {max_threads}");
 
-            match {
-                self.add_queue_with(|sender| {
-                    #[cfg(feature = "trace-thread")]
-                    println!(
-                        "[] Requesting addition of {} threads to the thread pool...",
-                        max_threads - current_len
-                    );
+            let count = max_threads - current_len;
+            let (send, recv) = std::sync::mpsc::sync_channel(count);
+            #[cfg(feature = "trace-thread")]
+            println!("[] count {count}");
+            let msg = VirtualThreadPoolMessage::<ThreadAccessor>::AddThread(
+                count - 1,
+                send,
+                self.kept_workers_pool.clone(),
+            );
 
-                    let (send, recv) = std::sync::mpsc::sync_channel(1);
-                    #[cfg(feature = "trace-thread")]
-                    println!("sender.receiver_count(): {}", sender.receiver_count());
-                    #[cfg(feature = "trace-thread")]
-                    println!("sender.len(): {}", sender.len());
-                    if !sender.is_empty() || sender.receiver_count() <= 1 {
-                        #[cfg(feature = "trace-thread")]
-                        println!("[] Another thread is handling the addition. Skipping...");
-                        return None;
-                    }
-                    #[cfg(feature = "trace-thread")]
-                    println!("[] Sending add thread request...");
-                    Some((
-                        VirtualThreadPoolMessage::AddThread(
-                            max_threads - current_len,
-                            send,
-                            self.kept_workers_pool.clone(),
-                        ),
-                        recv,
-                    ))
-                })
-            } {
-                Some(recv) => {
-                    return WaitThreadJoin::Recv(recv);
-                }
-                None => {
-                    let count = max_threads - current_len;
-                    let (send, recv) = std::sync::mpsc::sync_channel(count);
-                    #[cfg(feature = "trace-thread")]
-                    println!("[] count {count}");
-                    let msg = VirtualThreadPoolMessage::<ThreadAccessor>::AddThread(
-                        count - 1,
-                        send,
-                        self.kept_workers_pool.clone(),
-                    );
+            let queue_receiver = self.queue_receiver.clone();
 
-                    let queue_receiver = self.queue_receiver.clone();
+            let handle = root_spawn(std::thread::Builder::new(), move || {
+                #[cfg(feature = "trace-thread")]
+                println!("[] Thread pool addition thread started.");
 
-                    let handle = root_spawn(std::thread::Builder::new(), move || {
-                        #[cfg(feature = "trace-thread")]
-                        println!("[] Thread pool addition thread started.");
+                VirtualThreadPoolMessage::listen_with(&queue_receiver, msg);
+            })
+            .unwrap();
 
-                        VirtualThreadPoolMessage::listen_with(&queue_receiver, msg);
-                    })
-                    .unwrap();
-
-                    pool.push(handle);
-                    return WaitThreadJoin::Recv(recv);
-                }
-            }
+            pool.push(handle);
+            return WaitThreadJoin::Recv(recv);
         } else {
             let mut sender = self.queue.lock();
 
@@ -653,20 +619,20 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
         if need_expansion {
             let current = self.read_kept_workers_pool_size.load(Ordering::SeqCst);
             let max = self.max_threads.load(Ordering::SeqCst);
-            if current >= max {
-                if self
-                    .max_threads
-                    .compare_exchange(max, max + 1, Ordering::SeqCst, Ordering::SeqCst)
-                    .is_ok()
-                {
-                    #[cfg(feature = "trace-thread")]
-                    println!(
-                        "[] Automatically expanding thread pool capacity to {}",
-                        max + 1
-                    );
+            if current < max {
+                let _ = self.flush_capacity();
+            } else if self
+                .max_threads
+                .compare_exchange(max, max + 1, Ordering::SeqCst, Ordering::SeqCst)
+                .is_ok()
+            {
+                #[cfg(feature = "trace-thread")]
+                println!(
+                    "[] Automatically expanding thread pool capacity to {}",
+                    max + 1
+                );
 
-                    let _ = self.flush_capacity();
-                }
+                let _ = self.flush_capacity();
             }
         }
     }
@@ -680,7 +646,12 @@ mod tests {
     struct TestThreadAccessor;
 
     impl ThreadAccess for TestThreadAccessor {
-        fn call_wasi_thread_start(&self, _ptr: ThreadRunner, _thread_id: Option<NonZero<u32>>) {}
+        fn call_wasi_thread_start(&self, ptr: ThreadRunner, _thread_id: Option<NonZero<u32>>) {
+            unsafe {
+                let boxed: Box<Box<dyn FnOnce()>> = Box::from_raw(ptr.inner());
+                boxed();
+            }
+        }
 
         fn call_thread_start_init(&self) {}
 
@@ -796,6 +767,77 @@ mod tests {
         assert!(
             pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut runner))
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn virtual_thread_pool_spawns_worker_for_queued_task_when_under_capacity() {
+        use std::sync::atomic::AtomicBool;
+
+        let pool = unsafe { VirtualThreadPool::<TestThreadAccessor>::new_const(2) };
+        unsafe { pool.init() };
+
+        let ran = std::sync::Arc::new(AtomicBool::new(false));
+        let ran_clone = ran.clone();
+
+        let mut closure: Box<dyn FnOnce()> = Box::new(move || {
+            ran_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+        });
+
+        let result = pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut closure));
+        assert!(result.is_some());
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !ran.load(std::sync::atomic::Ordering::SeqCst)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::yield_now();
+        }
+        assert!(
+            ran.load(std::sync::atomic::Ordering::SeqCst),
+            "pool did not spawn a worker for the queued task"
+        );
+    }
+
+    #[test]
+    fn virtual_thread_pool_expands_when_existing_worker_is_blocked() {
+        use std::sync::{atomic::AtomicBool, Barrier};
+
+        let pool = unsafe { VirtualThreadPool::<TestThreadAccessor>::new_const(1) };
+        unsafe { pool.init_with_capacity_and_wait(1) };
+
+        // First task: take the only worker and block it on a barrier.
+        let barrier = std::sync::Arc::new(Barrier::new(2));
+        let barrier_clone = barrier.clone();
+        let mut closure1: Box<dyn FnOnce()> = Box::new(move || {
+            barrier_clone.wait();
+        });
+        let result1 = pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut closure1));
+        assert!(result1.is_some());
+
+        // Wait for the worker to pick up the task and block.
+        std::thread::sleep(std::time::Duration::from_millis(100));
+
+        // Second task: should trigger auto-expansion because the sole worker is blocked.
+        let ran = std::sync::Arc::new(AtomicBool::new(false));
+        let ran_clone = ran.clone();
+        let barrier2 = barrier.clone();
+        let mut closure2: Box<dyn FnOnce()> = Box::new(move || {
+            ran_clone.store(true, std::sync::atomic::Ordering::SeqCst);
+            barrier2.wait();
+        });
+        let result2 = pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut closure2));
+        assert!(result2.is_some());
+
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !ran.load(std::sync::atomic::Ordering::SeqCst)
+            && std::time::Instant::now() < deadline
+        {
+            std::thread::yield_now();
+        }
+        assert!(
+            ran.load(std::sync::atomic::Ordering::SeqCst),
+            "pool did not expand for the second task while the only worker was blocked"
         );
     }
 }
