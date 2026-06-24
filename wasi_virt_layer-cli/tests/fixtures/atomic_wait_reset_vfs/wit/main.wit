@@ -1,0 +1,5 @@
+package tests:atomic-wait-reset;
+
+world component-abi {
+  export main: func();
+}
