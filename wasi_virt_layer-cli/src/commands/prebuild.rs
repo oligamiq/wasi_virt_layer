@@ -25,6 +25,7 @@ pub(crate) fn run_prebuild_internal(
     vfs_build_opts: &crate::args::VfsBuildOptions,
     target_vfs_build_opts: Box<[crate::args::VfsBuildOptions]>,
     own_memory: bool,
+    detect_deadlock: bool,
     stack_options: crate::args::StackOptions,
     validate: bool,
 ) -> eyre::Result<(generator::ComponentRunner, bool)> {
@@ -129,6 +130,7 @@ pub(crate) fn run_prebuild_internal(
         toml_restores,
         wasm_memory_hints,
         own_memory,
+        detect_deadlock,
         stack_options,
         validate,
     )?;
@@ -182,6 +184,7 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         &vfs_build_opts,
         target_vfs_build_opts,
         parsed_args.own_memory,
+        parsed_args.detect_deadlock,
         parsed_args.stack_options.clone(),
         parsed_args.validate,
     )?;

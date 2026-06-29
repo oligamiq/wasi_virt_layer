@@ -271,6 +271,10 @@ pub struct BuildArgs {
     #[arg(long, default_value = "false")]
     pub own_memory: bool,
 
+    /// Enable atomic wait deadlock detection for threaded builds.
+    #[arg(long, default_value = "false")]
+    pub detect_deadlock: bool,
+
     /// Export-stack isolation settings.
     #[command(flatten)]
     pub stack_options: StackOptions,
@@ -441,6 +445,10 @@ pub struct PreBuildArgs {
     /// Enable own-memory mode.
     #[arg(long, default_value = "false")]
     pub own_memory: bool,
+
+    /// Enable atomic wait deadlock detection for threaded builds.
+    #[arg(long, default_value = "false")]
+    pub detect_deadlock: bool,
 
     /// Export-stack isolation settings.
     #[command(flatten)]

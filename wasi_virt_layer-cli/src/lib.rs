@@ -8,6 +8,28 @@ use crate::{
     fallback_command::CommandLock,
 };
 
+const OWN_MEMORY_FEATURE: &str = "wasi_virt_layer/own-memory";
+const DETECT_DEADLOCK_FEATURE: &str = "wasi_virt_layer/detect-deadlock";
+
+fn push_feature_once(opts: &mut args::VfsBuildOptions, feature: &str) {
+    if !opts.features.iter().any(|f| f == feature) {
+        opts.features.push(feature.to_string());
+    }
+}
+
+fn apply_implicit_vfs_features(
+    opts: &mut args::VfsBuildOptions,
+    own_memory: bool,
+    detect_deadlock: bool,
+) {
+    if own_memory {
+        push_feature_once(opts, OWN_MEMORY_FEATURE);
+    }
+    if detect_deadlock {
+        push_feature_once(opts, DETECT_DEADLOCK_FEATURE);
+    }
+}
+
 /// WASI ABI transformation and generation constants.
 pub mod abi;
 /// CLI argument parsing structures and definitions.
@@ -85,16 +107,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                         sub_matches,
                         build_args.wasm.len(),
                     );
-                    if build_args.own_memory
-                        && !vfs_opts
-                            .features
-                            .iter()
-                            .any(|f| f == "wasi_virt_layer/own-memory")
-                    {
-                        vfs_opts
-                            .features
-                            .push("wasi_virt_layer/own-memory".to_string());
-                    }
+                    apply_implicit_vfs_features(
+                        &mut vfs_opts,
+                        build_args.own_memory,
+                        build_args.detect_deadlock,
+                    );
                     build_args.vfs_build_opts = vfs_opts;
                     build_args.target_vfs_build_opts = Some(target_opts);
                 }
@@ -105,16 +122,11 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
                         sub_matches,
                         prebuild_args.wasm.len(),
                     );
-                    if prebuild_args.own_memory
-                        && !vfs_opts
-                            .features
-                            .iter()
-                            .any(|f| f == "wasi_virt_layer/own-memory")
-                    {
-                        vfs_opts
-                            .features
-                            .push("wasi_virt_layer/own-memory".to_string());
-                    }
+                    apply_implicit_vfs_features(
+                        &mut vfs_opts,
+                        prebuild_args.own_memory,
+                        prebuild_args.detect_deadlock,
+                    );
                     prebuild_args.vfs_build_opts = vfs_opts;
                     prebuild_args.target_vfs_build_opts = Some(target_opts);
                 }
@@ -159,6 +171,21 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         args::Command::Prebuild(prebuild_args) => prebuild(prebuild_args),
         args::Command::Postbuild(postbuild_args) => postbuild(postbuild_args),
         args::Command::New(new_args) => new(new_args),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn implicit_vfs_features_include_deadlock_detection_when_requested() {
+        let mut opts = crate::args::VfsBuildOptions::default();
+
+        super::apply_implicit_vfs_features(&mut opts, false, true);
+
+        assert_eq!(
+            opts.features,
+            vec!["wasi_virt_layer/detect-deadlock".to_string()]
+        );
     }
 }
 

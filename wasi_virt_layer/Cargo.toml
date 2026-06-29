@@ -31,6 +31,8 @@ simple-debug = []
 # Traps when a host-routed, non-recursive WASI call synchronously re-enters
 # another non-recursive WASI call on the same thread.
 detect-wasi-reentrancy = ["std"]
+# Tracks atomic waits and traps when an observed threaded build deadlocks.
+detect-deadlock = ["threads"]
 # this is unstable
 unstable_print_debug = ["std", "dep:backtrace", "trace"]
 

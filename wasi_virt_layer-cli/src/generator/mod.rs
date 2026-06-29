@@ -43,6 +43,8 @@ pub struct GeneratorCtx {
     pub main_void_synthesized_targets: Option<std::collections::HashSet<String>>,
     /// Whether own-memory mode is enabled.
     pub own_memory: bool,
+    /// Whether atomic wait deadlock detection is enabled.
+    pub detect_deadlock: bool,
     /// Export-stack isolation configuration keyed by module name.
     pub stack_config: StackConfig,
     /// Whether to validate generated Wasm modules.
@@ -115,6 +117,8 @@ pub struct ComponentCtx {
     pub adjust_abi: bool,
     /// Flag for own-memory mode.
     pub own_memory: bool,
+    /// Whether atomic wait deadlock detection is enabled.
+    pub detect_deadlock: bool,
 }
 
 impl ComponentCtx {
@@ -128,6 +132,7 @@ impl ComponentCtx {
         threads: bool,
         adjust_abi: bool,
         own_memory: bool,
+        detect_deadlock: bool,
     ) -> Self {
         Self {
             vfs_name: Some(vfs_name),
@@ -138,6 +143,7 @@ impl ComponentCtx {
             threads: Some(threads),
             adjust_abi,
             own_memory,
+            detect_deadlock,
         }
     }
 
@@ -396,6 +402,7 @@ impl GeneratorRunner {
         toml_restorers: TomlRestorers,
         memory_hint: Box<[Option<usize>]>,
         own_memory: bool,
+        detect_deadlock: bool,
         stack_options: args::StackOptions,
         validate: bool,
     ) -> eyre::Result<Self> {
@@ -472,6 +479,7 @@ impl GeneratorRunner {
                 wrap_unreachable_targets: std::collections::HashSet::new(),
                 main_void_synthesized_targets: None,
                 own_memory,
+                detect_deadlock,
                 stack_config,
                 validate,
             },

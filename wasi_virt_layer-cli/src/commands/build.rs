@@ -56,6 +56,7 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         &vfs_build_opts,
         target_vfs_build_opts,
         parsed_args.own_memory,
+        parsed_args.detect_deadlock,
         parsed_args.stack_options.clone(),
         parsed_args.validate,
     )?;
