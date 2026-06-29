@@ -713,6 +713,11 @@ impl GeneratorRunner {
                         target_name.to_string(),
                         is_opted_in,
                     )));
+                    pipeline.add_pass(Box::new(
+                        crate::wasm_stream::passes::deadlock_thread_id::DeadlockThreadIdPreTargetStreamPass::new(
+                            _cloned_ctx.detect_deadlock,
+                        ),
+                    ));
 
                     if _cloned_ctx.target_memory_type == TargetMemoryType::Single {
                         pipeline.add_pass(Box::new(ExportStackPreTargetStreamPass::new(
