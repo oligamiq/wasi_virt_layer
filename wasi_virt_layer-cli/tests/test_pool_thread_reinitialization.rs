@@ -75,6 +75,35 @@ const POOL_REUSED_START_TARGET_WAT: &str = r#"
         (drop (memory.atomic.notify (i32.const 0) (i32.const 1)))))))
 "#;
 
+const POOL_REUSED_DIRECT_EXPORT_TARGET_WAT: &str = r#"
+(module
+  (memory (export "memory") 1 1 shared)
+
+  ;; $marker: worker-local state cleared by the target start section/thread init
+  (global $marker (mut i32) (i32.const 0))
+
+  (func $start
+    (global.set $marker (i32.const 0)))
+  (start $start)
+
+  (func $_start (export "_start")
+    (global.set $marker (i32.const 1)))
+
+  (func $__main_void (export "__main_void") (result i32)
+    (if
+      (i32.ne
+        (global.get $marker)
+        (i32.const 0))
+      (then unreachable))
+    (i32.const 0))
+
+  (func $wasi_thread_start (export "wasi_thread_start")
+    (param $thread_id i32)
+    (param $start_arg i32)
+    (global.set $marker (local.get $start_arg)))
+)
+"#;
+
 #[test]
 fn test_pool_reused_thread_runs_start_section_for_each_logical_thread() -> color_eyre::Result<()> {
     color_eyre::install().ok();
@@ -110,3 +139,42 @@ fn test_pool_reused_thread_runs_start_section_for_each_logical_thread() -> color
     Ok(())
 }
 
+#[test]
+fn test_direct_export_reinitializes_target_on_non_main_worker() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let target_dir = tempfile::tempdir()?;
+    let target_path = target_dir
+        .path()
+        .join("pool_reused_direct_export_target.wasm");
+    std::fs::write(
+        &target_path,
+        wat::parse_str(POOL_REUSED_DIRECT_EXPORT_TARGET_WAT)?,
+    )?;
+    let target_path = target_path
+        .to_str()
+        .ok_or_else(|| color_eyre::eyre::eyre!("target path is not UTF-8"))?;
+
+    let dir = run_wasi_virt_layer(
+        Some("pool_reused_direct_export_vfs"),
+        Some(target_path),
+        None,
+        true,
+        OutDir::Random,
+        false,
+        &["--validate"],
+        None,
+    )?;
+
+    let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
+    println!("Captured stdout:\n{}", stdout);
+
+    assert!(stdout.contains("Starting non-main direct-export test"));
+    assert!(stdout.contains("Non-main direct-export test passed"));
+
+    Ok(())
+}

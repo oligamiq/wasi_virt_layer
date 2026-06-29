@@ -467,6 +467,8 @@ mod export {
 
         impl Guest for Exporter {
             fn wasi_thread_start(thread_id: i32, data_ptr: i32) {
+                crate::thread::mark_wasi_thread_started();
+
                 unsafe extern "C" {
                     pub fn wasi_thread_start(thread_id: i32, ptr: i32);
                 }

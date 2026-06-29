@@ -10,31 +10,57 @@ use std::{sync::Arc, thread::JoinHandle};
 use crate::{__private::wasip1, memory::WasmAccess};
 use crate::{memory::WasmAccessName, utils::UnsafeOnceCell};
 
-/// Per-worker flag tracking whether this worker thread has already
-/// processed a `Run` message. Used to detect thread pool worker reuse
-/// and trigger Wasm start-section reinitialization.
 thread_local! {
+    // Tracks reusable worker state for direct and pooled thread reinitialization.
     static WORKER_HAS_RUN_BEFORE: Cell<bool> = const { Cell::new(false) };
+    static IS_VIRTUAL_THREAD_POOL_WORKER: Cell<bool> = const { Cell::new(false) };
+    static IS_WASI_STARTED_THREAD: Cell<bool> = const { Cell::new(false) };
 }
 
-/// Extracts the numeric ID from std::thread::ThreadId since as_u64() is unstable.
+/// Returns true when the current thread is a reusable [`VirtualThreadPool`] worker.
+pub fn is_virtual_thread_pool_worker() -> bool {
+    IS_VIRTUAL_THREAD_POOL_WORKER.with(Cell::get)
+}
+
+/// Returns true when a direct target export should refresh thread-local target state.
+pub fn should_reinitialize_direct_export_thread() -> bool {
+    is_virtual_thread_pool_worker()
+        || IS_WASI_STARTED_THREAD.with(Cell::get)
+        || current_thread_debug_id().is_some_and(|id| id != 1)
+}
+
+/// Marks the current thread as having entered through the WASI thread-start entrypoint.
+pub fn mark_wasi_thread_started() {
+    IS_WASI_STARTED_THREAD.with(|flag| flag.set(true));
+}
+
+fn mark_virtual_thread_pool_worker() {
+    IS_VIRTUAL_THREAD_POOL_WORKER.with(|flag| flag.set(true));
+}
+
+static NEXT_HOST_THREAD_ID: AtomicU32 = AtomicU32::new(1);
+
 fn get_host_thread_id() -> u32 {
+    HOST_THREAD_ID.with(|&id| id)
+}
+
+fn current_thread_debug_id() -> Option<u32> {
     let id_str = format!("{:?}", std::thread::current().id());
     id_str
         .trim_start_matches("ThreadId(")
         .trim_end_matches(')')
         .parse()
-        .unwrap_or(1)
+        .ok()
 }
 
 thread_local! {
-    static HOST_THREAD_ID: u32 = get_host_thread_id();
+    static HOST_THREAD_ID: u32 = NEXT_HOST_THREAD_ID.fetch_add(1, Ordering::Relaxed);
     static THREAD_LOCAL_COUNTER: Cell<u32> = Cell::new(0);
 }
 
 /// Generates a unique thread ID using the host thread ID and a TLS counter.
 fn next_thread_id() -> u32 {
-    let host_id = HOST_THREAD_ID.with(|&id| id);
+    let host_id = get_host_thread_id();
     let counter = THREAD_LOCAL_COUNTER.with(|c| {
         let val = c.get();
         // Rotate (wrap around) when it reaches 100,000
@@ -257,6 +283,14 @@ impl JoinPoolHandle {
     }
 }
 
+struct InFlightRunGuard(Arc<AtomicUsize>);
+
+impl Drop for InFlightRunGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
 /// Options for waiting for threads in a thread pool to join.
 pub enum WaitThreadJoin {
     /// No waiting required.
@@ -302,6 +336,7 @@ enum VirtualThreadPoolMessage<ThreadAccessor: ThreadAccess> {
         ThreadRunner,
         ThreadAccessorWrapper<ThreadAccessor>,
         NonZero<u32>,
+        InFlightRunGuard,
     ),
     AddThread(usize, std::sync::mpsc::SyncSender<()>, JoinPoolHandle),
     Terminate(flume::Sender<()>, JoinPoolHandle),
@@ -310,7 +345,7 @@ enum VirtualThreadPoolMessage<ThreadAccessor: ThreadAccess> {
 impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
     pub fn use_(self, queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>) -> bool {
         match self {
-            VirtualThreadPoolMessage::Run(runner, accessor_wrapper, thread_id) => {
+            VirtualThreadPoolMessage::Run(runner, accessor_wrapper, thread_id, in_flight_guard) => {
                 let accessor = accessor_wrapper.as_accessor();
                 // Track whether this worker thread has already processed a Run
                 // message. On the first Run, the Wasm start section was already
@@ -322,6 +357,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
                     }
                     flag.set(true);
                 });
+                let _in_flight_guard = in_flight_guard;
                 accessor.call_wasi_thread_start(runner, Some(thread_id));
                 #[cfg(feature = "trace-thread")]
                 println!("[] Thread pool worker finished Run for thread {thread_id}");
@@ -353,7 +389,11 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
     }
 
     fn listen(queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>) {
-        while queue.recv().unwrap().use_(queue) {}
+        while let Ok(message) = queue.recv() {
+            if !message.use_(queue) {
+                break;
+            }
+        }
     }
 
     fn listen_with(
@@ -374,6 +414,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
         println!("Creating {count} threads in the thread pool...");
         core::iter::repeat_n(queue.clone(), count).map(move |queue| {
             let thread = root_spawn(std::thread::Builder::new(), move || {
+                mark_virtual_thread_pool_worker();
                 Self::listen(&queue);
             })
             .unwrap();
@@ -392,6 +433,7 @@ pub struct VirtualThreadPool<
     queue: parking_lot::Mutex<Option<flume::Sender<VirtualThreadPoolMessage<ThreadAccessor>>>>,
     queue_receiver: UnsafeOnceCell<flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>>,
     kept_workers_pool: UnsafeOnceCell<JoinPoolHandle>,
+    in_flight_runs: UnsafeOnceCell<Arc<AtomicUsize>>,
     thread_id_generator: Generator,
 }
 
@@ -412,6 +454,7 @@ impl<ThreadAccessor: ThreadAccess>
         VirtualThreadPool {
             max_threads: AtomicUsize::new(max_threads),
             kept_workers_pool: UnsafeOnceCell::new(),
+            in_flight_runs: UnsafeOnceCell::new(),
             queue: parking_lot::Mutex::new(None),
             queue_receiver: UnsafeOnceCell::new(),
             read_kept_workers_pool_size: AtomicUsize::new(0),
@@ -431,6 +474,7 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
         VirtualThreadPool {
             max_threads: AtomicUsize::new(max_threads),
             kept_workers_pool: UnsafeOnceCell::new(),
+            in_flight_runs: UnsafeOnceCell::new(),
             queue: parking_lot::Mutex::new(None),
             queue_receiver: UnsafeOnceCell::new(),
             read_kept_workers_pool_size: AtomicUsize::new(0),
@@ -442,6 +486,11 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
     /// It is unsafe because it must only be called once, and the caller must ensure that no threads are using the pool until initialization is complete.
     pub unsafe fn init(&self) {
         if unsafe { self.kept_workers_pool.init_default().is_ok() } {
+            unsafe {
+                self.in_flight_runs
+                    .init(Arc::new(AtomicUsize::new(0)))
+                    .unwrap()
+            };
             let (sender, receiver) = flume::unbounded();
             *self.queue.lock() = Some(sender);
             unsafe { self.queue_receiver.init(receiver).unwrap() };
@@ -562,6 +611,7 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
             let queue_receiver = self.queue_receiver.clone();
 
             let handle = root_spawn(std::thread::Builder::new(), move || {
+                mark_virtual_thread_pool_worker();
                 #[cfg(feature = "trace-thread")]
                 println!("[] Thread pool addition thread started.");
 
@@ -599,21 +649,36 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
     /// `wasi_thread_start` to reinitialize global constructors and TLS state.
     /// Reuse detection is per-worker via a `thread_local` flag.
     pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
+        let in_flight_runs = unsafe { self.in_flight_runs.get() }.clone();
         let need_expansion = {
             let mut sender_lock = self.queue.lock();
             let sender = sender_lock
                 .as_mut()
                 .expect("Thread pool queue not initialized");
+            let in_flight_after_enqueue = in_flight_runs.fetch_add(1, Ordering::SeqCst) + 1;
+            let in_flight_guard = InFlightRunGuard(in_flight_runs);
 
             sender
                 .send(VirtualThreadPoolMessage::Run(
                     runner,
                     ThreadAccessorWrapper::new(accessor),
                     thread_id,
+                    in_flight_guard,
                 ))
                 .unwrap();
 
-            sender.len() > 0
+            // Keep one spare worker once all target-capacity workers are occupied.
+            // Some Wasm workloads synchronously spawn/join from worker threads; by
+            // then the queue can be empty because the parent work was already consumed.
+            let queue_len = sender.len();
+            let max_threads = self.max_threads.load(Ordering::SeqCst);
+            let need_expansion = queue_len > 0 || in_flight_after_enqueue >= max_threads;
+            #[cfg(feature = "trace-thread")]
+            println!(
+                "[] VTP enqueue thread {thread_id}: queue_len={queue_len} in_flight={in_flight_after_enqueue} max={max_threads} current={} need_expansion={need_expansion}",
+                self.read_kept_workers_pool_size.load(Ordering::SeqCst)
+            );
+            need_expansion
         };
 
         if need_expansion {
@@ -666,6 +731,11 @@ mod tests {
         fn from_usize(_v: usize) -> Self {
             Self
         }
+    }
+
+    fn test_runner(f: impl FnOnce() + 'static) -> ThreadRunner {
+        let boxed: Box<dyn FnOnce()> = Box::new(f);
+        ThreadRunner::__new(Box::into_raw(Box::new(boxed)))
     }
 
     #[test]
@@ -762,10 +832,8 @@ mod tests {
                 OutOfRangeThreadIdGenerator,
             )
         };
-        let mut runner = Box::new(|| {}) as Box<dyn FnOnce()>;
-
         assert!(
-            pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut runner))
+            pool.new_thread(TestThreadAccessor, test_runner(|| {}))
                 .is_none()
         );
     }
@@ -780,11 +848,11 @@ mod tests {
         let ran = std::sync::Arc::new(AtomicBool::new(false));
         let ran_clone = ran.clone();
 
-        let mut closure: Box<dyn FnOnce()> = Box::new(move || {
+        let runner = test_runner(move || {
             ran_clone.store(true, std::sync::atomic::Ordering::SeqCst);
         });
 
-        let result = pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut closure));
+        let result = pool.new_thread(TestThreadAccessor, runner);
         assert!(result.is_some());
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -808,10 +876,10 @@ mod tests {
         // First task: take the only worker and block it on a barrier.
         let barrier = std::sync::Arc::new(Barrier::new(2));
         let barrier_clone = barrier.clone();
-        let mut closure1: Box<dyn FnOnce()> = Box::new(move || {
+        let runner1 = test_runner(move || {
             barrier_clone.wait();
         });
-        let result1 = pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut closure1));
+        let result1 = pool.new_thread(TestThreadAccessor, runner1);
         assert!(result1.is_some());
 
         // Wait for the worker to pick up the task and block.
@@ -821,11 +889,11 @@ mod tests {
         let ran = std::sync::Arc::new(AtomicBool::new(false));
         let ran_clone = ran.clone();
         let barrier2 = barrier.clone();
-        let mut closure2: Box<dyn FnOnce()> = Box::new(move || {
+        let runner2 = test_runner(move || {
             ran_clone.store(true, std::sync::atomic::Ordering::SeqCst);
             barrier2.wait();
         });
-        let result2 = pool.new_thread(TestThreadAccessor, ThreadRunner::__new(&mut closure2));
+        let result2 = pool.new_thread(TestThreadAccessor, runner2);
         assert!(result2.is_some());
 
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -837,6 +905,48 @@ mod tests {
             ran.load(std::sync::atomic::Ordering::SeqCst),
             "pool did not expand for the second task while the only worker was blocked"
         );
+    }
+
+    #[test]
+    fn virtual_thread_pool_expands_when_workers_are_busy_without_queue_backlog() {
+        use std::sync::mpsc;
+
+        let pool = unsafe { VirtualThreadPool::<TestThreadAccessor>::new_const(2) };
+        unsafe { pool.init_with_capacity_and_wait(2) };
+
+        let (started_tx, started_rx) = mpsc::sync_channel(2);
+        let (release_tx, release_rx) = mpsc::sync_channel::<()>(2);
+        let release_rx = std::sync::Arc::new(std::sync::Mutex::new(release_rx));
+
+        for task_id in 0..2 {
+            let started_tx = started_tx.clone();
+            let release_rx = release_rx.clone();
+            let runner = test_runner(move || {
+                started_tx.send(task_id).unwrap();
+                release_rx.lock().unwrap().recv().unwrap();
+            });
+
+            let result = pool.new_thread(TestThreadAccessor, runner);
+            assert!(result.is_some());
+
+            started_rx
+                .recv_timeout(std::time::Duration::from_secs(5))
+                .expect("worker did not start blocking task");
+
+            assert_eq!(
+                pool.queued_task_count(),
+                Some(0),
+                "task should be consumed immediately, leaving no queue backlog"
+            );
+        }
+
+        assert!(
+            pool.capacity() > 2,
+            "pool should keep spare capacity when all existing workers are busy"
+        );
+
+        release_tx.send(()).unwrap();
+        release_tx.send(()).unwrap();
     }
 }
 

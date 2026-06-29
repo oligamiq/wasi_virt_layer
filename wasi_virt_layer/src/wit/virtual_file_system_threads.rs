@@ -1600,6 +1600,8 @@ pub mod exports {
                     unsafe {
                         #[cfg(target_arch = "wasm32")]
                         _rt::run_ctors_once();
+                        #[cfg(feature = "threads")]
+                        crate::thread::mark_wasi_thread_started();
                         {
                             T_::wasi_thread_start(arg0, arg1)
                         };

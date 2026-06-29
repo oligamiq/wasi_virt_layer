@@ -431,7 +431,22 @@ macro_rules! import_wasm {
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
-                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() }
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe {
+                        [<__wasip1_vfs_ $name ___main_void>]()
+                    }
                 }
 
                 #[inline(always)]
@@ -449,6 +464,19 @@ macro_rules! import_wasm {
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
 
                     #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name __start>]() };
@@ -505,7 +533,22 @@ macro_rules! import_wasm {
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
-                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() }
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe {
+                        [<__wasip1_vfs_ $name ___main_void>]()
+                    }
                 }
 
                 #[inline(always)]
@@ -521,6 +564,19 @@ macro_rules! import_wasm {
                 fn _start_raw() {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
 
                     #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name __start>]() };
@@ -761,7 +817,7 @@ impl<T: WasmAccessNameDynCompatible + ?Sized> WasmAccessNameDynCompatible for &T
 /// Holds the single-memory read lock while a directed pointer is in use.
 #[cfg(not(feature = "multi_memory"))]
 pub struct MemoryDirectorGuard {
-    #[cfg(feature = "threads")]
+    #[cfg(all(feature = "threads", target_arch = "wasm32"))]
     _read: crate::shared_global::ReadGuard,
 }
 
@@ -771,7 +827,7 @@ impl MemoryDirectorGuard {
     #[inline(always)]
     pub fn acquire() -> Self {
         Self {
-            #[cfg(feature = "threads")]
+            #[cfg(all(feature = "threads", target_arch = "wasm32"))]
             _read: crate::shared_global::lock_read(),
         }
     }

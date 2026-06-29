@@ -405,7 +405,9 @@ pub mod thread {
     pub use crate::wasi::thread::__wasip1_vfs_is_root_spawn;
     pub use crate::wasi::thread::{
         DirectThreadPool, ReservedRangeThreadIdGenerator, ThreadAccess, ThreadIdGenerator,
-        ThreadRunner, VirtualThread, VirtualThreadPool, root_spawn, root_spawn_unchecked,
+        ThreadRunner, VirtualThread, VirtualThreadPool, is_virtual_thread_pool_worker,
+        mark_wasi_thread_started, root_spawn, root_spawn_unchecked,
+        should_reinitialize_direct_export_thread,
     };
 }
 

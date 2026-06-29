@@ -1677,6 +1677,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "pool_reused_direct_export_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "pool_reused_start_vfs"
 version = "0.0.1"
 dependencies = [
