@@ -16,13 +16,91 @@ use crate::wasm_stream::translator::{
 pub struct AtomicPatchStreamPass {
     pub threads: bool,
     pub target_index: u32,
+    pub detect_deadlock: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AtomicPatchStreamPass;
+    use crate::wasm_stream::passes::deadlock_thread_id::DeadlockThreadIdPreTargetStreamPass;
+    use crate::wasm_stream::pipeline::StreamPass;
+
+    fn import_func_type(bytes: &[u8], import_name: &str) -> Option<u32> {
+        for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+            if let Ok(wasmparser::Payload::ImportSection(section)) = payload {
+                for group in section.into_iter().flatten() {
+                    for import in group.into_iter().flatten() {
+                        let (_, import) = import;
+                        if import.name == import_name {
+                            if let wasmparser::TypeRef::Func(type_idx) = import.ty {
+                                return Some(type_idx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn func_param_count(bytes: &[u8], type_idx: u32) -> Option<usize> {
+        let mut current = 0;
+        for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+            if let Ok(wasmparser::Payload::TypeSection(section)) = payload {
+                for ty in section.into_iter().flatten() {
+                    for sub_ty in ty.into_types() {
+                        if current == type_idx {
+                            if let wasmparser::CompositeInnerType::Func(func) =
+                                sub_ty.composite_type.inner
+                            {
+                                return Some(func.params().len());
+                            }
+                        }
+                        current += 1;
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn detector_enabled_wait32_import_includes_thread_id_param() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (memory 1 1 shared)
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start
+                (drop
+                  (memory.atomic.wait32 align=4
+                    (i32.const 0)
+                    (i32.const 0)
+                    (i64.const -1))))
+              (export "memory" (memory 0))
+              (export "wasi_thread_start" (func $wasi_thread_start))
+              (export "_start" (func $_start)))
+            "#,
+        )
+        .unwrap();
+        let with_thread_id = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+        let output = AtomicPatchStreamPass::new(true, 3, true)
+            .run(&with_thread_id)
+            .unwrap();
+
+        let type_idx = import_func_type(&output, "__vfs_atomic_wait32").unwrap();
+        assert_eq!(func_param_count(&output, type_idx), Some(5));
+    }
 }
 
 impl AtomicPatchStreamPass {
-    pub fn new(threads: bool, target_index: u32) -> Self {
+    pub fn new(threads: bool, target_index: u32, detect_deadlock: bool) -> Self {
         Self {
             threads,
             target_index,
+            detect_deadlock,
         }
     }
 }
@@ -56,6 +134,7 @@ impl StreamPass for AtomicPatchStreamPass {
         let mut func_types = Vec::new();
         let mut types = Vec::new();
         let mut import_func_count = 0;
+        let mut thread_id_global = None;
 
         for payload in Parser::new(0).parse_all(input_wasm) {
             match payload? {
@@ -106,6 +185,18 @@ impl StreamPass for AtomicPatchStreamPass {
                         }
                     }
                 }
+                Payload::CustomSection(section) => {
+                    if section.name()
+                        == crate::wasm_stream::passes::deadlock_thread_id::THREAD_ID_GLOBAL_SECTION
+                    {
+                        let data = section.data();
+                        if data.len() == 4 {
+                            thread_id_global = Some(u32::from_le_bytes(
+                                data.try_into().expect("metadata length checked"),
+                            ));
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -113,6 +204,16 @@ impl StreamPass for AtomicPatchStreamPass {
         if wait32_offsets.is_empty() && wait64_offsets.is_empty() && notify_offsets.is_empty() {
             return Ok(input_wasm.to_vec());
         }
+
+        let thread_id_global = if self.detect_deadlock {
+            Some(thread_id_global.ok_or_else(|| {
+                eyre::eyre!(
+                    "deadlock detection requires DeadlockThreadIdPreTargetStreamPass before AtomicPatchStreamPass"
+                )
+            })?)
+        } else {
+            None
+        };
 
         let mut module = Module::new();
 
@@ -175,10 +276,18 @@ impl StreamPass for AtomicPatchStreamPass {
         let mut new_imports_count = 0;
 
         if !wait32_offsets.is_empty() {
-            wait32_import_ty = Some(get_or_add_type(
-                &[ValType::I32, ValType::I32, ValType::I32, ValType::I64],
-                &[ValType::I32],
-            ));
+            let wait32_import_params: &[ValType] = if self.detect_deadlock {
+                &[
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I64,
+                ]
+            } else {
+                &[ValType::I32, ValType::I32, ValType::I32, ValType::I64]
+            };
+            wait32_import_ty = Some(get_or_add_type(wait32_import_params, &[ValType::I32]));
             wait32_wrap_ty = Some(get_or_add_type(
                 &[ValType::I32, ValType::I32, ValType::I64],
                 &[ValType::I32],
@@ -186,10 +295,18 @@ impl StreamPass for AtomicPatchStreamPass {
             new_imports_count += 1;
         }
         if !wait64_offsets.is_empty() {
-            wait64_import_ty = Some(get_or_add_type(
-                &[ValType::I32, ValType::I32, ValType::I64, ValType::I64],
-                &[ValType::I32],
-            ));
+            let wait64_import_params: &[ValType] = if self.detect_deadlock {
+                &[
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I64,
+                    ValType::I64,
+                ]
+            } else {
+                &[ValType::I32, ValType::I32, ValType::I64, ValType::I64]
+            };
+            wait64_import_ty = Some(get_or_add_type(wait64_import_params, &[ValType::I32]));
             wait64_wrap_ty = Some(get_or_add_type(
                 &[ValType::I32, ValType::I64, ValType::I64],
                 &[ValType::I32],
@@ -197,10 +314,12 @@ impl StreamPass for AtomicPatchStreamPass {
             new_imports_count += 1;
         }
         if !notify_offsets.is_empty() {
-            notify_import_ty = Some(get_or_add_type(
-                &[ValType::I32, ValType::I32, ValType::I32],
-                &[ValType::I32],
-            ));
+            let notify_import_params: &[ValType] = if self.detect_deadlock {
+                &[ValType::I32, ValType::I32, ValType::I32, ValType::I32]
+            } else {
+                &[ValType::I32, ValType::I32, ValType::I32]
+            };
+            notify_import_ty = Some(get_or_add_type(notify_import_params, &[ValType::I32]));
             notify_wrap_ty = Some(get_or_add_type(
                 &[ValType::I32, ValType::I32],
                 &[ValType::I32],
@@ -214,6 +333,7 @@ impl StreamPass for AtomicPatchStreamPass {
         let mut wait32_import_idx = None;
         let mut wait64_import_idx = None;
         let mut notify_import_idx = None;
+        let mut imports_emitted = false;
 
         let mut wait32_map = HashMap::new();
         let mut wait64_map = HashMap::new();
@@ -277,8 +397,41 @@ impl StreamPass for AtomicPatchStreamPass {
                         func_count += 1;
                     }
                     module.section(&import_sec);
+                    imports_emitted = true;
                 }
                 Payload::FunctionSection(s) => {
+                    if !imports_emitted {
+                        let mut import_sec = ImportSection::new();
+                        if let Some(ty) = wait32_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_wait32",
+                                EntityType::Function(ty),
+                            );
+                            wait32_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        if let Some(ty) = wait64_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_wait64",
+                                EntityType::Function(ty),
+                            );
+                            wait64_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        if let Some(ty) = notify_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_notify",
+                                EntityType::Function(ty),
+                            );
+                            notify_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        module.section(&import_sec);
+                        imports_emitted = true;
+                    }
                     let mut func_sec = FunctionSection::new();
                     for f in s.clone() {
                         func_sec.function(f?);
@@ -510,6 +663,9 @@ impl StreamPass for AtomicPatchStreamPass {
 
                     for offset in &wait32_offsets {
                         let mut func = Function::new(Vec::new());
+                        if let Some(global) = thread_id_global {
+                            func.instruction(&Instruction::GlobalGet(global));
+                        }
                         func.instruction(&Instruction::I32Const(target_id));
                         func.instruction(&Instruction::LocalGet(0));
                         if *offset > 0 {
@@ -524,6 +680,9 @@ impl StreamPass for AtomicPatchStreamPass {
                     }
                     for offset in &wait64_offsets {
                         let mut func = Function::new(Vec::new());
+                        if let Some(global) = thread_id_global {
+                            func.instruction(&Instruction::GlobalGet(global));
+                        }
                         func.instruction(&Instruction::I32Const(target_id));
                         func.instruction(&Instruction::LocalGet(0));
                         if *offset > 0 {
@@ -538,6 +697,9 @@ impl StreamPass for AtomicPatchStreamPass {
                     }
                     for offset in &notify_offsets {
                         let mut func = Function::new(Vec::new());
+                        if let Some(global) = thread_id_global {
+                            func.instruction(&Instruction::GlobalGet(global));
+                        }
                         func.instruction(&Instruction::I32Const(target_id));
                         func.instruction(&Instruction::LocalGet(0));
                         if *offset > 0 {

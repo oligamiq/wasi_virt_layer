@@ -1422,6 +1422,7 @@ pub mod vfs_atomic {
         LazyLock::new(DashMap::default);
 
     #[unsafe(no_mangle)]
+    #[cfg(not(feature = "detect-deadlock"))]
     pub unsafe extern "C" fn __vfs_atomic_wait32(
         wasm_id: u32,
         relative_addr: u32,
@@ -1445,6 +1446,33 @@ pub mod vfs_atomic {
     }
 
     #[unsafe(no_mangle)]
+    #[cfg(feature = "detect-deadlock")]
+    pub unsafe extern "C" fn __vfs_atomic_wait32(
+        thread_id: i32,
+        wasm_id: u32,
+        relative_addr: u32,
+        expected: u32,
+        timeout: i64,
+    ) -> i32 {
+        let _ = thread_id;
+        let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        let (ptr, vfs_expected) = {
+            let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
+            unsafe {
+                let val = __wvl_atomic_load32_target(wasm_id, relative_addr as *const u32);
+                if val != expected {
+                    return 1; // not-equal
+                }
+                let ptr = &**entry.value() as *const u32;
+                let vfs_expected = *ptr;
+                (ptr, vfs_expected)
+            }
+        };
+        unsafe { __wvl_atomic_wait32_vfs(ptr, vfs_expected, timeout) }
+    }
+
+    #[unsafe(no_mangle)]
+    #[cfg(not(feature = "detect-deadlock"))]
     pub unsafe extern "C" fn __vfs_atomic_wait64(
         wasm_id: u32,
         relative_addr: u32,
@@ -1468,11 +1496,57 @@ pub mod vfs_atomic {
     }
 
     #[unsafe(no_mangle)]
+    #[cfg(feature = "detect-deadlock")]
+    pub unsafe extern "C" fn __vfs_atomic_wait64(
+        thread_id: i32,
+        wasm_id: u32,
+        relative_addr: u32,
+        expected: u64,
+        timeout: i64,
+    ) -> i32 {
+        let _ = thread_id;
+        let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        let (ptr, vfs_expected) = {
+            let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
+            unsafe {
+                let val = __wvl_atomic_load64_target(wasm_id, relative_addr as *const u64);
+                if val != expected {
+                    return 1; // not-equal
+                }
+                let ptr = &**entry.value() as *const u32;
+                let vfs_expected = *ptr;
+                (ptr, vfs_expected)
+            }
+        };
+        unsafe { __wvl_atomic_wait32_vfs(ptr, vfs_expected, timeout) }
+    }
+
+    #[unsafe(no_mangle)]
+    #[cfg(not(feature = "detect-deadlock"))]
     pub unsafe extern "C" fn __vfs_atomic_notify(
         wasm_id: u32,
         relative_addr: u32,
         count: u32,
     ) -> i32 {
+        let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        let ptr = {
+            let mut entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
+            let val_mut = entry.value_mut().as_mut();
+            *val_mut = val_mut.wrapping_add(1);
+            val_mut as *const u32
+        };
+        unsafe { __wvl_atomic_notify_vfs(ptr, count) }
+    }
+
+    #[unsafe(no_mangle)]
+    #[cfg(feature = "detect-deadlock")]
+    pub unsafe extern "C" fn __vfs_atomic_notify(
+        thread_id: i32,
+        wasm_id: u32,
+        relative_addr: u32,
+        count: u32,
+    ) -> i32 {
+        let _ = thread_id;
         let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
         let ptr = {
             let mut entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));

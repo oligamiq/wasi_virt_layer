@@ -758,6 +758,7 @@ impl GeneratorRunner {
                     pipeline.add_pass(Box::new(AtomicPatchStreamPass::new(
                         _cloned_ctx.threads,
                         i as u32,
+                        _cloned_ctx.detect_deadlock,
                     )));
 
                     let check_pass = crate::wasm_stream::pipeline::ParallelCheckStreamPass::new(
