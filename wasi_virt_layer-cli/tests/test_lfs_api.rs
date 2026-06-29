@@ -25,4 +25,3 @@ fn test_lfs_api_operations() -> color_eyre::Result<()> {
 
     Ok(())
 }
-

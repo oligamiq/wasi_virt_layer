@@ -1,7 +1,6 @@
 pub mod utils;
 use utils::*;
 
-
 const ATOMIC_WAIT_RESET_TARGET_WAT: &str = r#"
 (module
   (import "env" "__wasip1_vfs_wasi_thread_spawn_wrapper"

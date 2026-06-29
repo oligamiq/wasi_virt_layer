@@ -104,7 +104,6 @@ fn build_and_validate_dev(
     Ok(())
 }
 
-
 // ── Component validation tests ────────────────────────────────────────────
 
 #[test]

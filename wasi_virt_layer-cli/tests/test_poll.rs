@@ -1,9 +1,6 @@
 pub mod utils;
 use utils::*;
 
-
-
-
 #[test]
 fn test_wait_poll() -> color_eyre::Result<()> {
     color_eyre::install().ok();

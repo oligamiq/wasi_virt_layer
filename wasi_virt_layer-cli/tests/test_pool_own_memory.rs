@@ -38,4 +38,3 @@ fn test_pool_own_memory() -> color_eyre::Result<()> {
         }
     }
 }
-

@@ -64,4 +64,3 @@ fn test_virtual_thread_pool_nested_spawn_starvation() -> color_eyre::Result<()> 
     assert!(stdout.contains("Nested spawn VirtualThreadPool test completed."));
     Ok(())
 }
-

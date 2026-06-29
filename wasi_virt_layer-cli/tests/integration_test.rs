@@ -22,10 +22,8 @@ use wasi_virt_layer_cli::unique_name::UniqueName;
 // threads + unstable_print_debug
 // multi_memory + threads + unstable_print_debug
 
-
 #[path = "common/test_own_memory.rs"]
 pub mod test_own_memory;
-
 
 /// Tests the build process with the `--out-dir` argument, ensuring output is directed to a specific temporary directory.
 #[test]

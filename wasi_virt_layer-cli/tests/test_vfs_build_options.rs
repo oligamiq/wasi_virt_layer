@@ -34,4 +34,3 @@ fn test_vfs_features_invalid() -> color_eyre::Result<()> {
 
     Ok(())
 }
-

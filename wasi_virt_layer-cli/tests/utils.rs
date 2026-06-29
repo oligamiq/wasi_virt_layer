@@ -10,8 +10,10 @@ use wait_timeout::ChildExt;
 pub const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
 
-static INSTALLED_TARGETS_STABLE: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
-static INSTALLED_TARGETS_NIGHTLY: std::sync::OnceLock<std::collections::HashSet<String>> = std::sync::OnceLock::new();
+static INSTALLED_TARGETS_STABLE: std::sync::OnceLock<std::collections::HashSet<String>> =
+    std::sync::OnceLock::new();
+static INSTALLED_TARGETS_NIGHTLY: std::sync::OnceLock<std::collections::HashSet<String>> =
+    std::sync::OnceLock::new();
 
 fn installed_targets(nightly: bool) -> &'static std::collections::HashSet<String> {
     let list = || {

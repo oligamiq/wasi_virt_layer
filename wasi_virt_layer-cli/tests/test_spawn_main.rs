@@ -70,4 +70,3 @@ fn test_spawn_main() -> color_eyre::Result<()> {
 
     Ok(())
 }
-

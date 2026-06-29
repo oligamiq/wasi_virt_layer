@@ -1,7 +1,5 @@
 use const_struct::const_struct;
-use wasi_virt_layer::{
-    file::*, plug_thread, poll::*, prelude::*, thread::VirtualThreadPool,
-};
+use wasi_virt_layer::{file::*, plug_thread, poll::*, prelude::*, thread::VirtualThreadPool};
 
 struct ComponentABI;
 

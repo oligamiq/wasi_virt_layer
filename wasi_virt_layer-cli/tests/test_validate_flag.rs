@@ -30,4 +30,3 @@ fn test_validate_flag_success() -> color_eyre::Result<()> {
 
     Ok(())
 }
-

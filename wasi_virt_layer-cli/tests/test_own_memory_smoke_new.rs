@@ -85,4 +85,3 @@ fn test_own_memory_smoke_auto_detects_exports_without_flag() -> color_eyre::Resu
 
     Ok(())
 }
-
