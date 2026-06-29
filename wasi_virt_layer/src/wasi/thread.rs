@@ -1180,6 +1180,41 @@ mod deadlock_detector {
                 .map(|state| state.generation)
                 .unwrap_or(0)
         }
+
+        /// Returns a deadlock diagnostic when all observed threads are waiting on unchanged locations.
+        pub(super) fn check_deadlock(&self) -> Option<String> {
+            if self.active_threads.is_empty() {
+                return None;
+            }
+
+            let mut waits = Vec::new();
+            for thread in self.active_threads.iter() {
+                let thread_id = *thread.key();
+                let wait = self.waits.get(&thread_id)?;
+                let current_generation = self.location_generation(wait.location);
+                if current_generation != wait.generation_at_wait {
+                    return None;
+                }
+                waits.push((thread_id, *wait));
+            }
+
+            if waits.is_empty() {
+                return None;
+            }
+
+            let mut diagnostic = String::from("deadlock detected");
+            for (thread_id, wait) in waits {
+                diagnostic.push_str(&format!(
+                    ": thread={thread_id} wasm={} addr={} width={} expected={} generation={}",
+                    wait.location.wasm_id,
+                    wait.location.relative_addr,
+                    wait.location.width,
+                    wait.expected_low,
+                    wait.generation_at_wait
+                ));
+            }
+            Some(diagnostic)
+        }
     }
 }
 
@@ -1403,6 +1438,27 @@ pub mod vfs_atomic {
     use std::hash::BuildHasherDefault;
     use std::sync::LazyLock;
 
+    #[cfg(feature = "detect-deadlock")]
+    use super::deadlock_detector::{AtomicLocation, DeadlockDetector};
+
+    #[cfg(feature = "detect-deadlock")]
+    const DEADLOCK_WAIT_SLICE_NS: i64 = 50_000_000;
+
+    #[cfg(feature = "detect-deadlock")]
+    static DEADLOCK_DETECTOR: LazyLock<DeadlockDetector> = LazyLock::new(DeadlockDetector::default);
+
+    #[cfg(feature = "detect-deadlock")]
+    struct WaitGuard {
+        thread_id: i32,
+    }
+
+    #[cfg(feature = "detect-deadlock")]
+    impl Drop for WaitGuard {
+        fn drop(&mut self) {
+            DEADLOCK_DETECTOR.record_wait_end(self.thread_id);
+        }
+    }
+
     #[link(wasm_import_module = "wvl_atomic")]
     unsafe extern "C" {
         // Wait and notify on VFS memory (Memory 0)
@@ -1468,7 +1524,14 @@ pub mod vfs_atomic {
                 (ptr, vfs_expected)
             }
         };
-        unsafe { __wvl_atomic_wait32_vfs(ptr, vfs_expected, timeout) }
+        let location = AtomicLocation {
+            wasm_id,
+            relative_addr,
+            width: 4,
+        };
+        DEADLOCK_DETECTOR.record_wait_start(thread_id, location, expected as u64);
+        let _guard = WaitGuard { thread_id };
+        wait_with_deadlock_detection(ptr, vfs_expected, timeout)
     }
 
     #[unsafe(no_mangle)]
@@ -1518,7 +1581,40 @@ pub mod vfs_atomic {
                 (ptr, vfs_expected)
             }
         };
-        unsafe { __wvl_atomic_wait32_vfs(ptr, vfs_expected, timeout) }
+        let location = AtomicLocation {
+            wasm_id,
+            relative_addr,
+            width: 8,
+        };
+        DEADLOCK_DETECTOR.record_wait_start(thread_id, location, expected);
+        let _guard = WaitGuard { thread_id };
+        wait_with_deadlock_detection(ptr, vfs_expected, timeout)
+    }
+
+    #[cfg(feature = "detect-deadlock")]
+    fn wait_with_deadlock_detection(ptr: *const u32, expected: u32, timeout: i64) -> i32 {
+        let infinite = timeout < 0;
+        let mut remaining = timeout;
+        loop {
+            let slice = if infinite {
+                DEADLOCK_WAIT_SLICE_NS
+            } else {
+                remaining.min(DEADLOCK_WAIT_SLICE_NS)
+            };
+            let result = unsafe { __wvl_atomic_wait32_vfs(ptr, expected, slice) };
+            if result != 2 {
+                return result;
+            }
+            if let Some(diagnostic) = DEADLOCK_DETECTOR.check_deadlock() {
+                panic!("{diagnostic}");
+            }
+            if !infinite {
+                remaining = remaining.saturating_sub(slice);
+                if remaining <= 0 {
+                    return 2;
+                }
+            }
+        }
     }
 
     #[unsafe(no_mangle)]
@@ -1548,6 +1644,22 @@ pub mod vfs_atomic {
     ) -> i32 {
         let _ = thread_id;
         let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        DEADLOCK_DETECTOR.record_location_change(
+            thread_id,
+            AtomicLocation {
+                wasm_id,
+                relative_addr,
+                width: 4,
+            },
+        );
+        DEADLOCK_DETECTOR.record_location_change(
+            thread_id,
+            AtomicLocation {
+                wasm_id,
+                relative_addr,
+                width: 8,
+            },
+        );
         let ptr = {
             let mut entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             let val_mut = entry.value_mut().as_mut();
@@ -1682,5 +1794,44 @@ mod deadlock_detector_tests {
         detector.record_location_change(7, location);
 
         assert_eq!(detector.location_generation(location), 1);
+    }
+
+    #[test]
+    fn closed_wait_component_reports_deadlock() {
+        let detector = DeadlockDetector::default();
+        let first = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+        let second = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 8,
+            width: 4,
+        };
+
+        detector.record_wait_start(7, first, 0);
+        detector.record_wait_start(8, second, 0);
+
+        let diagnostic = detector.check_deadlock().expect("deadlock diagnostic");
+
+        assert!(diagnostic.contains("deadlock detected"));
+        assert!(diagnostic.contains("thread=7"));
+        assert!(diagnostic.contains("thread=8"));
+    }
+
+    #[test]
+    fn location_generation_change_prevents_deadlock() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_wait_start(7, location, 0);
+        detector.record_location_change(0, location);
+
+        assert_eq!(detector.check_deadlock(), None);
     }
 }
