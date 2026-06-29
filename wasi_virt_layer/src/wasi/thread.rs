@@ -1078,6 +1078,111 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
     }
 }
 
+#[cfg(feature = "detect-deadlock")]
+mod deadlock_detector {
+    use dashmap::DashMap;
+
+    /// Atomic memory location observed by the deadlock detector.
+    #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+    pub(super) struct AtomicLocation {
+        pub(super) wasm_id: u32,
+        pub(super) relative_addr: u32,
+        pub(super) width: u8,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    struct ThreadWait {
+        location: AtomicLocation,
+        expected_low: u64,
+        generation_at_wait: u64,
+    }
+
+    #[derive(Clone, Copy, Debug, Default)]
+    struct LocationState {
+        generation: u64,
+        last_thread_id: i32,
+    }
+
+    /// Runtime wait graph state for atomic deadlock detection.
+    #[derive(Default)]
+    pub(super) struct DeadlockDetector {
+        active_threads: DashMap<i32, ()>,
+        waits: DashMap<i32, ThreadWait>,
+        locations: DashMap<AtomicLocation, LocationState>,
+    }
+
+    impl DeadlockDetector {
+        /// Marks a wasm thread as active for detector purposes.
+        pub(super) fn record_thread_enter(&self, thread_id: i32) {
+            self.active_threads.insert(thread_id, ());
+        }
+
+        /// Removes all detector state for a wasm thread.
+        pub(super) fn record_thread_exit(&self, thread_id: i32) {
+            self.waits.remove(&thread_id);
+            self.active_threads.remove(&thread_id);
+        }
+
+        /// Records that a wasm thread is blocked on an atomic location.
+        pub(super) fn record_wait_start(
+            &self,
+            thread_id: i32,
+            location: AtomicLocation,
+            expected_low: u64,
+        ) {
+            self.record_thread_enter(thread_id);
+            let generation_at_wait = self.location_generation(location);
+            self.waits.insert(
+                thread_id,
+                ThreadWait {
+                    location,
+                    expected_low,
+                    generation_at_wait,
+                },
+            );
+        }
+
+        /// Clears a wasm thread's current wait edge.
+        pub(super) fn record_wait_end(&self, thread_id: i32) {
+            self.waits.remove(&thread_id);
+        }
+
+        /// Records a write, RMW, CAS, or notify that can advance a location.
+        pub(super) fn record_location_change(&self, thread_id: i32, location: AtomicLocation) {
+            self.record_thread_enter(thread_id);
+            let mut entry = self.locations.entry(location).or_default();
+            let state = entry.value_mut();
+            state.generation = state.generation.wrapping_add(1);
+            state.last_thread_id = thread_id;
+        }
+
+        /// Returns the location a thread is currently waiting on.
+        pub(super) fn waiting_location(&self, thread_id: i32) -> Option<AtomicLocation> {
+            self.waits.get(&thread_id).map(|wait| wait.location)
+        }
+
+        /// Returns the expected low bits recorded for a waiting thread.
+        pub(super) fn waiting_expected_low(&self, thread_id: i32) -> Option<u64> {
+            self.waits.get(&thread_id).map(|wait| wait.expected_low)
+        }
+
+        /// Returns the location generation captured when a thread started waiting.
+        pub(super) fn waiting_generation_at_wait(&self, thread_id: i32) -> Option<u64> {
+            self.waits
+                .get(&thread_id)
+                .map(|wait| wait.generation_at_wait)
+        }
+
+        /// Returns the observed generation for an atomic location.
+        pub(super) fn location_generation(&self, location: AtomicLocation) -> u64 {
+            self.locations
+                .get(&location)
+                .map(|state| state.generation)
+                .unwrap_or(0)
+        }
+    }
+}
+
 /// Plugs the thread ecosystem by defining necessary accessor enums and hooks.
 /// Other plug_* macros can be split and used separately,
 /// but due to the internal branching logic of this macro,
@@ -1434,5 +1539,74 @@ pub mod vfs_atomic {
 
             WAIT_MAP.clear();
         }
+    }
+}
+
+#[cfg(test)]
+mod deadlock_detector_tests {
+    use super::deadlock_detector::{AtomicLocation, DeadlockDetector};
+
+    #[test]
+    fn detector_records_wait_edge() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_thread_enter(7);
+        detector.record_wait_start(7, location, 123);
+
+        assert_eq!(detector.waiting_location(7), Some(location));
+        assert_eq!(detector.waiting_expected_low(7), Some(123));
+        assert_eq!(detector.waiting_generation_at_wait(7), Some(0));
+    }
+
+    #[test]
+    fn detector_clears_wait_edge_on_end() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_thread_enter(7);
+        detector.record_wait_start(7, location, 0);
+        detector.record_wait_end(7);
+
+        assert_eq!(detector.waiting_location(7), None);
+    }
+
+    #[test]
+    fn detector_thread_exit_clears_wait_edge() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_thread_enter(7);
+        detector.record_wait_start(7, location, 0);
+        detector.record_thread_exit(7);
+
+        assert_eq!(detector.waiting_location(7), None);
+    }
+
+    #[test]
+    fn location_generation_increments_on_notify_or_write() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        assert_eq!(detector.location_generation(location), 0);
+        detector.record_location_change(7, location);
+
+        assert_eq!(detector.location_generation(location), 1);
     }
 }
