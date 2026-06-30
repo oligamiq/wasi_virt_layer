@@ -1669,6 +1669,24 @@ pub mod vfs_atomic {
         unsafe { __wvl_atomic_notify_vfs(ptr, count) }
     }
 
+    #[unsafe(no_mangle)]
+    #[cfg(feature = "detect-deadlock")]
+    pub unsafe extern "C" fn __vfs_atomic_observe_write(
+        thread_id: i32,
+        wasm_id: u32,
+        relative_addr: u32,
+        width: u32,
+    ) {
+        DEADLOCK_DETECTOR.record_location_change(
+            thread_id,
+            AtomicLocation {
+                wasm_id,
+                relative_addr,
+                width: width as u8,
+            },
+        );
+    }
+
     /// Resets the atomic-wait state for a single target, freeing its wait cells.
     ///
     /// Called from the generated `_reset` body. For each wait cell belonging to

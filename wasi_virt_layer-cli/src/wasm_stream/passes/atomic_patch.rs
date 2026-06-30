@@ -93,6 +93,72 @@ mod tests {
         let type_idx = import_func_type(&output, "__vfs_atomic_wait32").unwrap();
         assert_eq!(func_param_count(&output, type_idx), Some(5));
     }
+
+    #[test]
+    fn detector_enabled_atomic_store_imports_write_observer() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (memory 1 1 shared)
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start
+                (i32.atomic.store align=4
+                  (i32.const 0)
+                  (i32.const 1)))
+              (export "memory" (memory 0))
+              (export "wasi_thread_start" (func $wasi_thread_start))
+              (export "_start" (func $_start)))
+            "#,
+        )
+        .unwrap();
+        let with_thread_id = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+        let output = AtomicPatchStreamPass::new(true, 3, true)
+            .run(&with_thread_id)
+            .unwrap();
+
+        assert!(import_func_type(&output, "__vfs_atomic_observe_write").is_some());
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)
+            .unwrap();
+    }
+
+    #[test]
+    fn detector_enabled_atomic_rmw_and_cmpxchg_validate() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (memory 1 1 shared)
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start
+                (drop
+                  (i32.atomic.rmw.add align=4
+                    (i32.const 0)
+                    (i32.const 1)))
+                (drop
+                  (i64.atomic.rmw.cmpxchg align=8
+                    (i32.const 8)
+                    (i64.const 0)
+                    (i64.const 1))))
+              (export "memory" (memory 0))
+              (export "wasi_thread_start" (func $wasi_thread_start))
+              (export "_start" (func $_start)))
+            "#,
+        )
+        .unwrap();
+        let with_thread_id = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+        let output = AtomicPatchStreamPass::new(true, 3, true)
+            .run(&with_thread_id)
+            .unwrap();
+
+        assert!(import_func_type(&output, "__vfs_atomic_observe_write").is_some());
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)
+            .unwrap();
+    }
 }
 
 impl AtomicPatchStreamPass {
@@ -121,6 +187,129 @@ impl Rebind for FuncRebinder {
     }
 }
 
+#[derive(Clone, Copy)]
+enum AtomicWriteShape {
+    StoreI32 { width: i32 },
+    StoreI64 { width: i32 },
+    RmwI32 { width: i32 },
+    RmwI64 { width: i32 },
+    CmpxchgI32 { width: i32 },
+    CmpxchgI64 { width: i32 },
+}
+
+fn atomic_write_shape(
+    op: &wasmparser::Operator<'_>,
+) -> Option<(wasmparser::MemArg, AtomicWriteShape)> {
+    use wasmparser::Operator::*;
+    match op {
+        I32AtomicStore { memarg } => Some((*memarg, AtomicWriteShape::StoreI32 { width: 4 })),
+        I64AtomicStore { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 8 })),
+        I32AtomicStore8 { memarg } => Some((*memarg, AtomicWriteShape::StoreI32 { width: 1 })),
+        I32AtomicStore16 { memarg } => Some((*memarg, AtomicWriteShape::StoreI32 { width: 2 })),
+        I64AtomicStore8 { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 1 })),
+        I64AtomicStore16 { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 2 })),
+        I64AtomicStore32 { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 4 })),
+        I32AtomicRmwAdd { memarg }
+        | I32AtomicRmwSub { memarg }
+        | I32AtomicRmwAnd { memarg }
+        | I32AtomicRmwOr { memarg }
+        | I32AtomicRmwXor { memarg }
+        | I32AtomicRmwXchg { memarg } => Some((*memarg, AtomicWriteShape::RmwI32 { width: 4 })),
+        I64AtomicRmwAdd { memarg }
+        | I64AtomicRmwSub { memarg }
+        | I64AtomicRmwAnd { memarg }
+        | I64AtomicRmwOr { memarg }
+        | I64AtomicRmwXor { memarg }
+        | I64AtomicRmwXchg { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 8 })),
+        I32AtomicRmw8AddU { memarg }
+        | I32AtomicRmw8SubU { memarg }
+        | I32AtomicRmw8AndU { memarg }
+        | I32AtomicRmw8OrU { memarg }
+        | I32AtomicRmw8XorU { memarg }
+        | I32AtomicRmw8XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI32 { width: 1 })),
+        I32AtomicRmw16AddU { memarg }
+        | I32AtomicRmw16SubU { memarg }
+        | I32AtomicRmw16AndU { memarg }
+        | I32AtomicRmw16OrU { memarg }
+        | I32AtomicRmw16XorU { memarg }
+        | I32AtomicRmw16XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI32 { width: 2 })),
+        I64AtomicRmw8AddU { memarg }
+        | I64AtomicRmw8SubU { memarg }
+        | I64AtomicRmw8AndU { memarg }
+        | I64AtomicRmw8OrU { memarg }
+        | I64AtomicRmw8XorU { memarg }
+        | I64AtomicRmw8XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 1 })),
+        I64AtomicRmw16AddU { memarg }
+        | I64AtomicRmw16SubU { memarg }
+        | I64AtomicRmw16AndU { memarg }
+        | I64AtomicRmw16OrU { memarg }
+        | I64AtomicRmw16XorU { memarg }
+        | I64AtomicRmw16XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 2 })),
+        I64AtomicRmw32AddU { memarg }
+        | I64AtomicRmw32SubU { memarg }
+        | I64AtomicRmw32AndU { memarg }
+        | I64AtomicRmw32OrU { memarg }
+        | I64AtomicRmw32XorU { memarg }
+        | I64AtomicRmw32XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 4 })),
+        I32AtomicRmwCmpxchg { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI32 { width: 4 }))
+        }
+        I64AtomicRmwCmpxchg { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 8 }))
+        }
+        I32AtomicRmw8CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI32 { width: 1 }))
+        }
+        I32AtomicRmw16CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI32 { width: 2 }))
+        }
+        I64AtomicRmw8CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 1 }))
+        }
+        I64AtomicRmw16CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 2 }))
+        }
+        I64AtomicRmw32CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 4 }))
+        }
+        _ => None,
+    }
+}
+
+fn function_param_count(types: &[wasmparser::SubType], type_idx: u32) -> u32 {
+    let Some(ty) = types.get(type_idx as usize) else {
+        return 0;
+    };
+    if let wasmparser::CompositeInnerType::Func(func) = &ty.composite_type.inner {
+        func.params().len() as u32
+    } else {
+        0
+    }
+}
+
+fn emit_observe_write(
+    func: &mut Function,
+    thread_id_global: Option<u32>,
+    observe_write_import_idx: Option<u32>,
+    target_id: i32,
+    addr_local: u32,
+    offset: u64,
+    width: i32,
+) {
+    let (Some(global), Some(import_idx)) = (thread_id_global, observe_write_import_idx) else {
+        return;
+    };
+    func.instruction(&Instruction::GlobalGet(global));
+    func.instruction(&Instruction::I32Const(target_id));
+    func.instruction(&Instruction::LocalGet(addr_local));
+    if offset > 0 {
+        func.instruction(&Instruction::I32Const(offset as i32));
+        func.instruction(&Instruction::I32Add);
+    }
+    func.instruction(&Instruction::I32Const(width));
+    func.instruction(&Instruction::Call(import_idx));
+}
+
 impl StreamPass for AtomicPatchStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> Result<Vec<u8>> {
         if !self.threads {
@@ -130,6 +319,7 @@ impl StreamPass for AtomicPatchStreamPass {
         let mut wait32_offsets = BTreeSet::new();
         let mut wait64_offsets = BTreeSet::new();
         let mut notify_offsets = BTreeSet::new();
+        let mut has_atomic_write = false;
 
         let mut func_types = Vec::new();
         let mut types = Vec::new();
@@ -162,6 +352,7 @@ impl StreamPass for AtomicPatchStreamPass {
                     }
                 }
                 Payload::CodeSectionStart { range, .. } => {
+                    let target_id = self.target_index as i32;
                     let reader = wasmparser::BinaryReader::new(
                         &input_wasm[range.start..range.end],
                         range.start,
@@ -180,7 +371,9 @@ impl StreamPass for AtomicPatchStreamPass {
                                 wasmparser::Operator::MemoryAtomicNotify { memarg } => {
                                     notify_offsets.insert(memarg.offset);
                                 }
-                                _ => {}
+                                op => {
+                                    has_atomic_write |= atomic_write_shape(&op).is_some();
+                                }
                             }
                         }
                     }
@@ -201,7 +394,11 @@ impl StreamPass for AtomicPatchStreamPass {
             }
         }
 
-        if wait32_offsets.is_empty() && wait64_offsets.is_empty() && notify_offsets.is_empty() {
+        if wait32_offsets.is_empty()
+            && wait64_offsets.is_empty()
+            && notify_offsets.is_empty()
+            && !(self.detect_deadlock && has_atomic_write)
+        {
             return Ok(input_wasm.to_vec());
         }
 
@@ -220,6 +417,7 @@ impl StreamPass for AtomicPatchStreamPass {
         let mut wait32_import_ty = None;
         let mut wait64_import_ty = None;
         let mut notify_import_ty = None;
+        let mut observe_write_import_ty = None;
 
         let mut wait32_wrap_ty = None;
         let mut wait64_wrap_ty = None;
@@ -326,6 +524,13 @@ impl StreamPass for AtomicPatchStreamPass {
             ));
             new_imports_count += 1;
         }
+        if self.detect_deadlock && has_atomic_write {
+            observe_write_import_ty = Some(get_or_add_type(
+                &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+                &[],
+            ));
+            new_imports_count += 1;
+        }
 
         module.section(&type_sec);
 
@@ -333,6 +538,7 @@ impl StreamPass for AtomicPatchStreamPass {
         let mut wait32_import_idx = None;
         let mut wait64_import_idx = None;
         let mut notify_import_idx = None;
+        let mut observe_write_import_idx = None;
         let mut imports_emitted = false;
 
         let mut wait32_map = HashMap::new();
@@ -396,6 +602,15 @@ impl StreamPass for AtomicPatchStreamPass {
                         notify_import_idx = Some(func_count);
                         func_count += 1;
                     }
+                    if let Some(ty) = observe_write_import_ty {
+                        import_sec.import(
+                            "wasi_snapshot_preview1",
+                            "__vfs_atomic_observe_write",
+                            EntityType::Function(ty),
+                        );
+                        observe_write_import_idx = Some(func_count);
+                        func_count += 1;
+                    }
                     module.section(&import_sec);
                     imports_emitted = true;
                 }
@@ -427,6 +642,15 @@ impl StreamPass for AtomicPatchStreamPass {
                                 EntityType::Function(ty),
                             );
                             notify_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        if let Some(ty) = observe_write_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_observe_write",
+                                EntityType::Function(ty),
+                            );
+                            observe_write_import_idx = Some(func_count);
                             func_count += 1;
                         }
                         module.section(&import_sec);
@@ -613,6 +837,7 @@ impl StreamPass for AtomicPatchStreamPass {
                     module.section(&sec);
                 }
                 Payload::CodeSectionStart { range, .. } => {
+                    let target_id = self.target_index as i32;
                     let reader = wasmparser::BinaryReader::new(
                         &input_wasm[range.start..range.end],
                         range.start,
@@ -621,15 +846,33 @@ impl StreamPass for AtomicPatchStreamPass {
                     let wait32_map_clone = wait32_map.clone();
                     let wait64_map_clone = wait64_map.clone();
                     let notify_map_clone = notify_map.clone();
-                    let mut code_sec = par_process_code_section(s, move |_, func_body| {
+                    let types_for_params = types.clone();
+                    let func_types_for_params = func_types.clone();
+                    let observe_write_import_idx_for_body = observe_write_import_idx;
+                    let thread_id_global_for_body = thread_id_global;
+                    let mut code_sec = par_process_code_section(s, move |body_idx, func_body| {
                         let mut locals = Vec::new();
                         let mut locals_reader = func_body.get_locals_reader()?;
+                        let mut local_count = 0u32;
                         for _ in 0..locals_reader.get_count() {
                             let (count, ty) = locals_reader.read()?;
+                            local_count += count;
                             locals.push((
                                 count,
                                 crate::wasm_stream::translator::translate_val_type(ty, &rebinder),
                             ));
+                        }
+                        let func_idx = import_func_count + body_idx as u32;
+                        let type_idx = func_types_for_params[func_idx as usize];
+                        let param_count = function_param_count(&types_for_params, type_idx);
+                        let temp_addr = param_count + local_count;
+                        let temp_i32 = temp_addr + 1;
+                        let temp_i32_b = temp_addr + 2;
+                        let temp_i64 = temp_addr + 3;
+                        let temp_i64_b = temp_addr + 4;
+                        if observe_write_import_idx_for_body.is_some() {
+                            locals.push((3, ValType::I32));
+                            locals.push((2, ValType::I64));
                         }
                         let mut func = Function::new(locals);
                         let mut reader = func_body.get_operators_reader()?;
@@ -651,6 +894,107 @@ impl StreamPass for AtomicPatchStreamPass {
                                         notify_map_clone[&memarg.offset],
                                     ));
                                 }
+                                _ if observe_write_import_idx_for_body.is_some()
+                                    && atomic_write_shape(&op).is_some() =>
+                                {
+                                    let (memarg, shape) = atomic_write_shape(&op).unwrap();
+                                    match shape {
+                                        AtomicWriteShape::StoreI32 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i32));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i32));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::StoreI64 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i64));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i64));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::RmwI32 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i32));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i32));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::RmwI64 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i64));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i64));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::CmpxchgI32 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i32_b));
+                                            func.instruction(&Instruction::LocalSet(temp_i32));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i32));
+                                            func.instruction(&Instruction::LocalGet(temp_i32_b));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::CmpxchgI64 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i64_b));
+                                            func.instruction(&Instruction::LocalSet(temp_i64));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i64));
+                                            func.instruction(&Instruction::LocalGet(temp_i64_b));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                    }
+                                }
                                 _ => {
                                     func.instruction(&translate(&op, &rebinder));
                                 }
@@ -658,8 +1002,6 @@ impl StreamPass for AtomicPatchStreamPass {
                         }
                         Ok(func)
                     })?;
-
-                    let target_id = self.target_index as i32;
 
                     for offset in &wait32_offsets {
                         let mut func = Function::new(Vec::new());
