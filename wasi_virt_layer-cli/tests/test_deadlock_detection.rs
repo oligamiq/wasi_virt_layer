@@ -153,11 +153,113 @@ fn detector_allows_notified_wait_to_finish() -> color_eyre::Result<()> {
         Some(Duration::from_secs(20)),
     )?;
 
+    assert_success_without_deadlock("baseline", &dir)?;
+    Ok(())
+}
+
+#[test]
+fn detector_feature_matrix_allows_notified_wait_to_finish() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let own_memory_dir = run_wasi_virt_layer(
+        Some("pool_own_mem_vfs"),
+        Some("pool_own_mem_target"),
+        None,
+        true,
+        OutDir::Random,
+        false,
+        &["--own-memory", "--validate", "--detect-deadlock"],
+        Some(Duration::from_secs(20)),
+    )
+    .map_err(|err| color_eyre::eyre::eyre!("feature matrix case own-memory failed: {err:?}"))?;
+    assert_pool_own_memory_without_deadlock("own-memory", &own_memory_dir)?;
+
+    // VFS `--features` must appear before the target positional path; otherwise
+    // feature_extractor assigns them to target options instead of VFS options.
+    let matrix: &[(&str, Option<bool>, &[&str])] = &[
+        ("single_memory", Some(true), &[]),
+        ("multi_memory", Some(false), &[]),
+        (
+            "dynamic-fs",
+            None,
+            &["--features", "wasi_virt_layer/dynamic-fs"],
+        ),
+        (
+            "multiple-fs",
+            None,
+            &["--features", "wasi_virt_layer/multiple-fs"],
+        ),
+        ("trace", None, &["--features", "wasi_virt_layer/trace"]),
+        (
+            "detect-wasi-reentrancy",
+            None,
+            &["--features", "wasi_virt_layer/detect-wasi-reentrancy"],
+        ),
+    ];
+
+    for (name, target_single, feature_args) in matrix {
+        let (_target_dir, target_path) = write_target(FALSE_POSITIVE_TARGET_WAT)?;
+        let mut args = vec!["--validate", "--detect-deadlock"];
+        args.extend_from_slice(feature_args);
+        args.push(target_path.as_str());
+        let dir = run_wasi_virt_layer(
+            Some("deadlock_detection_vfs"),
+            None,
+            *target_single,
+            true,
+            OutDir::Random,
+            false,
+            &args,
+            Some(Duration::from_secs(20)),
+        )
+        .map_err(|err| color_eyre::eyre::eyre!("feature matrix case {name} failed: {err:?}"))?;
+
+        assert_success_without_deadlock(name, &dir)?;
+    }
+
+    Ok(())
+}
+
+fn assert_success_without_deadlock(case_name: &str, dir: &TestDir) -> color_eyre::Result<()> {
     let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
     let stderr = std::fs::read_to_string(dir.0.join(".deno-test-stderr.log"))?;
-    assert!(stdout.contains("Deadlock detection false-positive test passed"));
-    assert!(!stdout.contains("deadlock detected"));
-    assert!(!stderr.contains("deadlock detected"));
+    assert!(
+        stdout.contains("Deadlock detection false-positive test passed"),
+        "case {case_name} stdout did not contain success marker:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        !stdout.contains("deadlock detected"),
+        "case {case_name} stdout contained deadlock diagnostic:\n{stdout}"
+    );
+    assert!(
+        !stderr.contains("deadlock detected"),
+        "case {case_name} stderr contained deadlock diagnostic:\n{stderr}"
+    );
+    Ok(())
+}
+
+fn assert_pool_own_memory_without_deadlock(
+    case_name: &str,
+    dir: &TestDir,
+) -> color_eyre::Result<()> {
+    let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
+    let stderr = std::fs::read_to_string(dir.0.join(".deno-test-stderr.log"))?;
+    assert!(
+        stdout.contains("All 5 threads completed successfully."),
+        "case {case_name} stdout did not contain own-memory success marker:\n{stdout}\nstderr:\n{stderr}"
+    );
+    assert!(
+        !stdout.contains("deadlock detected"),
+        "case {case_name} stdout contained deadlock diagnostic:\n{stdout}"
+    );
+    assert!(
+        !stderr.contains("deadlock detected"),
+        "case {case_name} stderr contained deadlock diagnostic:\n{stderr}"
+    );
     Ok(())
 }
 
