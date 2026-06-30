@@ -79,7 +79,7 @@ mod deadlock_thread_id_tests {
         .unwrap();
 
         let original_thread_start = export_index(&input, "wasi_thread_start").unwrap();
-        let output = DeadlockThreadIdPreTargetStreamPass::new(true)
+        let output = DeadlockThreadIdPreTargetStreamPass::for_target(true, "target")
             .run(&input)
             .unwrap();
 
@@ -96,6 +96,36 @@ mod deadlock_thread_id_tests {
         wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
             .validate_all(&output)
             .unwrap();
+    }
+
+    #[test]
+    fn deadlock_thread_id_pass_wraps_special_func_renamed_exports() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start)
+              (func $__main_void (result i32) (i32.const 0))
+              (export "__wasip1_vfs_target_wasi_thread_start" (func $wasi_thread_start))
+              (export "__wasip1_vfs_target__start" (func $_start))
+              (export "__wasip1_vfs_target___main_void" (func $__main_void)))
+            "#,
+        )
+        .unwrap();
+
+        let original_thread_start =
+            export_index(&input, "__wasip1_vfs_target_wasi_thread_start").unwrap();
+        let output = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+
+        wasmparser::Validator::new().validate_all(&output).unwrap();
+        assert_ne!(
+            export_index(&output, "__wasip1_vfs_target_wasi_thread_start"),
+            Some(original_thread_start)
+        );
+        assert!(imports_func(&output, "__vfs_deadlock_thread_enter"));
+        assert!(imports_func(&output, "__vfs_deadlock_thread_exit"));
     }
 
     fn imports_func(bytes: &[u8], name: &str) -> bool {

@@ -22,20 +22,56 @@ const THREAD_LIFECYCLE_IMPORTS: u32 = 2;
 /// Injects a target-local wasm thread id global for deadlock detection.
 pub struct DeadlockThreadIdPreTargetStreamPass {
     enabled: bool,
+    target_name: Option<String>,
 }
 
 impl DeadlockThreadIdPreTargetStreamPass {
     /// Creates the pass.
     pub fn new(enabled: bool) -> Self {
-        Self { enabled }
+        Self {
+            enabled,
+            target_name: None,
+        }
+    }
+
+    /// Creates the pass for a named target after special entry exports were renamed.
+    pub fn for_target(enabled: bool, target_name: impl Into<String>) -> Self {
+        Self {
+            enabled,
+            target_name: Some(target_name.into()),
+        }
     }
 }
 
 #[derive(Default)]
 struct EntryExports {
-    wasi_thread_start: Option<u32>,
-    start: Option<u32>,
-    main_void: Option<u32>,
+    wasi_thread_start: Option<(String, u32)>,
+    start: Option<(String, u32)>,
+    main_void: Option<(String, u32)>,
+}
+
+fn is_wasi_thread_start_export(name: &str, target_name: Option<&str>) -> bool {
+    if let Some(target_name) = target_name {
+        name == format!("__wasip1_vfs_{target_name}_wasi_thread_start")
+    } else {
+        name == "wasi_thread_start"
+    }
+}
+
+fn is_start_export(name: &str, target_name: Option<&str>) -> bool {
+    if let Some(target_name) = target_name {
+        name == format!("__wasip1_vfs_{target_name}__start")
+    } else {
+        name == "_start"
+    }
+}
+
+fn is_main_void_export(name: &str, target_name: Option<&str>) -> bool {
+    if let Some(target_name) = target_name {
+        name == format!("__wasip1_vfs_{target_name}___main_void")
+    } else {
+        name == "__main_void"
+    }
 }
 
 fn entity_type(ty: TypeRef) -> EntityType {
@@ -74,6 +110,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
         let mut import_func_count = 0;
         let mut global_count = 0;
         let mut entries = EntryExports::default();
+        let target_name = self.target_name.as_deref();
 
         for payload in Parser::new(0).parse_all(input_wasm) {
             match payload? {
@@ -108,13 +145,17 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                     for export in section {
                         let export = export?;
                         if export.kind == wasmparser::ExternalKind::Func {
-                            match export.name {
-                                "wasi_thread_start" => {
-                                    entries.wasi_thread_start = Some(export.index)
-                                }
-                                "_start" => entries.start = Some(export.index),
-                                "__main_void" => entries.main_void = Some(export.index),
-                                _ => {}
+                            if export.index < import_func_count {
+                                continue;
+                            }
+
+                            if is_wasi_thread_start_export(export.name, target_name) {
+                                entries.wasi_thread_start =
+                                    Some((export.name.to_string(), export.index));
+                            } else if is_start_export(export.name, target_name) {
+                                entries.start = Some((export.name.to_string(), export.index));
+                            } else if is_main_void_export(export.name, target_name) {
+                                entries.main_void = Some((export.name.to_string(), export.index));
                             }
                         }
                     }
@@ -128,16 +169,16 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
         let mut next_wrapper_idx =
             import_func_count + THREAD_LIFECYCLE_IMPORTS + original_defined_count;
         let mut wrapper_indices = HashMap::new();
-        if entries.wasi_thread_start.is_some() {
-            wrapper_indices.insert("wasi_thread_start", next_wrapper_idx);
+        if let Some((name, _)) = &entries.wasi_thread_start {
+            wrapper_indices.insert(name.clone(), next_wrapper_idx);
             next_wrapper_idx += 1;
         }
-        if entries.start.is_some() {
-            wrapper_indices.insert("_start", next_wrapper_idx);
+        if let Some((name, _)) = &entries.start {
+            wrapper_indices.insert(name.clone(), next_wrapper_idx);
             next_wrapper_idx += 1;
         }
-        if entries.main_void.is_some() {
-            wrapper_indices.insert("__main_void", next_wrapper_idx);
+        if let Some((name, _)) = &entries.main_void {
+            wrapper_indices.insert(name.clone(), next_wrapper_idx);
         }
 
         let mut module = Module::new();
@@ -453,7 +494,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         }
                         code.function(&func);
                     }
-                    if let Some(orig) = entries.wasi_thread_start {
+                    if let Some((_, orig)) = &entries.wasi_thread_start {
                         let mut func = Function::new([]);
                         func.instruction(&Instruction::LocalGet(0));
                         func.instruction(&Instruction::GlobalSet(thread_id_global));
@@ -461,31 +502,31 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         func.instruction(&Instruction::Call(enter_idx));
                         func.instruction(&Instruction::LocalGet(0));
                         func.instruction(&Instruction::LocalGet(1));
-                        func.instruction(&Instruction::Call(rebinder.function(orig)));
+                        func.instruction(&Instruction::Call(rebinder.function(*orig)));
                         func.instruction(&Instruction::LocalGet(0));
                         func.instruction(&Instruction::Call(exit_idx));
                         func.instruction(&Instruction::End);
                         code.function(&func);
                     }
-                    if let Some(orig) = entries.start {
+                    if let Some((_, orig)) = &entries.start {
                         let mut func = Function::new([]);
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::GlobalSet(thread_id_global));
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::Call(enter_idx));
-                        func.instruction(&Instruction::Call(rebinder.function(orig)));
+                        func.instruction(&Instruction::Call(rebinder.function(*orig)));
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::Call(exit_idx));
                         func.instruction(&Instruction::End);
                         code.function(&func);
                     }
-                    if let Some(orig) = entries.main_void {
+                    if let Some((_, orig)) = &entries.main_void {
                         let mut func = Function::new([(1, ValType::I32)]);
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::GlobalSet(thread_id_global));
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::Call(enter_idx));
-                        func.instruction(&Instruction::Call(rebinder.function(orig)));
+                        func.instruction(&Instruction::Call(rebinder.function(*orig)));
                         func.instruction(&Instruction::LocalSet(0));
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::Call(exit_idx));

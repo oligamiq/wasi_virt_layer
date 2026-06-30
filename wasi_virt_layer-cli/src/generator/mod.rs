@@ -714,8 +714,9 @@ impl GeneratorRunner {
                         is_opted_in,
                     )));
                     pipeline.add_pass(Box::new(
-                        crate::wasm_stream::passes::deadlock_thread_id::DeadlockThreadIdPreTargetStreamPass::new(
+                        crate::wasm_stream::passes::deadlock_thread_id::DeadlockThreadIdPreTargetStreamPass::for_target(
                             _cloned_ctx.detect_deadlock,
+                            target_name.to_string(),
                         ),
                     ));
 
