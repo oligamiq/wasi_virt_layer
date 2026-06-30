@@ -1080,7 +1080,10 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
 
 #[cfg(feature = "detect-deadlock")]
 mod deadlock_detector {
+    use core::hash::BuildHasherDefault;
+
     use dashmap::DashMap;
+    use fxhash::FxHasher;
 
     /// Atomic memory location observed by the deadlock detector.
     #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -1106,9 +1109,9 @@ mod deadlock_detector {
     /// Runtime wait graph state for atomic deadlock detection.
     #[derive(Default)]
     pub(super) struct DeadlockDetector {
-        active_threads: DashMap<i32, ()>,
-        waits: DashMap<i32, ThreadWait>,
-        locations: DashMap<AtomicLocation, LocationState>,
+        active_threads: DashMap<i32, (), BuildHasherDefault<FxHasher>>,
+        waits: DashMap<i32, ThreadWait, BuildHasherDefault<FxHasher>>,
+        locations: DashMap<AtomicLocation, LocationState, BuildHasherDefault<FxHasher>>,
     }
 
     impl DeadlockDetector {

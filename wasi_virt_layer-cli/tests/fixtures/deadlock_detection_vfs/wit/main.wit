@@ -1,0 +1,5 @@
+package tests:deadlock-detection;
+
+world component-abi {
+  export main: func();
+}

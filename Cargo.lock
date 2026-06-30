@@ -746,6 +746,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "deadlock_detection_vfs"
+version = "0.0.1"
+dependencies = [
+ "const_struct",
+ "wasi_virt_layer",
+ "wit-bindgen 0.54.0",
+]
+
+[[package]]
 name = "defmt"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
