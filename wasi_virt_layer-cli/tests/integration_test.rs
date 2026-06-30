@@ -1207,7 +1207,7 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     ]);
 
     let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
-    if output.status.success() {
+    if !output.status.success() {
         return Err(color_eyre::eyre::eyre!(
             "wasi_virt_layer build failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
             String::from_utf8_lossy(&output.stdout),
@@ -1257,7 +1257,7 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     ]);
 
     let output = cmd.output().wrap_err("Failed to execute wasi_virt_layer")?;
-    if output.status.success() {
+    if !output.status.success() {
         return Err(color_eyre::eyre::eyre!(
             "wasi_virt_layer build failed:\nSTDOUT:\n{}\nSTDERR:\n{}",
             String::from_utf8_lossy(&output.stdout),

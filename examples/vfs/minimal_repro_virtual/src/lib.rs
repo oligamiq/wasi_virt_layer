@@ -49,6 +49,7 @@ export!(Hello);
 static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(4) };
 
 plug_thread!({ &THREAD_POOL }, self, test_threads);
+plug_sched!(DefaultSched, ls, self);
 
 plug_process!(StandardProcess, test_threads, ls, self);
 
