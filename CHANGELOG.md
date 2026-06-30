@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.14] - 2026-06-30
+### Added
+- **Deadlock Detection**:
+    - Added `--deadlock-detection` CLI gate (`wasi_virt_layer-cli`) to enable automatic deadlock detection for threaded Wasm builds.
+    - Injects per-target wasm thread ID globals so the host can associate atomic.wait callers with logical threads.
+    - Observes atomic writes (`i32.atomic.store` variants) to detect when a thread has released a lock.
+    - Detects closed atomic wait deadlocks when a waiter times out without the expected notify after a reasonable interval.
+    - Routes all host-side wait calls through a central `DeadlockDetector` that logs suspected deadlocked thread IDs and their backtrace context.
+    - Added unit and integration tests covering single-thread wait, multi-thread acquire, and feature-matrix permutations.
+
+### Fixed
+- **test_minimal_repro / test_minimal_repro_virtual**:
+    - Inverted success condition in both integration tests — they previously returned `Err` when `output.status.success()` was true, causing false failures.
+    - Added missing `plug_sched!(DefaultSched, ls, self)` in `examples/vfs/minimal_repro_virtual/src/lib.rs` so the `ls` target can resolve `sched_yield` imports.
+
 ## [0.5.13] - 2026-06-24
 ### Fixed
 - **Atomic Wait State Reset**:

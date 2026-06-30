@@ -40,7 +40,7 @@ dependencies = [
 
 [[package]]
 name = "anonymous_threads_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -100,17 +100,17 @@ dependencies = [
 
 [[package]]
 name = "anyhow"
-version = "1.0.102"
+version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
 
 [[package]]
 name = "args"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "args-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -143,7 +143,7 @@ dependencies = [
 
 [[package]]
 name = "atomic_wait_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -179,7 +179,7 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "big_alloc"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "walkdir",
 ]
@@ -253,13 +253,13 @@ dependencies = [
 
 [[package]]
 name = "bstr"
-version = "1.12.1"
+version = "1.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63044e1ae8e69f3b5a92c736ca6269b8d12fa7efe39bf34ddb06d102cf0e2cab"
+checksum = "5cee35f73844aa3014bb606320a6c1f010249dbdf43342fe54b5a4f6a8ed4b79"
 dependencies = [
  "memchr",
  "regex-automata",
- "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -276,9 +276,9 @@ checksum = "1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b"
 
 [[package]]
 name = "camino"
-version = "1.2.3"
+version = "1.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4ce8d3bd5823c7504d3f579f13e7b2f3da252fcb938c594d5680ee508bf846f"
+checksum = "5f2d30e4173c4026932d51d31d6b0613b1fd3014bf3f9f8943d4ba139c437ba0"
 dependencies = [
  "serde_core",
 ]
@@ -342,7 +342,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
 name = "changeable-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -455,7 +455,7 @@ dependencies = [
 
 [[package]]
 name = "complex-threads-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -534,9 +534,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-bforest"
-version = "0.132.2"
+version = "0.132.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4053fa2575ef4a5c35d2708533df2200400ae979226cea9cc92a578b811bd4e7"
+checksum = "0111d110b72b4efad69a372e29e21628652fd0bcab66967e5c8350ab679affd5"
 dependencies = [
  "cranelift-entity",
  "wasmtime-internal-core",
@@ -544,9 +544,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-bitset"
-version = "0.132.2"
+version = "0.132.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d216663191014aa63e1d2cffd058e609eaf207646d40b739d88250f65b2c4f69"
+checksum = "cf01ecc92fc5499789d79c3b817299d5a8ddd828d31dcf0f9cc3cc66f38dbb36"
 dependencies = [
  "serde",
  "serde_derive",
@@ -555,9 +555,9 @@ dependencies = [
 
 [[package]]
 name = "cranelift-entity"
-version = "0.132.2"
+version = "0.132.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "668e56db75a54816cbdd7c7b7bfc558b08bf7b2cda9d0846491517e92f3b393b"
+checksum = "2eea22522144ba08c7e7ef94bfc25d474ef016c2771974b8ab1986734ac85965"
 dependencies = [
  "cranelift-bitset",
  "serde",
@@ -825,7 +825,7 @@ dependencies = [
 
 [[package]]
 name = "dis_wasm"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "wasmparser 0.252.0",
 ]
@@ -844,7 +844,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -853,7 +853,7 @@ dependencies = [
 
 [[package]]
 name = "dynamic-wasm-multiple"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -896,9 +896,9 @@ checksum = "34aa73646ffb006b8f5147f3dc182bd4bcb190227ce861fc4a4844bf8e3cb2c0"
 
 [[package]]
 name = "env_filter"
-version = "1.0.1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32e90c2accc4b07a8456ea0debdc2e7587bdd890680d71173a15d4ae604f6eef"
+checksum = "900d271a03799a1ee8d1ca9b19893b48ca674a9284fefcfb85f05e74ed314217"
 dependencies = [
  "log",
  "regex",
@@ -906,9 +906,9 @@ dependencies = [
 
 [[package]]
 name = "env_logger"
-version = "0.11.10"
+version = "0.11.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0621c04f2196ac3f488dd583365b9c09be011a4ab8b9f37248ffcc8f6198b56a"
+checksum = "de671bd27a75a797dc9ae289ba1e77276e75e2026408aab65185384e2d5cd3f6"
 dependencies = [
  "anstream",
  "anstyle",
@@ -939,7 +939,7 @@ version = "0.1.0"
 
 [[package]]
 name = "example_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1237,9 +1237,9 @@ checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
 
 [[package]]
 name = "jiff"
-version = "0.2.29"
+version = "0.2.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "34f877a98676d2fb664698d74cc6a51ce6c484ce8c770f05d0108ec9090aeb46"
+checksum = "ccfe6121cbe750cf81efa362d85c0bde7ea298ec43092d3a193baca59cdbd634"
 dependencies = [
  "defmt",
  "jiff-static",
@@ -1251,9 +1251,9 @@ dependencies = [
 
 [[package]]
 name = "jiff-static"
-version = "0.2.29"
+version = "0.2.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0666b5ab5ecaca213fc2a85b8c0083d9004e84ee2d5f9a7e0017aaf50986f25f"
+checksum = "e165e897f662d428f3cd3828a919dbe067c2d42bb1031eede74ef9d27ecdedd2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1272,9 +1272,9 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen"
-version = "2.0.3"
+version = "2.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f217b7335bd3166dc3bd1d1bcd9a14f069a9413f7e0c23431632513f0ac418a"
+checksum = "ca2868b11b997bcbac1300f81306c5234d10f4680ddc3bb0de1b1a0778bdfad5"
 dependencies = [
  "anyhow",
  "base64",
@@ -1292,9 +1292,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.102"
+version = "0.3.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03d04c30968dffe80775bd4d7fb676131cd04a1fb46d2686dbffbaec2d9dfd31"
+checksum = "53b44bfcdb3f8d5837a46dae1ca9660a837176eee74a28b229bc626816589102"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -1326,7 +1326,7 @@ dependencies = [
 
 [[package]]
 name = "lib_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1386,15 +1386,15 @@ checksum = "0ceec5bc11778974d1bcb055b18002eba7f4b3518b6a0081b3af5f21666da9ad"
 
 [[package]]
 name = "ls"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "ls-threads"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "ls-threads-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1404,7 +1404,7 @@ dependencies = [
 
 [[package]]
 name = "ls-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1413,7 +1413,7 @@ dependencies = [
 
 [[package]]
 name = "ls2"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "memchr"
@@ -1423,7 +1423,7 @@ checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
 name = "minimal_repro"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1433,7 +1433,7 @@ dependencies = [
 
 [[package]]
 name = "minimal_repro_virtual"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1452,7 +1452,7 @@ dependencies = [
 
 [[package]]
 name = "mkdir_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "parking_lot",
  "wasi_virt_layer",
@@ -1497,7 +1497,7 @@ dependencies = [
 
 [[package]]
 name = "multiple-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "parking_lot",
  "smallstr",
@@ -1507,7 +1507,7 @@ dependencies = [
 
 [[package]]
 name = "multiple_calls_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1516,7 +1516,7 @@ dependencies = [
 
 [[package]]
 name = "my_target"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "nix"
@@ -1532,7 +1532,7 @@ dependencies = [
 
 [[package]]
 name = "no_std_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1541,7 +1541,7 @@ dependencies = [
 
 [[package]]
 name = "no_thread_with_thread_feature_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -1613,7 +1613,7 @@ checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
 
 [[package]]
 name = "own_memory_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1664,7 +1664,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "pool-threads-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1769,7 +1769,7 @@ dependencies = [
 
 [[package]]
 name = "print_args"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "proc-macro-error-attr2"
@@ -1851,14 +1851,14 @@ dependencies = [
 
 [[package]]
 name = "rayon_self_pool_target"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "rayon_self_pool_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1926,7 +1926,7 @@ dependencies = [
 
 [[package]]
 name = "repro_multi_target_table_bug"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1936,7 +1936,7 @@ dependencies = [
 
 [[package]]
 name = "run_on_thread"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -1952,7 +1952,7 @@ checksum = "b50b8869d9fc858ce7266cce0194bd74df58b9d0e3f6df3a9fc8eb470d95c09d"
 
 [[package]]
 name = "rustc_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2007,7 +2007,7 @@ checksum = "d68f2ec51b097e4c1a75b681a8bec621909b5e91f15bb7b840c4f2f7b01148b2"
 
 [[package]]
 name = "self-rw-threads-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -2017,7 +2017,7 @@ dependencies = [
 
 [[package]]
 name = "self-rw-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -2027,11 +2027,11 @@ dependencies = [
 
 [[package]]
 name = "self_rw_example"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "self_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -2141,11 +2141,11 @@ dependencies = [
 
 [[package]]
 name = "smoke_target"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "smoke_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2167,11 +2167,11 @@ dependencies = [
 
 [[package]]
 name = "spawn_vfs_and_body_example"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "spawn_vfs_and_body_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2204,7 +2204,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stderr_reentrancy_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2343,18 +2343,18 @@ dependencies = [
 
 [[package]]
 name = "test_args"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "walkdir",
 ]
 
 [[package]]
 name = "test_atomic_wait"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "test_helper_shared_memory_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "wasi_virt_layer",
  "wit-bindgen 0.54.0",
@@ -2362,7 +2362,7 @@ dependencies = [
 
 [[package]]
 name = "test_helper_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "wasi_virt_layer",
  "wit-bindgen 0.54.0",
@@ -2370,7 +2370,7 @@ dependencies = [
 
 [[package]]
 name = "test_lib"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "test_mkdir"
@@ -2378,7 +2378,7 @@ version = "0.1.0"
 
 [[package]]
 name = "test_new_bare"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2387,22 +2387,22 @@ dependencies = [
 
 [[package]]
 name = "test_poll"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "test_pool_thread"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "test_rayon_tls_project"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "test_threads"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "test_unreachable_target"
@@ -2410,11 +2410,11 @@ version = "0.1.0"
 
 [[package]]
 name = "test_unwind_target"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "test_unwind_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -2424,14 +2424,14 @@ dependencies = [
 
 [[package]]
 name = "test_wasm"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "walkdir",
 ]
 
 [[package]]
 name = "test_write_single"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "thiserror"
@@ -2475,7 +2475,7 @@ dependencies = [
 
 [[package]]
 name = "thread_direct_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2484,7 +2484,7 @@ dependencies = [
 
 [[package]]
 name = "thread_pool_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2493,7 +2493,7 @@ dependencies = [
 
 [[package]]
 name = "threads_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
@@ -2503,7 +2503,7 @@ dependencies = [
 
 [[package]]
 name = "tmp_test_encoder"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "wasm-encoder 0.252.0",
 ]
@@ -2547,7 +2547,7 @@ checksum = "756daf9b1013ebe47a8776667b466417e2d4c5679d441c26230efd9ef78692db"
 
 [[package]]
 name = "tree"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2614,9 +2614,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.23.3"
+version = "1.23.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "144d6b123cef80b301b8f72a9e2ca4370ddec21950d0a103dd22c437006d2db7"
+checksum = "bf80a72845275afea99e7f2b434723d3bc7e38470fcd1c7ed39a599c73319a53"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
@@ -2679,7 +2679,7 @@ dependencies = [
 
 [[package]]
 name = "wait_poll_vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "wasi_virt_layer",
@@ -2703,7 +2703,7 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi_virt_layer"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "backtrace",
  "const_for",
@@ -2722,7 +2722,7 @@ dependencies = [
 
 [[package]]
 name = "wasi_virt_layer-cli"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -2784,9 +2784,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.125"
+version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ddb3f79143bced6de84270411622a2699cee572fc0875aeaf1e7867cf9fca1a"
+checksum = "4b067c0c11094aef6b7a801c1e34a26affafdf3d051dba08456b868789aaf9a4"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -2797,9 +2797,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.125"
+version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4e21a184b13fb19e157296e2c46056aec9092264fab83e4ba59e68c61b323c3d"
+checksum = "167ce5e579f6bcf889c4f7175a8a5a585de84e8ff93976ce393efa5f2837aab1"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -2807,9 +2807,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.125"
+version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fecefd9c35bd935a20fc3fc344b5f29138961e4f47fb03297d88f2587afb5ebd"
+checksum = "f3997c7839262f4ef12cf90b818d6340c18e80f263f1a94bf157d0ec4420380e"
 dependencies = [
  "bumpalo",
  "proc-macro2",
@@ -2820,9 +2820,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.125"
+version = "0.2.126"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23939e44bb9a5d7576fa2b563dc2e136628f1224e88a8deed09e04858b77871f"
+checksum = "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
 dependencies = [
  "unicode-ident",
 ]
@@ -3079,9 +3079,9 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-environ"
-version = "45.0.2"
+version = "45.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8fb157bd1fbf689ac89d570433a700db6f33bdfcb5ffc30e3f1c49e4c70de71"
+checksum = "439686d3deb38525c86b88bbc90f7ba669f70c8edc7d6b35147c738bbef5ff76"
 dependencies = [
  "anyhow",
  "cpp_demangle",
@@ -3110,15 +3110,15 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-internal-component-util"
-version = "45.0.2"
+version = "45.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d2eeb9b53222859e6f5dc73d2ccfb33254d672469cac11b693a71912e2f3817"
+checksum = "0ed79c4e9ab416dcc5e46b9d1ec9b7c2e3c730deab525996b0de45a35fc8b2c3"
 
 [[package]]
 name = "wasmtime-internal-core"
-version = "45.0.2"
+version = "45.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a1deaf6bc3430abd7497b00c64f06ca2b97ca0fe41af87836446ca30949965c"
+checksum = "3073c03f97f871fe6400e68621c863b93ba79296f8e570285231952d23fcc804"
 dependencies = [
  "hashbrown 0.17.1",
  "libm",
@@ -3609,11 +3609,11 @@ dependencies = [
 
 [[package]]
 name = "write-single-target"
-version = "0.5.13"
+version = "0.5.14"
 
 [[package]]
 name = "write-single-vfs"
-version = "0.5.13"
+version = "0.5.14"
 dependencies = [
  "const_struct",
  "parking_lot",
