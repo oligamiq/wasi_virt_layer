@@ -1,7 +1,7 @@
 use crate::wasm_stream::{
     pipeline::StreamPass,
     translator::{
-        DefaultRebinder, translate, translate_global_type, translate_memory_type,
+        DefaultRebinder, Rebind, translate, translate_global_type, translate_memory_type,
         translate_ref_type, translate_sub_type, translate_table_type, translate_tag_type,
     },
 };
@@ -14,6 +14,10 @@ use wasm_encoder::{
 use wasmparser::{Parser, Payload, TypeRef};
 
 pub const THREAD_ID_GLOBAL_SECTION: &str = "wvl.deadlock_thread_id.v1";
+const VFS_IMPORT_MODULE: &str = "wasi_snapshot_preview1";
+const THREAD_ENTER_IMPORT: &str = "__vfs_deadlock_thread_enter";
+const THREAD_EXIT_IMPORT: &str = "__vfs_deadlock_thread_exit";
+const THREAD_LIFECYCLE_IMPORTS: u32 = 2;
 
 /// Injects a target-local wasm thread id global for deadlock detection.
 pub struct DeadlockThreadIdPreTargetStreamPass {
@@ -42,6 +46,20 @@ fn entity_type(ty: TypeRef) -> EntityType {
         TypeRef::Global(g) => EntityType::Global(translate_global_type(g, &DefaultRebinder)),
         TypeRef::Tag(t) => EntityType::Tag(translate_tag_type(t)),
         _ => unreachable!(),
+    }
+}
+
+struct LifecycleImportRebinder {
+    original_func_imports: u32,
+}
+
+impl Rebind for LifecycleImportRebinder {
+    fn function(&self, index: u32) -> u32 {
+        if index < self.original_func_imports {
+            index
+        } else {
+            index + THREAD_LIFECYCLE_IMPORTS
+        }
     }
 }
 
@@ -107,7 +125,8 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
 
         let thread_id_global = global_count;
         let original_defined_count = local_func_types.len() as u32;
-        let mut next_wrapper_idx = import_func_count + original_defined_count;
+        let mut next_wrapper_idx =
+            import_func_count + THREAD_LIFECYCLE_IMPORTS + original_defined_count;
         let mut wrapper_indices = HashMap::new();
         if entries.wasi_thread_start.is_some() {
             wrapper_indices.insert("wasi_thread_start", next_wrapper_idx);
@@ -158,10 +177,47 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
         let thread_start_ty = get_or_add_type(&[ValType::I32, ValType::I32], &[]);
         let start_ty = get_or_add_type(&[], &[]);
         let main_void_ty = get_or_add_type(&[], &[ValType::I32]);
+        let lifecycle_ty = get_or_add_type(&[ValType::I32], &[]);
         module.section(&type_section);
+
+        let rebinder = LifecycleImportRebinder {
+            original_func_imports: import_func_count,
+        };
+        let enter_idx = import_func_count;
+        let exit_idx = import_func_count + 1;
 
         let mut global_emitted = false;
         let mut custom_emitted = false;
+        let mut imports_emitted = false;
+        let emit_imports = |module: &mut Module,
+                            imports_emitted: &mut bool,
+                            original: Option<wasmparser::ImportSectionReader<'_>>|
+         -> Result<()> {
+            if !*imports_emitted {
+                let mut imports = ImportSection::new();
+                if let Some(section) = original {
+                    for group in section {
+                        for import in group? {
+                            let (_, import) = import?;
+                            imports.import(import.module, import.name, entity_type(import.ty));
+                        }
+                    }
+                }
+                imports.import(
+                    VFS_IMPORT_MODULE,
+                    THREAD_ENTER_IMPORT,
+                    EntityType::Function(lifecycle_ty),
+                );
+                imports.import(
+                    VFS_IMPORT_MODULE,
+                    THREAD_EXIT_IMPORT,
+                    EntityType::Function(lifecycle_ty),
+                );
+                module.section(&imports);
+                *imports_emitted = true;
+            }
+            Ok(())
+        };
         let emit_global = |module: &mut Module, global_emitted: &mut bool| {
             if !*global_emitted {
                 let mut globals = GlobalSection::new();
@@ -192,16 +248,10 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
             match payload {
                 Payload::TypeSection(_) => {}
                 Payload::ImportSection(section) => {
-                    let mut imports = ImportSection::new();
-                    for group in section {
-                        for import in group? {
-                            let (_, import) = import?;
-                            imports.import(import.module, import.name, entity_type(import.ty));
-                        }
-                    }
-                    module.section(&imports);
+                    emit_imports(&mut module, &mut imports_emitted, Some(section))?;
                 }
                 Payload::FunctionSection(section) => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     let mut functions = FunctionSection::new();
                     for ty in section {
                         functions.function(ty?);
@@ -239,6 +289,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                     module.section(&tags);
                 }
                 Payload::GlobalSection(section) => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     let mut globals = GlobalSection::new();
                     for global in section {
                         let global = global?;
@@ -246,7 +297,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         for op in global.init_expr.get_operators_reader() {
                             let op = op?;
                             if !matches!(op, wasmparser::Operator::End) {
-                                instrs.push(translate(&op, &DefaultRebinder));
+                                instrs.push(translate(&op, &rebinder));
                             }
                         }
                         let init = wasm_encoder::ConstExpr::extended(instrs);
@@ -265,6 +316,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                     emit_custom(&mut module, &mut custom_emitted);
                 }
                 Payload::ExportSection(section) => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     emit_global(&mut module, &mut global_emitted);
                     emit_custom(&mut module, &mut custom_emitted);
                     let mut exports = ExportSection::new();
@@ -282,7 +334,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                             wrapper_indices
                                 .get(export.name)
                                 .copied()
-                                .unwrap_or(export.index)
+                                .unwrap_or_else(|| rebinder.function(export.index))
                         } else {
                             export.index
                         };
@@ -291,13 +343,15 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                     module.section(&exports);
                 }
                 Payload::StartSection { func, .. } => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     emit_global(&mut module, &mut global_emitted);
                     emit_custom(&mut module, &mut custom_emitted);
                     module.section(&wasm_encoder::StartSection {
-                        function_index: func,
+                        function_index: rebinder.function(func),
                     });
                 }
                 Payload::ElementSection(section) => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     emit_global(&mut module, &mut global_emitted);
                     emit_custom(&mut module, &mut custom_emitted);
                     let mut elements = wasm_encoder::ElementSection::new();
@@ -307,7 +361,13 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         let exprs;
                         let items = match element.items {
                             wasmparser::ElementItems::Functions(reader) => {
-                                funcs = reader.into_iter().collect::<Result<Vec<u32>, _>>()?;
+                                funcs = reader
+                                    .into_iter()
+                                    .collect::<Result<Vec<u32>, _>>()?
+                                    .iter()
+                                    .copied()
+                                    .map(|idx| rebinder.function(idx))
+                                    .collect::<Vec<_>>();
                                 wasm_encoder::Elements::Functions(std::borrow::Cow::Borrowed(
                                     &funcs,
                                 ))
@@ -320,7 +380,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                                         for op in expr?.get_operators_reader() {
                                             let op = op?;
                                             if !matches!(op, wasmparser::Operator::End) {
-                                                instrs.push(translate(&op, &DefaultRebinder));
+                                                instrs.push(translate(&op, &rebinder));
                                             }
                                         }
                                         Ok(wasm_encoder::ConstExpr::extended(instrs))
@@ -347,7 +407,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                                 for op in offset_expr.get_operators_reader() {
                                     let op = op?;
                                     if !matches!(op, wasmparser::Operator::End) {
-                                        instrs.push(translate(&op, &DefaultRebinder));
+                                        instrs.push(translate(&op, &rebinder));
                                     }
                                 }
                                 let offset = wasm_encoder::ConstExpr::extended(instrs);
@@ -358,11 +418,13 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                     module.section(&elements);
                 }
                 Payload::DataCountSection { count, .. } => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     emit_global(&mut module, &mut global_emitted);
                     emit_custom(&mut module, &mut custom_emitted);
                     module.section(&wasm_encoder::DataCountSection { count });
                 }
                 Payload::CodeSectionStart { range, .. } => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     emit_global(&mut module, &mut global_emitted);
                     emit_custom(&mut module, &mut custom_emitted);
                     let reader = wasmparser::BinaryReader::new(
@@ -387,7 +449,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         let mut func = Function::new(locals);
                         for op in body.get_operators_reader()? {
                             let op = op?;
-                            func.instruction(&translate(&op, &DefaultRebinder));
+                            func.instruction(&translate(&op, &rebinder));
                         }
                         code.function(&func);
                     }
@@ -396,8 +458,12 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         func.instruction(&Instruction::LocalGet(0));
                         func.instruction(&Instruction::GlobalSet(thread_id_global));
                         func.instruction(&Instruction::LocalGet(0));
+                        func.instruction(&Instruction::Call(enter_idx));
+                        func.instruction(&Instruction::LocalGet(0));
                         func.instruction(&Instruction::LocalGet(1));
-                        func.instruction(&Instruction::Call(orig));
+                        func.instruction(&Instruction::Call(rebinder.function(orig)));
+                        func.instruction(&Instruction::LocalGet(0));
+                        func.instruction(&Instruction::Call(exit_idx));
                         func.instruction(&Instruction::End);
                         code.function(&func);
                     }
@@ -405,21 +471,32 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                         let mut func = Function::new([]);
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::GlobalSet(thread_id_global));
-                        func.instruction(&Instruction::Call(orig));
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::Call(enter_idx));
+                        func.instruction(&Instruction::Call(rebinder.function(orig)));
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::Call(exit_idx));
                         func.instruction(&Instruction::End);
                         code.function(&func);
                     }
                     if let Some(orig) = entries.main_void {
-                        let mut func = Function::new([]);
+                        let mut func = Function::new([(1, ValType::I32)]);
                         func.instruction(&Instruction::I32Const(0));
                         func.instruction(&Instruction::GlobalSet(thread_id_global));
-                        func.instruction(&Instruction::Call(orig));
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::Call(enter_idx));
+                        func.instruction(&Instruction::Call(rebinder.function(orig)));
+                        func.instruction(&Instruction::LocalSet(0));
+                        func.instruction(&Instruction::I32Const(0));
+                        func.instruction(&Instruction::Call(exit_idx));
+                        func.instruction(&Instruction::LocalGet(0));
                         func.instruction(&Instruction::End);
                         code.function(&func);
                     }
                     module.section(&code);
                 }
                 Payload::DataSection(section) => {
+                    emit_imports(&mut module, &mut imports_emitted, None)?;
                     emit_global(&mut module, &mut global_emitted);
                     emit_custom(&mut module, &mut custom_emitted);
                     let mut data = wasm_encoder::DataSection::new();
@@ -437,7 +514,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
                                 for op in offset_expr.get_operators_reader() {
                                     let op = op?;
                                     if !matches!(op, wasmparser::Operator::End) {
-                                        instrs.push(translate(&op, &DefaultRebinder));
+                                        instrs.push(translate(&op, &rebinder));
                                     }
                                 }
                                 let offset = wasm_encoder::ConstExpr::extended(instrs);
@@ -461,6 +538,7 @@ impl StreamPass for DeadlockThreadIdPreTargetStreamPass {
         }
 
         if !global_emitted {
+            emit_imports(&mut module, &mut imports_emitted, None)?;
             emit_global(&mut module, &mut global_emitted);
         }
         if !custom_emitted {

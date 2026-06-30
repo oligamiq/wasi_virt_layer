@@ -83,8 +83,12 @@ mod deadlock_thread_id_tests {
             .run(&input)
             .unwrap();
 
+        wasmparser::Validator::new().validate_all(&output).unwrap();
         assert!(has_custom_section(&output, "wvl.deadlock_thread_id.v1"));
         assert!(has_mutable_i32_global(&output));
+        assert!(export_index(&output, "__vfs_deadlock_thread_enter").is_none());
+        assert!(imports_func(&output, "__vfs_deadlock_thread_enter"));
+        assert!(imports_func(&output, "__vfs_deadlock_thread_exit"));
         assert_ne!(
             export_index(&output, "wasi_thread_start"),
             Some(original_thread_start)
@@ -92,5 +96,19 @@ mod deadlock_thread_id_tests {
         wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
             .validate_all(&output)
             .unwrap();
+    }
+
+    fn imports_func(bytes: &[u8], name: &str) -> bool {
+        wasmparser::Parser::new(0).parse_all(bytes).any(|payload| {
+            if let Ok(wasmparser::Payload::ImportSection(section)) = payload {
+                section.into_iter().flatten().any(|group| {
+                    group.into_iter().flatten().any(|(_, import)| {
+                        import.name == name && matches!(import.ty, wasmparser::TypeRef::Func(_))
+                    })
+                })
+            } else {
+                false
+            }
+        })
     }
 }

@@ -1474,6 +1474,20 @@ pub mod vfs_atomic {
         pub fn __wvl_atomic_load64_target(wasm_id: u32, addr: *const u64) -> u64;
     }
 
+    /// Marks a wasm thread as active in the deadlock detector.
+    #[unsafe(no_mangle)]
+    #[cfg(feature = "detect-deadlock")]
+    pub unsafe extern "C" fn __vfs_deadlock_thread_enter(thread_id: i32) {
+        DEADLOCK_DETECTOR.record_thread_enter(thread_id);
+    }
+
+    /// Removes a wasm thread from active deadlock detector state.
+    #[unsafe(no_mangle)]
+    #[cfg(feature = "detect-deadlock")]
+    pub unsafe extern "C" fn __vfs_deadlock_thread_exit(thread_id: i32) {
+        DEADLOCK_DETECTOR.record_thread_exit(thread_id);
+    }
+
     static WAIT_MAP: LazyLock<DashMap<u64, Box<u32>, BuildHasherDefault<FxHasher>>> =
         LazyLock::new(DashMap::default);
 
@@ -1749,6 +1763,8 @@ pub mod vfs_atomic {
 #[cfg(test)]
 mod deadlock_detector_tests {
     use super::deadlock_detector::{AtomicLocation, DeadlockDetector};
+    #[cfg(all(target_os = "wasi", feature = "detect-deadlock"))]
+    use super::vfs_atomic;
 
     #[test]
     fn detector_records_wait_edge() {
@@ -1797,6 +1813,30 @@ mod deadlock_detector_tests {
         detector.record_thread_exit(7);
 
         assert_eq!(detector.waiting_location(7), None);
+    }
+
+    #[test]
+    fn detector_thread_exit_removes_thread_from_deadlock_check() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_wait_start(7, location, 0);
+        detector.record_thread_exit(7);
+
+        assert_eq!(detector.check_deadlock(), None);
+    }
+
+    #[test]
+    #[cfg(all(target_os = "wasi", feature = "detect-deadlock"))]
+    fn vfs_exports_thread_lifecycle_hooks() {
+        unsafe {
+            vfs_atomic::__vfs_deadlock_thread_enter(91);
+            vfs_atomic::__vfs_deadlock_thread_exit(91);
+        }
     }
 
     #[test]

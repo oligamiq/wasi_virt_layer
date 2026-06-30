@@ -46,6 +46,7 @@ impl Rebind for PostCombineRebinder {
 struct ParsedInfo {
     dropped_imports: HashMap<u32, String>,
     host_imports: HashMap<u32, String>,
+    host_import_modules: HashMap<u32, String>,
     exported_funcs: HashMap<String, u32>,
     mutable_globals: HashMap<u32, i64>, // index -> initial value
     data_segments: Vec<(u32, i32, Vec<u8>)>, // mem_idx, offset, data bytes
@@ -84,6 +85,33 @@ fn resolve_host_export(name: &str, info: &ParsedInfo) -> Option<u32> {
     }
 
     None
+}
+
+fn is_detector_helper(name: &str) -> bool {
+    matches!(
+        name,
+        "__vfs_deadlock_thread_enter"
+            | "__vfs_deadlock_thread_exit"
+            | "__vfs_atomic_wait32"
+            | "__vfs_atomic_wait64"
+            | "__vfs_atomic_notify"
+            | "__vfs_atomic_observe_write"
+    )
+}
+
+fn is_void_detector_helper(name: &str) -> bool {
+    matches!(
+        name,
+        "__vfs_deadlock_thread_enter" | "__vfs_deadlock_thread_exit" | "__vfs_atomic_observe_write"
+    )
+}
+
+fn detector_helper_stub_i32(name: &str) -> Option<i32> {
+    match name {
+        "__vfs_atomic_notify" => Some(0),
+        "__vfs_atomic_wait32" | "__vfs_atomic_wait64" => Some(2),
+        _ => None,
+    }
 }
 
 fn data_segments_for_memory(
@@ -223,6 +251,8 @@ impl StreamPass for PostCombineStreamPass {
                                 {
                                     info.host_imports
                                         .insert(func_import_count, import.name.to_string());
+                                    info.host_import_modules
+                                        .insert(func_import_count, import.module.to_string());
 
                                     if import.module == "env"
                                         && import.name == "__wasip1_vfs_wasi_thread_spawn_wrapper"
@@ -501,6 +531,14 @@ impl StreamPass for PostCombineStreamPass {
             } else if let Some(export_orig_idx) = resolve_host_export(name, &info) {
                 let export_new_idx = func_map.get(&export_orig_idx).copied().unwrap();
                 func_map.insert(*import_idx, export_new_idx);
+            } else if is_detector_helper(name)
+                && info
+                    .host_import_modules
+                    .get(import_idx)
+                    .is_some_and(|module| module == "wasi_snapshot_preview1")
+            {
+                dropped_func_original_indices.push(*import_idx);
+                info.dropped_imports.insert(*import_idx, name.clone());
             } else {
                 dropped_func_original_indices.push(*import_idx);
                 info.dropped_imports.insert(*import_idx, name.clone());
@@ -1400,6 +1438,11 @@ impl StreamPass for PostCombineStreamPass {
                 }
 
                 func.instruction(&wasm_encoder::Instruction::End);
+            } else if is_void_detector_helper(name) {
+                func.instruction(&wasm_encoder::Instruction::End);
+            } else if let Some(value) = detector_helper_stub_i32(name) {
+                func.instruction(&wasm_encoder::Instruction::I32Const(value));
+                func.instruction(&wasm_encoder::Instruction::End);
             } else {
                 func.instruction(&wasm_encoder::Instruction::Unreachable);
                 func.instruction(&wasm_encoder::Instruction::End);
@@ -1823,6 +1866,36 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn detector_helper_imports_are_intentional_when_unresolved() -> eyre::Result<()> {
+        let input = module_with_detector_observe_import();
+        let mut pass = PostCombineStreamPass::new("vfs".to_string(), Vec::new(), vec![1], true);
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new().validate_all(&output)?;
+        assert!(!imports_func(&output, "__vfs_atomic_observe_write")?);
+        Ok(())
+    }
+
+    #[test]
+    fn unresolved_detector_notify_stub_returns_zero() -> eyre::Result<()> {
+        let input = module_with_detector_notify_import();
+        let mut pass = PostCombineStreamPass::new("vfs".to_string(), Vec::new(), vec![1], true);
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new().validate_all(&output)?;
+        let calls = function_calls_by_export(&output, "detector_notify_caller")?;
+        let stub_ops = function_ops_by_index(&output, calls[0])?;
+        assert!(matches!(
+            stub_ops.as_slice(),
+            [
+                wasmparser::Operator::I32Const { value: 0 },
+                wasmparser::Operator::End,
+            ]
+        ));
+        Ok(())
+    }
+
     fn start_calls(output: &[u8]) -> eyre::Result<Vec<u32>> {
         let mut start = None;
         let mut calls = Vec::new();
@@ -1896,6 +1969,43 @@ mod tests {
         eyre::bail!("exported function {export_name:?} not found")
     }
 
+    fn function_ops_by_index<'a>(
+        output: &'a [u8],
+        target_func_idx: u32,
+    ) -> eyre::Result<Vec<wasmparser::Operator<'a>>> {
+        let mut imported_funcs = 0;
+        let mut defined_func_idx = 0;
+
+        for payload in wasmparser::Parser::new(0).parse_all(output) {
+            match payload? {
+                wasmparser::Payload::ImportSection(imports) => {
+                    for group in imports {
+                        for import in group?.into_iter() {
+                            let (_, import) = import?;
+                            if matches!(import.ty, wasmparser::TypeRef::Func(_)) {
+                                imported_funcs += 1;
+                            }
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(body) => {
+                    let absolute_idx = imported_funcs + defined_func_idx;
+                    if absolute_idx == target_func_idx {
+                        return body
+                            .get_operators_reader()?
+                            .into_iter()
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(Into::into);
+                    }
+                    defined_func_idx += 1;
+                }
+                _ => {}
+            }
+        }
+
+        eyre::bail!("function index {target_func_idx} not found")
+    }
+
     fn function_calls(output: &[u8], target_func_idx: u32) -> eyre::Result<Vec<u32>> {
         let mut calls = Vec::new();
         let mut imported_funcs = 0;
@@ -1950,6 +2060,23 @@ mod tests {
         function_calls(output, target_func_idx)
     }
 
+    fn imports_func(output: &[u8], name: &str) -> eyre::Result<bool> {
+        for payload in wasmparser::Parser::new(0).parse_all(output) {
+            if let wasmparser::Payload::ImportSection(imports) = payload? {
+                for group in imports {
+                    for import in group?.into_iter() {
+                        let (_, import) = import?;
+                        if import.name == name && matches!(import.ty, wasmparser::TypeRef::Func(_))
+                        {
+                            return Ok(true);
+                        }
+                    }
+                }
+            }
+        }
+        Ok(false)
+    }
+
     fn module_with_flesh_vfs_start() -> Vec<u8> {
         let mut module = Module::new();
 
@@ -1969,6 +2096,96 @@ mod tests {
         let mut func = Function::new([]);
         func.instruction(&Instruction::End);
         code.function(&func);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_detector_observe_import() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+            ],
+            [],
+        );
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "wasi_snapshot_preview1",
+            "__vfs_atomic_observe_write",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(1);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("detector_observe_caller", ExportKind::Func, 1);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut caller = Function::new([]);
+        caller.instruction(&Instruction::I32Const(0));
+        caller.instruction(&Instruction::I32Const(1));
+        caller.instruction(&Instruction::I32Const(4));
+        caller.instruction(&Instruction::I32Const(4));
+        caller.instruction(&Instruction::Call(0));
+        caller.instruction(&Instruction::End);
+        code.function(&caller);
+        module.section(&code);
+
+        module.finish()
+    }
+
+    fn module_with_detector_notify_import() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function(
+            [
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+                wasm_encoder::ValType::I32,
+            ],
+            [wasm_encoder::ValType::I32],
+        );
+        types.ty().function([], [wasm_encoder::ValType::I32]);
+        module.section(&types);
+
+        let mut imports = ImportSection::new();
+        imports.import(
+            "wasi_snapshot_preview1",
+            "__vfs_atomic_notify",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = FunctionSection::new();
+        functions.function(1);
+        module.section(&functions);
+
+        let mut exports = ExportSection::new();
+        exports.export("detector_notify_caller", ExportKind::Func, 1);
+        module.section(&exports);
+
+        let mut code = CodeSection::new();
+        let mut caller = Function::new([]);
+        caller.instruction(&Instruction::I32Const(0));
+        caller.instruction(&Instruction::I32Const(4));
+        caller.instruction(&Instruction::I32Const(1));
+        caller.instruction(&Instruction::Call(0));
+        caller.instruction(&Instruction::End);
+        code.function(&caller);
         module.section(&code);
 
         module.finish()
