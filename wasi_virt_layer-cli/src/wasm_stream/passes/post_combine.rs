@@ -50,9 +50,11 @@ struct ParsedInfo {
     exported_funcs: HashMap<String, u32>,
     mutable_globals: HashMap<u32, i64>, // index -> initial value
     data_segments: Vec<(u32, i32, Vec<u8>)>, // mem_idx, offset, data bytes
+    memory_initials: Vec<u64>,
     pub main_void_funcs: HashSet<u32>,
     pub wasi_thread_starts: HashMap<String, u32>,
     reset_globals_funcs: HashMap<String, u32>,
+    target_own_memory_size_set_funcs: HashMap<String, u32>,
     wrap_unreachable_targets: HashSet<String>,
     set_unreachable_flag_funcs: HashMap<String, u32>,
     original_data_count: u32,
@@ -271,7 +273,8 @@ impl StreamPass for PostCombineStreamPass {
                             if matches!(import.ty, wasmparser::TypeRef::Global(_)) {
                                 global_count += 1;
                             }
-                            if matches!(import.ty, wasmparser::TypeRef::Memory(_)) {
+                            if let wasmparser::TypeRef::Memory(memory_ty) = import.ty {
+                                info.memory_initials.push(memory_ty.initial);
                                 memory_import_count += 1;
                                 memory_count += 1;
                             }
@@ -289,7 +292,11 @@ impl StreamPass for PostCombineStreamPass {
                     defined_func_count = s.count();
                 }
                 wasmparser::Payload::MemorySection(s) => {
-                    memory_count += s.count();
+                    for memory in s {
+                        let memory = memory?;
+                        info.memory_initials.push(memory.initial);
+                        memory_count += 1;
+                    }
                 }
                 wasmparser::Payload::ExportSection(s) => {
                     for export in s {
@@ -366,6 +373,20 @@ impl StreamPass for PostCombineStreamPass {
                                         .unwrap();
                                     info.reset_globals_funcs
                                         .insert(target.replace("_", "-"), export.index);
+                                }
+                                name if own_memory_abi::parse_prefixed_target_export(
+                                    name,
+                                    own_memory_abi::TARGET_OWN_MEMORY_SIZE_SET_SUFFIX,
+                                )
+                                .is_some() =>
+                                {
+                                    let target = own_memory_abi::parse_prefixed_target_export(
+                                        name,
+                                        own_memory_abi::TARGET_OWN_MEMORY_SIZE_SET_SUFFIX,
+                                    )
+                                    .unwrap();
+                                    info.target_own_memory_size_set_funcs
+                                        .insert(target.to_string(), export.index);
                                 }
                                 name if name.starts_with("__wasip1_virt_layer_")
                                     && name.ends_with("_wrap_unreachable") =>
@@ -1426,6 +1447,14 @@ impl StreamPass for PostCombineStreamPass {
                         data_index: info.original_data_count + segment_index as u32,
                         mem: wasm_mem,
                     });
+                }
+
+                if let (Some(initial_pages), Some(&set_idx)) = (
+                    info.memory_initials.get(wasm_mem as usize),
+                    info.target_own_memory_size_set_funcs.get(target_name),
+                ) {
+                    func.instruction(&wasm_encoder::Instruction::I32Const(*initial_pages as i32));
+                    func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(set_idx)));
                 }
 
                 // 4. Re-run the target's module start. Besides memory.init, this
@@ -2601,6 +2630,75 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn reset_body_restores_target_own_memory_logical_size() -> eyre::Result<()> {
+        let input = module_with_own_memory_target_reset();
+        let mut pass = PostCombineStreamPass::new(
+            "vfs".to_string(),
+            vec!["test_target".to_string()],
+            vec![1],
+            true,
+        );
+        let output = pass.run(&input)?;
+
+        let mut set_idx = None;
+        let mut found_ordered_logical_reset = false;
+
+        for payload in wasmparser::Parser::new(0).parse_all(&output) {
+            match payload? {
+                wasmparser::Payload::ExportSection(exports) => {
+                    for export in exports {
+                        let export = export?;
+                        if export.name == "__wasip1_vfs_test_target_own_memory_size_set" {
+                            set_idx = Some(export.index);
+                        }
+                    }
+                }
+                wasmparser::Payload::CodeSectionEntry(body) => {
+                    let start_idx = set_idx.map(|idx| idx + 1);
+                    let ops = body
+                        .get_operators_reader()?
+                        .into_iter()
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let mut logical_reset_pos = None;
+                    let mut target_start_pos = None;
+                    for (pos, window) in ops.windows(2).enumerate() {
+                        if let (
+                            wasmparser::Operator::I32Const { value: 7 },
+                            wasmparser::Operator::Call { function_index },
+                        ) = (&window[0], &window[1])
+                        {
+                            if Some(*function_index) == set_idx {
+                                logical_reset_pos = Some(pos);
+                            }
+                        }
+                    }
+                    for (pos, op) in ops.iter().enumerate() {
+                        if let wasmparser::Operator::Call { function_index } = op {
+                            if Some(*function_index) == start_idx {
+                                target_start_pos = Some(pos);
+                            }
+                        }
+                    }
+                    if let (Some(logical_reset_pos), Some(target_start_pos)) =
+                        (logical_reset_pos, target_start_pos)
+                    {
+                        if logical_reset_pos < target_start_pos {
+                            found_ordered_logical_reset = true;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        assert!(
+            found_ordered_logical_reset,
+            "synthesized _reset should restore target own-memory logical size before target start"
+        );
+        Ok(())
+    }
+
     fn module_with_flesh_vfs_start_and_reset() -> Vec<u8> {
         let mut module = wasm_encoder::Module::new();
 
@@ -2633,6 +2731,69 @@ mod tests {
         let mut atomic_func = wasm_encoder::Function::new([(1, wasm_encoder::ValType::I32)]);
         atomic_func.instruction(&wasm_encoder::Instruction::End);
         code.function(&atomic_func);
+        module.section(&code);
+
+        module.finish().to_vec()
+    }
+
+    fn module_with_own_memory_target_reset() -> Vec<u8> {
+        let mut module = wasm_encoder::Module::new();
+
+        let mut types = wasm_encoder::TypeSection::new();
+        types.ty().function([], []);
+        types.ty().function([wasm_encoder::ValType::I32], []);
+        module.section(&types);
+
+        let mut imports = wasm_encoder::ImportSection::new();
+        imports.import(
+            "wasip1-vfs",
+            "__wasip1_vfs_test_target_reset",
+            wasm_encoder::EntityType::Function(0),
+        );
+        module.section(&imports);
+
+        let mut functions = wasm_encoder::FunctionSection::new();
+        functions.function(1);
+        functions.function(0);
+        module.section(&functions);
+
+        let mut memories = wasm_encoder::MemorySection::new();
+        memories.memory(wasm_encoder::MemoryType {
+            minimum: 3,
+            maximum: Some(12),
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        memories.memory(wasm_encoder::MemoryType {
+            minimum: 7,
+            maximum: Some(20),
+            memory64: false,
+            shared: false,
+            page_size_log2: None,
+        });
+        module.section(&memories);
+
+        let mut exports = wasm_encoder::ExportSection::new();
+        exports.export(
+            "__wasip1_vfs_test_target_own_memory_size_set",
+            wasm_encoder::ExportKind::Func,
+            1,
+        );
+        exports.export(
+            "__flesh_test_target_start",
+            wasm_encoder::ExportKind::Func,
+            2,
+        );
+        module.section(&exports);
+
+        let mut code = wasm_encoder::CodeSection::new();
+        let mut set_func = wasm_encoder::Function::new([(1, wasm_encoder::ValType::I32)]);
+        set_func.instruction(&wasm_encoder::Instruction::End);
+        code.function(&set_func);
+        let mut start_func = wasm_encoder::Function::new([]);
+        start_func.instruction(&wasm_encoder::Instruction::End);
+        code.function(&start_func);
         module.section(&code);
 
         module.finish().to_vec()

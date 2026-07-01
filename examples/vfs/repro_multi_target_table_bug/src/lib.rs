@@ -86,6 +86,7 @@ plug_args!(@embedded, VirtualArgsTy, test_threads, ls, args, ls2, self);
 plug_clock!(StandardClock, test_threads, ls, args, ls2, self);
 plug_random!(StandardRandom, test_threads, ls, args, ls2, self);
 plug_poll!(DefaultPoll, test_threads, ls, args, ls2, self);
+plug_sched!(DefaultSched, ls, args, ls2, self);
 
 #[allow(dead_code)]
 mod fs {

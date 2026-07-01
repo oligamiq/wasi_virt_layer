@@ -77,6 +77,9 @@ const POOL_REUSED_START_TARGET_WAT: &str = r#"
 
 const POOL_REUSED_DIRECT_EXPORT_TARGET_WAT: &str = r#"
 (module
+  (import "__wasip1_vfs-host" "reused_worker_call_direct_export"
+    (func $call_direct_export))
+
   (memory (export "memory") 1 1 shared)
 
   ;; $marker: worker-local state cleared by the target start section/thread init
@@ -100,7 +103,8 @@ const POOL_REUSED_DIRECT_EXPORT_TARGET_WAT: &str = r#"
   (func $wasi_thread_start (export "wasi_thread_start")
     (param $thread_id i32)
     (param $start_arg i32)
-    (global.set $marker (local.get $start_arg)))
+    (global.set $marker (local.get $start_arg))
+    (call $call_direct_export))
 )
 "#;
 
@@ -140,7 +144,7 @@ fn test_pool_reused_thread_runs_start_section_for_each_logical_thread() -> color
 }
 
 #[test]
-fn test_direct_export_reinitializes_target_on_non_main_worker() -> color_eyre::Result<()> {
+fn test_direct_export_reinitializes_target_on_reused_vtp_worker() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
     if !has_required_wasi_targets(true) {
@@ -173,8 +177,8 @@ fn test_direct_export_reinitializes_target_on_non_main_worker() -> color_eyre::R
     let stdout = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
     println!("Captured stdout:\n{}", stdout);
 
-    assert!(stdout.contains("Starting non-main direct-export test"));
-    assert!(stdout.contains("Non-main direct-export test passed"));
+    assert!(stdout.contains("Starting reused VTP direct-export test"));
+    assert!(stdout.contains("Reused VTP direct-export test passed"));
 
     Ok(())
 }
