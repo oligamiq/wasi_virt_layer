@@ -7,18 +7,18 @@ wit_bindgen::generate!({
 
 struct Starter;
 
-import_wasm!(write_single_target);
+import_wasm!(test_write_single);
 
 impl Guest for Starter {
     fn init() {}
 
     fn start() {
-        write_single_target::_start();
+        test_write_single::_start();
     }
 
     fn main() {
-        write_single_target::_start();
-        write_single_target::_main();
+        test_write_single::_start();
+        test_write_single::_main();
     }
 }
 
@@ -28,10 +28,11 @@ export!(Starter);
 plug_thread!(
     { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
-    write_single_target
+    test_write_single
 );
 
-plug_process!(StandardProcess, write_single_target, self);
+plug_clock!(StandardClock, test_write_single, self);
+plug_process!(StandardProcess, test_write_single, self);
 
 mod env {
     use super::*;
@@ -42,7 +43,7 @@ mod env {
         environ: &["HOME=~/"],
     };
 
-    plug_env!(@embedded, VirtualEnvTy, write_single_target, self);
+    plug_env!(@embedded, VirtualEnvTy, test_write_single, self);
 }
 
 mod fs {
@@ -59,5 +60,5 @@ mod fs {
             vfs
         });
 
-    plug_fs!(&*VIRTUAL_FILE_SYSTEM, write_single_target, self);
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_write_single, self);
 }

@@ -496,7 +496,7 @@ fn test_stderr_reentrancy_vfs() -> color_eyre::Result<()> {
         return Ok(());
     }
 
-    let _dir = run_wasi_virt_layer(
+    let err = run_wasi_virt_layer(
         Some("stderr_reentrancy_vfs"),
         None, // it's a self VFS, so the target is itself
         None,
@@ -506,7 +506,17 @@ fn test_stderr_reentrancy_vfs() -> color_eyre::Result<()> {
         &[],
         None,
     )
-    .wrap_err("Failed to run stderr_reentrancy_vfs")?;
+    .expect_err("stderr_reentrancy_vfs should trap on re-entrant stderr");
+
+    let err = format!("{err:?}");
+    assert!(
+        err.contains("RuntimeError") || err.contains("null function"),
+        "expected a re-entrancy trap, got:\n{err}"
+    );
+    assert!(
+        !err.contains("Process timed out"),
+        "stderr re-entrancy should fail fast, not time out:\n{err}"
+    );
 
     Ok(())
 }
@@ -1560,7 +1570,7 @@ fn test_write_single_memory() -> color_eyre::Result<()> {
 
     let _test_dir = run_wasi_virt_layer(
         Some("write-single-vfs"),
-        Some("write_single_target"),
+        Some("test_write_single"),
         Some(true), // t_single: true
         true,       // threads: true
         OutDir::Random,
