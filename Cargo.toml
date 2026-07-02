@@ -77,6 +77,8 @@ members = [
     "wasi_virt_layer-cli/tests/fixtures/vtp_nested_spawn_vfs",
     "wasi_virt_layer-cli/tests/fixtures/spawn_main_target",
     "wasi_virt_layer-cli/tests/fixtures/spawn_main_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/own_memory_reset_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/unreachable_reset_vfs",
     "wasi_virt_layer-cli/tests/fixtures/pool_reused_start_vfs",
     "wasi_virt_layer-cli/tests/fixtures/pool_reused_direct_export_vfs",
     "wasi_virt_layer-cli/tests/fixtures/atomic_wait_reset_vfs",

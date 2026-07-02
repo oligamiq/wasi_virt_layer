@@ -54,6 +54,7 @@ struct ParsedInfo {
     pub main_void_funcs: HashSet<u32>,
     pub wasi_thread_starts: HashMap<String, u32>,
     reset_globals_funcs: HashMap<String, u32>,
+    target_own_memory_size_get_funcs: HashMap<String, u32>,
     target_own_memory_size_set_funcs: HashMap<String, u32>,
     wrap_unreachable_targets: HashSet<String>,
     set_unreachable_flag_funcs: HashMap<String, u32>,
@@ -373,6 +374,20 @@ impl StreamPass for PostCombineStreamPass {
                                         .unwrap();
                                     info.reset_globals_funcs
                                         .insert(target.replace("_", "-"), export.index);
+                                }
+                                name if own_memory_abi::parse_prefixed_target_export(
+                                    name,
+                                    own_memory_abi::TARGET_OWN_MEMORY_SIZE_GET_SUFFIX,
+                                )
+                                .is_some() =>
+                                {
+                                    let target = own_memory_abi::parse_prefixed_target_export(
+                                        name,
+                                        own_memory_abi::TARGET_OWN_MEMORY_SIZE_GET_SUFFIX,
+                                    )
+                                    .unwrap();
+                                    info.target_own_memory_size_get_funcs
+                                        .insert(target.to_string(), export.index);
                                 }
                                 name if own_memory_abi::parse_prefixed_target_export(
                                     name,
@@ -1420,11 +1435,36 @@ impl StreamPass for PostCombineStreamPass {
                     ));
                 }
 
+                if let Some(&set_unreachable_flag_idx) =
+                    info.set_unreachable_flag_funcs.get(target_name)
+                {
+                    func.instruction(&wasm_encoder::Instruction::I32Const(0));
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(set_unreachable_flag_idx),
+                    ));
+                }
+
                 // 1. Reset globals
                 if let Some(&reset_globals_idx) = info.reset_globals_funcs.get(target_name) {
                     func.instruction(&wasm_encoder::Instruction::Call(
                         rebinder.function(reset_globals_idx),
                     ));
+                }
+
+                if let (Some(initial_pages), Some(&get_idx), Some(&set_idx)) = (
+                    info.memory_initials.get(wasm_mem as usize),
+                    info.target_own_memory_size_get_funcs.get(target_name),
+                    info.target_own_memory_size_set_funcs.get(target_name),
+                ) {
+                    func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(get_idx)));
+                    func.instruction(&wasm_encoder::Instruction::I32Const(-1));
+                    func.instruction(&wasm_encoder::Instruction::I32Eq);
+                    func.instruction(&wasm_encoder::Instruction::If(
+                        wasm_encoder::BlockType::Empty,
+                    ));
+                    func.instruction(&wasm_encoder::Instruction::I32Const(*initial_pages as i32));
+                    func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(set_idx)));
+                    func.instruction(&wasm_encoder::Instruction::End);
                 }
 
                 let target_data_segments =

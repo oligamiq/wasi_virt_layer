@@ -1,0 +1,5 @@
+package tests:unreachable-reset;
+
+world component-abi {
+  export main: func();
+}

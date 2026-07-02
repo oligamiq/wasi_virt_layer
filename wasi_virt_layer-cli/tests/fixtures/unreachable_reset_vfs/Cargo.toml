@@ -1,0 +1,17 @@
+[package]
+name = "unreachable_reset_vfs"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[dependencies]
+const_struct = "0.6.2"
+wit-bindgen = "0.54.0"
+
+[dependencies.wasi_virt_layer]
+path = "../../../../wasi_virt_layer"
+default-features = false
+features = ["std", "own-memory", "multi_memory", "embedded-fs"]
+
+[lib]
+crate-type = ["cdylib"]

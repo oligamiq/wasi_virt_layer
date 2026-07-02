@@ -1,0 +1,5 @@
+package tests:own-memory-reset;
+
+world component-abi {
+  export main: func();
+}
