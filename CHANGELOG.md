@@ -6,9 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.6.0] - 2026-07-04
-### Changed
-- Updated workspace version to 0.6.0.
-- Updated dependencies.
+### Added
+- **Reset State Management**:
+    - Synthesized `_reset()` functions now correctly restore the target's own-memory logical sizes to their initial states.
+    - `_reset()` now clears the `unreachable` trap wrapper state flags.
+    - Added `own_memory_reset_vfs` and `unreachable_reset_vfs` integration tests to verify state clearing behavior.
+- **Documentation**:
+    - Added `rubrc-rustc-vtp-followup-2026-07.md` detailing the `VirtualThreadPool` architecture and thread re-initialization invariants.
+
+### Fixed
+- **Deadlock Detector**:
+    - Fixed a false positive where the deadlock detector would incorrectly flag the VFS shell thread during a host idle wait (thread ID `1_000_000`, wasm ID `4`).
+- **Tests**:
+    - Fixed `pool_reused_direct_export_vfs` test to correctly verify target reinitialization on reused non-main workers.
+    - Fixed `test_stderr_reentrancy_vfs` to explicitly assert a trap rather than a timeout.
+    - Corrected the target name in `write-single-vfs` to `test_write_single` to align with expected test inputs.
 
 ## [0.5.14] - 2026-06-30
 ### Added
