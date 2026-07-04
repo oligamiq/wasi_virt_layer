@@ -10,6 +10,8 @@ use std::{sync::Arc, thread::JoinHandle};
 use crate::{__private::wasip1, memory::WasmAccess};
 use crate::{memory::WasmAccessName, utils::UnsafeOnceCell};
 
+const DEFAULT_RESERVED_THREAD_ID_BASE: u32 = 1_000_000;
+
 thread_local! {
     // Tracks reusable worker state for direct and pooled thread reinitialization.
     static WORKER_HAS_RUN_BEFORE: Cell<bool> = const { Cell::new(false) };
@@ -141,7 +143,7 @@ impl ReservedRangeThreadIdGenerator {
 
     /// Creates the default generator for IDs reserved away from external runners.
     pub const fn new_default() -> Self {
-        Self::new(1_000_000, i32::MAX as u32)
+        Self::new(DEFAULT_RESERVED_THREAD_ID_BASE, i32::MAX as u32)
     }
 }
 
@@ -1085,6 +1087,10 @@ mod deadlock_detector {
     use dashmap::DashMap;
     use fxhash::FxHasher;
 
+    use super::DEFAULT_RESERVED_THREAD_ID_BASE;
+
+    const VFS_SHELL_WASM_ID: u32 = 4;
+
     /// Atomic memory location observed by the deadlock detector.
     #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
     pub(super) struct AtomicLocation {
@@ -1098,6 +1104,15 @@ mod deadlock_detector {
         location: AtomicLocation,
         expected_low: u64,
         generation_at_wait: u64,
+    }
+
+    impl ThreadWait {
+        fn is_possible_host_idle_wait(&self, thread_id: i32) -> bool {
+            thread_id == DEFAULT_RESERVED_THREAD_ID_BASE as i32
+                && self.location.wasm_id == VFS_SHELL_WASM_ID
+                && self.location.width == 4
+                && self.expected_low == u32::MAX as u64
+        }
     }
 
     #[derive(Clone, Copy, Debug, Default)]
@@ -1186,7 +1201,8 @@ mod deadlock_detector {
 
         /// Returns a deadlock diagnostic when all observed threads are waiting on unchanged locations.
         pub(super) fn check_deadlock(&self) -> Option<String> {
-            if self.active_threads.is_empty() {
+            let active_count = self.active_threads.len();
+            if active_count == 0 {
                 return None;
             }
 
@@ -1194,6 +1210,9 @@ mod deadlock_detector {
             for thread in self.active_threads.iter() {
                 let thread_id = *thread.key();
                 let wait = self.waits.get(&thread_id)?;
+                if active_count == 1 && wait.is_possible_host_idle_wait(thread_id) {
+                    continue;
+                }
                 let current_generation = self.location_generation(wait.location);
                 if current_generation != wait.generation_at_wait {
                     return None;
@@ -1855,6 +1874,95 @@ mod deadlock_detector_tests {
         detector.record_location_change(7, location);
 
         assert_eq!(detector.location_generation(location), 1);
+    }
+
+    #[test]
+    fn host_idle_wait_does_not_report_deadlock() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 4,
+            relative_addr: 1_582_760,
+            width: 4,
+        };
+
+        detector.record_wait_start(1_000_000, location, u32::MAX as u64);
+
+        assert_eq!(detector.check_deadlock(), None);
+    }
+
+    #[test]
+    fn host_idle_wait_does_not_suppress_other_wait() {
+        let detector = DeadlockDetector::default();
+        detector.record_wait_start(
+            1_000_000,
+            AtomicLocation {
+                wasm_id: 4,
+                relative_addr: 1_582_760,
+                width: 4,
+            },
+            u32::MAX as u64,
+        );
+        detector.record_wait_start(
+            1_000_001,
+            AtomicLocation {
+                wasm_id: 1,
+                relative_addr: 4,
+                width: 4,
+            },
+            u32::MAX as u64,
+        );
+
+        let diagnostic = detector.check_deadlock().expect("deadlock diagnostic");
+        assert!(diagnostic.contains("deadlock detected"));
+        assert!(diagnostic.contains("thread=1000001"));
+    }
+
+    #[test]
+    fn lone_non_idle_wait_reports_deadlock() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_wait_start(7, location, 0);
+
+        let diagnostic = detector.check_deadlock().expect("deadlock diagnostic");
+        assert!(diagnostic.contains("deadlock detected"));
+        assert!(diagnostic.contains("thread=7"));
+    }
+
+    #[test]
+    fn lone_non_idle_max_expected_wait_reports_deadlock() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_wait_start(7, location, u32::MAX as u64);
+
+        let diagnostic = detector.check_deadlock().expect("deadlock diagnostic");
+        assert!(diagnostic.contains("deadlock detected"));
+        assert!(diagnostic.contains("thread=7"));
+    }
+
+    #[test]
+    fn first_reserved_non_idle_max_expected_wait_reports_deadlock() {
+        let detector = DeadlockDetector::default();
+        let location = AtomicLocation {
+            wasm_id: 1,
+            relative_addr: 4,
+            width: 4,
+        };
+
+        detector.record_wait_start(1_000_000, location, u32::MAX as u64);
+
+        let diagnostic = detector.check_deadlock().expect("deadlock diagnostic");
+        assert!(diagnostic.contains("deadlock detected"));
+        assert!(diagnostic.contains("thread=1000000"));
     }
 
     #[test]
