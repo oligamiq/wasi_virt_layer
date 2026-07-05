@@ -1548,8 +1548,24 @@ impl<'a, Wasm: WasmAccess + ?Sized> Iterator for WasmPathComponents<'a, Wasm> {
                 self.path.len -= end;
                 return Some(WasmPathComponent::Normal(component));
             }
+
+            let mut end = 2;
+            while end < self.path.len && self.path.get(end) != b'/' {
+                end += 1;
+            }
+
+            let component = WasmArrayAccess::new(self.path.ptr, end);
+
+            while end < self.path.len && self.path.get(end) == b'/' {
+                end += 1;
+            }
+            self.path.ptr = unsafe { self.path.ptr.add(end) };
+            self.path.len -= end;
+            return Some(WasmPathComponent::Normal(component));
         } else {
-            let mut end = 0;
+            // At this point leading separators have already been consumed, so the
+            // first byte belongs to a normal component.
+            let mut end = 1;
             while end < self.path.len && self.path.get(end) != b'/' {
                 end += 1;
             }
@@ -1564,7 +1580,6 @@ impl<'a, Wasm: WasmAccess + ?Sized> Iterator for WasmPathComponents<'a, Wasm> {
             return Some(WasmPathComponent::Normal(component));
         }
 
-        None
     }
 }
 
@@ -1954,15 +1969,31 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
                 self.path.len -= end;
                 return Some(WasmPathComponentDynCompatible::Normal(component));
             }
-        } else {
-            let mut end = 0;
-            while end < self.path.len() && self.path.get(end) != b'/' {
+
+            let mut end = 2;
+            while end < self.path.len && self.path.get(end) != b'/' {
                 end += 1;
             }
 
             let component = WasmArrayAccessDynCompatible::new(self.path.access, self.path.ptr, end);
 
-            while end < self.path.len() && self.path.get(end) == b'/' {
+            while end < self.path.len && self.path.get(end) == b'/' {
+                end += 1;
+            }
+            self.path.ptr = unsafe { self.path.ptr.add(end) };
+            self.path.len -= end;
+            return Some(WasmPathComponentDynCompatible::Normal(component));
+        } else {
+            // At this point leading separators have already been consumed, so the
+            // first byte belongs to a normal component.
+            let mut end = 1;
+            while end < self.path.len && self.path.get(end) != b'/' {
+                end += 1;
+            }
+
+            let component = WasmArrayAccessDynCompatible::new(self.path.access, self.path.ptr, end);
+
+            while end < self.path.len && self.path.get(end) == b'/' {
                 end += 1;
             }
             self.path.ptr = unsafe { self.path.ptr.add(end) };
@@ -1970,7 +2001,6 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
             return Some(WasmPathComponentDynCompatible::Normal(component));
         }
 
-        None
     }
 }
 
@@ -2000,6 +2030,19 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> WasmPathComponentCommon
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_component_eq(component: impl WasmPathComponentCommon, expected: &str) {
+        if expected == "/" {
+            assert!(component.as_root_dir());
+        } else if expected == "." {
+            assert!(component.as_cur_dir());
+        } else if expected == ".." {
+            assert!(component.as_parent_dir());
+        } else {
+            let bytes: Vec<u8> = component.as_normal().unwrap().into_iter().collect();
+            assert_eq!(bytes, expected.as_bytes());
+        }
+    }
 
     #[test]
     fn test_wasm_path_components() {
@@ -2042,6 +2085,50 @@ mod tests {
         assert!(iter.next().unwrap().eq_str(".."));
         assert!(iter.next().unwrap().eq_str("bin"));
         assert!(iter.next().unwrap().eq_str("explorer.exe"));
+        assert!(iter.next().is_none());
+
+        let path = WasmPathAccess::<WasmAccessFaker>::new(b".cargo/config.toml".as_ptr(), 18);
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert!(iter.next().unwrap().eq_str(".cargo"));
+        assert!(iter.next().unwrap().eq_str("config.toml"));
+        assert!(iter.next().is_none());
+
+        let access = WasmAccessFaker;
+        let path = WasmPathAccessDynCompatible::new(
+            &access,
+            b".cargo/config.toml".as_ptr(),
+            18,
+        );
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert_component_eq(iter.next().unwrap(), ".cargo");
+        assert_component_eq(iter.next().unwrap(), "config.toml");
+        assert!(iter.next().is_none());
+
+        let path = WasmPathAccess::<WasmAccessFaker>::new(b"/.cargo/config.toml".as_ptr(), 19);
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert!(iter.next().unwrap().eq_str("/"));
+        assert!(iter.next().unwrap().eq_str(".cargo"));
+        assert!(iter.next().unwrap().eq_str("config.toml"));
+        assert!(iter.next().is_none());
+
+        let access = WasmAccessFaker;
+        let path = WasmPathAccessDynCompatible::new(
+            &access,
+            b"/.cargo/config.toml".as_ptr(),
+            19,
+        );
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert_component_eq(iter.next().unwrap(), "/");
+        assert_component_eq(iter.next().unwrap(), ".cargo");
+        assert_component_eq(iter.next().unwrap(), "config.toml");
         assert!(iter.next().is_none());
     }
 }
