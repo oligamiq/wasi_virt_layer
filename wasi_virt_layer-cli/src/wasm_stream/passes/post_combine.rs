@@ -814,6 +814,13 @@ impl StreamPass for PostCombineStreamPass {
                     // TODO: append VFS External Memory here
                     module.section(&memory_section);
                 }
+                wasmparser::Payload::TagSection(s) => {
+                    let mut tags = wasm_encoder::TagSection::new();
+                    for tag in s {
+                        tags.tag(crate::wasm_stream::translator::translate_tag_type(tag?));
+                    }
+                    module.section(&tags);
+                }
                 wasmparser::Payload::GlobalSection(s) => {
                     for global in s {
                         let global = global?;
@@ -1556,8 +1563,9 @@ impl StreamPass for PostCombineStreamPass {
 mod tests {
     use super::*;
     use wasm_encoder::{
-        CodeSection, DataCountSection, DataSection, ExportKind, ExportSection, Function,
-        FunctionSection, ImportSection, Instruction, MemorySection, Module, TypeSection,
+        BlockType, Catch, CodeSection, DataCountSection, DataSection, ExportKind, ExportSection,
+        Function, FunctionSection, ImportSection, Instruction, MemorySection, Module, TagKind,
+        TagSection, TagType, TypeSection,
     };
 
     #[test]
@@ -1965,6 +1973,19 @@ mod tests {
         Ok(())
     }
 
+    #[test]
+    fn preserves_tag_section_referenced_by_exception_handlers() -> eyre::Result<()> {
+        let input = module_with_try_table_tag();
+        wasmparser::Validator::new().validate_all(&input)?;
+
+        let mut pass = PostCombineStreamPass::new("vfs".to_string(), Vec::new(), vec![1], false);
+        let output = pass.run(&input)?;
+
+        wasmparser::Validator::new().validate_all(&output)?;
+        assert_eq!(tag_type_indices(&output)?, vec![1]);
+        Ok(())
+    }
+
     fn start_calls(output: &[u8]) -> eyre::Result<Vec<u32>> {
         let mut start = None;
         let mut calls = Vec::new();
@@ -2144,6 +2165,51 @@ mod tests {
             }
         }
         Ok(false)
+    }
+
+    fn tag_type_indices(output: &[u8]) -> eyre::Result<Vec<u32>> {
+        for payload in wasmparser::Parser::new(0).parse_all(output) {
+            if let wasmparser::Payload::TagSection(tags) = payload? {
+                return tags
+                    .into_iter()
+                    .map(|tag| Ok(tag?.func_type_idx))
+                    .collect();
+            }
+        }
+        Ok(Vec::new())
+    }
+
+    fn module_with_try_table_tag() -> Vec<u8> {
+        let mut module = Module::new();
+
+        let mut types = TypeSection::new();
+        types.ty().function([wasm_encoder::ValType::I32], []);
+        types.ty().function([], []);
+        module.section(&types);
+
+        let mut functions = FunctionSection::new();
+        functions.function(1);
+        module.section(&functions);
+
+        let mut tags = TagSection::new();
+        tags.tag(TagType {
+            kind: TagKind::Exception,
+            func_type_idx: 1,
+        });
+        module.section(&tags);
+
+        let mut code = CodeSection::new();
+        let mut func = Function::new([]);
+        func.instruction(&Instruction::TryTable(
+            BlockType::Empty,
+            std::borrow::Cow::Borrowed(&[Catch::One { tag: 0, label: 0 }]),
+        ));
+        func.instruction(&Instruction::End);
+        func.instruction(&Instruction::End);
+        code.function(&func);
+        module.section(&code);
+
+        module.finish()
     }
 
     fn module_with_flesh_vfs_start() -> Vec<u8> {
