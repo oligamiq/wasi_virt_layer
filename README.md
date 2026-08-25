@@ -1,5 +1,6 @@
 # wasi-virt-layer
 WASI Virtual Layer is a virtual file system layer for WebAssembly System Interface (WASI) modules. It allows you to run WASI modules with a virtual file system that can be customized and extended.
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/oligamiq/wasi_virt_layer)
 
 # example usage
 0. Install the CLI tool with
