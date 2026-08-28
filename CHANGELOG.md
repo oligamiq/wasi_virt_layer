@@ -13,11 +13,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Thread activity tracking is internal and keyed per `ThreadAccessor` type/target, so the public `ThreadAccess` trait remains unchanged for downstream implementations.
 - **Threaded integration test logging**:
     - Deno stdout/stderr are written directly to test log files instead of undrained pipes, avoiding pipe backpressure during verbose threaded runs.
+- **Patch-release API compatibility**:
+    - Restored the public three-argument `VirtualThreadPool::run` API while keeping the new reset activity tracking internal, preserving compatibility with downstream callers.
 - **Future Rust compatibility**:
-    - Removed expression-position `eyre::bail!` usages that trigger Rust future-incompatibility lints, and fixed bare rustdoc URLs in the CLI.
+    - Removed expression-position `eyre::bail!` usages that trigger Rust future-incompatibility lints, and fixed bare rustdoc URLs in the core and CLI crates.
+- **Dependency security and lockfiles**:
+    - Updated `crossbeam-epoch` to 0.9.20 to resolve RUSTSEC-2026-0204 and refreshed the `cxx` dependency family to 1.0.199 to remove its unsound advisory.
+    - Removed stale workspace-member `Cargo.lock` files so the audited root lockfile is the single dependency resolution source; GitHub Dependabot now reports no open alerts.
 - **Publishing metadata**:
     - Crate packages now include the repository README, and `wasi_virt_layer` uses the repository's actual `LICENSE` file instead of the previous incorrect `MIT OR Apache-2.0` metadata declaration.
     - Crate metadata now declares the tested MSRV explicitly: Rust 1.89.0 for `wasi_virt_layer` and Rust 1.93.0 for `wasi_virt_layer-cli`.
+- **Release safety**:
+    - Added a staged release workflow and `scripts/release-preflight.sh` to verify repository state, target-version availability, Dependabot/RustSec status, regression tests, SemVer compatibility, MSRV builds, strict rustdoc, and publish dry-runs before tagging.
 
 ## [0.7.0] - 2026-08-28
 ### Fixed
