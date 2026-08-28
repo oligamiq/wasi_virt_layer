@@ -68,7 +68,7 @@ install deno
 
 # Notes and Caveats
 - **Thread Toolchain**: `wasm32-wasip1-threads` command-style builds require Rust 1.92.0 or later. Threaded VFS/reactor (`cdylib`) builds require nightly-2026-08-27 or later until the corresponding fix reaches stable Rust 1.100.0.
-- **Thread & Memory Modes**: `single_memory` mode can sometimes fail in scenarios where `multi_memory` succeeds. A sequence like `_reset(); _start(); _main();` in multi-threaded environments has been observed to trigger issues in single-memory mode.
+- **Thread & Memory Modes**: Threaded `_reset()` waits for queued/running logical threads from the old target generation before releasing atomic-wait state and restarting the target. Other `single_memory`-specific limitations may still exist in configurations where `multi_memory` succeeds.
 - **Build Cache**: Caching build artifacts in `target/` to speed up subsequent builds is under consideration (not yet implemented).
 - **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.
 - **CLI Arguments**: Very long argument lists might still cause issues in some environments.
@@ -82,3 +82,6 @@ install deno
 - VFS -> Target Module: Success
 - Target Module -> Target Module: Success
 - VFS -> VFS: Success
+
+# License
+The repository license is defined in [`LICENSE`](LICENSE). Except for the `examples/` directory, the current license reserves all rights and restricts use, copying, modification, and distribution. The `examples/` directory may be used freely as stated in that license.

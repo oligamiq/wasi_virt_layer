@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Fixed
+- **Threaded target reset lifecycle**:
+    - `_reset()` now cancels target atomic waits, waits for all queued/running logical threads from the old target generation to finish, and only then frees atomic-wait cells and restarts the target. This prevents stale threads from racing with reset memory and stealing or missing notifications.
+    - Thread activity is counted from enqueue time so child threads queued by an old-generation worker are included in the reset barrier.
+    - Thread activity tracking is internal and keyed per `ThreadAccessor` type/target, so the public `ThreadAccess` trait remains unchanged for downstream implementations.
+- **Threaded integration test logging**:
+    - Deno stdout/stderr are written directly to test log files instead of undrained pipes, avoiding pipe backpressure during verbose threaded runs.
+- **Publishing metadata**:
+    - Crate packages now include the repository README, and `wasi_virt_layer` uses the repository's actual `LICENSE` file instead of the previous incorrect `MIT OR Apache-2.0` metadata declaration.
 
 ## [0.7.0] - 2026-08-28
 ### Fixed

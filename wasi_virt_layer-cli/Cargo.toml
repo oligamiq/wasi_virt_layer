@@ -4,6 +4,7 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 description = "CLI for the wasi_virt_layer crate"
+readme = "../README.md"
 license-file = "./LICENSE"
 documentation = "https://docs.rs/wasi_virt_layer-cli"
 repository = "https://github.com/oligamiq/wasi_virt_layer"
