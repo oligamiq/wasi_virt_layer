@@ -2,7 +2,7 @@
 
 ## Scope
 - Workspace default members: `wasi_virt_layer` (lib) and `wasi_virt_layer-cli` (CLI). See `Cargo.toml` for full workspace members.
-- Rust edition is 2024; minimum rustc is 1.89.0 (`Cargo.toml`).
+- Rust edition is 2024. `wasi_virt_layer` has MSRV 1.89.0; `wasi_virt_layer-cli` has MSRV 1.93.0 because of its current dependency graph.
 
 ## Commands
 - Check workspace (release profile): `cargo check -r`

@@ -1,0 +1,17 @@
+[package]
+name = "pool_own_mem_vfs"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[dependencies]
+wit-bindgen = "0.54.0"
+const_struct = "0.6.4"
+
+[dependencies.wasi_virt_layer]
+path = "../../../../wasi_virt_layer"
+default-features = false
+features = ["threads", "unstable_print_debug", "embedded-fs", "own-memory"]
+
+[lib]
+crate-type = ["cdylib"]

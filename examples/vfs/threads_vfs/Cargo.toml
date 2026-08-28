@@ -21,7 +21,7 @@ parking_lot = "0.12.3"
 [dependencies.wasi_virt_layer]
 workspace = true
 default-features = false
-features = ["threads", "unstable_print_debug", "embedded-fs", "multi_memory"]
+features = ["threads", "unstable_print_debug", "embedded-fs"]
 
 [lib]
 crate-type = ["cdylib"]

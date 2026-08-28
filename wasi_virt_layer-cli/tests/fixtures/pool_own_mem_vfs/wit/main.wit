@@ -1,0 +1,5 @@
+package tests:pool;
+
+world component-abi {
+  export main: func();
+}

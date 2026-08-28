@@ -19,16 +19,9 @@ fn test_lfs_api_operations() -> color_eyre::Result<()> {
         false,      // threads
         OutDir::Random,
         false, // keep_build_artifacts
-        &[],
+        &["--run-with-opt"],
         None,
     )?;
 
     Ok(())
-}
-
-fn has_required_wasi_targets(_threads: bool) -> bool {
-    // Simplified version of the check in integration_test.rs
-    // In a real scenario, we might want to import it or duplicate it.
-    // For now, I'll assume it's there if we are running tests.
-    true
 }

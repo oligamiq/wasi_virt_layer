@@ -2,7 +2,9 @@ use const_struct::const_struct;
 use wasi_virt_layer::file::*;
 use wasi_virt_layer::poll::DefaultWaitPoll;
 use wasi_virt_layer::prelude::*;
-use wasi_virt_layer::{import_wasm, plug_clock, plug_env, plug_fs, plug_poll, plug_process, plug_sched, EmbeddedFiles};
+use wasi_virt_layer::{
+    EmbeddedFiles, import_wasm, plug_clock, plug_env, plug_fs, plug_poll, plug_process, plug_sched,
+};
 
 import_wasm!(test_poll);
 
@@ -29,7 +31,10 @@ const FILE_COUNT: usize = 2; // "." directory + "placeholder.txt"
 
 #[const_struct]
 const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-    EmbeddedFiles!([(".", [("placeholder.txt", WasiEmbeddedFile::new("placeholder"))])]);
+    EmbeddedFiles!([(
+        ".",
+        [("placeholder.txt", WasiEmbeddedFile::new("placeholder"))]
+    )]);
 
 // Minimal filesystem setup
 mod fs {
@@ -54,4 +59,45 @@ pub fn main() {
     println!("### Starting WaitPoll VFS example...");
     test_poll::_start();
     test_poll::_main();
+}
+
+#[const_struct]
+const HOST_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState {
+    args: &["wait_poll_program"],
+};
+plug_args!(@embedded, HostArgsTy, test_poll, self);
+plug_random!(wasi_virt_layer::random::StandardRandom, test_poll, self);
+
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_recv(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+) -> i32 {
+    58
+}
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_send(
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+    _: i32,
+) -> i32 {
+    58
+}
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_accept(_: i32, _: i32, _: i32) -> i32 {
+    58
+}
+#[cfg(target_os = "wasi")]
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn __wasip1_vfs___self_sock_shutdown(_: i32, _: i32) -> i32 {
+    58
 }

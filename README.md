@@ -68,11 +68,13 @@ install deno
 - `cargo nextest run -r --fail-fast`
 
 # Notes and Caveats
-- **Thread & Memory Modes**: `single_memory` mode can sometimes fail in scenarios where `multi_memory` succeeds. A sequence like `_reset(); _start(); _main();` in multi-threaded environments has been observed to trigger issues in single-memory mode.
-- **Build Cache**: The build process may benefit from a `--no-cache` option (currently a TODO) if the target directory caching causes stale builds.
+- **MSRV**: `wasi_virt_layer` supports Rust 1.89.0 or later. Building `wasi_virt_layer-cli` requires Rust 1.93.0 or later with the current dependency set.
+- **Thread Toolchain**: `wasm32-wasip1-threads` command-style builds require Rust 1.92.0 or later. Threaded VFS/reactor (`cdylib`) builds require nightly-2026-08-27 or later until the corresponding fix reaches stable Rust 1.100.0.
+- **Thread & Memory Modes**: Threaded `_reset()` waits for queued/running logical threads from the old target generation before releasing atomic-wait state and restarting the target. Other `single_memory`-specific limitations may still exist in configurations where `multi_memory` succeeds.
+- **Build Cache**: Caching build artifacts in `target/` to speed up subsequent builds is under consideration (not yet implemented).
 - **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.
 - **CLI Arguments**: Very long argument lists might still cause issues in some environments.
-- **Self-Calling Fallback**: The tool supports a fallback mechanism for tools like `wasm-merge` and `wasm-opt` by calling itself if the binaries are not found in the PATH.
+- **Self-Calling Fallback**: The tool supports a fallback mechanism for `wasm-opt` by calling itself if the binary is not found in the PATH.
 - **Dynamic Wasm from JS**: The capability to add Wasm modules from JavaScript is currently in early development and does not work reliably.
 
 
@@ -82,3 +84,6 @@ install deno
 - VFS -> Target Module: Success
 - Target Module -> Target Module: Success
 - VFS -> VFS: Success
+
+# License
+The repository license is defined in [`LICENSE`](LICENSE). Except for the `examples/` directory, the current license reserves all rights and restricts use, copying, modification, and distribution. The `examples/` directory may be used freely as stated in that license.

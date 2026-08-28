@@ -1,6 +1,7 @@
 use crate::__private::wasip1;
 
 #[macro_export]
+#[doc(hidden)]
 macro_rules! gen_alt_global {
     ($name:ident) => {
         $crate::__private::paste::paste! {
@@ -60,20 +61,219 @@ macro_rules! gen_alt_global {
     };
 }
 
+/// A macro to explicitly manage memory growth for multiple WebAssembly targets when the automatic memory expansion is disabled (`--own-memory` mode).
+///
+/// **Important Note on Threading:**
+/// When physically expanding memory, you MUST ensure that no other threads can
+/// access the affected target memories. This means memory expansion should be
+/// done **before** spawning threads, or while all other threads are externally
+/// paused/quiesced.
+///
+/// This macro generates `pub fn memory_reserve(wasm: &str, pages: i32) -> i32` and `pub fn memory_size(wasm: &str) -> i32`.
+///
+/// ```compile_fail
+/// use wasi_virt_layer::own_memory;
+/// own_memory!(self, big_alloc);
+/// ```
+///
+/// ```compile_fail
+/// use wasi_virt_layer::own_memory;
+/// own_memory!(__self, big_alloc);
+/// ```
+#[cfg(feature = "own-memory")]
+#[macro_export]
+macro_rules! own_memory {
+    (@reject_self) => {};
+    (@reject_self self $(, $rest:ident)*) => {
+        compile_error!("own_memory! does not accept `self`; use memory_size_self(), memory_reserve_self(), or memory_reserve::<__self>() instead");
+    };
+    (@reject_self __self $(, $rest:ident)*) => {
+        compile_error!("own_memory! does not accept `__self`; use memory_size_self(), memory_reserve_self(), or memory_reserve::<__self>() instead");
+    };
+    (@reject_self $name:ident $(, $rest:ident)*) => {
+        $crate::own_memory!(@reject_self $($rest),*);
+    };
+    ($($name:ident),+ $(,)?) => {
+        $crate::own_memory!(@reject_self $($name),+);
+        $crate::__private::paste::paste! {
+            #[cfg(target_arch = "wasm32")]
+            unsafe extern "C" {
+                fn __wasip1_vfs_own_memory_size___self() -> i32;
+                fn __wasip1_vfs_own_memory_grow___self(pages: i32) -> i32;
+            }
+
+            #[cfg(target_arch = "wasm32")]
+            #[allow(unsafe_attr_outside_unsafe)]
+            #[unsafe(no_mangle)]
+            pub fn __keep_wasip1_vfs_own_memory___self() -> (*const u8, *const u8) {
+                (
+                    unsafe { __wasip1_vfs_own_memory_size___self as *const u8 },
+                    unsafe { __wasip1_vfs_own_memory_grow___self as *const u8 },
+                )
+            }
+
+            $(
+                #[cfg(target_arch = "wasm32")]
+                unsafe extern "C" {
+                    fn [<__wasip1_vfs_own_memory_size_ $name>]() -> i32;
+                    fn [<__wasip1_vfs_own_memory_grow_ $name>](pages: i32) -> i32;
+                }
+                #[cfg(target_arch = "wasm32")]
+                #[allow(unsafe_attr_outside_unsafe)]
+                #[unsafe(no_mangle)]
+                pub fn [<__keep_wasip1_vfs_own_memory_ $name>]() -> (*const u8, *const u8) {
+                    (
+                        unsafe { [<__wasip1_vfs_own_memory_size_ $name>] as *const u8 },
+                        unsafe { [<__wasip1_vfs_own_memory_grow_ $name>] as *const u8 },
+                    )
+                }
+
+                static [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>]: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_get>]() -> i32 {
+                    [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].load(core::sync::atomic::Ordering::Relaxed)
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_set>](v: i32) {
+                    [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].store(v, core::sync::atomic::Ordering::Relaxed);
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_init>](v: i32) {
+                    let _ = [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].compare_exchange(
+                        -1,
+                        v,
+                        core::sync::atomic::Ordering::Relaxed,
+                        core::sync::atomic::Ordering::Relaxed,
+                    );
+                }
+
+                #[cfg(target_os = "wasi")]
+                #[unsafe(no_mangle)]
+                pub extern "C" fn [<__wasip1_vfs_ $name _own_memory_size_compare_exchange>](
+                    expected: i32,
+                    new: i32,
+                ) -> i32 {
+                    match [<__WASIP1_VFS_ $name _OWN_MEMORY_SIZE>].compare_exchange(
+                        expected,
+                        new,
+                        core::sync::atomic::Ordering::Relaxed,
+                        core::sync::atomic::Ordering::Relaxed,
+                    ) {
+                        Ok(old) | Err(old) => old,
+                    }
+                }
+            )+
+
+            static __WASIP1_VFS_HOST_OWN_MEMORY_SIZE: core::sync::atomic::AtomicI32 = core::sync::atomic::AtomicI32::new(-1);
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_get() -> i32 {
+                __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.load(core::sync::atomic::Ordering::Relaxed)
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_set(v: i32) {
+                __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.store(v, core::sync::atomic::Ordering::Relaxed);
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_init(v: i32) {
+                let _ = __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.compare_exchange(
+                    -1,
+                    v,
+                    core::sync::atomic::Ordering::Relaxed,
+                    core::sync::atomic::Ordering::Relaxed,
+                );
+            }
+
+            #[cfg(target_os = "wasi")]
+            #[unsafe(no_mangle)]
+            pub extern "C" fn __wasip1_vfs_host_own_memory_size_compare_exchange(
+                expected: i32,
+                new: i32,
+            ) -> i32 {
+                match __WASIP1_VFS_HOST_OWN_MEMORY_SIZE.compare_exchange(
+                    expected,
+                    new,
+                    core::sync::atomic::Ordering::Relaxed,
+                    core::sync::atomic::Ordering::Relaxed,
+                ) {
+                    Ok(old) | Err(old) => old,
+                }
+            }
+
+            /// Computes the logical memory size of the given target Wasm.
+            pub fn memory_size<Wasm: $crate::memory::WasmAccessName + $crate::memory::WasmAccess>() -> i32 {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    unimplemented!("memory_size is only available on wasm32")
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    match Wasm::NAME {
+                        "__self" => unsafe { __wasip1_vfs_own_memory_size___self() },
+                        $(
+                            stringify!($name) => unsafe { [<__wasip1_vfs_own_memory_size_ $name>]() },
+                        )+
+                        _ => panic!("Wasm not found in own_memory! list"),
+                    }
+                }
+            }
+
+            /// Reserves additional physical pages for the given target Wasm without changing its logical own-memory size.
+            pub fn memory_reserve<Wasm: $crate::memory::WasmAccessName + $crate::memory::WasmAccess>(pages: i32) -> i32 {
+                #[cfg(not(target_arch = "wasm32"))]
+                {
+                    unimplemented!("memory_reserve is only available on wasm32")
+                }
+                #[cfg(target_arch = "wasm32")]
+                {
+                    match Wasm::NAME {
+                        "__self" => unsafe { __wasip1_vfs_own_memory_grow___self(pages) },
+                        $(
+                            stringify!($name) => unsafe { [<__wasip1_vfs_own_memory_grow_ $name>](pages) },
+                        )+
+                        _ => panic!("Wasm not found in own_memory! list"),
+                    }
+                }
+            }
+
+            /// Computes the logical memory size of the VFS/host Wasm itself.
+            pub fn memory_size_self() -> i32 {
+                memory_size::<$crate::__private::__self>()
+            }
+
+            /// Reserves additional physical pages for the VFS/host Wasm itself.
+            pub fn memory_reserve_self(pages: i32) -> i32 {
+                memory_reserve::<$crate::__private::__self>(pages)
+            }
+        }
+    };
+}
+
 /// By entering the names of the files to be combined, a bridge for the combination is created.
 /// You need to prepare as many Wasip1 instances on the virtual file system as the number of files to be combined.
-/// 
+///
 /// ## `wasm-merge` Module Names
-/// When manually integrating modules or defining custom imports/exports to be resolved during the 
+/// When manually integrating modules or defining custom imports/exports to be resolved during the
 /// `wasm-merge` phase, the following module names are used:
-/// 
-/// - **VFS to Host**: To import actual host WASI functions (e.g., calling the real `fd_write` from within the VFS), 
-///   use the module name `__wasip1_vfs-host`. The CLI automatically renames the VFS's `wasi_snapshot_preview1` 
+///
+/// - **VFS to Host**: To import actual host WASI functions (e.g., calling the real `fd_write` from within the VFS),
+///   use the module name `__wasip1_vfs-host`. The CLI automatically renames the VFS's `wasi_snapshot_preview1`
 ///   imports to this name to prevent self-resolution during the merge.
-/// - **Target to VFS**: The VFS module is assigned the name `wasi_snapshot_preview1`. Target WASM modules 
+/// - **Target to VFS**: The VFS module is assigned the name `wasi_snapshot_preview1`. Target WASM modules
 ///   (or other external modules) importing from `wasi_snapshot_preview1` will be automatically linked to the VFS's exports.
-/// - **VFS to Target**: Each target WASM module is assigned the name `wasip1_vfs_{filename}` (where `{filename}` is 
-///   the name of the file without the `.wasm` extension, e.g., `wasip1_vfs_target`). To manually import a function 
+/// - **VFS to Target**: Each target WASM module is assigned the name `wasip1_vfs_{filename}` (where `{filename}` is
+///   the name of the file without the `.wasm` extension, e.g., `wasip1_vfs_target`). To manually import a function
 ///   exported by a target WASM into the VFS, use this module name.
 ///
 /// ```
@@ -231,7 +431,22 @@ macro_rules! import_wasm {
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
-                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() }
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe {
+                        [<__wasip1_vfs_ $name ___main_void>]()
+                    }
                 }
 
                 #[inline(always)]
@@ -249,6 +464,19 @@ macro_rules! import_wasm {
                 {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
 
                     #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name __start>]() };
@@ -305,7 +533,22 @@ macro_rules! import_wasm {
                     unimplemented!("this is not supported on this architecture");
 
                     #[cfg(target_os = "wasi")]
-                    unsafe { [<__wasip1_vfs_ $name ___main_void>]() }
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
+
+                    #[cfg(target_os = "wasi")]
+                    unsafe {
+                        [<__wasip1_vfs_ $name ___main_void>]()
+                    }
                 }
 
                 #[inline(always)]
@@ -321,6 +564,19 @@ macro_rules! import_wasm {
                 fn _start_raw() {
                     #[cfg(not(target_os = "wasi"))]
                     unimplemented!("this is not supported on this architecture");
+
+                    #[cfg(target_os = "wasi")]
+                    $crate::__if_feature! {
+                        @threads if $crate::thread::should_reinitialize_direct_export_thread() {
+                            unsafe {
+                                #[link(wasm_import_module = "wasip1-vfs")]
+                                unsafe extern "C" {
+                                    fn [<__wasip1_vfs_ $name __thread_start>]();
+                                }
+                                [<__wasip1_vfs_ $name __thread_start>]();
+                            }
+                        }
+                    }
 
                     #[cfg(target_os = "wasi")]
                     unsafe { [<__wasip1_vfs_ $name __start>]() };
@@ -558,6 +814,25 @@ impl<T: WasmAccessNameDynCompatible + ?Sized> WasmAccessNameDynCompatible for &T
     }
 }
 
+/// Holds the single-memory read lock while a directed pointer is in use.
+#[cfg(not(feature = "multi_memory"))]
+pub struct MemoryDirectorGuard {
+    #[cfg(all(feature = "threads", target_arch = "wasm32"))]
+    _read: crate::shared_global::ReadGuard,
+}
+
+#[cfg(not(feature = "multi_memory"))]
+impl MemoryDirectorGuard {
+    /// Acquires the guard required for using a directed pointer.
+    #[inline(always)]
+    pub fn acquire() -> Self {
+        Self {
+            #[cfg(all(feature = "threads", target_arch = "wasm32"))]
+            _read: crate::shared_global::lock_read(),
+        }
+    }
+}
+
 /// A dynamically compatible trait for low-level memory operations in WASM.
 pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     /// Copies a slice of data into WASM memory starting at the given offset.
@@ -567,6 +842,10 @@ pub trait WasmAccessDynCompatibleRaw: core::fmt::Debug {
     fn memcpy_to_raw(&self, offset: *mut u8, src: *const u8, len: usize);
 
     /// Directs a pointer to its mapped address in a single-memory model.
+    ///
+    /// This is an implementation hook. Public/direct users must use the guarded
+    /// `with_directed_memory*` APIs so the returned pointer is not kept after the
+    /// single-memory offset lock has been released.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(&self, ptr: isize) -> Option<isize>;
 
@@ -621,13 +900,21 @@ pub trait WasmAccessDynCompatible: WasmAccessDynCompatibleRaw {
         buff
     }
 
-    /// Directs a pointer to its mapped address in a single-memory model.
+    /// Directs a pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<T>(&self, ptr: *const T) -> Option<*const T>;
+    fn with_directed_memory_with<T, R>(
+        &self,
+        ptr: *const T,
+        f: impl FnOnce(*const T) -> R,
+    ) -> Option<R>;
 
-    /// Directs a mutable pointer to its mapped address in a single-memory model.
+    /// Directs a mutable pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<T>(&self, ptr: *mut T) -> Option<*mut T>;
+    fn with_directed_memory_mut_with<T, R>(
+        &self,
+        ptr: *mut T,
+        f: impl FnOnce(*mut T) -> R,
+    ) -> Option<R>;
 
     /// Execute the `_main` entrypoint of the WASM module.
     fn _main_with(&self) -> wasip1::Errno;
@@ -712,13 +999,23 @@ impl<T: WasmAccessDynCompatibleRaw + ?Sized> WasmAccessDynCompatible for T {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_with<U>(&self, ptr: *const U) -> Option<*const U> {
-        Self::memory_director_raw(self, ptr as isize).map(|p| p as *const U)
+    fn with_directed_memory_with<U, R>(
+        &self,
+        ptr: *const U,
+        f: impl FnOnce(*const U) -> R,
+    ) -> Option<R> {
+        let _guard = MemoryDirectorGuard::acquire();
+        Self::memory_director_raw(self, ptr as isize).map(|p| f(p as *const U))
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut_with<U>(&self, ptr: *mut U) -> Option<*mut U> {
-        Self::memory_director_raw(self, ptr as isize).map(|p| p as *mut U)
+    fn with_directed_memory_mut_with<U, R>(
+        &self,
+        ptr: *mut U,
+        f: impl FnOnce(*mut U) -> R,
+    ) -> Option<R> {
+        let _guard = MemoryDirectorGuard::acquire();
+        Self::memory_director_raw(self, ptr as isize).map(|p| f(p as *mut U))
     }
 
     fn _main_with(&self) -> wasip1::Errno {
@@ -743,6 +1040,10 @@ pub trait WasmAccessRaw: core::fmt::Debug {
     fn memcpy_to_raw(offset: *mut u8, src: *const u8, len: usize);
 
     /// Directs a pointer to its mapped address in a single-memory model.
+    ///
+    /// This is an implementation hook. Public/direct users must use the guarded
+    /// `with_directed_memory*` APIs so the returned pointer is not kept after the
+    /// single-memory offset lock has been released.
     #[cfg(not(feature = "multi_memory"))]
     fn memory_director_raw(ptr: isize) -> isize;
 
@@ -882,13 +1183,15 @@ impl<T: WasmAccessRaw> WasmAccess for T {
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director<U>(ptr: *const U) -> *const U {
-        Self::memory_director_raw(ptr as isize) as *const U
+    fn with_directed_memory<U, R>(ptr: *const U, f: impl FnOnce(*const U) -> R) -> R {
+        let _guard = MemoryDirectorGuard::acquire();
+        f(Self::memory_director_raw(ptr as isize) as *const U)
     }
 
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut<U>(ptr: *mut U) -> *mut U {
-        Self::memory_director_raw(ptr as isize) as *mut U
+    fn with_directed_memory_mut<U, R>(ptr: *mut U, f: impl FnOnce(*mut U) -> R) -> R {
+        let _guard = MemoryDirectorGuard::acquire();
+        f(Self::memory_director_raw(ptr as isize) as *mut U)
     }
 
     fn _main() -> wasip1::Errno {
@@ -937,14 +1240,21 @@ pub trait WasmAccess: WasmAccessRaw {
         buff
     }
 
-    /// Directs a pointer to its mapped address in a single-memory model.
+    /// Directs a pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director<T>(ptr: *const T) -> *const T;
+    fn with_directed_memory<T, R>(ptr: *const T, f: impl FnOnce(*const T) -> R) -> R;
 
-    /// Directs a mutable pointer to its mapped address in a single-memory model.
+    /// Directs a mutable pointer and keeps the single-memory read lock for the closure.
     #[cfg(not(feature = "multi_memory"))]
-    fn memory_director_mut<T>(ptr: *mut T) -> *mut T;
+    fn with_directed_memory_mut<T, R>(ptr: *mut T, f: impl FnOnce(*mut T) -> R) -> R;
 
+    /// Executes the target's reusable main entrypoint when one is available.
+    ///
+    /// If the target does not export `__main_void`, the CLI synthesizes this entrypoint by
+    /// calling `_start()`. In that case `_main()` is not independently reusable and has the same
+    /// execution-context restrictions as `_start()`. The CLI emits a build warning when it uses
+    /// this fallback.
+    ///
     /// wrapping wasm's _start function
     /// By default in Rust code, when _start is called,
     /// the main function is executed.
@@ -970,9 +1280,31 @@ pub trait WasmAccess: WasmAccessRaw {
     /// - memory copied from data-segment
     /// if you call this function,
     /// virtual file system's memory isn't changed
+    ///
+    /// # WARNING: Multithreading Vulnerabilities
+    ///
+    /// This function is **NOT thread-safe** and executing it in a multithreaded environment
+    /// (such as `wasi-threads` or `single_memory` mode) causes catastrophic memory corruption:
+    ///
+    /// 1. **Stack Destruction**: `memory.fill(0)` will indiscriminately zero out the dynamically
+    ///    allocated linear memory, wiping out the call stacks of all other running threads.
+    /// 2. **TLS Deletion**: Thread Local Storage (TLS) for all other threads is also zeroed.
+    /// 3. **Concurrency Primitives**: Mutexes and atomic variables residing in memory are reset,
+    ///    breaking synchronization and leading to data races or deadlocks.
+    /// 4. **Shared Globals**: Simulated shared global pointers (like `ALT_GLOBAL_VAR`) are reset,
+    ///    corrupting the state shared among instances.
+    /// 5. **Memory Bounds**: The expanded memory size (`memory.grow`) is NOT shrunk.
+    ///
+    /// **Note**: If you configure the panic strategy to use `unwind` rather than `abort`,
+    /// it is possible to safely use this function by allowing threads to cleanly unwind and terminate
+    /// before `_reset` is invoked, mitigating the immediate corruption of active thread states.
     fn _reset();
 
     /// Calls the initialization function provided.
+    ///
+    /// A WASI command `_start()` is generally a process-root entrypoint. Calling it from a
+    /// secondary `wasi_thread_start` instance is only supported when the target runtime explicitly
+    /// permits that usage. For command-style targets, use a fresh root instance or Worker instead.
     /// If you are using the _main function of the same TRAIT,
     /// RUST's main function will not be automatically executed during initialization.
     ///
@@ -1216,8 +1548,24 @@ impl<'a, Wasm: WasmAccess + ?Sized> Iterator for WasmPathComponents<'a, Wasm> {
                 self.path.len -= end;
                 return Some(WasmPathComponent::Normal(component));
             }
+
+            let mut end = 2;
+            while end < self.path.len && self.path.get(end) != b'/' {
+                end += 1;
+            }
+
+            let component = WasmArrayAccess::new(self.path.ptr, end);
+
+            while end < self.path.len && self.path.get(end) == b'/' {
+                end += 1;
+            }
+            self.path.ptr = unsafe { self.path.ptr.add(end) };
+            self.path.len -= end;
+            return Some(WasmPathComponent::Normal(component));
         } else {
-            let mut end = 0;
+            // At this point leading separators have already been consumed, so the
+            // first byte belongs to a normal component.
+            let mut end = 1;
             while end < self.path.len && self.path.get(end) != b'/' {
                 end += 1;
             }
@@ -1232,7 +1580,6 @@ impl<'a, Wasm: WasmAccess + ?Sized> Iterator for WasmPathComponents<'a, Wasm> {
             return Some(WasmPathComponent::Normal(component));
         }
 
-        None
     }
 }
 
@@ -1622,15 +1969,31 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
                 self.path.len -= end;
                 return Some(WasmPathComponentDynCompatible::Normal(component));
             }
-        } else {
-            let mut end = 0;
-            while end < self.path.len() && self.path.get(end) != b'/' {
+
+            let mut end = 2;
+            while end < self.path.len && self.path.get(end) != b'/' {
                 end += 1;
             }
 
             let component = WasmArrayAccessDynCompatible::new(self.path.access, self.path.ptr, end);
 
-            while end < self.path.len() && self.path.get(end) == b'/' {
+            while end < self.path.len && self.path.get(end) == b'/' {
+                end += 1;
+            }
+            self.path.ptr = unsafe { self.path.ptr.add(end) };
+            self.path.len -= end;
+            return Some(WasmPathComponentDynCompatible::Normal(component));
+        } else {
+            // At this point leading separators have already been consumed, so the
+            // first byte belongs to a normal component.
+            let mut end = 1;
+            while end < self.path.len && self.path.get(end) != b'/' {
+                end += 1;
+            }
+
+            let component = WasmArrayAccessDynCompatible::new(self.path.access, self.path.ptr, end);
+
+            while end < self.path.len && self.path.get(end) == b'/' {
                 end += 1;
             }
             self.path.ptr = unsafe { self.path.ptr.add(end) };
@@ -1638,7 +2001,6 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> Iterator
             return Some(WasmPathComponentDynCompatible::Normal(component));
         }
 
-        None
     }
 }
 
@@ -1668,6 +2030,19 @@ impl<'a, 'b, Wasm: WasmAccessDynCompatible + ?Sized> WasmPathComponentCommon
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn assert_component_eq(component: impl WasmPathComponentCommon, expected: &str) {
+        if expected == "/" {
+            assert!(component.as_root_dir());
+        } else if expected == "." {
+            assert!(component.as_cur_dir());
+        } else if expected == ".." {
+            assert!(component.as_parent_dir());
+        } else {
+            let bytes: Vec<u8> = component.as_normal().unwrap().into_iter().collect();
+            assert_eq!(bytes, expected.as_bytes());
+        }
+    }
 
     #[test]
     fn test_wasm_path_components() {
@@ -1710,6 +2085,50 @@ mod tests {
         assert!(iter.next().unwrap().eq_str(".."));
         assert!(iter.next().unwrap().eq_str("bin"));
         assert!(iter.next().unwrap().eq_str("explorer.exe"));
+        assert!(iter.next().is_none());
+
+        let path = WasmPathAccess::<WasmAccessFaker>::new(b".cargo/config.toml".as_ptr(), 18);
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert!(iter.next().unwrap().eq_str(".cargo"));
+        assert!(iter.next().unwrap().eq_str("config.toml"));
+        assert!(iter.next().is_none());
+
+        let access = WasmAccessFaker;
+        let path = WasmPathAccessDynCompatible::new(
+            &access,
+            b".cargo/config.toml".as_ptr(),
+            18,
+        );
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert_component_eq(iter.next().unwrap(), ".cargo");
+        assert_component_eq(iter.next().unwrap(), "config.toml");
+        assert!(iter.next().is_none());
+
+        let path = WasmPathAccess::<WasmAccessFaker>::new(b"/.cargo/config.toml".as_ptr(), 19);
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert!(iter.next().unwrap().eq_str("/"));
+        assert!(iter.next().unwrap().eq_str(".cargo"));
+        assert!(iter.next().unwrap().eq_str("config.toml"));
+        assert!(iter.next().is_none());
+
+        let access = WasmAccessFaker;
+        let path = WasmPathAccessDynCompatible::new(
+            &access,
+            b"/.cargo/config.toml".as_ptr(),
+            19,
+        );
+        let components = path.components();
+        let mut iter = components.into_iter();
+
+        assert_component_eq(iter.next().unwrap(), "/");
+        assert_component_eq(iter.next().unwrap(), ".cargo");
+        assert_component_eq(iter.next().unwrap(), "config.toml");
         assert!(iter.next().is_none());
     }
 }

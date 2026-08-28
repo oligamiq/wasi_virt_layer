@@ -10,19 +10,6 @@ use tempfile::Builder as TempFileBuilder;
 pub(crate) const COMMAND_ALTERNATE_ENV_VAR: &str = "WASI_VIRT_LAYER_FALLBACK_ALTERNATE_COMMAND";
 
 #[allow(unused)]
-pub(crate) fn wasm_merge(args: &[String]) -> i32 {
-    #[cfg(feature = "fallback")]
-    {
-        wasm_merge_sys::run_wasm_merge(args)
-    }
-    #[cfg(not(feature = "fallback"))]
-    {
-        eprintln!("wasm-merge fallback is not enabled");
-        1
-    }
-}
-
-#[allow(unused)]
 pub(crate) fn wasm_opt(args: &[String]) -> i32 {
     #[cfg(feature = "fallback")]
     {
@@ -53,7 +40,6 @@ pub fn get_fallback_command(
     bin: impl AsRef<str>,
 ) -> FallbackCommand<impl FnOnce(&[String]) -> i32 + Send + 'static> {
     match bin.as_ref() {
-        "wasm-merge" => FallbackCommand::new("wasm-merge", fake_fallback),
         "wasm-opt" => FallbackCommand::new("wasm-opt", fake_fallback),
         _ => panic!("Unsupported fallback command specified: {}", bin.as_ref()),
     }
@@ -396,29 +382,6 @@ mod tests {
         assert!(output.success);
         let stdout_str = String::from_utf8_lossy(&output.stdout);
         assert!(stdout_str.contains("Fallback function called with args: [\"arg1\", \"arg2\"]"));
-
-        drop(_lock);
-    }
-
-    #[cfg(feature = "fallback")]
-    #[test]
-    fn test_fallback_wasm_merge() {
-        let _lock = MUTEX.lock().unwrap();
-        if !check_gag() {
-            return;
-        }
-
-        let mut cmd = FallbackCommand::new("non_existent_command", |args: &[String]| {
-            wasm_merge_sys::run_wasm_merge(&args)
-        });
-        cmd.arg("--help");
-
-        let child = cmd.spawn().expect("Failed to spawn command");
-        let output = child.wait_with_output().expect("Failed to get output");
-
-        assert!(output.success);
-        let stdout_str = String::from_utf8_lossy(&output.stdout);
-        panic!("Output: {}", stdout_str);
 
         drop(_lock);
     }

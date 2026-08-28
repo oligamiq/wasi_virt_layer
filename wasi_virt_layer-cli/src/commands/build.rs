@@ -4,53 +4,6 @@ use crate::{
     generator::{self, WasmPath},
 };
 
-macro_rules! add_generator {
-    ($runner:expr) => {{
-        use crate::generator::{
-            abi_connect, anonymous, check, debug, memory, patch_component, producer,
-            special_func, starts, threads, vfs_host, wrap_unreachable, poll,
-        };
-
-        generator::add_generators_by_type!(
-            $runner,
-            check::IsRustWasm,
-            starts::FnInStartsGeneratorFirst,
-            producer::Producer,
-            anonymous::Anonymous,
-            check::CheckUseLibrary,
-            check::CheckVFSMemoryType,
-            check::CheckUnusedThreads,
-            wrap_unreachable::WrapUnreachableGenerator,
-            threads::ThreadsSpawn,
-            threads::ThreadsSpawnPatch,
-            threads::AtomicPatch,
-            poll::PollWait,
-            special_func::StartFunc,
-            special_func::MainVoidFunc,
-            special_func::ResetFunc,
-
-            memory::TemporaryRefugeMemory,
-            memory::MemoryBridge,
-            memory::MemoryTrap,
-            abi_connect::ConnectWasip1ABI,
-            abi_connect::ConnectWasip1ThreadsABI,
-            abi_connect::NonRecursiveWasiABI,
-            vfs_host::ConnectVfsHost,
-            debug::SimpleDebug,
-            debug::DebugCallMemoryGrow,
-            debug::DebugExportVFSFunctions,
-            debug::DebugCallFunctionSmallScale,
-            debug::DebugCallFunctionMain,
-            patch_component::PatchComponent,
-            starts::FnInStartsGeneratorLast,
-        );
-
-        $runner.checker(check::CheckUseWasiVirtLayer);
-    }};
-}
-
-pub(crate) use add_generator;
-
 /// Executes the build command, coordinating the compilation and transformation of WASM modules.
 ///
 /// This is a convenience command that runs `prebuild` followed by `postbuild`.
@@ -63,7 +16,6 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
 
     if matches!(package, WasmPath::Component(_)) {
         let mut component_runner = generator::ComponentRunner::new(package.clone());
-        add_generator!(component_runner);
 
         postbuild::run_postbuild(&mut component_runner, &parsed_args, parsed_args.dwarf)?;
 
@@ -73,6 +25,22 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
     let mut vfs_build_opts = parsed_args.vfs_build_opts.clone();
     if parsed_args.dev {
         vfs_build_opts.no_opt_all = vfs_build_opts.no_opt_all.saturating_add(1);
+    }
+
+    let mut target_vfs_build_opts =
+        parsed_args
+            .target_vfs_build_opts
+            .clone()
+            .unwrap_or_else(|| {
+                vec![crate::args::VfsBuildOptions::default(); parsed_args.wasm.len()]
+                    .into_boxed_slice()
+            });
+
+    for (opt, &unwind) in target_vfs_build_opts
+        .iter_mut()
+        .zip(parsed_args.get_wasm_unwinds().iter())
+    {
+        opt.unwind = unwind;
     }
 
     let (mut component_runner, dwarf) = prebuild::run_prebuild_internal(
@@ -86,10 +54,11 @@ pub fn build(parsed_args: BuildArgs) -> eyre::Result<()> {
         &parsed_args.out_dir,
         parsed_args.get_wasm_memory_hints(),
         &vfs_build_opts,
-        parsed_args
-            .target_vfs_build_opts
-            .clone()
-            .unwrap_or_else(|| Box::new([])),
+        target_vfs_build_opts,
+        parsed_args.own_memory,
+        parsed_args.detect_deadlock,
+        parsed_args.stack_options.clone(),
+        parsed_args.validate,
     )?;
 
     postbuild::run_postbuild(&mut component_runner, &parsed_args, Some(dwarf))?;

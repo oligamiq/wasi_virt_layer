@@ -352,6 +352,23 @@ impl InitOnce {
     }
 }
 
+#[cfg(feature = "detect-wasi-reentrancy")]
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __enter_non_recursive_wasi_call {
+    ($name:ident) => {
+        let _non_recursive_wasi_call_guard =
+            $crate::__private::utils::NonRecursiveWasiCallGuard::enter(stringify!($name));
+    };
+}
+
+#[cfg(not(feature = "detect-wasi-reentrancy"))]
+#[macro_export]
+#[doc(hidden)]
+macro_rules! __enter_non_recursive_wasi_call {
+    ($name:ident) => {};
+}
+
 /// Typically, WASI ABI calls are made using plug!.
 /// However, there may be cases where you want to call the ABI directly from within plug!.
 /// Doing so would result in recursion.
@@ -360,7 +377,18 @@ impl InitOnce {
 /// it becomes a proper WASI ABI call after plug is connected.
 /// This allows you to call the ABI without causing recursion.
 ///
-/// Note: This ABI call is low-level. Please verify the ABI thoroughly.
+/// # Re-entrancy warning
+///
+/// "Non-recursive" describes how the generated import is connected; it cannot prevent the host
+/// implementation from calling back into the virtualized WASI function. The host sink must
+/// terminate outside the VFS. In particular, forwarding virtual stderr to a `std::io::stderr()`
+/// that is backed by the same VFS recursively enters `fd_write`.
+///
+/// Enable the `detect-wasi-reentrancy` feature to guard this boundary. A synchronous re-entry on
+/// the same thread traps immediately. The Wasm trap intentionally performs no diagnostic output,
+/// because formatting the error through stdout or stderr could itself recurse.
+///
+/// Note: This ABI call is low-level. Verify the ABI and final host routing thoroughly.
 ///
 /// ```rust
 /// use wasi_virt_layer::wasip1;
@@ -399,6 +427,8 @@ macro_rules! non_recursive_wasi_snapshot_preview1 {
         $name:ident ($($arg:ident : $arg_ty:ty),* $(,)?) -> $ret:ty
     ) => {
         {
+        $crate::__enter_non_recursive_wasi_call!($name);
+
         #[cfg(target_arch = "wasm32")]
         {
             #[link(wasm_import_module = "non_recursive_wasi_snapshot_preview1")]
@@ -420,6 +450,74 @@ macro_rules! non_recursive_wasi_snapshot_preview1 {
         }
     }
     };
+}
+
+/// Detects synchronous re-entry through the non-recursive WASI import boundary.
+///
+/// This type is public only so exported macros can reference it across crate boundaries.
+#[cfg(feature = "detect-wasi-reentrancy")]
+#[doc(hidden)]
+pub struct NonRecursiveWasiCallGuard;
+
+#[cfg(feature = "detect-wasi-reentrancy")]
+std::thread_local! {
+    static NON_RECURSIVE_WASI_CALL_ACTIVE: core::cell::Cell<Option<&'static str>> =
+        const { core::cell::Cell::new(None) };
+}
+
+#[cfg(feature = "detect-wasi-reentrancy")]
+impl NonRecursiveWasiCallGuard {
+    /// Enters the guarded non-recursive WASI boundary.
+    #[inline]
+    pub fn enter(function: &'static str) -> Self {
+        NON_RECURSIVE_WASI_CALL_ACTIVE.with(|active| {
+            if let Some(previous) = active.replace(Some(function)) {
+                active.set(Some(previous));
+                reentrant_non_recursive_wasi_call(previous, function);
+            }
+        });
+        Self
+    }
+}
+
+#[cfg(feature = "detect-wasi-reentrancy")]
+impl Drop for NonRecursiveWasiCallGuard {
+    fn drop(&mut self) {
+        NON_RECURSIVE_WASI_CALL_ACTIVE.with(|active| active.set(None));
+    }
+}
+
+#[cfg(all(feature = "detect-wasi-reentrancy", target_arch = "wasm32"))]
+#[cold]
+#[inline(never)]
+fn reentrant_non_recursive_wasi_call(_previous: &'static str, _current: &'static str) -> ! {
+    core::arch::wasm32::unreachable()
+}
+
+#[cfg(all(feature = "detect-wasi-reentrancy", not(target_arch = "wasm32")))]
+#[cold]
+#[inline(never)]
+fn reentrant_non_recursive_wasi_call(previous: &'static str, current: &'static str) -> ! {
+    panic!(
+        "re-entrant non-recursive WASI call detected: `{current}` entered while `{previous}` was active"
+    )
+}
+
+#[cfg(all(test, feature = "detect-wasi-reentrancy"))]
+mod non_recursive_wasi_call_guard_tests {
+    use super::NonRecursiveWasiCallGuard;
+
+    #[test]
+    fn rejects_reentrant_call_and_resets_after_drop() {
+        let first = NonRecursiveWasiCallGuard::enter("fd_write");
+        let reentry = std::panic::catch_unwind(|| {
+            let _second = NonRecursiveWasiCallGuard::enter("fd_write");
+        });
+        assert!(reentry.is_err());
+
+        drop(first);
+        let _next_call = NonRecursiveWasiCallGuard::enter("fd_write");
+    }
 }
 
 pub struct UnsafeOnceCell<T> {

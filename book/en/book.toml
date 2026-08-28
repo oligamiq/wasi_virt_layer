@@ -1,0 +1,9 @@
+[book]
+authors = ["oligami"]
+language = "en"
+src = "../src/en"
+title = "WASI Virtual Layer Documentation"
+
+[output.html]
+git-repository-url = "https://github.com/oligami/wasi-virt-layer"
+edit-url-template = "https://github.com/oligami/wasi-virt-layer/edit/main/book/src/en/{path}"

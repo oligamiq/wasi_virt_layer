@@ -1,0 +1,208 @@
+fn main() {
+    println!("use eyre::Result;");
+    println!("use wasm_encoder::Instruction;");
+    println!();
+    println!("pub trait Rebind {{");
+    println!("    fn function(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn global(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn table(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn memory(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn ty(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn data(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn elem(&self, index: u32) -> u32 {{ index }}");
+    println!("    fn tag(&self, index: u32) -> u32 {{ index }}");
+    println!("}}");
+    println!("pub struct DefaultRebinder;");
+    println!("impl Rebind for DefaultRebinder {{}}");
+    println!();
+    println!("pub fn translate<'a, R: Rebind>(op: &wasmparser::Operator<'a>, rebinder: &R) -> Instruction<'a> {{");
+    println!("    match op {{");
+
+    macro_rules! define_translator {
+        ($(@$proposal:ident $op:ident $({ $($arg:ident: $argty:ty),* })? => $visit:ident ($($ann:tt)*))*) => {
+            $(
+                print!("        wasmparser::Operator::{} ", stringify!($op));
+                let _op_name = stringify!($op);
+                let mut args: Vec<&'static str> = Vec::new();
+                $(
+                    $(
+                        args.push(stringify!($arg));
+                    )*
+                )?
+                if !args.is_empty() {
+                    let fields = args.join(", ");
+                    if stringify!($op) == "CallIndirect" {
+                        print!("{{ type_index, table_index, .. }}");
+                    } else {
+                        print!("{{ {} }}", fields);
+                    }
+                }
+                // Use `=> expr,` syntax (NOT `=> { expr, }`) so trailing commas are valid.
+                print!(" => ");
+
+                if stringify!($op) == "CallIndirect" {
+                    println!("Instruction::CallIndirect {{ type_index: rebinder.ty(*type_index), table_index: rebinder.table(*table_index) }},");
+                } else if stringify!($op) == "BrTable" {
+                    println!("Instruction::BrTable(targets.clone().into(), targets.default()),");
+                } else if stringify!($op) == "Select" {
+                    println!("Instruction::Select,");
+                } else if stringify!($op) == "MemorySize" {
+                    println!("Instruction::MemorySize(rebinder.memory(*mem)),");
+                } else if stringify!($op) == "MemoryGrow" {
+                    println!("Instruction::MemoryGrow(rebinder.memory(*mem)),");
+                } else if stringify!($op) == "MemoryCopy" {
+                    println!("Instruction::MemoryCopy {{ src_mem: rebinder.memory(*src_mem), dst_mem: rebinder.memory(*dst_mem) }},");
+                } else if stringify!($op) == "MemoryFill" {
+                    println!("Instruction::MemoryFill(rebinder.memory(*mem)),");
+                } else if stringify!($op) == "MemoryInit" {
+                    println!("Instruction::MemoryInit {{ mem: rebinder.memory(*mem), data_index: rebinder.data(*data_index) }},");
+                } else if stringify!($op) == "DataDrop" {
+                    println!("Instruction::DataDrop(rebinder.data(*data_index)),");
+                } else if stringify!($op) == "ElemDrop" {
+                    println!("Instruction::ElemDrop(rebinder.elem(*elem_index)),");
+                } else if stringify!($op) == "TableInit" {
+                    println!("Instruction::TableInit {{ table: rebinder.table(*table), elem_index: rebinder.elem(*elem_index) }},");
+                } else if stringify!($op) == "TableCopy" {
+                    println!("Instruction::TableCopy {{ src_table: rebinder.table(*src_table), dst_table: rebinder.table(*dst_table) }},");
+                } else if stringify!($op) == "Block" || stringify!($op) == "Loop" || stringify!($op) == "If" {
+                    println!("Instruction::{}(translate_block_type(*blockty, rebinder)),", stringify!($op));
+                } else if stringify!($op) == "TryTable" {
+                    println!("Instruction::TryTable(translate_block_type(*ty, rebinder), std::borrow::Cow::Owned(catches.iter().map(|c| translate_catch(c, rebinder)).collect())),");
+                } else if stringify!($op) == "TypedSelect" {
+                    println!("Instruction::TypedSelect(translate_val_type(*ty)),");
+                } else if stringify!($op) == "I32Const" {
+                    println!("Instruction::I32Const(*value),");
+                } else if stringify!($op) == "I64Const" {
+                    println!("Instruction::I64Const(*value),");
+                } else if stringify!($op) == "F32Const" {
+                    println!("Instruction::F32Const(f32::from_bits(value.bits()).into()),");
+                } else if stringify!($op) == "F64Const" {
+                    println!("Instruction::F64Const(f64::from_bits(value.bits()).into()),");
+                } else if stringify!($op) == "V128Const" {
+                    println!("Instruction::V128Const(value.i128()),");
+                } else if stringify!($op) == "StructGet" || stringify!($op) == "StructGetS" || stringify!($op) == "StructGetU" || stringify!($op) == "StructSet" {
+                    println!("Instruction::{} {{ struct_type_index: rebinder.ty(*type_index), field_index: *field_index }},", stringify!($op));
+                } else if stringify!($op) == "ArrayCopy" {
+                    println!("Instruction::ArrayCopy {{ array_dst: rebinder.ty(*array_dst), array_src: rebinder.ty(*array_src) }},");
+                } else if stringify!($op) == "ArrayFill" {
+                    println!("Instruction::ArrayFill(rebinder.ty(*type_index)),");
+                } else if stringify!($op) == "ArrayInitData" {
+                    println!("Instruction::ArrayInitData {{ array_type_index: rebinder.ty(*type_index), array_data_index: rebinder.data(*array_data_index) }},");
+                } else if stringify!($op) == "ArrayInitElem" {
+                    println!("Instruction::ArrayInitElem {{ array_type_index: rebinder.ty(*type_index), array_elem_index: rebinder.elem(*array_elem_index) }},");
+                } else if stringify!($op) == "RefTest" || stringify!($op) == "RefTestNull" || stringify!($op) == "RefCast" || stringify!($op) == "RefCastNull" || stringify!($op) == "BrOnCast" || stringify!($op) == "BrOnCastFail" {
+                    println!("unimplemented!(\"Wasm GC cast not supported\"),");
+                } else if stringify!($op) == "RefNull" {
+                    println!("Instruction::RefNull(translate_heap_type(*hty)),");
+                } else if stringify!($op) == "CallRef" {
+                    println!("Instruction::CallRef(rebinder.ty(*type_index)),");
+                } else if stringify!($op) == "ReturnCallRef" {
+                    println!("Instruction::ReturnCallRef(rebinder.ty(*type_index)),");
+                } else if args.contains(&"memarg") {
+                    println!("Instruction::{}(translate_memarg(memarg, rebinder)),", stringify!($op));
+                // Unsupported proposals: shared-everything-threads struct/array atomics,
+                // typed continuations, wide arithmetic, typed function references, GC
+                } else if stringify!($op).starts_with("StructAtomic")
+                    || stringify!($op).starts_with("ArrayAtomic")
+                    || stringify!($op).starts_with("GlobalAtomic")
+                    || stringify!($op).starts_with("TableAtomic")
+                    || stringify!($op).starts_with("Resume")
+                    || stringify!($op) == "ContBind"
+                    || stringify!($op) == "ContNew"
+                    || stringify!($op) == "Suspend"
+                    || stringify!($op) == "BrOnNull"
+                    || stringify!($op) == "BrOnNonNull"
+                    || stringify!($op) == "RefAsNonNull"
+                    || stringify!($op) == "ReturnCallRef"
+                    || stringify!($op) == "CallRef"
+                    || stringify!($op) == "RefI31Shared"
+                    || stringify!($op) == "Switch"
+                    || stringify!($op) == "CatchAll"
+                    || stringify!($op).starts_with("I64MulWide")
+                    || stringify!($op).ends_with("128")
+                {
+                    println!("unimplemented!(\"{}\"),", stringify!($op));
+                } else if args.is_empty() {
+                    println!("Instruction::{},", stringify!($op));
+                } else {
+                    let map_args = args.iter().map(|&a| {
+                        match a {
+                            "function_index" => format!("rebinder.function(*{})", a),
+                            "global_index" => format!("rebinder.global(*{})", a),
+                            "type_index" => format!("rebinder.ty(*{})", a),
+                            "table_index" => format!("rebinder.table(*{})", a),
+                            "table" => format!("rebinder.table(*{})", a),
+                            "memory_index" => format!("rebinder.memory(*{})", a),
+                            "mem" => format!("rebinder.memory(*{})", a),
+                            "data_index" => format!("rebinder.data(*{})", a),
+                            "elem_index" => format!("rebinder.elem(*{})", a),
+                            "array_data_index" => format!("rebinder.data(*{})", a),
+                            "array_elem_index" => format!("rebinder.elem(*{})", a),
+                            "tag_index" => format!("rebinder.tag(*{})", a),
+                            _ => format!("*{}", a),
+                        }
+                    }).collect::<Vec<String>>().join(", ");
+
+                    println!("Instruction::{}({}),", stringify!($op), map_args);
+                }
+            )*
+        }
+    }
+
+    wasmparser::for_each_operator!(define_translator);
+
+    println!("        _ => unimplemented!(\"unsupported wasmparser operator\"),");
+    println!("    }}");
+    println!("}}");
+    println!();
+    println!("pub fn translate_val_type(ty: wasmparser::ValType) -> wasm_encoder::ValType {{");
+    println!("    match ty {{");
+    println!("        wasmparser::ValType::I32 => wasm_encoder::ValType::I32,");
+    println!("        wasmparser::ValType::I64 => wasm_encoder::ValType::I64,");
+    println!("        wasmparser::ValType::F32 => wasm_encoder::ValType::F32,");
+    println!("        wasmparser::ValType::F64 => wasm_encoder::ValType::F64,");
+    println!("        wasmparser::ValType::V128 => wasm_encoder::ValType::V128,");
+    println!("        wasmparser::ValType::Ref(_) => unimplemented!(\"Ref types not supported\"),");
+    println!("    }}");
+    println!("}}");
+    println!();
+    println!("pub fn translate_block_type<R: Rebind>(bty: wasmparser::BlockType, rebinder: &R) -> wasm_encoder::BlockType {{");
+    println!("    match bty {{");
+    println!("        wasmparser::BlockType::Empty => wasm_encoder::BlockType::Empty,");
+    println!("        wasmparser::BlockType::Type(ty) => wasm_encoder::BlockType::Result(translate_val_type(ty)),");
+    println!("        wasmparser::BlockType::FuncType(idx) => wasm_encoder::BlockType::FunctionType(rebinder.ty(idx)),");
+    println!("    }}");
+    println!("}}");
+    println!();
+    println!("pub fn translate_catch<R: Rebind>(catch: &wasmparser::Catch, rebinder: &R) -> wasm_encoder::Catch {{");
+    println!("    match catch {{");
+    println!("        wasmparser::Catch::One {{ tag, label }} => wasm_encoder::Catch::One {{ tag: rebinder.tag(*tag), label: *label }},");
+    println!("        wasmparser::Catch::OneRef {{ tag, label }} => wasm_encoder::Catch::OneRef {{ tag: rebinder.tag(*tag), label: *label }},");
+    println!("        wasmparser::Catch::All {{ label }} => wasm_encoder::Catch::All {{ label: *label }},");
+    println!("        wasmparser::Catch::AllRef {{ label }} => wasm_encoder::Catch::AllRef {{ label: *label }},");
+    println!("    }}");
+    println!("}}");
+    println!();
+    println!("pub fn translate_memarg<R: Rebind>(memarg: &wasmparser::MemArg, rebinder: &R) -> wasm_encoder::MemArg {{");
+    println!("    wasm_encoder::MemArg {{");
+    println!("        offset: memarg.offset,");
+    println!("        align: memarg.align.into(),");
+    println!("        memory_index: rebinder.memory(memarg.memory),");
+    println!("    }}");
+    println!("}}");
+    println!();
+    println!("pub fn translate_const_expr<R: Rebind>(expr: &wasmparser::ConstExpr, rebinder: &R) -> Result<wasm_encoder::ConstExpr> {{");
+    println!("    let mut reader = expr.get_operators_reader();");
+    println!("    let op = reader.read()?;");
+    println!("    match op {{");
+    println!("        wasmparser::Operator::I32Const {{ value }} => Ok(wasm_encoder::ConstExpr::i32_const(value)),");
+    println!("        wasmparser::Operator::I64Const {{ value }} => Ok(wasm_encoder::ConstExpr::i64_const(value)),");
+    println!("        wasmparser::Operator::F32Const {{ value }} => Ok(wasm_encoder::ConstExpr::f32_const(f32::from_bits(value.bits()).into())),");
+    println!("        wasmparser::Operator::F64Const {{ value }} => Ok(wasm_encoder::ConstExpr::f64_const(f64::from_bits(value.bits()).into())),");
+    println!("        wasmparser::Operator::GlobalGet {{ global_index }} => Ok(wasm_encoder::ConstExpr::global_get(rebinder.global(global_index))),");
+    println!("        wasmparser::Operator::RefNull {{ .. }} => unimplemented!(\"RefNull not supported\"),");
+    println!("        wasmparser::Operator::RefFunc {{ function_index }} => Ok(wasm_encoder::ConstExpr::ref_func(rebinder.function(function_index))),");
+    println!("        _ => eyre::bail!(\"Unsupported const expr operator: {{:?}}\", op),");
+    println!("    }}");
+    println!("}}");
+}

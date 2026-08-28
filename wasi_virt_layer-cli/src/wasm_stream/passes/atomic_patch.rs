@@ -1,0 +1,1071 @@
+use crate::wasm_stream::pipeline::{StreamPass, par_process_code_section};
+use eyre::Result;
+use std::collections::{BTreeSet, HashMap};
+use wasm_encoder::{
+    CustomSection, DataCountSection, DataSection, ElementSection, EntityType, ExportSection,
+    Function, FunctionSection, GlobalSection, ImportSection, Instruction, Module, StartSection,
+    TypeSection, ValType,
+};
+use wasmparser::{Parser, Payload, TypeRef};
+
+use crate::wasm_stream::translator::{
+    DefaultRebinder, Rebind, translate, translate_global_type, translate_memory_type,
+    translate_ref_type, translate_table_type,
+};
+
+pub struct AtomicPatchStreamPass {
+    pub threads: bool,
+    pub target_index: u32,
+    pub detect_deadlock: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AtomicPatchStreamPass;
+    use crate::wasm_stream::passes::deadlock_thread_id::DeadlockThreadIdPreTargetStreamPass;
+    use crate::wasm_stream::pipeline::StreamPass;
+
+    fn import_func_type(bytes: &[u8], import_name: &str) -> Option<u32> {
+        for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+            if let Ok(wasmparser::Payload::ImportSection(section)) = payload {
+                for group in section.into_iter().flatten() {
+                    for import in group.into_iter().flatten() {
+                        let (_, import) = import;
+                        if import.name == import_name {
+                            if let wasmparser::TypeRef::Func(type_idx) = import.ty {
+                                return Some(type_idx);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    fn func_param_count(bytes: &[u8], type_idx: u32) -> Option<usize> {
+        let mut current = 0;
+        for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+            if let Ok(wasmparser::Payload::TypeSection(section)) = payload {
+                for ty in section.into_iter().flatten() {
+                    for sub_ty in ty.into_types() {
+                        if current == type_idx {
+                            if let wasmparser::CompositeInnerType::Func(func) =
+                                sub_ty.composite_type.inner
+                            {
+                                return Some(func.params().len());
+                            }
+                        }
+                        current += 1;
+                    }
+                }
+            }
+        }
+        None
+    }
+
+    #[test]
+    fn detector_enabled_wait32_import_includes_thread_id_param() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (memory 1 1 shared)
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start
+                (drop
+                  (memory.atomic.wait32 align=4
+                    (i32.const 0)
+                    (i32.const 0)
+                    (i64.const -1))))
+              (export "memory" (memory 0))
+              (export "wasi_thread_start" (func $wasi_thread_start))
+              (export "_start" (func $_start)))
+            "#,
+        )
+        .unwrap();
+        let with_thread_id = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+        let output = AtomicPatchStreamPass::new(true, 3, true)
+            .run(&with_thread_id)
+            .unwrap();
+
+        let type_idx = import_func_type(&output, "__vfs_atomic_wait32").unwrap();
+        assert_eq!(func_param_count(&output, type_idx), Some(5));
+    }
+
+    #[test]
+    fn detector_enabled_atomic_store_imports_write_observer() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (memory 1 1 shared)
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start
+                (i32.atomic.store align=4
+                  (i32.const 0)
+                  (i32.const 1)))
+              (export "memory" (memory 0))
+              (export "wasi_thread_start" (func $wasi_thread_start))
+              (export "_start" (func $_start)))
+            "#,
+        )
+        .unwrap();
+        let with_thread_id = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+        let output = AtomicPatchStreamPass::new(true, 3, true)
+            .run(&with_thread_id)
+            .unwrap();
+
+        assert!(import_func_type(&output, "__vfs_atomic_observe_write").is_some());
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)
+            .unwrap();
+    }
+
+    #[test]
+    fn detector_enabled_atomic_rmw_and_cmpxchg_validate() {
+        let input = wat::parse_str(
+            r#"
+            (module
+              (memory 1 1 shared)
+              (func $wasi_thread_start (param i32 i32))
+              (func $_start
+                (drop
+                  (i32.atomic.rmw.add align=4
+                    (i32.const 0)
+                    (i32.const 1)))
+                (drop
+                  (i64.atomic.rmw.cmpxchg align=8
+                    (i32.const 8)
+                    (i64.const 0)
+                    (i64.const 1))))
+              (export "memory" (memory 0))
+              (export "wasi_thread_start" (func $wasi_thread_start))
+              (export "_start" (func $_start)))
+            "#,
+        )
+        .unwrap();
+        let with_thread_id = DeadlockThreadIdPreTargetStreamPass::new(true)
+            .run(&input)
+            .unwrap();
+        let output = AtomicPatchStreamPass::new(true, 3, true)
+            .run(&with_thread_id)
+            .unwrap();
+
+        assert!(import_func_type(&output, "__vfs_atomic_observe_write").is_some());
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&output)
+            .unwrap();
+    }
+}
+
+impl AtomicPatchStreamPass {
+    pub fn new(threads: bool, target_index: u32, detect_deadlock: bool) -> Self {
+        Self {
+            threads,
+            target_index,
+            detect_deadlock,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct FuncRebinder {
+    import_func_count: u32,
+    shift_offset: u32,
+}
+
+impl Rebind for FuncRebinder {
+    fn function(&self, index: u32) -> u32 {
+        if index < self.import_func_count {
+            index
+        } else {
+            index + self.shift_offset
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum AtomicWriteShape {
+    StoreI32 { width: i32 },
+    StoreI64 { width: i32 },
+    RmwI32 { width: i32 },
+    RmwI64 { width: i32 },
+    CmpxchgI32 { width: i32 },
+    CmpxchgI64 { width: i32 },
+}
+
+fn atomic_write_shape(
+    op: &wasmparser::Operator<'_>,
+) -> Option<(wasmparser::MemArg, AtomicWriteShape)> {
+    use wasmparser::Operator::*;
+    match op {
+        I32AtomicStore { memarg } => Some((*memarg, AtomicWriteShape::StoreI32 { width: 4 })),
+        I64AtomicStore { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 8 })),
+        I32AtomicStore8 { memarg } => Some((*memarg, AtomicWriteShape::StoreI32 { width: 1 })),
+        I32AtomicStore16 { memarg } => Some((*memarg, AtomicWriteShape::StoreI32 { width: 2 })),
+        I64AtomicStore8 { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 1 })),
+        I64AtomicStore16 { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 2 })),
+        I64AtomicStore32 { memarg } => Some((*memarg, AtomicWriteShape::StoreI64 { width: 4 })),
+        I32AtomicRmwAdd { memarg }
+        | I32AtomicRmwSub { memarg }
+        | I32AtomicRmwAnd { memarg }
+        | I32AtomicRmwOr { memarg }
+        | I32AtomicRmwXor { memarg }
+        | I32AtomicRmwXchg { memarg } => Some((*memarg, AtomicWriteShape::RmwI32 { width: 4 })),
+        I64AtomicRmwAdd { memarg }
+        | I64AtomicRmwSub { memarg }
+        | I64AtomicRmwAnd { memarg }
+        | I64AtomicRmwOr { memarg }
+        | I64AtomicRmwXor { memarg }
+        | I64AtomicRmwXchg { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 8 })),
+        I32AtomicRmw8AddU { memarg }
+        | I32AtomicRmw8SubU { memarg }
+        | I32AtomicRmw8AndU { memarg }
+        | I32AtomicRmw8OrU { memarg }
+        | I32AtomicRmw8XorU { memarg }
+        | I32AtomicRmw8XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI32 { width: 1 })),
+        I32AtomicRmw16AddU { memarg }
+        | I32AtomicRmw16SubU { memarg }
+        | I32AtomicRmw16AndU { memarg }
+        | I32AtomicRmw16OrU { memarg }
+        | I32AtomicRmw16XorU { memarg }
+        | I32AtomicRmw16XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI32 { width: 2 })),
+        I64AtomicRmw8AddU { memarg }
+        | I64AtomicRmw8SubU { memarg }
+        | I64AtomicRmw8AndU { memarg }
+        | I64AtomicRmw8OrU { memarg }
+        | I64AtomicRmw8XorU { memarg }
+        | I64AtomicRmw8XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 1 })),
+        I64AtomicRmw16AddU { memarg }
+        | I64AtomicRmw16SubU { memarg }
+        | I64AtomicRmw16AndU { memarg }
+        | I64AtomicRmw16OrU { memarg }
+        | I64AtomicRmw16XorU { memarg }
+        | I64AtomicRmw16XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 2 })),
+        I64AtomicRmw32AddU { memarg }
+        | I64AtomicRmw32SubU { memarg }
+        | I64AtomicRmw32AndU { memarg }
+        | I64AtomicRmw32OrU { memarg }
+        | I64AtomicRmw32XorU { memarg }
+        | I64AtomicRmw32XchgU { memarg } => Some((*memarg, AtomicWriteShape::RmwI64 { width: 4 })),
+        I32AtomicRmwCmpxchg { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI32 { width: 4 }))
+        }
+        I64AtomicRmwCmpxchg { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 8 }))
+        }
+        I32AtomicRmw8CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI32 { width: 1 }))
+        }
+        I32AtomicRmw16CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI32 { width: 2 }))
+        }
+        I64AtomicRmw8CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 1 }))
+        }
+        I64AtomicRmw16CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 2 }))
+        }
+        I64AtomicRmw32CmpxchgU { memarg } => {
+            Some((*memarg, AtomicWriteShape::CmpxchgI64 { width: 4 }))
+        }
+        _ => None,
+    }
+}
+
+fn function_param_count(types: &[wasmparser::SubType], type_idx: u32) -> u32 {
+    let Some(ty) = types.get(type_idx as usize) else {
+        return 0;
+    };
+    if let wasmparser::CompositeInnerType::Func(func) = &ty.composite_type.inner {
+        func.params().len() as u32
+    } else {
+        0
+    }
+}
+
+fn emit_observe_write(
+    func: &mut Function,
+    thread_id_global: Option<u32>,
+    observe_write_import_idx: Option<u32>,
+    target_id: i32,
+    addr_local: u32,
+    offset: u64,
+    width: i32,
+) {
+    let (Some(global), Some(import_idx)) = (thread_id_global, observe_write_import_idx) else {
+        return;
+    };
+    func.instruction(&Instruction::GlobalGet(global));
+    func.instruction(&Instruction::I32Const(target_id));
+    func.instruction(&Instruction::LocalGet(addr_local));
+    if offset > 0 {
+        func.instruction(&Instruction::I32Const(offset as i32));
+        func.instruction(&Instruction::I32Add);
+    }
+    func.instruction(&Instruction::I32Const(width));
+    func.instruction(&Instruction::Call(import_idx));
+}
+
+impl StreamPass for AtomicPatchStreamPass {
+    fn run(&mut self, input_wasm: &[u8]) -> Result<Vec<u8>> {
+        if !self.threads {
+            return Ok(input_wasm.to_vec());
+        }
+
+        let mut wait32_offsets = BTreeSet::new();
+        let mut wait64_offsets = BTreeSet::new();
+        let mut notify_offsets = BTreeSet::new();
+        let mut has_atomic_write = false;
+
+        let mut func_types = Vec::new();
+        let mut types = Vec::new();
+        let mut import_func_count = 0;
+        let mut thread_id_global = None;
+
+        for payload in Parser::new(0).parse_all(input_wasm) {
+            match payload? {
+                Payload::TypeSection(s) => {
+                    for t in s {
+                        for sub_ty in t?.into_types() {
+                            types.push(sub_ty);
+                        }
+                    }
+                }
+                Payload::FunctionSection(s) => {
+                    for f in s {
+                        func_types.push(f?);
+                    }
+                }
+                Payload::ImportSection(s) => {
+                    for group in s {
+                        for import in group? {
+                            let (_, import) = import?;
+                            if let wasmparser::TypeRef::Func(f) = import.ty {
+                                func_types.push(f);
+                                import_func_count += 1;
+                            }
+                        }
+                    }
+                }
+                Payload::CodeSectionStart { range, .. } => {
+                    let target_id = self.target_index as i32;
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
+                    let s = wasmparser::CodeSectionReader::new(reader)?;
+                    for func_body in s {
+                        let mut reader = func_body?.get_operators_reader()?;
+                        while !reader.eof() {
+                            match reader.read()? {
+                                wasmparser::Operator::MemoryAtomicWait32 { memarg } => {
+                                    wait32_offsets.insert(memarg.offset);
+                                }
+                                wasmparser::Operator::MemoryAtomicWait64 { memarg } => {
+                                    wait64_offsets.insert(memarg.offset);
+                                }
+                                wasmparser::Operator::MemoryAtomicNotify { memarg } => {
+                                    notify_offsets.insert(memarg.offset);
+                                }
+                                op => {
+                                    has_atomic_write |= atomic_write_shape(&op).is_some();
+                                }
+                            }
+                        }
+                    }
+                }
+                Payload::CustomSection(section) => {
+                    if section.name()
+                        == crate::wasm_stream::passes::deadlock_thread_id::THREAD_ID_GLOBAL_SECTION
+                    {
+                        let data = section.data();
+                        if data.len() == 4 {
+                            thread_id_global = Some(u32::from_le_bytes(
+                                data.try_into().expect("metadata length checked"),
+                            ));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        if wait32_offsets.is_empty()
+            && wait64_offsets.is_empty()
+            && notify_offsets.is_empty()
+            && !(self.detect_deadlock && has_atomic_write)
+        {
+            return Ok(input_wasm.to_vec());
+        }
+
+        let thread_id_global = if self.detect_deadlock {
+            Some(thread_id_global.ok_or_else(|| {
+                eyre::eyre!(
+                    "deadlock detection requires DeadlockThreadIdPreTargetStreamPass before AtomicPatchStreamPass"
+                )
+            })?)
+        } else {
+            None
+        };
+
+        let mut module = Module::new();
+
+        let mut wait32_import_ty = None;
+        let mut wait64_import_ty = None;
+        let mut notify_import_ty = None;
+        let mut observe_write_import_ty = None;
+
+        let mut wait32_wrap_ty = None;
+        let mut wait64_wrap_ty = None;
+        let mut notify_wrap_ty = None;
+
+        let mut type_sec = TypeSection::new();
+        for t in &types {
+            let enc_ty = crate::wasm_stream::translator::translate_sub_type(t, &DefaultRebinder);
+            type_sec.ty().subtype(&enc_ty);
+        }
+
+        let mut type_count = types.len() as u32;
+
+        let mut get_or_add_type = |params: &[ValType], results: &[ValType]| -> u32 {
+            for (i, t) in types.iter().enumerate() {
+                if let wasmparser::CompositeInnerType::Func(f) = &t.composite_type.inner {
+                    if f.params().len() == params.len() && f.results().len() == results.len() {
+                        let mut match_params = true;
+                        for (a, b) in f.params().iter().zip(params.iter()) {
+                            if crate::wasm_stream::translator::translate_val_type(
+                                *a,
+                                &DefaultRebinder,
+                            ) != *b
+                            {
+                                match_params = false;
+                                break;
+                            }
+                        }
+                        let mut match_results = true;
+                        for (a, b) in f.results().iter().zip(results.iter()) {
+                            if crate::wasm_stream::translator::translate_val_type(
+                                *a,
+                                &DefaultRebinder,
+                            ) != *b
+                            {
+                                match_results = false;
+                                break;
+                            }
+                        }
+                        if match_params && match_results {
+                            return i as u32;
+                        }
+                    }
+                }
+            }
+            type_sec
+                .ty()
+                .function(params.iter().cloned(), results.iter().cloned());
+            let idx = type_count;
+            type_count += 1;
+            idx
+        };
+
+        let mut new_imports_count = 0;
+
+        if !wait32_offsets.is_empty() {
+            let wait32_import_params: &[ValType] = if self.detect_deadlock {
+                &[
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I64,
+                ]
+            } else {
+                &[ValType::I32, ValType::I32, ValType::I32, ValType::I64]
+            };
+            wait32_import_ty = Some(get_or_add_type(wait32_import_params, &[ValType::I32]));
+            wait32_wrap_ty = Some(get_or_add_type(
+                &[ValType::I32, ValType::I32, ValType::I64],
+                &[ValType::I32],
+            ));
+            new_imports_count += 1;
+        }
+        if !wait64_offsets.is_empty() {
+            let wait64_import_params: &[ValType] = if self.detect_deadlock {
+                &[
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I32,
+                    ValType::I64,
+                    ValType::I64,
+                ]
+            } else {
+                &[ValType::I32, ValType::I32, ValType::I64, ValType::I64]
+            };
+            wait64_import_ty = Some(get_or_add_type(wait64_import_params, &[ValType::I32]));
+            wait64_wrap_ty = Some(get_or_add_type(
+                &[ValType::I32, ValType::I64, ValType::I64],
+                &[ValType::I32],
+            ));
+            new_imports_count += 1;
+        }
+        if !notify_offsets.is_empty() {
+            let notify_import_params: &[ValType] = if self.detect_deadlock {
+                &[ValType::I32, ValType::I32, ValType::I32, ValType::I32]
+            } else {
+                &[ValType::I32, ValType::I32, ValType::I32]
+            };
+            notify_import_ty = Some(get_or_add_type(notify_import_params, &[ValType::I32]));
+            notify_wrap_ty = Some(get_or_add_type(
+                &[ValType::I32, ValType::I32],
+                &[ValType::I32],
+            ));
+            new_imports_count += 1;
+        }
+        if self.detect_deadlock && has_atomic_write {
+            observe_write_import_ty = Some(get_or_add_type(
+                &[ValType::I32, ValType::I32, ValType::I32, ValType::I32],
+                &[],
+            ));
+            new_imports_count += 1;
+        }
+
+        module.section(&type_sec);
+
+        let mut func_count = import_func_count;
+        let mut wait32_import_idx = None;
+        let mut wait64_import_idx = None;
+        let mut notify_import_idx = None;
+        let mut observe_write_import_idx = None;
+        let mut imports_emitted = false;
+
+        let mut wait32_map = HashMap::new();
+        let mut wait64_map = HashMap::new();
+        let mut notify_map = HashMap::new();
+
+        let rebinder = FuncRebinder {
+            import_func_count,
+            shift_offset: new_imports_count,
+        };
+
+        for payload in Parser::new(0).parse_all(input_wasm) {
+            let payload = payload?;
+            match &payload {
+                Payload::ImportSection(s) => {
+                    let mut import_sec = ImportSection::new();
+                    for group in s.clone() {
+                        for import in group? {
+                            let (_, import) = import?;
+                            let ty = match import.ty {
+                                TypeRef::Func(f) => EntityType::Function(f),
+                                TypeRef::Table(t) => {
+                                    EntityType::Table(translate_table_type(t, &DefaultRebinder))
+                                }
+                                TypeRef::Memory(m) => EntityType::Memory(translate_memory_type(m)),
+                                TypeRef::Global(g) => {
+                                    EntityType::Global(translate_global_type(g, &DefaultRebinder))
+                                }
+                                TypeRef::Tag(t) => EntityType::Tag(
+                                    crate::wasm_stream::translator::translate_tag_type(t),
+                                ),
+                                _ => unreachable!(),
+                            };
+                            import_sec.import(import.module, import.name, ty);
+                        }
+                    }
+                    if let Some(ty) = wait32_import_ty {
+                        import_sec.import(
+                            "wasi_snapshot_preview1",
+                            "__vfs_atomic_wait32",
+                            EntityType::Function(ty),
+                        );
+                        wait32_import_idx = Some(func_count);
+                        func_count += 1;
+                    }
+                    if let Some(ty) = wait64_import_ty {
+                        import_sec.import(
+                            "wasi_snapshot_preview1",
+                            "__vfs_atomic_wait64",
+                            EntityType::Function(ty),
+                        );
+                        wait64_import_idx = Some(func_count);
+                        func_count += 1;
+                    }
+                    if let Some(ty) = notify_import_ty {
+                        import_sec.import(
+                            "wasi_snapshot_preview1",
+                            "__vfs_atomic_notify",
+                            EntityType::Function(ty),
+                        );
+                        notify_import_idx = Some(func_count);
+                        func_count += 1;
+                    }
+                    if let Some(ty) = observe_write_import_ty {
+                        import_sec.import(
+                            "wasi_snapshot_preview1",
+                            "__vfs_atomic_observe_write",
+                            EntityType::Function(ty),
+                        );
+                        observe_write_import_idx = Some(func_count);
+                        func_count += 1;
+                    }
+                    module.section(&import_sec);
+                    imports_emitted = true;
+                }
+                Payload::FunctionSection(s) => {
+                    if !imports_emitted {
+                        let mut import_sec = ImportSection::new();
+                        if let Some(ty) = wait32_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_wait32",
+                                EntityType::Function(ty),
+                            );
+                            wait32_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        if let Some(ty) = wait64_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_wait64",
+                                EntityType::Function(ty),
+                            );
+                            wait64_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        if let Some(ty) = notify_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_notify",
+                                EntityType::Function(ty),
+                            );
+                            notify_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        if let Some(ty) = observe_write_import_ty {
+                            import_sec.import(
+                                "wasi_snapshot_preview1",
+                                "__vfs_atomic_observe_write",
+                                EntityType::Function(ty),
+                            );
+                            observe_write_import_idx = Some(func_count);
+                            func_count += 1;
+                        }
+                        module.section(&import_sec);
+                        imports_emitted = true;
+                    }
+                    let mut func_sec = FunctionSection::new();
+                    for f in s.clone() {
+                        func_sec.function(f?);
+                        func_count += 1;
+                    }
+                    for offset in &wait32_offsets {
+                        func_sec.function(wait32_wrap_ty.unwrap());
+                        wait32_map.insert(*offset, func_count);
+                        func_count += 1;
+                    }
+                    for offset in &wait64_offsets {
+                        func_sec.function(wait64_wrap_ty.unwrap());
+                        wait64_map.insert(*offset, func_count);
+                        func_count += 1;
+                    }
+                    for offset in &notify_offsets {
+                        func_sec.function(notify_wrap_ty.unwrap());
+                        notify_map.insert(*offset, func_count);
+                        func_count += 1;
+                    }
+                    module.section(&func_sec);
+                }
+                Payload::TableSection(s) => {
+                    let mut sec = wasm_encoder::TableSection::new();
+                    for t in s.clone() {
+                        sec.table(translate_table_type(t?.ty, &rebinder));
+                    }
+                    module.section(&sec);
+                }
+                Payload::MemorySection(s) => {
+                    let mut sec = wasm_encoder::MemorySection::new();
+                    for m in s.clone() {
+                        sec.memory(translate_memory_type(m?));
+                    }
+                    module.section(&sec);
+                }
+                Payload::TagSection(s) => {
+                    let mut sec = wasm_encoder::TagSection::new();
+                    for t in s.clone() {
+                        let t = t?;
+                        sec.tag(wasm_encoder::TagType {
+                            kind: wasm_encoder::TagKind::Exception,
+                            func_type_idx: t.func_type_idx,
+                        });
+                    }
+                    module.section(&sec);
+                }
+                Payload::GlobalSection(s) => {
+                    let mut sec = GlobalSection::new();
+                    for g in s.clone() {
+                        let g = g?;
+                        let mut instrs = Vec::new();
+                        for op in g.init_expr.get_operators_reader() {
+                            let op = op?;
+                            if matches!(op, wasmparser::Operator::End) {
+                                continue;
+                            }
+                            instrs.push(translate(&op, &rebinder));
+                        }
+                        let init_expr = wasm_encoder::ConstExpr::extended(instrs);
+                        sec.global(translate_global_type(g.ty, &rebinder), &init_expr);
+                    }
+                    module.section(&sec);
+                }
+                Payload::ExportSection(s) => {
+                    let mut sec = ExportSection::new();
+                    for e in s.clone() {
+                        let e = e?;
+                        let kind = match e.kind {
+                            wasmparser::ExternalKind::Func
+                            | wasmparser::ExternalKind::FuncExact => wasm_encoder::ExportKind::Func,
+                            wasmparser::ExternalKind::Table => wasm_encoder::ExportKind::Table,
+                            wasmparser::ExternalKind::Memory => wasm_encoder::ExportKind::Memory,
+                            wasmparser::ExternalKind::Global => wasm_encoder::ExportKind::Global,
+                            wasmparser::ExternalKind::Tag => wasm_encoder::ExportKind::Tag,
+                        };
+                        let idx = match e.kind {
+                            wasmparser::ExternalKind::Func
+                            | wasmparser::ExternalKind::FuncExact => rebinder.function(e.index),
+                            _ => e.index,
+                        };
+                        sec.export(e.name, kind, idx);
+                    }
+                    module.section(&sec);
+                }
+                Payload::StartSection { func, .. } => {
+                    module.section(&StartSection {
+                        function_index: rebinder.function(*func),
+                    });
+                }
+                Payload::ElementSection(s) => {
+                    let mut sec = ElementSection::new();
+                    for elem in s.clone() {
+                        let elem = elem?;
+                        let items = match elem.items {
+                            wasmparser::ElementItems::Functions(f) => {
+                                let funcs_vec = f
+                                    .into_iter()
+                                    .map(|idx| Ok(rebinder.function(idx?)))
+                                    .collect::<Result<Vec<u32>, eyre::Error>>()?;
+                                wasm_encoder::Elements::Functions(std::borrow::Cow::Owned(
+                                    funcs_vec,
+                                ))
+                            }
+                            wasmparser::ElementItems::Expressions(ref_ty, exprs) => {
+                                let mut const_exprs = Vec::new();
+                                for expr in exprs {
+                                    let mut instrs = Vec::new();
+                                    for op in expr?.get_operators_reader() {
+                                        let op = op?;
+                                        if matches!(op, wasmparser::Operator::End) {
+                                            continue;
+                                        }
+                                        instrs.push(translate(&op, &rebinder));
+                                    }
+                                    const_exprs.push(wasm_encoder::ConstExpr::extended(instrs));
+                                }
+                                let enc_ref_ty = translate_ref_type(ref_ty, &rebinder);
+                                wasm_encoder::Elements::Expressions(
+                                    enc_ref_ty,
+                                    std::borrow::Cow::Owned(const_exprs),
+                                )
+                            }
+                        };
+                        match elem.kind {
+                            wasmparser::ElementKind::Passive => {
+                                sec.passive(items);
+                            }
+                            wasmparser::ElementKind::Active {
+                                table_index,
+                                offset_expr,
+                            } => {
+                                let mut instrs = Vec::new();
+                                for op in offset_expr.get_operators_reader() {
+                                    let op = op?;
+                                    if matches!(op, wasmparser::Operator::End) {
+                                        continue;
+                                    }
+                                    instrs.push(translate(&op, &rebinder));
+                                }
+                                let offset = wasm_encoder::ConstExpr::extended(instrs);
+                                sec.active(table_index, &offset, items);
+                            }
+                            wasmparser::ElementKind::Declared => {
+                                sec.declared(items);
+                            }
+                        }
+                    }
+                    module.section(&sec);
+                }
+                Payload::DataCountSection { count, .. } => {
+                    module.section(&DataCountSection { count: *count });
+                }
+                Payload::DataSection(s) => {
+                    let mut sec = DataSection::new();
+                    for d in s.clone() {
+                        let d = d?;
+                        match d.kind {
+                            wasmparser::DataKind::Passive => {
+                                sec.passive(d.data.iter().copied());
+                            }
+                            wasmparser::DataKind::Active {
+                                memory_index,
+                                offset_expr,
+                            } => {
+                                let mut instrs = Vec::new();
+                                for op in offset_expr.get_operators_reader() {
+                                    let op = op?;
+                                    if matches!(op, wasmparser::Operator::End) {
+                                        continue;
+                                    }
+                                    instrs.push(translate(&op, &rebinder));
+                                }
+                                let offset = wasm_encoder::ConstExpr::extended(instrs);
+                                sec.active(memory_index, &offset, d.data.iter().copied());
+                            }
+                        }
+                    }
+                    module.section(&sec);
+                }
+                Payload::CodeSectionStart { range, .. } => {
+                    let target_id = self.target_index as i32;
+                    let reader = wasmparser::BinaryReader::new(
+                        &input_wasm[range.start..range.end],
+                        range.start,
+                    );
+                    let s = wasmparser::CodeSectionReader::new(reader)?;
+                    let wait32_map_clone = wait32_map.clone();
+                    let wait64_map_clone = wait64_map.clone();
+                    let notify_map_clone = notify_map.clone();
+                    let types_for_params = types.clone();
+                    let func_types_for_params = func_types.clone();
+                    let observe_write_import_idx_for_body = observe_write_import_idx;
+                    let thread_id_global_for_body = thread_id_global;
+                    let mut code_sec = par_process_code_section(s, move |body_idx, func_body| {
+                        let mut locals = Vec::new();
+                        let mut locals_reader = func_body.get_locals_reader()?;
+                        let mut local_count = 0u32;
+                        for _ in 0..locals_reader.get_count() {
+                            let (count, ty) = locals_reader.read()?;
+                            local_count += count;
+                            locals.push((
+                                count,
+                                crate::wasm_stream::translator::translate_val_type(ty, &rebinder),
+                            ));
+                        }
+                        let func_idx = import_func_count + body_idx as u32;
+                        let type_idx = func_types_for_params[func_idx as usize];
+                        let param_count = function_param_count(&types_for_params, type_idx);
+                        let temp_addr = param_count + local_count;
+                        let temp_i32 = temp_addr + 1;
+                        let temp_i32_b = temp_addr + 2;
+                        let temp_i64 = temp_addr + 3;
+                        let temp_i64_b = temp_addr + 4;
+                        if observe_write_import_idx_for_body.is_some() {
+                            locals.push((3, ValType::I32));
+                            locals.push((2, ValType::I64));
+                        }
+                        let mut func = Function::new(locals);
+                        let mut reader = func_body.get_operators_reader()?;
+                        while !reader.eof() {
+                            let op = reader.read()?;
+                            match op {
+                                wasmparser::Operator::MemoryAtomicWait32 { memarg } => {
+                                    func.instruction(&Instruction::Call(
+                                        wait32_map_clone[&memarg.offset],
+                                    ));
+                                }
+                                wasmparser::Operator::MemoryAtomicWait64 { memarg } => {
+                                    func.instruction(&Instruction::Call(
+                                        wait64_map_clone[&memarg.offset],
+                                    ));
+                                }
+                                wasmparser::Operator::MemoryAtomicNotify { memarg } => {
+                                    func.instruction(&Instruction::Call(
+                                        notify_map_clone[&memarg.offset],
+                                    ));
+                                }
+                                _ if observe_write_import_idx_for_body.is_some()
+                                    && atomic_write_shape(&op).is_some() =>
+                                {
+                                    let (memarg, shape) = atomic_write_shape(&op).unwrap();
+                                    match shape {
+                                        AtomicWriteShape::StoreI32 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i32));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i32));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::StoreI64 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i64));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i64));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::RmwI32 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i32));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i32));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::RmwI64 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i64));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i64));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::CmpxchgI32 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i32_b));
+                                            func.instruction(&Instruction::LocalSet(temp_i32));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i32));
+                                            func.instruction(&Instruction::LocalGet(temp_i32_b));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                        AtomicWriteShape::CmpxchgI64 { width } => {
+                                            func.instruction(&Instruction::LocalSet(temp_i64_b));
+                                            func.instruction(&Instruction::LocalSet(temp_i64));
+                                            func.instruction(&Instruction::LocalTee(temp_addr));
+                                            func.instruction(&Instruction::LocalGet(temp_i64));
+                                            func.instruction(&Instruction::LocalGet(temp_i64_b));
+                                            func.instruction(&translate(&op, &rebinder));
+                                            emit_observe_write(
+                                                &mut func,
+                                                thread_id_global_for_body,
+                                                observe_write_import_idx_for_body,
+                                                target_id,
+                                                temp_addr,
+                                                memarg.offset,
+                                                width,
+                                            );
+                                        }
+                                    }
+                                }
+                                _ => {
+                                    func.instruction(&translate(&op, &rebinder));
+                                }
+                            }
+                        }
+                        Ok(func)
+                    })?;
+
+                    for offset in &wait32_offsets {
+                        let mut func = Function::new(Vec::new());
+                        if let Some(global) = thread_id_global {
+                            func.instruction(&Instruction::GlobalGet(global));
+                        }
+                        func.instruction(&Instruction::I32Const(target_id));
+                        func.instruction(&Instruction::LocalGet(0));
+                        if *offset > 0 {
+                            func.instruction(&Instruction::I32Const(*offset as i32));
+                            func.instruction(&Instruction::I32Add);
+                        }
+                        func.instruction(&Instruction::LocalGet(1));
+                        func.instruction(&Instruction::LocalGet(2));
+                        func.instruction(&Instruction::Call(wait32_import_idx.unwrap()));
+                        func.instruction(&Instruction::End);
+                        code_sec.function(&func);
+                    }
+                    for offset in &wait64_offsets {
+                        let mut func = Function::new(Vec::new());
+                        if let Some(global) = thread_id_global {
+                            func.instruction(&Instruction::GlobalGet(global));
+                        }
+                        func.instruction(&Instruction::I32Const(target_id));
+                        func.instruction(&Instruction::LocalGet(0));
+                        if *offset > 0 {
+                            func.instruction(&Instruction::I32Const(*offset as i32));
+                            func.instruction(&Instruction::I32Add);
+                        }
+                        func.instruction(&Instruction::LocalGet(1));
+                        func.instruction(&Instruction::LocalGet(2));
+                        func.instruction(&Instruction::Call(wait64_import_idx.unwrap()));
+                        func.instruction(&Instruction::End);
+                        code_sec.function(&func);
+                    }
+                    for offset in &notify_offsets {
+                        let mut func = Function::new(Vec::new());
+                        if let Some(global) = thread_id_global {
+                            func.instruction(&Instruction::GlobalGet(global));
+                        }
+                        func.instruction(&Instruction::I32Const(target_id));
+                        func.instruction(&Instruction::LocalGet(0));
+                        if *offset > 0 {
+                            func.instruction(&Instruction::I32Const(*offset as i32));
+                            func.instruction(&Instruction::I32Add);
+                        }
+                        func.instruction(&Instruction::LocalGet(1));
+                        func.instruction(&Instruction::Call(notify_import_idx.unwrap()));
+                        func.instruction(&Instruction::End);
+                        code_sec.function(&func);
+                    }
+
+                    module.section(&code_sec);
+                }
+                Payload::CustomSection(c) => {
+                    module.section(&CustomSection {
+                        name: c.name().into(),
+                        data: std::borrow::Cow::Borrowed(c.data()),
+                    });
+                }
+                _ => {}
+            }
+        }
+
+        Ok(module.finish())
+    }
+}

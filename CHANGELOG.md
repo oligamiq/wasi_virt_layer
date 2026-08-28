@@ -5,6 +5,273 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+- **Threaded target reset lifecycle**:
+    - `_reset()` now cancels target atomic waits, waits for all queued/running logical threads from the old target generation to finish before mutating target state, then frees atomic-wait cells, restores target state, and restarts the target. This prevents stale threads from racing with reset memory and stealing or missing notifications.
+    - Thread activity is counted from enqueue time so child threads queued by an old-generation worker are included in the reset barrier.
+    - Thread activity tracking is internal and keyed per `ThreadAccessor` type/target, so the public `ThreadAccess` trait remains unchanged for downstream implementations.
+- **Threaded integration test logging**:
+    - Deno stdout/stderr are written directly to test log files instead of undrained pipes, avoiding pipe backpressure during verbose threaded runs.
+- **Future Rust compatibility**:
+    - Removed expression-position `eyre::bail!` usages that trigger Rust future-incompatibility lints, and fixed bare rustdoc URLs in the CLI.
+- **Publishing metadata**:
+    - Crate packages now include the repository README, and `wasi_virt_layer` uses the repository's actual `LICENSE` file instead of the previous incorrect `MIT OR Apache-2.0` metadata declaration.
+    - Crate metadata now declares the tested MSRV explicitly: Rust 1.89.0 for `wasi_virt_layer` and Rust 1.93.0 for `wasi_virt_layer-cli`.
+
+## [0.7.0] - 2026-08-28
+### Fixed
+- **WASI threads toolchain compatibility**:
+    - Removed the obsolete manual `__wasi_init_tp` / `__wasm_call_ctors` initializer workaround and its synthetic `__thread_patch` startup placeholder after the upstream WASI TLS initialization fix.
+    - Stopped forcing `+nightly` solely for `wasm32-wasip1-threads`; Rust 1.92.0 and later include the stable fix for rust-lang/rust#146721.
+    - Threaded reactor/library builds now rely on the upstream wasi-sdk 34 initialization behavior available from nightly-2026-08-27 and, on stable, Rust 1.100.0; older toolchains are rejected before the VFS build starts.
+
+## [0.6.1] - 2026-07-18
+### Fixed
+- **Wasm Generation**:
+    - Preserved Wasm tag sections after combining modules.
+- **Path Resolution**:
+    - Treated dot-prefixed names (e.g., `.cargo`) as normal path components rather than special tokens.
+
+## [0.6.0] - 2026-07-04
+### Added
+- **Reset State Management**:
+    - Synthesized `_reset()` functions now correctly restore the target's own-memory logical sizes to their initial states.
+    - `_reset()` now clears the `unreachable` trap wrapper state flags.
+    - Added `own_memory_reset_vfs` and `unreachable_reset_vfs` integration tests to verify state clearing behavior.
+- **Documentation**:
+    - Added `rubrc-rustc-vtp-followup-2026-07.md` detailing the `VirtualThreadPool` architecture and thread re-initialization invariants.
+
+### Fixed
+- **Deadlock Detector**:
+    - Fixed a false positive where the deadlock detector would incorrectly flag the VFS shell thread during a host idle wait (thread ID `1_000_000`, wasm ID `4`).
+- **Tests**:
+    - Fixed `pool_reused_direct_export_vfs` test to correctly verify target reinitialization on reused non-main workers.
+    - Fixed `test_stderr_reentrancy_vfs` to explicitly assert a trap rather than a timeout.
+    - Corrected the target name in `write-single-vfs` to `test_write_single` to align with expected test inputs.
+
+## [0.5.14] - 2026-06-30
+### Added
+- **Deadlock Detection**:
+    - Added `--deadlock-detection` CLI gate (`wasi_virt_layer-cli`) to enable automatic deadlock detection for threaded Wasm builds.
+    - Injects per-target wasm thread ID globals so the host can associate atomic.wait callers with logical threads.
+    - Observes atomic writes (`i32.atomic.store` variants) to detect when a thread has released a lock.
+    - Detects closed atomic wait deadlocks when a waiter times out without the expected notify after a reasonable interval.
+    - Routes all host-side wait calls through a central `DeadlockDetector` that logs suspected deadlocked thread IDs and their backtrace context.
+    - Added unit and integration tests covering single-thread wait, multi-thread acquire, and feature-matrix permutations.
+
+### Fixed
+- **test_minimal_repro / test_minimal_repro_virtual**:
+    - Inverted success condition in both integration tests — they previously returned `Err` when `output.status.success()` was true, causing false failures.
+    - Added missing `plug_sched!(DefaultSched, ls, self)` in `examples/vfs/minimal_repro_virtual/src/lib.rs` so the `ls` target can resolve `sched_yield` imports.
+
+## [0.5.13] - 2026-06-24
+### Fixed
+- **Atomic Wait State Reset**:
+    - Cleared `WAIT_MAP` state on `_reset()` calls per-target using `__vfs_atomic_reset_target` to prevent stale zombie threads from stealing atomic notify signals on subsequent runs.
+- **Tests**:
+    - Fixed a bug in `has_required_wasi_targets` that incorrectly skipped tests when WASI targets were successfully detected.
+    - Deduplicated `has_required_wasi_targets` logic across the test suite into `utils.rs` to improve performance and stability.
+    - Tightened `post_combine` codegen tests to assert exact argument instructions.
+
+### Added
+- **Tests**:
+    - Added `test_atomic_wait_reset.rs` integration test to ensure `_reset()` correctly clears memory.atomic wait states for a target.
+
+## [0.5.12] - 2026-06-24
+### Fixed
+- **Thread spawning and pooling logic**:
+    - Spun up workers when pool is under capacity and avoided AddThread deadlock in `run()`.
+    - Routed VFS thread spawn wrapper directly to host thread path, fixing TLS destruction errors.
+### Added
+- **Tests**:
+    - Enhanced spawn_main test with higher thread counts and re-entrancy.
+    - Added test for spawning main in a new thread.
+
+## [0.5.11] - 2026-06-23
+### Fixed
+- **VirtualThreadPool worker reuse skipping Wasm start-section reinitialization**:
+    - When a `VirtualThreadPool` worker thread processed multiple logical threads sequentially (via `Run` messages in the shared queue), the Wasm start section was called only on the first logical thread. Subsequent logical threads on the same worker skipped TLS initialization and global constructors, causing runtime errors (e.g., `unreachable` traps in downstream threading projects).
+    - Added per-worker `thread_local! WORKER_HAS_RUN_BEFORE: Cell<bool>` to detect reuse; on non-first `Run` messages, `call_thread_start_init()` invokes the Wasm start section function (exported as `__wasip1_vfs_<target>__thread_start`) before executing the logical thread body.
+    - Added `StartsPreStreamPass` to dual-export the Wasm start section as both `__flesh_<target>_start` (preserving existing contract) and `__wasip1_vfs_<target>__thread_start` (reuse detection contract).
+    - Added `post_combine.rs` classification for `__thread_start` imports/exports to resolve the cross-module call chain.
+    - `DirectThreadPool` and `TestThreadAccessor` implement `call_thread_start_init` as no-ops (fresh threads don't need re-init).
+    - Added integration test `test_pool_thread_reinitialization` with a WAT target whose start section clears a marker, verifying that the marker is cleared on every logical thread, not just the first.
+
+## [0.5.10] - 2026-06-22
+### Fixed
+- **Dynamic LFS UTF-8 filename corruption**:
+    - Fixed a bug where raw UTF-8 path bytes were cast to `char` via `b as char`, causing Latin-1 reinterpretation and byte-doubling for all non-ASCII sequences. Files created with Unicode names (e.g. `あ`, `👋`) were stored under garbled keys and became unfindable (`ENOENT`) on subsequent lookups.
+    - Replaced byte-by-byte `push(b as char)` with a `bytes_to_smallstring` helper that preserves raw UTF-8 bytes via `core::str::from_utf8`.
+    - Added regression tests for Unicode filename create, lookup, DirMap key verification, and 4-byte emoji handling.
+
+## [0.5.9] - 2026-06-22
+### Added
+- **Documentation**:
+    - Added a detailed Japanese mdBook architecture page (`book/src/ja/architecture/own-memory.md`) explaining the final own-memory architecture, physical vs logical memory bounds, lowering contracts, remapping, and regression testing checkpoints.
+    - Integrated the own-memory architecture section into the Japanese `SUMMARY.md` and Index pages.
+
+### Changed
+- **Refactoring & Own-Memory ABI Alignment**:
+    - Centralized all own-memory ABI prefixes/suffixes, host exports, memory director exports/parsers, target sanitization, and copy helpers into a new single contract helper module (`wasi_virt_layer-cli/src/wasm_stream/own_memory_abi.rs`).
+    - Eliminated manual `replace("-", "_")` target-name mutations in `multi_memory_lowering.rs` and `post_combine.rs` in favor of consistent `own_memory_abi::sanitize_target_name` helpers, resolving several silent hyphenated target lookups/start/reset failures.
+    - Replaced CLI-crashing `.unwrap()` and `panic!` invocations during target positions and string splits with safe `Result::Err(eyre::Error)` propagations.
+- **Cleanup**:
+    - Deleted obsolete script `rewrite.py` and dead duplicate lowering pass `own_memory_lowering.rs`.
+
+## [0.5.8] - 2026-06-20
+### Added
+- **Self/Host own-memory API**:
+    - `own_memory!` now unconditionally supports `memory_size_self()`, `memory_grow_self()`, and `memory_size::<__self>()` / `memory_grow::<__self>()` for querying and expanding the VFS/host own memory without passing a target Wasm.
+    - `__self` marker type publicly re-exported via `wasi_virt_layer::prelude::*`.
+- **Compile-time guard**: `own_memory!(self, ...)` and `own_memory!(__self, ...)` now produce a clear `compile_error!` with guidance.
+
+### Changed
+- CLI lowering (`own_memory_lowering`, `multi_memory_lowering`) maps `__self` imports to memory index 0, aligning host memory with the existing host logical exports.
+
+## [0.5.7] - 2026-06-20
+### Added
+- **ThreadID Collision Safety**:
+    - Introduced `ThreadIdGenerator` trait with `ReservedRangeThreadIdGenerator` (default base 1,000,000) for configurable guest thread ID generation in `VirtualThreadPool`.
+    - Added `new_const_with_thread_id_generator()` constructor for custom ID generation.
+    - `plug_thread!` now returns `ERRNO_AGAIN` instead of panicking on ID exhaustion.
+    - `root_spawn`/`root_spawn_unchecked` use `RootSpawnFlagGuard` (Drop guard) for correct nested root-spawn state management.
+- **Documentation**:
+    - Documented collision contract: guest runtime uses a single thread-ID namespace shared by external (WasiRunner) and pool (VFS) threads.
+
+### Changed
+- **VirtualThreadPool refactoring**:
+    - Thread ID generation moved from host-thread-derived `next_thread_id()` to configurable `Generator` field in the pool struct.
+    - Added generic `Generator: ThreadIdGenerator` parameter to `VirtualThreadPool`.
+
+### Removed
+- Removed `VirtualThreadPool` dependency on `get_host_thread_id()` / `next_thread_id()` / `THREAD_LOCAL_COUNTER`.
+
+## [0.5.6] - 2026-06-19
+### Added
+- **Feature Gating**:
+    - Added `own-memory` Cargo feature to `wasi_virt_layer` to gate `own_memory!` macro, functions, and exports.
+    - CLI `build` and `prebuild` now automatically inject `wasi_virt_layer/own-memory` for `--own-memory` builds.
+
+### Changed
+- **Memory Expansion & own_memory!**:
+    - Moved own-memory logical-size exports out of `import_wasm!` and into `own_memory!` macro.
+    - Rewrote own-memory logical `memory.grow` wrapper to use Atomic Compare-and-Swap (CAS) loop instead of layout locks.
+    - Restored physical `memory_grow` contract to caller-quiesced execution without inserting broad layout locks.
+    - Optimized `SharedGlobalStreamPass` to use lock-free/wait-free globals under `--own-memory` + threads.
+- **Testing & Execution**:
+    - Strengthened `test_own_memory_smoke_new_example` integration test to assert threaded worker run success and clean exit.
+    - Threaded integration test runs now write and preserve Deno worker output to `.deno-test-stdout.log` / `.deno-test-stderr.log`.
+
+### Removed
+- **Debug Artifacts**:
+    - Removed pre-existing hardcoded debug file generation (`DEBUG_INPUT.wasm`, `DEBUG_OUTPUT.wasm`) from core stream pipeline.
+
+## [0.5.5] - 2026-06-16
+### Added
+- **Memory Expansion & own_memory!**:
+    - Implemented `own_memory!` macro in `wasi_virt_layer` allowing VFS modules to expand target memory.
+    - Added `own_memory_lowering` and `check_range` stream passes to the CLI to support memory expansion.
+- **Export Stack Handoff Isolation**:
+    - Implemented export stack handoff design and ABI to protect exported Wasm functions from stack collisions when sharing linear memory.
+    - Added `ExportStackArenaStreamPass` for multi-memory target arena isolation (including atomic slot acquire/release).
+    - Integrated `ExportStackMultiMemoryTargetStreamPass` into the generator.
+    - Added `configure_wasm_stack!` and `protect_wasm_exports!` macros along with CLI argument parsing for configuring stack sizes and isolation.
+- **Threading & Execution**:
+    - Improved thread ID generation using host thread IDs and a TLS counter to ensure unique IDs across thread pools, preventing Rayon TLS isolation issues.
+    - Added WASI re-entrancy detection feature (`detect-wasi-reentrancy`) to trap synchronous re-entries of `non_recursive_wasi_snapshot_preview1!` calls via thread-local guards.
+    - Added synthesis warnings when a `__main_void` entrypoint is generated.
+- **Tests**:
+    - Added integration tests for single memory virtualization, 4 argument passing, and `stderr_reentrancy_vfs`.
+    - Added unit tests for memory growth edge cases and stack size skip logic in `ExportStackPreTargetStreamPass`.
+    - Added unit tests for memory strip, localization, and renaming logic in `TemporaryRefugeMemoryStreamPass`.
+    - Added comprehensive unit tests for `ExportStackMultiMemoryTargetStreamPass`.
+    - Added component validation tests and `wit-component` trampoline regression tests.
+
+### Fixed
+- **Stack Export Passes**:
+    - Fixed `CodeSectionStart` parsing by using `CodeSectionReader` with the correct range, resolving function body corruption in various export stack passes.
+    - Corrected `TargetRebinder` shift offset in `ExportStackPreTargetStreamPass` to prevent incorrect function indices in `call` instructions.
+    - Fixed incorrect function index calculation for `slot_acquire` in the stack ensure wrapper.
+- **Memory Passes**:
+    - Fixed `MultiMemoryLoweringStreamPass` function index rebinding and element section handling.
+    - Fixed refuge pass by adding explicit `TypeSection` pre-scan and `CodeSectionStart` handler.
+    - Unconditionally cleared the `shared` flag in the refuge pass.
+- **Dependencies**:
+    - Upgraded `wit-component` to 0.252.0 and `js-component-bindgen` to 2.0.1.
+
+## [0.5.4] - 2026-06-11
+### Added
+- **Tests**:
+    - Added `test_workspace_overwrite.rs` to verify workspace file preservation.
+- **Documentation**:
+    - Added `docs/plans/handoff_rustc_v_fix.md`.
+
+### Changed
+- **CLI Improvements**:
+    - Refined Wasm file existence checks in the generator to allow non-existent files during certain build phases.
+    - Improved ABI validation and command handling in the CLI tool.
+- **Examples**:
+    - Updated various examples with improved formatting and minor logic refinements.
+- **Dependencies**:
+    - Updated project version and dependencies via `cargo update`.
+
+## [0.5.3] - 2026-06-11
+### Added
+- **Unwind Support**:
+    - Added support for compiling Wasm modules with exception handling using `-Cpanic=unwind -Cllvm-args=-wasm-use-legacy-eh=false` and `-Zbuild-std=std,panic_unwind`.
+    - Introduced `--wasm-unwind` and `--vfs-unwind` flags to the CLI tool to control unwind compatibility.
+    - Added `test_unwind_target` and `test_unwind_vfs` examples demonstrating `std::panic::catch_unwind` behavior inside virtualized environments.
+    - Implemented integration tests to verify successful builds with the new unwind flags.
+
+
+## [0.5.2] - 2026-06-11
+### Added
+- **Example Enhancements**:
+    - Added `plug_sched!` and `plug_args!` to `lfs_api_test_vfs` example.
+    - Added `plug_args!`, `plug_random!`, and WASI socket stubs (`sock_recv`, `sock_send`, `sock_accept`, `sock_shutdown`) to `wait_poll_vfs` example.
+- **CLI Validation & Compatibility**:
+    - Enhanced `validate_unresolved_imports` to correctly handle and validate `__self_` prefixed custom imports.
+    - Whitelisted `wasi_snapshot_preview1` in the streaming merger's post-combine pass to allow direct pass-through of standard WASI imports when necessary.
+- **Internal Cleanup**:
+    - Improved documentation and added doc comments for `Wasip1ABIName`, `MemoryUniqueName`, and other internal CLI types.
+    - Cleaned up unused imports and refined internal module organization.
+
+### Fixed
+- **Integration Tests**:
+    - Enabled optimizations in `test_lfs_api_operations` to verify LFS operations under realistic build conditions.
+
+## [0.5.1] - 2026-06-10
+### Fixed
+- **CLI Validation Improvements**:
+    - Restored and refined unresolved WASI import validation in the streaming pipeline.
+    - Improved error message formatting and context chaining for missing imports.
+    - Fixed validation to correctly ignore intentionally dropped imports.
+- **Test Fixes**:
+    - Fixed single-memory thread VFS tests for Deno.
+    - Cleaned up unused WASI imports in `c_target.wat` test fixture.
+
+## [0.5.0] - 2026-06-09
+### Added
+- **Enhanced Streaming Merger**: Replaced the external `wasm-merge` dependency with a robust, in-process streaming merger.
+    - **Import Deduplication**: Automatically deduplicates identical external function imports during the merge process.
+    - **Robust Memory Restoration**: Implemented consistent memory state restoration, including zero-filling target memory, restoring active data segments from passive storage, and re-running target module starts.
+    - **Integrated Poll Support**: Integrated `poll_wait` logic directly into the post-combine pass, utilizing `atomic.wait` for efficient thread suspension in multi-threaded builds.
+- **Improved Memory Safety**:
+    - **Guarded Memory Access**: Refactored `memory_director` to use guarded closures (`with_directed_memory`), preventing pointer invalidation during shared global updates or memory growth.
+    - **Shared Global Optimization**: Optimized `SharedGlobalStreamPass` to use lock-free/wait-free global access for memory grow/size helpers.
+- **Thread Pool Enhancements**:
+    - **VirtualThreadPool Improvements**: Added initialization helpers, capacity reporting, and synchronous resizing to `VirtualThreadPool`.
+- **Custom Metadata Sections**: Added `wvl.multi_memory_lowering.helpers.v1` custom section to share metadata and control flags between different streaming passes.
+
+### Fixed
+- **ABI Connection Refinement**: Improved the ABI connection pass to be more selective, only renaming imports when matching exports are present in the module.
+- **Memory Copy Instruction Order**: Corrected the operand order for `memory.copy` instructions in generated director functions.
+- **Start Function Synthesis**: Ensured the synthesized `_start` function correctly orchestrates thread initialization and target runtime startup sequences.
+
+### Changed
+- **Version Bump**: Updated workspace version to 0.5.0.
+
 ## [0.4.12] - 2026-05-23
 ### Changed
 - **Parallelized Wasm Processing**: Introduced `rayon` to parallelize Wasm modification and generation steps (e.g., rewriting multi-memory, shared globals, atomic waits, unreachable wrappers, etc.) inside the CLI for single-module processing. This significantly improves transpilation speed for large Wasm modules without increasing memory overhead via parallel target generation.

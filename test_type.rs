@@ -1,0 +1,6 @@
+fn main() {
+    let s: wasmparser::ImportSectionReader<'_> = unimplemented!();
+    for group in s {
+        let x: () = group;
+    }
+}

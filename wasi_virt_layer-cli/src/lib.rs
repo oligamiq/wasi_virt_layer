@@ -4,12 +4,31 @@
 //! Provides commands and generator internals `wasi_virt_layer`.
 
 use crate::{
-    commands::{
-        build::build, new::new, postbuild::postbuild, prebuild::prebuild,
-        prepare_target::prepare_target,
-    },
+    commands::{build::build, new::new, postbuild::postbuild, prebuild::prebuild},
     fallback_command::CommandLock,
 };
+
+const OWN_MEMORY_FEATURE: &str = "wasi_virt_layer/own-memory";
+const DETECT_DEADLOCK_FEATURE: &str = "wasi_virt_layer/detect-deadlock";
+
+fn push_feature_once(opts: &mut args::VfsBuildOptions, feature: &str) {
+    if !opts.features.iter().any(|f| f == feature) {
+        opts.features.push(feature.to_string());
+    }
+}
+
+fn apply_implicit_vfs_features(
+    opts: &mut args::VfsBuildOptions,
+    own_memory: bool,
+    detect_deadlock: bool,
+) {
+    if own_memory {
+        push_feature_once(opts, OWN_MEMORY_FEATURE);
+    }
+    if detect_deadlock {
+        push_feature_once(opts, DETECT_DEADLOCK_FEATURE);
+    }
+}
 
 /// WASI ABI transformation and generation constants.
 pub mod abi;
@@ -32,15 +51,19 @@ pub mod feature_extractor;
 /// Generate TypeScript helper code for VFS modules.
 pub mod gen_ts_helper;
 /// Internal generators for modifying and stitching Wasm structures.
+#[allow(missing_docs)]
 pub mod generator;
 /// Instruction scanning and rewriting utilities for Walrus IR.
-pub mod instrs;
+
 /// Utilities for running integration tests against Wasm runtimes.
 pub mod test_run;
 /// Utilities for generating globally unique IDs/names within Wasm modules.
 pub mod unique_name;
 /// General utility functions for CLI logic and AST operations.
 pub mod util;
+/// Streaming Wasm module modification engine.
+#[allow(missing_docs)]
+pub mod wasm_stream;
 
 /// Central execution entrypoint for the CLI logic
 pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<()> {
@@ -48,12 +71,6 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
 
     if let Some(bin) = std::env::var(fallback_command::COMMAND_ALTERNATE_ENV_VAR).ok() {
         match bin.as_str() {
-            "wasm-merge" => {
-                return match fallback_command::wasm_merge(&args_vec) {
-                    0 => Ok(()),
-                    code => Err(eyre::eyre!("wasm-merge failed with exit code {code}")),
-                };
-            }
             "wasm-opt" => {
                 return match fallback_command::wasm_opt(&args_vec) {
                     0 => Ok(()),
@@ -86,9 +103,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         match subcmd {
             "build" => {
                 if let args::Command::Build(ref mut build_args) = parsed_args.command {
-                    let (vfs_opts, target_opts) = crate::feature_extractor::extract_features(
+                    let (mut vfs_opts, target_opts) = crate::feature_extractor::extract_features(
                         sub_matches,
                         build_args.wasm.len(),
+                    );
+                    apply_implicit_vfs_features(
+                        &mut vfs_opts,
+                        build_args.own_memory,
+                        build_args.detect_deadlock,
                     );
                     build_args.vfs_build_opts = vfs_opts;
                     build_args.target_vfs_build_opts = Some(target_opts);
@@ -96,9 +118,14 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
             }
             "prebuild" => {
                 if let args::Command::Prebuild(ref mut prebuild_args) = parsed_args.command {
-                    let (vfs_opts, target_opts) = crate::feature_extractor::extract_features(
+                    let (mut vfs_opts, target_opts) = crate::feature_extractor::extract_features(
                         sub_matches,
                         prebuild_args.wasm.len(),
+                    );
+                    apply_implicit_vfs_features(
+                        &mut vfs_opts,
+                        prebuild_args.own_memory,
+                        prebuild_args.detect_deadlock,
                     );
                     prebuild_args.vfs_build_opts = vfs_opts;
                     prebuild_args.target_vfs_build_opts = Some(target_opts);
@@ -144,19 +171,21 @@ pub fn main(args: impl IntoIterator<Item = impl Into<String>>) -> eyre::Result<(
         args::Command::Prebuild(prebuild_args) => prebuild(prebuild_args),
         args::Command::Postbuild(postbuild_args) => postbuild(postbuild_args),
         args::Command::New(new_args) => new(new_args),
-        args::Command::PrepareTarget(prepare_target_args) => {
-            let output = prepare_target_args.output.unwrap_or_else(|| {
-                prepare_target_args
-                    .target_wasm
-                    .with_extension("prepared.wasm")
-            });
-            let args = commands::prepare_target::PrepareTargetHandler {
-                target_wasm: prepare_target_args.target_wasm,
-                output,
-                keep_artifacts: prepare_target_args.keep_artifacts,
-            };
-            prepare_target(args)
-        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn implicit_vfs_features_include_deadlock_detection_when_requested() {
+        let mut opts = crate::args::VfsBuildOptions::default();
+
+        super::apply_implicit_vfs_features(&mut opts, false, true);
+
+        assert_eq!(
+            opts.features,
+            vec!["wasi_virt_layer/detect-deadlock".to_string()]
+        );
     }
 }
 
@@ -202,15 +231,6 @@ fn get_command_lock_identifiers(command: &args::Command) -> Vec<String> {
         }
         args::Command::Postbuild(args) => {
             ids.push(args.out_dir.to_string());
-        }
-        args::Command::PrepareTarget(args) => {
-            let output = args
-                .output
-                .clone()
-                .unwrap_or_else(|| args.target_wasm.with_extension("prepared.wasm"));
-            if let Some(parent) = output.parent() {
-                ids.push(parent.to_string());
-            }
         }
         args::Command::New(_) => {}
     }

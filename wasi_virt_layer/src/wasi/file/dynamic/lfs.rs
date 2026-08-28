@@ -24,6 +24,11 @@ use alloc::collections::BTreeMap;
 #[cfg(not(feature = "threads"))]
 use core::cell::UnsafeCell;
 
+fn bytes_to_smallstring<I: IntoIterator<Item = u8>>(iter: I) -> SmallString<[u8; 32]> {
+    let bytes: Vec<u8> = iter.into_iter().collect();
+    SmallString::from_str(core::str::from_utf8(&bytes).unwrap_or(""))
+}
+
 /// A local file system that allows runtime modifications
 /// This structure implements many file operations.
 /// However, it provides direct access, and there are no functions such as `open_file` to open files.
@@ -642,10 +647,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
             } else if component.as_root_dir() {
                 current_inode = 0;
             } else if let Some(name_iter) = component.as_normal() {
-                let mut s = SmallString::<[u8; 32]>::new();
-                for b in name_iter {
-                    s.push(b as char);
-                }
+                let s = bytes_to_smallstring(name_iter);
                 let child = self
                     .read_inode(&current_inode, |node| match &node.data {
                         InodeData::Dir(map) => map.get(&s).copied(),
@@ -675,10 +677,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
         while let Some(component) = components.next() {
             if components.peek().is_none() {
                 if let Some(name_iter) = component.as_normal() {
-                    let mut s = smallstr::SmallString::<[u8; 32]>::new();
-                    for b in name_iter {
-                        s.push(b as char);
-                    }
+                    let s = bytes_to_smallstring(name_iter);
                     return Some((current_inode, s));
                 } else {
                     return None;
@@ -690,7 +689,9 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
             } else if component.as_parent_dir() {
                 let parent = self
                     .read_inode(&current_inode, |node| match &node.data {
-                        InodeData::Dir(map) => map.get(&smallstr::SmallString::from_str("..")).copied(),
+                        InodeData::Dir(map) => {
+                            map.get(&smallstr::SmallString::from_str("..")).copied()
+                        }
                         _ => None,
                     })
                     .flatten();
@@ -703,10 +704,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + 'static> StandardDynamicLFS<
             } else if component.as_root_dir() {
                 current_inode = 0;
             } else if let Some(name_iter) = component.as_normal() {
-                let mut s = smallstr::SmallString::<[u8; 32]>::new();
-                for b in name_iter {
-                    s.push(b as char);
-                }
+                let s = bytes_to_smallstring(name_iter);
                 let child = self
                     .read_inode(&current_inode, |node| match &node.data {
                         InodeData::Dir(map) => map.get(&s).copied(),
@@ -1139,9 +1137,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
                 }
                 match component {
                     crate::memory::WasmPathComponent::Normal(name) => {
-                        for i in 0..name.len() {
-                            s.push(name.get(i) as char);
-                        }
+                        let name_bytes: Vec<u8> = (0..name.len()).map(|i| name.get(i)).collect();
+                        s.push_str(core::str::from_utf8(&name_bytes).unwrap_or(""));
                     }
                     crate::memory::WasmPathComponent::CurDir => s.push('.'),
                     crate::memory::WasmPathComponent::ParentDir => s.push_str(".."),
@@ -1154,13 +1151,16 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         let new_path = WasmPathAccess::<Wasm>::new(new_path_ptr, new_path_len);
         if let Some((parent_ino, new_name)) = self.resolve_parent_for_path_inner(inode, new_path) {
             // Check if the new path already exists
-            if self.read_inode(&parent_ino, |node| {
-                if let InodeData::Dir(map) = &node.data {
-                    map.contains_key(&new_name)
-                } else {
-                    false
-                }
-            }).unwrap_or(false) {
+            if self
+                .read_inode(&parent_ino, |node| {
+                    if let InodeData::Dir(map) = &node.data {
+                        map.contains_key(&new_name)
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false)
+            {
                 return Err(wasip1::ERRNO_EXIST);
             }
 
@@ -1230,7 +1230,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         } else {
             if o_flags & wasip1::OFLAGS_CREAT == wasip1::OFLAGS_CREAT {
                 let path = WasmPathAccess::<Wasm>::new(path_ptr, path_len);
-                
+
                 if let Some((parent_ino, s)) = self.resolve_parent_for_path_inner(dir_ino, path) {
                     let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
                     let filetype = if is_dir {
@@ -1366,7 +1366,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         }
 
         let new_path = WasmPathAccess::<Wasm>::new(new_path_ptr, new_path_len);
-        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path) {
+        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path)
+        {
             self.modify_inode(&parent_ino, |node| {
                 if let InodeData::Dir(dir_map) = &mut node.data {
                     dir_map.insert(new_s, inode);
@@ -1804,10 +1805,9 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                     if let crate::memory::WasmPathComponentDynCompatible::Normal(name) =
                         &components[0]
                     {
-                        let mut s = SmallString::<[u8; 32]>::new();
-                        for j in 0..name.len() {
-                            s.push(name.get(j) as char);
-                        }
+                        let name_bytes: Vec<u8> = (0..name.len()).map(|j| name.get(j)).collect();
+                        let s =
+                            SmallString::from_str(core::str::from_utf8(&name_bytes).unwrap_or(""));
 
                         let is_dir = o_flags & wasip1::OFLAGS_DIRECTORY == wasip1::OFLAGS_DIRECTORY;
                         let filetype = if is_dir {
@@ -1893,7 +1893,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
-        
+
         if self
             .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
             .is_some()
@@ -1943,14 +1943,9 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
     ) -> Result<(), wasip1::Errno> {
         let old_dir_ino = Self::downcast_inode(old_dir_inode);
         let new_dir_ino = Self::downcast_inode(new_dir_inode);
-        
+
         let inode = self
-            .get_inode_for_path_dyn_compatible(
-                access,
-                old_dir_ino,
-                old_path_ptr,
-                old_path_len,
-            )
+            .get_inode_for_path_dyn_compatible(access, old_dir_ino, old_path_ptr, old_path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         if self.is_dir(&inode) {
@@ -1959,7 +1954,8 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
 
         let new_path =
             crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
-        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path) {
+        if let Some((parent_ino, new_s)) = self.resolve_parent_for_path_inner(new_dir_ino, new_path)
+        {
             self.modify_inode(&parent_ino, |node| {
                 if let InodeData::Dir(dir_map) = &mut node.data {
                     dir_map.insert(new_s, inode);
@@ -1979,7 +1975,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
-        
+
         let inode = self
             .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
@@ -2027,14 +2023,9 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
     ) -> Result<(), wasip1::Errno> {
         let old_dir_ino = Self::downcast_inode(old_dir_inode);
         let new_dir_ino = Self::downcast_inode(new_dir_inode);
-        
+
         let inode = self
-            .get_inode_for_path_dyn_compatible(
-                access,
-                old_dir_ino,
-                old_path_ptr,
-                old_path_len,
-            )
+            .get_inode_for_path_dyn_compatible(access, old_dir_ino, old_path_ptr, old_path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
 
         let old_path =
@@ -2082,7 +2073,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let dir_ino = Self::downcast_inode(dir_inode);
-        
+
         let inode = self
             .get_inode_for_path_dyn_compatible(access, dir_ino, path_ptr, path_len)
             .ok_or(wasip1::ERRNO_NOENT)?;
@@ -2305,7 +2296,14 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                 .ok_or(wasip1::ERRNO_LOOP)?;
         }
 
-        Wasip1DynCompatibleLFS::<B>::fd_filestat_set_times_raw_dyn_compatible(self, access, &target_inode, atim, mtim, fst_flags)
+        Wasip1DynCompatibleLFS::<B>::fd_filestat_set_times_raw_dyn_compatible(
+            self,
+            access,
+            &target_inode,
+            atim,
+            mtim,
+            fst_flags,
+        )
     }
 
     fn path_symlink_raw_dyn_compatible(
@@ -2318,10 +2316,11 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         new_path_len: usize,
     ) -> Result<(), wasip1::Errno> {
         let inode_id = Self::downcast_inode(inode);
-        
+
         // Read the old (target) path
         let old_path_str = {
-            let path = crate::memory::WasmPathAccessDynCompatible::new(access, old_path_ptr, old_path_len);
+            let path =
+                crate::memory::WasmPathAccessDynCompatible::new(access, old_path_ptr, old_path_len);
             let mut s = alloc::string::String::new();
             for component in path.components() {
                 if !s.is_empty() {
@@ -2329,9 +2328,8 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
                 }
                 match component {
                     crate::memory::WasmPathComponentDynCompatible::Normal(name) => {
-                        for i in 0..name.len() {
-                            s.push(name.get(i) as char);
-                        }
+                        let name_bytes: Vec<u8> = (0..name.len()).map(|i| name.get(i)).collect();
+                        s.push_str(core::str::from_utf8(&name_bytes).unwrap_or(""));
                     }
                     crate::memory::WasmPathComponentDynCompatible::CurDir => s.push('.'),
                     crate::memory::WasmPathComponentDynCompatible::ParentDir => s.push_str(".."),
@@ -2341,16 +2339,21 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
             s
         };
 
-        let new_path = crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
-        if let Some((parent_ino, new_name)) = self.resolve_parent_for_path_inner(inode_id, new_path) {
+        let new_path =
+            crate::memory::WasmPathAccessDynCompatible::new(access, new_path_ptr, new_path_len);
+        if let Some((parent_ino, new_name)) = self.resolve_parent_for_path_inner(inode_id, new_path)
+        {
             // Check if the new path already exists
-            if self.read_inode(&parent_ino, |node| {
-                if let InodeData::Dir(map) = &node.data {
-                    map.contains_key(&new_name)
-                } else {
-                    false
-                }
-            }).unwrap_or(false) {
+            if self
+                .read_inode(&parent_ino, |node| {
+                    if let InodeData::Dir(map) = &node.data {
+                        map.contains_key(&new_name)
+                    } else {
+                        false
+                    }
+                })
+                .unwrap_or(false)
+            {
                 return Err(wasip1::ERRNO_EXIST);
             }
 
@@ -2389,5 +2392,106 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> DynamicLF
                 .iter()
                 .map(|(ino, name)| (*ino, name.clone()))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::memory::WasmAccessFaker;
+    use crate::wasi::file::Wasip1LFSBase;
+    use crate::wasi::file::stdio::DefaultStdIO;
+
+    fn make_lfs() -> (StandardDynamicLFS<DefaultStdIO, DefaultAddInfo>, InodeId) {
+        let lfs = StandardDynamicLFS::<DefaultStdIO, DefaultAddInfo>::new();
+        let root = lfs.add_preopen("/");
+        (lfs, root)
+    }
+
+    #[test]
+    fn test_unicode_filename_lookup() {
+        let (lfs, root) = make_lfs();
+        let name = "あ";
+        let _file_id = lfs.add_file(root, name, Vec::new()).unwrap();
+        let bytes = name.as_bytes();
+        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(&root, bytes.as_ptr(), bytes.len());
+        assert!(
+            lookup.is_some(),
+            "get_inode_for_path failed to find Unicode filename 'あ'"
+        );
+    }
+
+    #[test]
+    fn test_unicode_filename_create_dirmap_key() {
+        let (lfs, root) = make_lfs();
+        let name = "あ";
+        let bytes = name.as_bytes();
+        let create_result = lfs.path_open_raw::<WasmAccessFaker>(
+            &root,
+            0u16,
+            bytes.as_ptr(),
+            bytes.len(),
+            wasip1::OFLAGS_CREAT,
+            wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_FD_WRITE,
+            wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_FD_WRITE,
+            0u16,
+        );
+        assert!(
+            create_result.is_ok(),
+            "path_open_raw CREAT failed: {:?}",
+            create_result.err()
+        );
+        let dir_keys: Vec<alloc::string::String> = lfs
+            .read_inode(&root, |node| {
+                if let InodeData::Dir(map) = &node.data {
+                    map.keys()
+                        .map(|k| alloc::string::String::from(k.as_str()))
+                        .collect()
+                } else {
+                    Vec::new()
+                }
+            })
+            .unwrap_or_default();
+        assert!(
+            dir_keys.iter().any(|k| k == "あ"),
+            "DirMap does not contain correct key 'あ': {:?}",
+            dir_keys
+        );
+    }
+
+    #[test]
+    fn test_unicode_filename_emoji() {
+        let (lfs, root) = make_lfs();
+        let name = "👋";
+        let _file_id = lfs.add_file(root, name, Vec::new()).unwrap();
+        let bytes = name.as_bytes();
+        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(&root, bytes.as_ptr(), bytes.len());
+        assert!(
+            lookup.is_some(),
+            "get_inode_for_path failed to find emoji filename '👋'"
+        );
+    }
+
+    #[test]
+    fn test_unicode_filename_create_and_lookup() {
+        let (lfs, root) = make_lfs();
+        let name = "あ";
+        let bytes = name.as_bytes();
+        let create_result = lfs.path_open_raw::<WasmAccessFaker>(
+            &root,
+            0u16,
+            bytes.as_ptr(),
+            bytes.len(),
+            wasip1::OFLAGS_CREAT,
+            wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_FD_WRITE,
+            wasip1::RIGHTS_FD_READ | wasip1::RIGHTS_FD_WRITE,
+            0u16,
+        );
+        assert!(create_result.is_ok());
+        let lookup = lfs.get_inode_for_path::<WasmAccessFaker>(&root, bytes.as_ptr(), bytes.len());
+        assert!(
+            lookup.is_some(),
+            "get_inode_for_path failed after creating Unicode filename 'あ'"
+        );
     }
 }

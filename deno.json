@@ -1,6 +1,6 @@
 {
   "imports": {
     "@bjorn3/browser_wasi_shim": "npm:@bjorn3/browser_wasi_shim@^0.4.2",
-    "@oligami/browser_wasi_shim-threads": "npm:@oligami/browser_wasi_shim-threads@^0.2.3"
+    "@oligami/browser_wasi_shim-threads": "npm:@oligami/browser_wasi_shim-threads@^0.3.7"
   }
 }

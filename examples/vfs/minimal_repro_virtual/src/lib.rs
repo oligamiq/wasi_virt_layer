@@ -14,24 +14,30 @@ struct Hello;
 import_wasm!(test_threads);
 import_wasm!(ls);
 
+wrap_unreachable!(
+    wasi_virt_layer::wasi::wrap_unreachable::StandardWrapUnreachable,
+    test_threads,
+    ls
+);
+
 impl Guest for Hello {
     fn world() {
-        // println!("--- Starting ls ---");
-        ls::_reset();
-        ls::_start();
-        ls::_main();
+        // println!("--- Starting ls in world() ---");
+        // ls::_start();
+        // ls::_main();
     }
     fn add_env(_: String) {}
     fn get_envs() -> Vec<String> {
         vec![]
     }
     fn main() {
-        unsafe { THREAD_POOL.init() };
-        THREAD_POOL.set_capacity(1);
-        THREAD_POOL.flush_capacity().wait();
+        use wasi_virt_layer::__private::utils::InitOnce;
+        static INIT: InitOnce = InitOnce::new_const();
+        INIT.call_once(|| {
+            unsafe { THREAD_POOL.init_with_capacity_and_wait(4) };
+        });
 
         println!("--- Starting test_threads ---");
-        test_threads::_reset();
         test_threads::_start();
         test_threads::_main();
     }
@@ -40,9 +46,10 @@ impl Guest for Hello {
 #[cfg(not(test))]
 export!(Hello);
 
-static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(1) };
+static THREAD_POOL: VirtualThreadPool<ThreadAccessor> = unsafe { VirtualThreadPool::new_const(4) };
 
-plug_thread!({ &THREAD_POOL }, self, test_threads, ls);
+plug_thread!({ &THREAD_POOL }, self, test_threads);
+plug_sched!(DefaultSched, ls, self);
 
 plug_process!(StandardProcess, test_threads, ls, self);
 

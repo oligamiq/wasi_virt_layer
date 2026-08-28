@@ -101,6 +101,10 @@ impl ThreadAccess for ThreadAccessorAlt {
         todo!()
     }
 
+    fn call_thread_start_init(&self) {
+        todo!()
+    }
+
     fn as_name(&self) -> &'static str {
         todo!()
     }

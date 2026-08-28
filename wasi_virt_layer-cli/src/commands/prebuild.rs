@@ -24,6 +24,10 @@ pub(crate) fn run_prebuild_internal(
     wasm_memory_hints: Box<[Option<usize>]>,
     vfs_build_opts: &crate::args::VfsBuildOptions,
     target_vfs_build_opts: Box<[crate::args::VfsBuildOptions]>,
+    own_memory: bool,
+    detect_deadlock: bool,
+    stack_options: crate::args::StackOptions,
+    validate: bool,
 ) -> eyre::Result<(generator::ComponentRunner, bool)> {
     let vfs_package = package
         .clone()
@@ -112,7 +116,7 @@ pub(crate) fn run_prebuild_internal(
         )
     };
 
-    let mut generator = generator::GeneratorRunner::new(
+    let generator = generator::GeneratorRunner::new(
         package,
         wasm.to_vec().into_boxed_slice(),
         threads,
@@ -125,9 +129,11 @@ pub(crate) fn run_prebuild_internal(
         target_vfs_build_opts,
         toml_restores,
         wasm_memory_hints,
+        own_memory,
+        detect_deadlock,
+        stack_options,
+        validate,
     )?;
-
-    crate::commands::build::add_generator!(generator);
 
     let component_runner = generator
         .run_layers_to_component(out_dir, keep_build_artifacts)
@@ -149,6 +155,22 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         vfs_build_opts.no_opt_all = vfs_build_opts.no_opt_all.saturating_add(1);
     }
 
+    let mut target_vfs_build_opts =
+        parsed_args
+            .target_vfs_build_opts
+            .clone()
+            .unwrap_or_else(|| {
+                vec![crate::args::VfsBuildOptions::default(); parsed_args.wasm.len()]
+                    .into_boxed_slice()
+            });
+
+    for (opt, &unwind) in target_vfs_build_opts
+        .iter_mut()
+        .zip(parsed_args.get_wasm_unwinds().iter())
+    {
+        opt.unwind = unwind;
+    }
+
     let (component_runner, dwarf) = run_prebuild_internal(
         package,
         &parsed_args.get_wasm_paths(),
@@ -160,10 +182,11 @@ pub fn prebuild(parsed_args: PreBuildArgs) -> eyre::Result<()> {
         &parsed_args.out_dir,
         parsed_args.get_wasm_memory_hints(),
         &vfs_build_opts,
-        parsed_args
-            .target_vfs_build_opts
-            .clone()
-            .unwrap_or_else(|| Box::new([])),
+        target_vfs_build_opts,
+        parsed_args.own_memory,
+        parsed_args.detect_deadlock,
+        parsed_args.stack_options.clone(),
+        parsed_args.validate,
     )?;
 
     let path = component_runner.path.path()?;

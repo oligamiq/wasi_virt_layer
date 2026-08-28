@@ -1,4 +1,4 @@
-use std::{io::Read as _, process::Stdio, time::Duration};
+use std::{process::Stdio, time::Duration};
 
 use assert_cmd::assert::OutputAssertExt as _;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -9,55 +9,161 @@ use wait_timeout::ChildExt;
 
 pub const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
+const THREAD_TEST_FALLBACK_TOOLCHAIN: &str = "nightly-2026-08-27";
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ThreadTestToolchain {
+    Current,
+    FallbackNightly,
+}
+
+static INSTALLED_TARGETS_CURRENT: std::sync::OnceLock<std::collections::HashSet<String>> =
+    std::sync::OnceLock::new();
+static INSTALLED_TARGETS_FALLBACK: std::sync::OnceLock<std::collections::HashSet<String>> =
+    std::sync::OnceLock::new();
+static THREAD_TEST_TOOLCHAIN: std::sync::OnceLock<Option<ThreadTestToolchain>> =
+    std::sync::OnceLock::new();
+
+fn installed_targets(fallback: bool) -> &'static std::collections::HashSet<String> {
+    let list = || {
+        let mut cmd = std::process::Command::new("rustup");
+        cmd.args(["target", "list", "--installed"]);
+        if fallback {
+            cmd.args(["--toolchain", THREAD_TEST_FALLBACK_TOOLCHAIN]);
+        }
+        let output = cmd.output();
+
+        let Ok(output) = output else {
+            return std::collections::HashSet::new();
+        };
+        if !output.status.success() {
+            return std::collections::HashSet::new();
+        }
+
+        String::from_utf8_lossy(&output.stdout)
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(ToOwned::to_owned)
+            .collect()
+    };
+
+    if fallback {
+        INSTALLED_TARGETS_FALLBACK.get_or_init(list)
+    } else {
+        INSTALLED_TARGETS_CURRENT.get_or_init(list)
+    }
+}
+
+fn thread_test_toolchain() -> Option<ThreadTestToolchain> {
+    *THREAD_TEST_TOOLCHAIN.get_or_init(|| {
+        let current_targets = installed_targets(false);
+        if wasi_virt_layer_cli::compile::current_toolchain_supports_threaded_vfs().unwrap_or(false)
+            && current_targets.contains("wasm32-wasip1")
+            && current_targets.contains("wasm32-wasip1-threads")
+        {
+            return Some(ThreadTestToolchain::Current);
+        }
+
+        let fallback_targets = installed_targets(true);
+        if fallback_targets.contains("wasm32-wasip1")
+            && fallback_targets.contains("wasm32-wasip1-threads")
+        {
+            return Some(ThreadTestToolchain::FallbackNightly);
+        }
+
+        None
+    })
+}
+
+pub fn thread_test_toolchain_override() -> color_eyre::Result<Option<&'static str>> {
+    match thread_test_toolchain() {
+        Some(ThreadTestToolchain::Current) => Ok(None),
+        Some(ThreadTestToolchain::FallbackNightly) => Ok(Some(THREAD_TEST_FALLBACK_TOOLCHAIN)),
+        None => Err(color_eyre::eyre::eyre!(
+            "no supported threaded VFS test toolchain with wasm32-wasip1 and wasm32-wasip1-threads targets is installed"
+        )),
+    }
+}
+
+pub fn has_required_wasi_targets(threads: bool) -> bool {
+    if threads {
+        if thread_test_toolchain().is_some() {
+            return true;
+        }
+        eprintln!(
+            "Skipping test: install wasm32-wasip1 and wasm32-wasip1-threads for stable Rust 1.100+ or {THREAD_TEST_FALLBACK_TOOLCHAIN}"
+        );
+        return false;
+    }
+
+    if !installed_targets(false).contains("wasm32-wasip1") {
+        eprintln!(
+            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
+        );
+        return false;
+    }
+
+    true
+}
 
 pub fn run_non_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
     std::process::Command::new("deno")
-        .args(["add", "npm:@bjorn3/browser_wasi_shim"])
+        .args(["add", "npm:@bjorn3/browser_wasi_shim@0.4"])
         .current_dir(out_dir)
         .assert()
         .success();
 
+    let stdout_path = Utf8Path::new(out_dir).join(".deno-test-stdout.log");
+    let stderr_path = Utf8Path::new(out_dir).join(".deno-test-stderr.log");
+    let stdout_file = std::fs::File::create(&stdout_path)?;
+    let stderr_file = std::fs::File::create(&stderr_path)?;
+
     let mut child = std::process::Command::new("deno")
         .args(["run", "--allow-read", "--allow-env", "test_run.ts"])
         .current_dir(out_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()?;
 
     let msg = match child.wait_timeout(timeout)? {
         Some(status) => {
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+            println!(
+                "Process exited with {}.\nstdout: {}\nstderr: {}",
+                status, stdout, stderr
+            );
+
             if status.success() {
                 return Ok(());
             }
 
-            let mut stdout = String::new();
-            let mut stderr = String::new();
-
-            if let Some(mut out) = child.stdout.take() {
-                let _ = out.read_to_string(&mut stdout);
-            }
-            if let Some(mut err) = child.stderr.take() {
-                let _ = err.read_to_string(&mut stderr);
-            }
-
-            // Check if this is a proc_exit error (which is expected behavior)
-            if stderr.contains("exit with exit code 0") && stdout.contains("[WASI stdout]") {
-                return Ok(());
-            }
-
-            format!("deno execution failed: {}\nstdout: {}\nstderr: {}", status, stdout, stderr)
+            format!(
+                "deno execution failed with status: {}\nstdout: {}\nstderr: {}",
+                status, stdout, stderr
+            )
         }
         None => {
             child.kill()?;
             let code = child.wait()?.code();
-            format!("Process timed out after {:?} and was killed. Exit code: {:?}", timeout, code)
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+            format!(
+                "Process timed out after {:?} and was killed. Exit code: {:?}\nstdout: {}\nstderr: {}",
+                timeout, code, stdout, stderr
+            )
         }
     };
 
     Err(color_eyre::eyre::eyre!(msg))
 }
 
-pub fn run_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
+pub fn run_thread(
+    out_dir: &str,
+    timeout: Duration,
+    _is_single_memory: bool,
+) -> color_eyre::Result<()> {
     let bun_or_npm = if std::process::Command::new("bun")
         .arg("--version")
         .output()
@@ -68,46 +174,56 @@ pub fn run_thread(out_dir: &str, timeout: Duration) -> color_eyre::Result<()> {
         "npm"
     };
 
+    let bun_tmpdir = Utf8Path::new(out_dir).join(".bun-tmp");
+    std::fs::create_dir_all(&bun_tmpdir)?;
+
     std::process::Command::new(bun_or_npm)
         .args(["i"])
         .current_dir(out_dir)
+        .env("BUN_TMPDIR", bun_tmpdir.as_str())
         .assert()
         .success();
 
-    let mut child = std::process::Command::new(bun_or_npm)
-        .args(["run", "run"])
+    let stdout_path = Utf8Path::new(out_dir).join(".deno-test-stdout.log");
+    let stderr_path = Utf8Path::new(out_dir).join(".deno-test-stderr.log");
+    let stdout_file = std::fs::File::create(&stdout_path)?;
+    let stderr_file = std::fs::File::create(&stderr_path)?;
+
+    let mut child = std::process::Command::new("deno")
+        .args(["run", "-A", "test_run.ts"])
         .current_dir(out_dir)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .env("BUN_TMPDIR", bun_tmpdir.as_str())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()?;
 
     let msg = match child.wait_timeout(timeout)? {
         Some(status) => {
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+            println!(
+                "Process exited with {}.\nstdout: {}\nstderr: {}",
+                status, stdout, stderr
+            );
+
             if status.success() {
                 return Ok(());
             }
-            format!("Process exited with status: {status}")
+            format!("Process exited with status: {status}\nstdout: {stdout}\nstderr: {stderr}")
         }
         None => {
             child.kill()?;
             let code = child.wait()?.code();
-            format!("Process timed out after {:?} and was killed. Exit code: {:?}", timeout, code)
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
+            format!(
+                "Process timed out after {:?} and was killed. Exit code: {:?}\nstdout: {}\nstderr: {}",
+                timeout, code, stdout, stderr
+            )
         }
     };
 
-    let mut stdout = String::new();
-    let mut stderr = String::new();
-
-    if let Some(mut out) = child.stdout.take() {
-        let _ = out.read_to_string(&mut stdout);
-    }
-    if let Some(mut err) = child.stderr.take() {
-        let _ = err.read_to_string(&mut stderr);
-    }
-
-    Err(color_eyre::eyre::eyre!(
-        "{msg}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-    ))
+    Err(color_eyre::eyre::eyre!(msg))
 }
 
 pub enum OutDir<'a> {
@@ -166,11 +282,11 @@ impl Drop for TestDir {
 
         // The path often contains a "dist" folder which is inside the actual temporary folder.
         // We need to delete the parent of "dist".
-        if let Some(parent) = self.0.parent() {
-            if parent.starts_with(THIS_FOLDER) && parent != Utf8Path::new(THIS_FOLDER) {
-                let _ = std::fs::remove_dir_all(parent);
-            }
-        }
+        // if let Some(parent) = self.0.parent() {
+        //     if parent.starts_with(THIS_FOLDER) && parent != Utf8Path::new(THIS_FOLDER) {
+        //         let _ = std::fs::remove_dir_all(parent);
+        //     }
+        // }
     }
 }
 
@@ -185,8 +301,58 @@ pub fn run_wasi_virt_layer(
     other_args: &[&str],
     timeout: Option<Duration>,
 ) -> color_eyre::Result<TestDir> {
+    run_wasi_virt_layer_inner(
+        p_vfs,
+        wasm,
+        t_single,
+        threads,
+        threads,
+        out_dir,
+        keep_build_artifacts,
+        other_args,
+        timeout,
+    )
+}
+
+#[allow(dead_code, clippy::too_many_arguments)]
+pub fn run_wasi_virt_layer_with_thread_toolchain(
+    p_vfs: Option<&str>,
+    wasm: Option<&str>,
+    t_single: Option<bool>,
+    threads: bool,
+    out_dir: OutDir,
+    keep_build_artifacts: bool,
+    other_args: &[&str],
+    timeout: Option<Duration>,
+) -> color_eyre::Result<TestDir> {
+    run_wasi_virt_layer_inner(
+        p_vfs,
+        wasm,
+        t_single,
+        threads,
+        true,
+        out_dir,
+        keep_build_artifacts,
+        other_args,
+        timeout,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_wasi_virt_layer_inner(
+    p_vfs: Option<&str>,
+    wasm: Option<&str>,
+    t_single: Option<bool>,
+    threads: bool,
+    use_thread_toolchain: bool,
+    out_dir: OutDir,
+    keep_build_artifacts: bool,
+    other_args: &[&str],
+    timeout: Option<Duration>,
+) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
     cmd.arg("build");
+    println!("COMMAND: {:?}", cmd.get_program());
 
     if let Some(p_vfs) = p_vfs {
         cmd.args(["-p", p_vfs]);
@@ -202,6 +368,17 @@ pub fn run_wasi_virt_layer(
     if threads {
         cmd.args(["--threads", "true"]);
     }
+    let thread_toolchain_override = if use_thread_toolchain {
+        // Prefer a supported current toolchain (stable 1.100+ or a sufficiently new
+        // nightly); otherwise fall back to the first nightly with the reactor fix.
+        let toolchain = thread_test_toolchain_override()?;
+        if let Some(toolchain) = toolchain {
+            cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+        }
+        toolchain
+    } else {
+        None
+    };
 
     if keep_build_artifacts {
         cmd.arg("--keep-build-artifacts");
@@ -234,7 +411,11 @@ pub fn run_wasi_virt_layer(
     }
 
     let cmd_line = {
-        let mut args = vec!["cargo r -r --".to_string()];
+        let mut args = vec![if let Some(toolchain) = thread_toolchain_override {
+            format!("RUSTUP_TOOLCHAIN={toolchain} cargo r -r --")
+        } else {
+            "cargo r -r --".to_string()
+        }];
 
         let mut skip_next = false;
         for a in cmd.get_args() {
@@ -272,7 +453,11 @@ pub fn run_wasi_virt_layer(
         });
 
         if threads {
-            run_thread(&final_dist_path, execution_timeout)?;
+            run_thread(
+                &final_dist_path,
+                execution_timeout,
+                t_single.unwrap_or(false),
+            )?;
         } else {
             run_non_thread(&final_dist_path, execution_timeout)?;
         }

@@ -34,6 +34,11 @@ plug_process!(StandardProcess, test_wasm, self);
 plug_clock!(StandardClock, test_wasm, self);
 plug_random!(StandardRandom, test_wasm, self);
 plug_poll!(DefaultPoll, test_wasm, self);
+plug_sched!(DefaultSched, test_wasm, self);
+
+#[const_struct]
+const HOST_ARGS: VirtualArgsEmbeddedState = VirtualArgsEmbeddedState { args: &["test"] };
+plug_args!(@embedded, HostArgsTy, test_wasm, self);
 
 #[const_struct]
 const HOST_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
@@ -100,5 +105,5 @@ mod fs {
             vfs
         });
 
-    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_wasm);
+    plug_fs!(&*VIRTUAL_FILE_SYSTEM, test_wasm, self);
 }

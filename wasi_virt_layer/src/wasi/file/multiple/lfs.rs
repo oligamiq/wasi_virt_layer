@@ -1107,10 +1107,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         }
     }
 
-    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
-        &self,
-        fd: Fd,
-    ) -> wasip1::Errno {
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_sync: fd={fd}");
         get_access!(access = self, Wasm);
         get_open_fd!((open_fd, lfs) = self, fd);
@@ -1129,7 +1126,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
     ) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_tell: fd={fd}");
         get_open_fd!((open_fd, _lfs) = self, fd);
-        
+
         Wasm::store_le(offset_ret, open_fd.cursor() as u64);
         wasip1::ERRNO_SUCCESS
     }
@@ -1141,7 +1138,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
     ) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_fdstat_set_flags: fd={fd}, flags={flags}");
         get_open_fd_mut!((open_fd, _lfs) = self, fd);
-        
+
         open_fd.set_fd_flags(flags);
         wasip1::ERRNO_SUCCESS
     }
@@ -1154,7 +1151,7 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
     ) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_fdstat_set_rights: fd={fd}, base={fs_rights_base}, inheriting={fs_rights_inheriting}");
         get_open_fd_mut!((open_fd, _lfs) = self, fd);
-        
+
         let new_base = open_fd.base_rights() & fs_rights_base;
         let new_inheriting = open_fd.inheriting_rights() & fs_rights_inheriting;
         open_fd.set_base_rights(new_base);
@@ -1233,7 +1230,12 @@ impl<B: BoxedInode, OpenFd: OpenFdInfoWithInode<InodeId = B> + 'static> Wasip1Fi
         get_inode!(inode = open_fd);
 
         match lfs.path_symlink_raw_dyn_compatible(
-            access, inode, old_path_ptr, old_path_len, new_path_ptr, new_path_len,
+            access,
+            inode,
+            old_path_ptr,
+            old_path_len,
+            new_path_ptr,
+            new_path_len,
         ) {
             Ok(()) => wasip1::ERRNO_SUCCESS,
             Err(e) => e,

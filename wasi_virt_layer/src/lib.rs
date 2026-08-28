@@ -9,6 +9,18 @@
 //! - **Virtual File System (VFS)**: Overrides filesystem-related WASI calls to a custom virtualized implementation.
 //! - **Threading**: Provides components that patch how Wasm spawns and manages threads using shared memory.
 //! - **Memory Bridge**: Manages memory boundaries and host-guest interaction.
+//!
+//! # WASI callback re-entrancy
+//!
+//! A host-routed WASI call must not synchronously call back into the same virtualized WASI path.
+//! For example, a virtual `fd_write` implementation that forwards to `std::io::stderr()` can
+//! re-enter `fd_write` when that stderr is itself connected to the VFS. This creates an unbounded
+//! call cycle and commonly appears as a hang or lockup.
+//!
+//! Route such output to a terminal or host sink that bypasses the virtualized WASI ABI. During
+//! diagnosis, enable the `detect-wasi-reentrancy` feature. It adds a thread-local guard around
+//! [`non_recursive_wasi_snapshot_preview1!`] calls and traps immediately when the host path
+//! synchronously re-enters this boundary.
 
 #![cfg_attr(not(feature = "std"), no_std)]
 /// Procedural macros for generating WASIP1 boilerplate.
@@ -22,6 +34,7 @@ pub mod wasip1_derive;
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -40,6 +53,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -58,6 +72,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -76,6 +91,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -94,6 +110,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -112,6 +129,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -130,6 +148,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -148,6 +167,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { $($t)* };
     (@not_threads $($t:tt)*) => { };
@@ -166,6 +186,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -184,6 +205,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -202,6 +224,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -220,6 +243,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -238,6 +262,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -256,6 +281,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -274,6 +300,7 @@ macro_rules! __if_feature {
     feature = "std"
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -292,6 +319,7 @@ macro_rules! __if_feature {
     not(feature = "std")
 ))]
 #[macro_export]
+#[doc(hidden)]
 macro_rules! __if_feature {
     (@threads $($t:tt)*) => { };
     (@not_threads $($t:tt)*) => { $($t)* };
@@ -315,7 +343,6 @@ pub mod simple_debug;
 mod __self;
 #[cfg(all(feature = "unstable_print_debug", target_os = "wasi"))]
 mod debug;
-mod initializer;
 /// Memory operations to bridge host and WebAssembly memory models.
 pub mod memory;
 #[cfg(all(
@@ -327,6 +354,7 @@ pub mod memory;
 pub mod shared_global;
 mod transporter;
 mod utils;
+/// WebAssembly System Interface (WASI) modules and utilities.
 pub mod wasi;
 mod wit;
 
@@ -340,9 +368,12 @@ extern crate alloc;
 #[cfg(feature = "threads")]
 /// Shared memory management for zero-copy inter-module memory access.
 pub mod shared_memory;
+/// Export-stack isolation ABI and shared handoff state.
+pub mod stack;
 
 /// Common traits, structs, and macros representing the core functionality.
 pub mod prelude {
+    pub use crate::__self::__self;
     pub use crate::memory::WasmAccess;
     #[cfg(feature = "threads")]
     pub use crate::plug_thread;
@@ -369,9 +400,15 @@ pub mod prelude {
 #[cfg(feature = "threads")]
 /// Threading support for WASI.
 pub mod thread {
+    #[cfg(target_os = "wasi")]
+    pub use crate::wasi::thread::__wasip1_vfs_is_root_spawn;
+    #[doc(hidden)]
+    pub use crate::wasi::thread::wait_for_active_target_threads;
     pub use crate::wasi::thread::{
-        DirectThreadPool, ThreadAccess, ThreadRunner, VirtualThread, VirtualThreadPool, root_spawn,
-        root_spawn_unchecked,
+        DirectThreadPool, ReservedRangeThreadIdGenerator, ThreadAccess, ThreadIdGenerator,
+        ThreadRunner, VirtualThread, VirtualThreadPool, is_virtual_thread_pool_worker,
+        mark_wasi_thread_started, root_spawn, root_spawn_unchecked,
+        should_reinitialize_direct_export_thread,
     };
 }
 
@@ -480,6 +517,8 @@ pub mod __private {
     pub mod utils {
         pub use crate::utils::EmbeddedArrayBuilder;
         pub use crate::utils::InitOnce;
+        #[cfg(feature = "detect-wasi-reentrancy")]
+        pub use crate::utils::NonRecursiveWasiCallGuard;
         #[cfg(feature = "alloc")]
         pub use crate::utils::alloc_buff;
     }

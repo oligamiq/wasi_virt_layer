@@ -29,10 +29,7 @@ mod fs {
 }
 
 #[const_struct]
-const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
-    environ: &[],
-};
+const VIRTUAL_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState { environ: &[] };
 
 plug_env!(@embedded, VirtualEnvTy, example, self);
 plug_process!(wasi_virt_layer::process::StandardProcess, example, self);
-

@@ -56,6 +56,7 @@ members = [
     "examples/vfs/minimal_repro",
     "examples/vfs/minimal_repro_virtual",
     "examples/vfs/dynamic_args_vfs",
+    "examples/vfs/four_args_vfs",
     "examples/vfs/lfs_api_test_vfs",
     "examples/vfs/vfs_host_test_vfs",
     "examples/test_wasm/vfs_host_test_target",
@@ -66,14 +67,29 @@ members = [
     "examples/test_wasm/test_mkdir",
     "examples/vfs/mkdir_vfs",
     "examples/test_wasm/test_lib",
-    "examples/vfs/lib_vfs",
+    "examples/vfs/lib_vfs", "dis_wasm", "tmp_test_encoder", "examples/vfs/run_on_thread", "examples/threads/print_args", "examples/test_unwind_target", "examples/test_unwind_vfs", "examples/vfs/stderr_reentrancy_vfs", "examples/vfs/rayon_self_pool_vfs", "examples/test_wasm/rayon_self_pool_target", "examples/test_wasm/test_rayon_tls_project", "examples/test_wasm/test_write_single", "examples/test_wasm/write-single-target", "examples/vfs/write-single-vfs", "examples/own_memory_vfs", "examples/my_target", "examples/test_wasm/alloc",
+    "examples/bare/smoke_target", "examples/bare/smoke_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/pool_own_mem_target",
+    "wasi_virt_layer-cli/tests/fixtures/pool_own_mem_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_target",
+    "wasi_virt_layer-cli/tests/fixtures/vtp_5threads_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/vtp_nested_spawn_target",
+    "wasi_virt_layer-cli/tests/fixtures/vtp_nested_spawn_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/spawn_main_target",
+    "wasi_virt_layer-cli/tests/fixtures/spawn_main_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/own_memory_reset_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/unreachable_reset_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/pool_reused_start_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/pool_reused_direct_export_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/atomic_wait_reset_vfs",
+    "wasi_virt_layer-cli/tests/fixtures/deadlock_detection_vfs"
 ]
 resolver = "2"
 default-members = ["wasi_virt_layer", "wasi_virt_layer-cli"]
 
 [workspace.package]
 authors = ["oligami <nziq53@gmail.com>"]
-version = "0.4.12"
+version = "0.7.0"
 edition = "2024"
 description = ""
 rust-version = "1.89.0"

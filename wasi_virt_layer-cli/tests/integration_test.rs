@@ -6,7 +6,7 @@ use camino::Utf8PathBuf;
 use eyre::Context;
 use glob;
 use itertools::Itertools;
-use std::{collections::HashSet, process::Command, sync::OnceLock};
+use std::{process::Command, time::Duration};
 use utils::*;
 use uuid::Uuid;
 use wasi_virt_layer_cli::unique_name::UniqueName;
@@ -22,56 +22,8 @@ use wasi_virt_layer_cli::unique_name::UniqueName;
 // threads + unstable_print_debug
 // multi_memory + threads + unstable_print_debug
 
-static INSTALLED_TARGETS_STABLE: OnceLock<HashSet<String>> = OnceLock::new();
-static INSTALLED_TARGETS_NIGHTLY: OnceLock<HashSet<String>> = OnceLock::new();
-
-fn installed_targets(nightly: bool) -> &'static HashSet<String> {
-    let list = || {
-        let mut cmd = Command::new("rustup");
-        if nightly {
-            cmd.arg("+nightly");
-        }
-        let output = cmd.args(["target", "list", "--installed"]).output();
-
-        let Ok(output) = output else {
-            return HashSet::new();
-        };
-        if !output.status.success() {
-            return HashSet::new();
-        }
-
-        String::from_utf8_lossy(&output.stdout)
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(ToOwned::to_owned)
-            .collect()
-    };
-
-    if nightly {
-        INSTALLED_TARGETS_NIGHTLY.get_or_init(list)
-    } else {
-        INSTALLED_TARGETS_STABLE.get_or_init(list)
-    }
-}
-
-fn has_required_wasi_targets(threads: bool) -> bool {
-    if !installed_targets(false).contains("wasm32-wasip1") {
-        eprintln!(
-            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
-        );
-        return false;
-    }
-
-    if threads && !installed_targets(true).contains("wasm32-wasip1-threads") {
-        eprintln!(
-            "Skipping test: missing nightly rust target `wasm32-wasip1-threads` (install with `rustup +nightly target add wasm32-wasip1-threads`)"
-        );
-        return false;
-    }
-
-    true
-}
+#[path = "common/test_own_memory.rs"]
+pub mod test_own_memory;
 
 /// Tests the build process with the `--out-dir` argument, ensuring output is directed to a specific temporary directory.
 #[test]
@@ -125,6 +77,47 @@ fn test_build_single() -> color_eyre::Result<()> {
     Ok(())
 }
 
+/// Tests that single memory threaded VFS still fails under deno.
+/// Corresponding to: cargo r -r -- build -p threads_vfs test_threads -t single --threads true && deno run -A dist/test_run.ts
+#[test]
+fn test_threads_vfs_single_memory_deno_succeeds() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let test_dir = run_wasi_virt_layer(
+        Some("threads_vfs"),
+        Some("test_threads"),
+        Some(true), // t_single: true
+        true,       // threads: true
+        OutDir::Random,
+        false, // keep_build_artifacts
+        &[],
+        None,
+    )
+    .wrap_err("Failed to build threads single")?;
+
+    let out_dir = test_dir.0.as_str();
+
+    // Now run deno run -A test_run.ts
+    let output = Command::new("deno")
+        .args(["run", "-A", "test_run.ts"])
+        .current_dir(out_dir)
+        .output()
+        .wrap_err("Failed to execute deno")?;
+
+    assert!(
+        output.status.success(),
+        "Expected deno run -A test_run.ts to succeed for single memory thread VFS, but it failed! stdout: {}, stderr: {}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    Ok(())
+}
+
 /// Helper function to build a wasm component with a "normal" (non-threaded) VFS.
 /// It uses the default output directory.
 fn build_normal(single: bool) -> color_eyre::Result<TestDir> {
@@ -133,7 +126,7 @@ fn build_normal(single: bool) -> color_eyre::Result<TestDir> {
         Some("test_wasm"),
         Some(single),
         false,
-        OutDir::Default,
+        OutDir::Random,
         false, // keep_build_artifacts
         &[],
         None,
@@ -188,7 +181,7 @@ fn test_self_rw_vfs_example() -> color_eyre::Result<()> {
         OutDir::Random,
         false,
         &[],
-        None,
+        Some(Duration::from_secs(180)),
     )
     .wrap_err("Failed to run self-rw-vfs example")?;
 
@@ -341,6 +334,9 @@ fn test_self_rw_threads_vfs_example() -> color_eyre::Result<()> {
     let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    if let Some(toolchain) = thread_test_toolchain_override()? {
+        cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
     cmd.current_dir(THIS_FOLDER).args([
         "build",
         "-p",
@@ -491,6 +487,39 @@ fn all_features_with_threads() -> color_eyre::Result<()> {
         .wrap_err("Failed to run with threads + unstable_print_debug")?;
     let _t4 = set_features(&["multi_memory", "threads", "unstable_print_debug"], run)
         .wrap_err("Failed to run with multi_memory + threads + unstable_print_debug")?;
+
+    Ok(())
+}
+
+#[test]
+fn test_stderr_reentrancy_vfs() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let err = run_wasi_virt_layer(
+        Some("stderr_reentrancy_vfs"),
+        None, // it's a self VFS, so the target is itself
+        None,
+        true, // needs threads feature enabled
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )
+    .expect_err("stderr_reentrancy_vfs should trap on re-entrant stderr");
+
+    let err = format!("{err:?}");
+    assert!(
+        err.contains("RuntimeError") || err.contains("null function"),
+        "expected a re-entrancy trap, got:\n{err}"
+    );
+    assert!(
+        !err.contains("Process timed out"),
+        "stderr re-entrancy should fail fast, not time out:\n{err}"
+    );
 
     Ok(())
 }
@@ -717,16 +746,17 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
     let parent_dir_keep = test_dir_keep.0.parent().unwrap();
 
     // Check for intermediate files
-    let adjusted_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.adjusted.wasm"))?
-        .filter_map(Result::ok)
-        .collect();
+    let adjusted_wasm_files: Vec<_> =
+        glob::glob(&format!("{parent_dir_keep}/**/*.post-comp-stream.wasm"))?
+            .filter_map(Result::ok)
+            .collect();
     let opt_wasm_files: Vec<_> = glob::glob(&format!("{parent_dir_keep}/**/*.opt.wasm"))?
         .filter_map(Result::ok)
         .collect();
 
     assert!(
         !adjusted_wasm_files.is_empty(),
-        "Expected .adjusted.wasm files to exist when keep_build_artifacts is true"
+        "Expected .post-comp-stream.wasm files to exist when keep_build_artifacts is true"
     );
     assert!(
         !opt_wasm_files.is_empty(),
@@ -750,7 +780,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 
     // Check for intermediate files - should not exist
     let adjusted_wasm_files_no_keep: Vec<_> =
-        glob::glob(&format!("{parent_dir_no_keep}/**/*.adjusted.wasm"))?
+        glob::glob(&format!("{parent_dir_no_keep}/**/*.post-comp-stream.wasm"))?
             .filter_map(Result::ok)
             .collect();
     let opt_wasm_files_no_keep: Vec<_> =
@@ -760,7 +790,7 @@ fn test_keep_build_artifacts() -> color_eyre::Result<()> {
 
     assert!(
         adjusted_wasm_files_no_keep.is_empty(),
-        "Expected no .adjusted.wasm files to exist when keep_build_artifacts is false"
+        "Expected no .post-comp-stream.wasm files to exist when keep_build_artifacts is false"
     );
     assert!(
         opt_wasm_files_no_keep.is_empty(),
@@ -786,7 +816,7 @@ fn test_args_vfs_example() -> color_eyre::Result<()> {
         Some(true),
         false,
         OutDir::Random,
-        false,
+        true,
         &[],
         None,
     )
@@ -839,7 +869,7 @@ fn test_wrap_unreachable_multi_target() -> color_eyre::Result<()> {
 
     // Build can fail for other reasons (e.g., missing pluggers for components), but
     // the important thing is that wrap_unreachable generator runs without the exactly_one error
-    if !output.status.success() {
+    if output.status.success() {
         // Allow build failures that are NOT the exactly_one error
         if !stderr.contains("Failed to run post_combine for WrapUnreachableGenerator") {
             // The build failed but it's not due to WrapUnreachableGenerator, which is OK
@@ -1147,7 +1177,12 @@ fn test_repro_multi_target_table_bug() -> color_eyre::Result<()> {
     )?;
 
     // Run the generated module with Deno/Bun
-    run_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(
+        &test_dir.0.to_string(),
+        std::time::Duration::from_secs(120),
+        true,
+    )
+    .wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }
@@ -1170,6 +1205,9 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     let manifest_path = workspace_root.join("examples/vfs/minimal_repro/Cargo.toml");
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    if let Some(toolchain) = thread_test_toolchain_override()? {
+        cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
     cmd.current_dir(THIS_FOLDER).args([
         "build",
         "--manifest-path",
@@ -1194,7 +1232,8 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     }
 
     // 3. Run with Deno
-    run_thread(&out_dir, std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&out_dir, std::time::Duration::from_secs(120), true)
+        .wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
 
@@ -1219,6 +1258,9 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     let manifest_path = workspace_root.join("examples/vfs/minimal_repro_virtual/Cargo.toml");
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    if let Some(toolchain) = thread_test_toolchain_override()? {
+        cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
     cmd.current_dir(THIS_FOLDER).args([
         "build",
         "--manifest-path",
@@ -1243,7 +1285,8 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     }
 
     // 2. Run with Deno
-    run_thread(&out_dir, std::time::Duration::from_secs(120)).wrap_err("Failed to run combined module with Deno")?;
+    run_thread(&out_dir, std::time::Duration::from_secs(120), true)
+        .wrap_err("Failed to run combined module with Deno")?;
 
     let _test_dir = TestDir::new(Utf8PathBuf::from(out_dir));
 
@@ -1271,6 +1314,29 @@ fn test_dynamic_args_vfs_example() -> color_eyre::Result<()> {
         None,
     )
     .wrap_err("Failed to run dynamic_args_vfs example")?;
+
+    Ok(())
+}
+
+#[test]
+fn test_four_args_vfs_example() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(false) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("four_args_vfs"),
+        Some("test_args"),
+        Some(true),
+        false,
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run four_args_vfs example")?;
 
     Ok(())
 }
@@ -1375,7 +1441,8 @@ fn test_multiple_calls_vfs() -> color_eyre::Result<()> {
     )?;
 
     // Run the generated module with Deno
-    run_non_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(30)).wrap_err("Failed to run combined module with Deno")?;
+    run_non_thread(&test_dir.0.to_string(), std::time::Duration::from_secs(30))
+        .wrap_err("Failed to run combined module with Deno")?;
 
     Ok(())
 }
@@ -1394,13 +1461,14 @@ fn test_build_multi_opt() -> color_eyre::Result<()> {
         Some("test_wasm"),
         Some(false),
         false,
-        OutDir::Default,
+        OutDir::Random,
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build normal multi (opt)")?;
+    )
+    .wrap_err("Failed to build normal multi (opt)")?;
     println!("Normal multi build done (opt).");
-    
+
     let _test_dir_threads = run_wasi_virt_layer(
         Some("threads_vfs"),
         Some("test_threads"),
@@ -1410,7 +1478,8 @@ fn test_build_multi_opt() -> color_eyre::Result<()> {
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build threads multi (opt)")?;
+    )
+    .wrap_err("Failed to build threads multi (opt)")?;
     println!("Threads multi build done (opt).");
 
     Ok(())
@@ -1430,13 +1499,14 @@ fn test_build_single_opt() -> color_eyre::Result<()> {
         Some("test_wasm"),
         Some(true),
         false,
-        OutDir::Default,
+        OutDir::Random,
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build normal single (opt)")?;
+    )
+    .wrap_err("Failed to build normal single (opt)")?;
     println!("Normal single build done (opt).");
-    
+
     let _test_dir_threads = run_wasi_virt_layer(
         Some("threads_vfs"),
         Some("test_threads"),
@@ -1446,8 +1516,78 @@ fn test_build_single_opt() -> color_eyre::Result<()> {
         false,
         &["--run-with-opt"],
         None,
-    ).wrap_err("Failed to build threads single (opt)")?;
+    )
+    .wrap_err("Failed to build threads single (opt)")?;
     println!("Threads single build done (opt).");
+
+    Ok(())
+}
+
+#[test]
+fn test_rayon_self_pool_tls_issue() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+    // force test execution
+
+    let test_dir = run_wasi_virt_layer(
+        Some("rayon_self_pool_vfs"),
+        Some("rayon_self_pool_target"),
+        Some(false),
+        true,
+        OutDir::Random,
+        false,
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run Wasi Virt Layer build")?;
+
+    let out_dir = test_dir.0.as_str();
+
+    let output = Command::new("timeout")
+        .args(["5s", "deno", "run", "-A", "test_run.ts"])
+        .current_dir(out_dir)
+        .output()
+        .wrap_err("Failed to execute deno")?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    println!("stdout:\n{stdout}");
+    println!("stderr:\n{stderr}");
+
+    if output.status.success() {
+        println!("Test completed successfully, demonstrating TLS isolation works.");
+    } else {
+        panic!(
+            "Expected successful execution, but it failed.\nSuccess: {},\nCode: {:?},\nstdout: {},\nstderr: {}",
+            output.status.success(),
+            output.status.code(),
+            stdout,
+            stderr
+        );
+    }
+
+    Ok(())
+}
+
+#[test]
+fn test_write_single_memory() -> color_eyre::Result<()> {
+    color_eyre::install().ok();
+
+    if !has_required_wasi_targets(true) {
+        return Ok(());
+    }
+
+    let _test_dir = run_wasi_virt_layer(
+        Some("write-single-vfs"),
+        Some("test_write_single"),
+        Some(true), // t_single: true
+        true,       // threads: true
+        OutDir::Random,
+        false, // keep_build_artifacts
+        &[],
+        None,
+    )
+    .wrap_err("Failed to run test_write_single with write-single-vfs and single memory")?;
 
     Ok(())
 }

@@ -1,0 +1,2035 @@
+   Compiling wasi_virt_layer-cli v0.4.12 (/home/oligami/projects/wasi_virt_layer/wasi_virt_layer-cli)
+warning: unused imports: `anonymous`, `producer`, and `starts`
+  --> wasi_virt_layer-cli/src/commands/build.rs:10:13
+   |
+10 |             anonymous, debug, memory, memory_post_components, producer,
+   |             ^^^^^^^^^                                         ^^^^^^^^
+11 |             special_func, starts, threads, wrap_unreachable, poll,
+   |                           ^^^^^^
+...
+52 |         add_generator!(component_runner);
+   |         -------------------------------- in this macro invocation
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+   = note: this warning originates in the macro `add_generator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused imports: `anonymous`, `producer`, and `starts`
+   --> wasi_virt_layer-cli/src/commands/build.rs:10:13
+    |
+ 10 |             anonymous, debug, memory, memory_post_components, producer,
+    |             ^^^^^^^^^                                         ^^^^^^^^
+ 11 |             special_func, starts, threads, wrap_unreachable, poll,
+    |                           ^^^^^^
+    |
+   ::: wasi_virt_layer-cli/src/commands/postbuild.rs:156:5
+    |
+156 |     crate::commands::build::add_generator!(component_runner);
+    |     -------------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `crate::commands::build::add_generator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused imports: `anonymous`, `producer`, and `starts`
+   --> wasi_virt_layer-cli/src/commands/build.rs:10:13
+    |
+ 10 |             anonymous, debug, memory, memory_post_components, producer,
+    |             ^^^^^^^^^                                         ^^^^^^^^
+ 11 |             special_func, starts, threads, wrap_unreachable, poll,
+    |                           ^^^^^^
+    |
+   ::: wasi_virt_layer-cli/src/commands/prebuild.rs:130:5
+    |
+130 |     crate::commands::build::add_generator!(generator);
+    |     ------------------------------------------------- in this macro invocation
+    |
+    = note: this warning originates in the macro `crate::commands::build::add_generator` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+warning: unused imports: `collections::HashMap` and `str::FromStr`
+ --> wasi_virt_layer-cli/src/generator/memory.rs:1:11
+  |
+1 | use std::{collections::HashMap, str::FromStr};
+  |           ^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
+
+warning: unused imports: `ComponentCtx` and `WalrusUtilModule`
+  --> wasi_virt_layer-cli/src/generator/memory.rs:8:17
+   |
+ 8 |     generator::{ComponentCtx, Generator, GeneratorCtx},
+   |                 ^^^^^^^^^^^^
+ 9 |     unique_name::UniqueName,
+10 |     util::{ResultUtil as _, WalrusFID, WalrusUtilExport, WalrusUtilModule, WasmName},
+   |                                                          ^^^^^^^^^^^^^^^^
+
+warning: unused import: `generator::Generator`
+ --> wasi_virt_layer-cli/src/generator/starts.rs:7:5
+  |
+7 |     generator::Generator,
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `instrs::InstrRewrite as _`
+  --> wasi_virt_layer-cli/src/generator/multi_memory_lowering.rs:20:5
+   |
+20 |     instrs::InstrRewrite as _,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `anonymous::AnonymousStreamPass` and `dummy_injector::DummyInjectorStreamPass`
+    --> wasi_virt_layer-cli/src/generator/mod.rs:1041:58
+     |
+1041 | ...   starts_pre::StartsPreStreamPass, dummy_injector::DummyInjectorStreamPass, pr...
+     |                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+1042 | ...   producer::ProducerStreamPass, anonymous::AnonymousStreamPass, check_unused_t...
+     |                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `super::StreamContext`
+ --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:1:5
+  |
+1 | use super::StreamContext;
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `ContextCompat`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:2:20
+  |
+2 | use eyre::{Result, ContextCompat};
+  |                    ^^^^^^^^^^^^^
+
+warning: unused imports: `CodeSection`, `Section`, and `ValType`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:4:28
+  |
+4 | ...{Module, Section, RawSection, CodeSection, Function, Instruction, ValType};
+  |             ^^^^^^^              ^^^^^^^^^^^                         ^^^^^^^
+
+warning: unused imports: `CodeSection`, `ExportKind`, and `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:3:28
+  |
+3 | ...odule, Section, RawSection, CodeSection, Function, Instruction, ExportKind};
+  |           ^^^^^^^              ^^^^^^^^^^^                         ^^^^^^^^^^
+
+warning: unused imports: `ContextCompat` and `Result`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:1:12
+  |
+1 | use eyre::{Result, ContextCompat};
+  |            ^^^^^^  ^^^^^^^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:2:28
+  |
+2 | use wasm_encoder::{Module, Section, RawSection, MemorySection, ImportSection, ExportS...
+  |                            ^^^^^^^
+
+warning: unused import: `eyre::Result`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:1:5
+  |
+1 | use eyre::Result;
+  |     ^^^^^^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:2:28
+  |
+2 | use wasm_encoder::{Module, Section, RawSection, ExportSection, ExportKind};
+  |                            ^^^^^^^
+
+warning: unused imports: `ExportKind`, `RawSection`, and `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:2:28
+  |
+2 | use wasm_encoder::{Module, Section, RawSection, ExportSection, ExportKind, FunctionSe...
+  |                            ^^^^^^^  ^^^^^^^^^^                 ^^^^^^^^^^
+
+warning: unused import: `crate::wasm_stream::tracker::IndexTracker`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:5:5
+  |
+5 | use crate::wasm_stream::tracker::IndexTracker;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `translate`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:6:38
+  |
+6 | use crate::wasm_stream::translator::{translate, Rebind};
+  |                                      ^^^^^^^^^
+
+warning: unused import: `crate::unique_name::UniqueName`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:7:5
+  |
+7 | use crate::unique_name::UniqueName;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::generator::memory::MemoryUniqueName`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:8:5
+  |
+8 | use crate::generator::memory::MemoryUniqueName;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `crate::generator::special_func::SpecialFuncUniqueName`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:9:5
+  |
+9 | use crate::generator::special_func::SpecialFuncUniqueName;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `eyre::Result`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/dummy_injector.rs:1:5
+  |
+1 | use eyre::Result;
+  |     ^^^^^^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/dummy_injector.rs:2:28
+  |
+2 | use wasm_encoder::{Module, Section, RawSection, ExportSection, ExportKind, TypeSectio...
+  |                            ^^^^^^^
+
+warning: unused imports: `CustomSection` and `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/producer.rs:3:20
+  |
+3 | use wasm_encoder::{CustomSection, Module, RawSection, Section};
+  |                    ^^^^^^^^^^^^^                      ^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/anonymous.rs:3:70
+  |
+3 | use wasm_encoder::{ExportSection, ImportSection, Module, RawSection, Section};
+  |                                                                      ^^^^^^^
+
+warning: unused import: `Context`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:2:20
+  |
+2 | use eyre::{Result, Context};
+  |                    ^^^^^^^
+
+warning: unused import: `ExternalKind`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:3:27
+  |
+3 | use wasmparser::{Payload, ExternalKind};
+  |                           ^^^^^^^^^^^^
+
+warning: unused import: `compact_str::CompactString as WasmName`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:5:5
+  |
+5 | use compact_str::CompactString as WasmName;
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `Context`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/check_unused_threads.rs:2:20
+  |
+2 | use eyre::{Result, Context};
+  |                    ^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/check_unused_threads.rs:3:70
+  |
+3 | use wasm_encoder::{ExportSection, ImportSection, Module, RawSection, Section, MemoryS...
+  |                                                                      ^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/patch_component.rs:3:58
+  |
+3 | use wasm_encoder::{ExportSection, ImportSection, Module, Section, EntityType};
+  |                                                          ^^^^^^^
+
+warning: unused import: `Section`
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/abi_connect.rs:4:28
+  |
+4 | use wasm_encoder::{Module, Section, ImportSection};
+  |                            ^^^^^^^
+
+warning: unused import: `std::borrow::Cow`
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:10:5
+   |
+10 | use std::borrow::Cow;
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `ContextCompat`
+ --> wasi_virt_layer-cli/src/generator/memory.rs:3:26
+  |
+3 | use eyre::{Context as _, ContextCompat as _};
+  |                          ^^^^^^^^^^^^^
+
+warning: unused import: `WalrusUtilModule`
+   --> wasi_virt_layer-cli/src/generator/threads.rs:473:38
+    |
+473 |         use crate::util::{WalrusFID, WalrusUtilModule};
+    |                                      ^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> wasi_virt_layer-cli/src/generator/wrap_unreachable.rs:532:13
+    |
+532 | ...   let mut scan_results: Vec<(FunctionId, Vec<ValType>, InstrScanResult)> = func...
+    |           ----^^^^^^^^^^^^
+    |           |
+    |           help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> wasi_virt_layer-cli/src/generator/multi_memory_lowering.rs:389:79
+    |
+389 | ...], &[ValType::I32], move |mut builder, args| {
+    |                              ----^^^^^^^
+    |                              |
+    |                              help: remove this `mut`
+
+warning: unused variable: `dwarf`
+   --> wasi_virt_layer-cli/src/generator/mod.rs:621:9
+    |
+621 |         dwarf: bool,
+    |         ^^^^^ help: if this is intentional, prefix it with an underscore: `_dwarf`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:298:41
+    |
+298 | ...                   let mut new_expr = wasm_encoder::ConstExpr::global_get(gid);
+    |                           ----^^^^^^^^
+    |                           |
+    |                           help: remove this `mut`
+
+warning: unused variable: `n`
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:470:49
+    |
+470 | ...                   let n = info.value_operands.len();
+    |                           ^ help: if this is intentional, prefix it with an underscore: `_n`
+
+warning: variable `data_count` is assigned to, but never used
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:33:13
+   |
+33 |         let mut data_count = 0;
+   |             ^^^^^^^^^^^^^^
+   |
+   = note: consider using `_data_count` instead
+
+warning: unused variable: `new_expr`
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:298:41
+    |
+298 | ...                   let mut new_expr = wasm_encoder::ConstExpr::global_get(gid);
+    |                           ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_new_expr`
+
+warning: unused variable: `count`
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:321:45
+    |
+321 |                 Payload::CodeSectionStart { count, range, size } => {
+    |                                             ^^^^^ help: try ignoring the field: `count: _`
+
+warning: unused variable: `size`
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:321:59
+    |
+321 |                 Payload::CodeSectionStart { count, range, size } => {
+    |                                                           ^^^^ help: try ignoring the field: `size: _`
+
+warning: value assigned to `data_count` is never read
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:95:21
+   |
+95 |                     data_count = s.count();
+   |                     ^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable `func_count` is assigned to, but never used
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:29:13
+   |
+29 |         let mut func_count = 0;
+   |             ^^^^^^^^^^^^^^
+   |
+   = note: consider using `_func_count` instead
+
+warning: unused variable: `count`
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:69:45
+   |
+69 |                 Payload::CodeSectionStart { count, range, size } => {
+   |                                             ^^^^^ help: try ignoring the field: `count: _`
+
+warning: unused variable: `size`
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:69:59
+   |
+69 |                 Payload::CodeSectionStart { count, range, size } => {
+   |                                                           ^^^^ help: try ignoring the field: `size: _`
+
+warning: value assigned to `func_count` is never read
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:48:21
+   |
+48 |                     func_count = s.count() + imported_func_count;
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: variable does not need to be mutable
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:54:13
+   |
+54 |         let mut encoder = wasm_encoder::Module::new();
+   |             ----^^^^^^^
+   |             |
+   |             help: remove this `mut`
+
+warning: unused variable: `encoder`
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:54:13
+   |
+54 |         let mut encoder = wasm_encoder::Module::new();
+   |             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_encoder`
+
+warning: unreachable pattern
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:54:29
+   |
+54 | ...                   _ => unimplemented!(),
+   |                       ^ no value can reach this
+   |
+note: multiple earlier patterns match some of the same values
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:54:29
+   |
+48 | ...                   wasmparser::ExternalKind::Func => ExportKind::Func,
+   |                       ------------------------------ matches some of the same values
+49 | ...                   wasmparser::ExternalKind::FuncExact => ExportKind::Func,
+   |                       ----------------------------------- matches some of the same values
+50 | ...                   wasmparser::ExternalKind::Table => ExportKind::Table,
+   |                       ------------------------------- matches some of the same values
+51 | ...                   wasmparser::ExternalKind::Memory => ExportKind::Memory,
+   |                       -------------------------------- matches some of the same values
+...
+54 | ...                   _ => unimplemented!(),
+   |                       ^ ...and 2 other patterns collectively make this unreachable
+   = note: `#[warn(unreachable_patterns)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable `type_count` is assigned to, but never used
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:54:13
+   |
+54 |         let mut type_count = 0;
+   |             ^^^^^^^^^^^^^^
+   |
+   = note: consider using `_type_count` instead
+
+warning: variable `memory_count` is assigned to, but never used
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:56:13
+   |
+56 |         let mut memory_count = 0;
+   |             ^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_memory_count` instead
+
+warning: variable `memory_import_count` is assigned to, but never used
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:57:13
+   |
+57 |         let mut memory_import_count = 0;
+   |             ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_memory_import_count` instead
+
+warning: variable `data_count` is assigned to, but never used
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:183:13
+    |
+183 |         let mut data_count = 0;
+    |             ^^^^^^^^^^^^^^
+    |
+    = note: consider using `_data_count` instead
+
+warning: unused variable: `e`
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:416:67
+    |
+416 | ...                   wasmparser::ElementItems::Expressions(e, _) => {
+    |                                                             ^ help: if this is intentional, prefix it with an underscore: `_e`
+
+warning: value assigned to `type_count` is never read
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:101:29
+    |
+101 | ...                   type_count += 1;
+    |                       ^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `memory_count` is never read
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:93:33
+   |
+93 | ...                   memory_count += 1;
+   |                       ^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: value assigned to `memory_count` is never read
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:109:21
+    |
+109 |                     memory_count += s.count();
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `memory_import_count` is never read
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:92:33
+   |
+92 | ...                   memory_import_count += 1;
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: value assigned to `data_count` is never read
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:443:21
+    |
+443 |                     data_count = count;
+    |                     ^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `current_new_idx` is never read
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:224:9
+    |
+224 |         current_new_idx += 1;
+    |         ^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `type_count` is never read
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:298:25
+    |
+298 |                         type_count += 1;
+    |                         ^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `funcs_vec` is never read
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:410:45
+    |
+410 |                         let mut funcs_vec = Vec::new();
+    |                                             ^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: variable does not need to be mutable
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/dummy_injector.rs:134:25
+    |
+134 |                     let mut body_parser = wasmparser::Parser::new(0);
+    |                         ----^^^^^^^^^^^
+    |                         |
+    |                         help: remove this `mut`
+
+warning: variable `has_producer_section` is assigned to, but never used
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/producer.rs:19:13
+   |
+19 |         let mut has_producer_section = false;
+   |             ^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_has_producer_section` instead
+
+warning: value assigned to `has_producer_section` is never read
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/producer.rs:35:21
+   |
+35 |                     has_producer_section = true;
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = help: maybe it is overwritten before being read?
+
+warning: unreachable pattern
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/anonymous.rs:172:33
+    |
+172 | ...                   _ => unimplemented!("Unsupported TypeRef translation"),
+    |                       ^ no value can reach this
+    |
+note: multiple earlier patterns match some of the same values
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/anonymous.rs:172:33
+    |
+166 | ...   wasmparser::TypeRef::Func(idx) => wasm_encoder::EntityType::Function(idx),
+    |       ------------------------------ matches some of the same values
+167 | ...   wasmparser::TypeRef::FuncExact(_) => unimplemented!("FuncExact translation is...
+    |       --------------------------------- matches some of the same values
+168 | ...   wasmparser::TypeRef::Table(t) => wasm_encoder::EntityType::Table(crate::wasm_...
+    |       ----------------------------- matches some of the same values
+169 | ...   wasmparser::TypeRef::Memory(t) => wasm_encoder::EntityType::Memory(crate::was...
+    |       ------------------------------ matches some of the same values
+...
+172 | ...   _ => unimplemented!("Unsupported TypeRef translation"),
+    |       ^ ...and 2 other patterns collectively make this unreachable
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:322:48
+    |
+322 | ...::RefTestNonNull { hty } => unimplemented!("RefTestNonNull: GC types not support...
+    |                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:323:49
+    |
+323 | ...:RefTestNullable { hty } => unimplemented!("RefTestNullable: GC types not suppor...
+    |                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:324:48
+    |
+324 | ...::RefCastNonNull { hty } => unimplemented!("RefCastNonNull: GC types not support...
+    |                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:325:49
+    |
+325 | ...:RefCastNullable { hty } => unimplemented!("RefCastNullable: GC types not suppor...
+    |                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `relative_depth`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:326:42
+    |
+326 | ...nCast { relative_depth, from_ref_type, to_ref_type } => unimplemented!("Wasm GC ...
+    |            ^^^^^^^^^^^^^^ help: try ignoring the field: `relative_depth: _`
+
+warning: unused variable: `from_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:326:58
+    |
+326 | ...e_depth, from_ref_type, to_ref_type } => unimplemented!("Wasm GC cast not suppor...
+    |             ^^^^^^^^^^^^^ help: try ignoring the field: `from_ref_type: _`
+
+warning: unused variable: `to_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:326:73
+    |
+326 | ..._ref_type, to_ref_type } => unimplemented!("Wasm GC cast not supported"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `to_ref_type: _`
+
+warning: unused variable: `relative_depth`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:327:46
+    |
+327 | ...tFail { relative_depth, from_ref_type, to_ref_type } => unimplemented!("Wasm GC ...
+    |            ^^^^^^^^^^^^^^ help: try ignoring the field: `relative_depth: _`
+
+warning: unused variable: `from_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:327:62
+    |
+327 | ...e_depth, from_ref_type, to_ref_type } => unimplemented!("Wasm GC cast not suppor...
+    |             ^^^^^^^^^^^^^ help: try ignoring the field: `from_ref_type: _`
+
+warning: unused variable: `to_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:327:77
+    |
+327 | ..._ref_type, to_ref_type } => unimplemented!("Wasm GC cast not supported"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `to_ref_type: _`
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:336:54
+    |
+336 | ...astDescEqNonNull { hty } => unimplemented!("RefCastDescEqNonNull: GC types not s...
+    |                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:337:55
+    |
+337 | ...stDescEqNullable { hty } => unimplemented!("RefCastDescEqNullable: GC types not ...
+    |                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `relative_depth`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:338:48
+    |
+338 | ...escEq { relative_depth, from_ref_type, to_ref_type } => unimplemented!("BrOnCast...
+    |            ^^^^^^^^^^^^^^ help: try ignoring the field: `relative_depth: _`
+
+warning: unused variable: `from_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:338:64
+    |
+338 | ...e_depth, from_ref_type, to_ref_type } => unimplemented!("BrOnCastDescEq: GC type...
+    |             ^^^^^^^^^^^^^ help: try ignoring the field: `from_ref_type: _`
+
+warning: unused variable: `to_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:338:79
+    |
+338 | ..._ref_type, to_ref_type } => unimplemented!("BrOnCastDescEq: GC types not support...
+    |               ^^^^^^^^^^^ help: try ignoring the field: `to_ref_type: _`
+
+warning: unused variable: `relative_depth`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:339:52
+    |
+339 | ...qFail { relative_depth, from_ref_type, to_ref_type } => unimplemented!("BrOnCast...
+    |            ^^^^^^^^^^^^^^ help: try ignoring the field: `relative_depth: _`
+
+warning: unused variable: `from_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:339:68
+    |
+339 | ...e_depth, from_ref_type, to_ref_type } => unimplemented!("BrOnCastDescEqFail: GC ...
+    |             ^^^^^^^^^^^^^ help: try ignoring the field: `from_ref_type: _`
+
+warning: unused variable: `to_ref_type`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:339:83
+    |
+339 | ..._ref_type, to_ref_type } => unimplemented!("BrOnCastDescEqFail: GC types not sup...
+    |               ^^^^^^^^^^^ help: try ignoring the field: `to_ref_type: _`
+
+warning: unused variable: `tys`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:356:50
+    |
+356 | ...TypedSelectMulti { tys } => unimplemented!("TypedSelectMulti: GC types not suppo...
+    |                       ^^^ help: try ignoring the field: `tys: _`
+
+warning: unused variable: `hty`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:357:41
+    |
+357 | ...   wasmparser::Operator::RefNull { hty } => unimplemented!("RefNull not supporte...
+    |                                       ^^^ help: try ignoring the field: `hty: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:699:49
+    |
+699 | ...alAtomicGet { ordering, global_index } => unimplemented!("GlobalAtomicGet"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:699:59
+    |
+699 | ...ordering, global_index } => unimplemented!("GlobalAtomicGet"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:700:49
+    |
+700 | ...alAtomicSet { ordering, global_index } => unimplemented!("GlobalAtomicSet"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:700:59
+    |
+700 | ...ordering, global_index } => unimplemented!("GlobalAtomicSet"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:701:52
+    |
+701 | ...tomicRmwAdd { ordering, global_index } => unimplemented!("GlobalAtomicRmwAdd"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:701:62
+    |
+701 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwAdd"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:702:52
+    |
+702 | ...tomicRmwSub { ordering, global_index } => unimplemented!("GlobalAtomicRmwSub"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:702:62
+    |
+702 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwSub"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:703:52
+    |
+703 | ...tomicRmwAnd { ordering, global_index } => unimplemented!("GlobalAtomicRmwAnd"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:703:62
+    |
+703 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwAnd"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:704:51
+    |
+704 | ...AtomicRmwOr { ordering, global_index } => unimplemented!("GlobalAtomicRmwOr"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:704:61
+    |
+704 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwOr"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:705:52
+    |
+705 | ...tomicRmwXor { ordering, global_index } => unimplemented!("GlobalAtomicRmwXor"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:705:62
+    |
+705 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwXor"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:706:53
+    |
+706 | ...omicRmwXchg { ordering, global_index } => unimplemented!("GlobalAtomicRmwXchg"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:706:63
+    |
+706 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwXchg"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:707:56
+    |
+707 | ...cRmwCmpxchg { ordering, global_index } => unimplemented!("GlobalAtomicRmwCmpxchg"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `global_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:707:66
+    |
+707 | ...ordering, global_index } => unimplemented!("GlobalAtomicRmwCmpxchg"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `global_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:708:48
+    |
+708 | ...leAtomicGet { ordering, table_index } => unimplemented!("TableAtomicGet"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `table_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:708:58
+    |
+708 | ... ordering, table_index } => unimplemented!("TableAtomicGet"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `table_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:709:48
+    |
+709 | ...leAtomicSet { ordering, table_index } => unimplemented!("TableAtomicSet"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `table_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:709:58
+    |
+709 | ... ordering, table_index } => unimplemented!("TableAtomicSet"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `table_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:710:52
+    |
+710 | ...omicRmwXchg { ordering, table_index } => unimplemented!("TableAtomicRmwXchg"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `table_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:710:62
+    |
+710 | ... ordering, table_index } => unimplemented!("TableAtomicRmwXchg"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `table_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:711:55
+    |
+711 | ...cRmwCmpxchg { ordering, table_index } => unimplemented!("TableAtomicRmwCmpxchg"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `table_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:711:65
+    |
+711 | ... ordering, table_index } => unimplemented!("TableAtomicRmwCmpxchg"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `table_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:712:49
+    |
+712 | ...ctAtomicGet { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:712:59
+    |
+712 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicGet"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:712:78
+    |
+712 | ...ype_index, field_index } => unimplemented!("StructAtomicGet"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:713:50
+    |
+713 | ...tAtomicGetS { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:713:60
+    |
+713 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicGetS"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:713:79
+    |
+713 | ...ype_index, field_index } => unimplemented!("StructAtomicGetS"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:714:50
+    |
+714 | ...tAtomicGetU { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:714:60
+    |
+714 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicGetU"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:714:79
+    |
+714 | ...ype_index, field_index } => unimplemented!("StructAtomicGetU"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:715:49
+    |
+715 | ...ctAtomicSet { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:715:59
+    |
+715 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicSet"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:715:78
+    |
+715 | ...ype_index, field_index } => unimplemented!("StructAtomicSet"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:716:52
+    |
+716 | ...tomicRmwAdd { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:716:62
+    |
+716 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwAdd"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:716:81
+    |
+716 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwAdd"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:717:52
+    |
+717 | ...tomicRmwSub { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:717:62
+    |
+717 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwSub"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:717:81
+    |
+717 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwSub"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:718:52
+    |
+718 | ...tomicRmwAnd { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:718:62
+    |
+718 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwAnd"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:718:81
+    |
+718 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwAnd"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:719:51
+    |
+719 | ...AtomicRmwOr { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:719:61
+    |
+719 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwOr"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:719:80
+    |
+719 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwOr"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:720:52
+    |
+720 | ...tomicRmwXor { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:720:62
+    |
+720 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwXor"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:720:81
+    |
+720 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwXor"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:721:53
+    |
+721 | ...omicRmwXchg { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:721:63
+    |
+721 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwXchg"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:721:82
+    |
+721 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwXchg"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:722:56
+    |
+722 | ...cRmwCmpxchg { ordering, struct_type_index, field_index } => unimplemented!("Stru...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `struct_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:722:66
+    |
+722 | ...ing, struct_type_index, field_index } => unimplemented!("StructAtomicRmwCmpxchg"),
+    |         ^^^^^^^^^^^^^^^^^ help: try ignoring the field: `struct_type_index: _`
+
+warning: unused variable: `field_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:722:85
+    |
+722 | ...ype_index, field_index } => unimplemented!("StructAtomicRmwCmpxchg"),
+    |               ^^^^^^^^^^^ help: try ignoring the field: `field_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:723:48
+    |
+723 | ...ayAtomicGet { ordering, array_type_index } => unimplemented!("ArrayAtomicGet"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:723:58
+    |
+723 | ...ring, array_type_index } => unimplemented!("ArrayAtomicGet"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:724:49
+    |
+724 | ...yAtomicGetS { ordering, array_type_index } => unimplemented!("ArrayAtomicGetS"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:724:59
+    |
+724 | ...ring, array_type_index } => unimplemented!("ArrayAtomicGetS"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:725:49
+    |
+725 | ...yAtomicGetU { ordering, array_type_index } => unimplemented!("ArrayAtomicGetU"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:725:59
+    |
+725 | ...ring, array_type_index } => unimplemented!("ArrayAtomicGetU"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:726:48
+    |
+726 | ...ayAtomicSet { ordering, array_type_index } => unimplemented!("ArrayAtomicSet"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:726:58
+    |
+726 | ...ring, array_type_index } => unimplemented!("ArrayAtomicSet"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:727:51
+    |
+727 | ...tomicRmwAdd { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwAdd"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:727:61
+    |
+727 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwAdd"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:728:51
+    |
+728 | ...tomicRmwSub { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwSub"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:728:61
+    |
+728 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwSub"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:729:51
+    |
+729 | ...tomicRmwAnd { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwAnd"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:729:61
+    |
+729 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwAnd"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:730:50
+    |
+730 | ...AtomicRmwOr { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwOr"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:730:60
+    |
+730 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwOr"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:731:51
+    |
+731 | ...tomicRmwXor { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwXor"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:731:61
+    |
+731 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwXor"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:732:52
+    |
+732 | ...omicRmwXchg { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwXchg"),
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:732:62
+    |
+732 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwXchg"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `ordering`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:733:55
+    |
+733 | ...cRmwCmpxchg { ordering, array_type_index } => unimplemented!("ArrayAtomicRmwCmpx...
+    |                  ^^^^^^^^ help: try ignoring the field: `ordering: _`
+
+warning: unused variable: `array_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:733:65
+    |
+733 | ...ring, array_type_index } => unimplemented!("ArrayAtomicRmwCmpxchg"),
+    |          ^^^^^^^^^^^^^^^^ help: try ignoring the field: `array_type_index: _`
+
+warning: unused variable: `cont_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:740:41
+    |
+740 | ...tNew { cont_type_index } => unimplemented!("ContNew"),
+    |           ^^^^^^^^^^^^^^^ help: try ignoring the field: `cont_type_index: _`
+
+warning: unused variable: `argument_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:741:42
+    |
+741 | ...tBind { argument_index, result_index } => unimplemented!("ContBind"),
+    |            ^^^^^^^^^^^^^^ help: try ignoring the field: `argument_index: _`
+
+warning: unused variable: `result_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:741:58
+    |
+741 | ...nt_index, result_index } => unimplemented!("ContBind"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `result_index: _`
+
+warning: unused variable: `tag_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:742:41
+    |
+742 |         wasmparser::Operator::Suspend { tag_index } => unimplemented!("Suspend"),
+    |                                         ^^^^^^^^^ help: try ignoring the field: `tag_index: _`
+
+warning: unused variable: `cont_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:743:40
+    |
+743 | ...sume { cont_type_index, resume_table } => unimplemented!("Resume"),
+    |           ^^^^^^^^^^^^^^^ help: try ignoring the field: `cont_type_index: _`
+
+warning: unused variable: `resume_table`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:743:57
+    |
+743 | ...pe_index, resume_table } => unimplemented!("Resume"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `resume_table: _`
+
+warning: unused variable: `cont_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:744:45
+    |
+744 | ...hrow { cont_type_index, tag_index, resume_table } => unimplemented!("ResumeThrow"),
+    |           ^^^^^^^^^^^^^^^ help: try ignoring the field: `cont_type_index: _`
+
+warning: unused variable: `tag_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:744:62
+    |
+744 | ..._type_index, tag_index, resume_table } => unimplemented!("ResumeThrow"),
+    |                 ^^^^^^^^^ help: try ignoring the field: `tag_index: _`
+
+warning: unused variable: `resume_table`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:744:73
+    |
+744 | ...ag_index, resume_table } => unimplemented!("ResumeThrow"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `resume_table: _`
+
+warning: unused variable: `cont_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:745:48
+    |
+745 | ...wRef { cont_type_index, resume_table } => unimplemented!("ResumeThrowRef"),
+    |           ^^^^^^^^^^^^^^^ help: try ignoring the field: `cont_type_index: _`
+
+warning: unused variable: `resume_table`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:745:65
+    |
+745 | ...pe_index, resume_table } => unimplemented!("ResumeThrowRef"),
+    |              ^^^^^^^^^^^^ help: try ignoring the field: `resume_table: _`
+
+warning: unused variable: `cont_type_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:746:40
+    |
+746 | ...itch { cont_type_index, tag_index } => unimplemented!("Switch"),
+    |           ^^^^^^^^^^^^^^^ help: try ignoring the field: `cont_type_index: _`
+
+warning: unused variable: `tag_index`
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:746:57
+    |
+746 | ..._type_index, tag_index } => unimplemented!("Switch"),
+    |                 ^^^^^^^^^ help: try ignoring the field: `tag_index: _`
+
+warning: associated items `init`, `build`, and `create_dummy_start` are never used
+   --> wasi_virt_layer-cli/src/generator/starts.rs:79:8
+    |
+ 56 | impl FnInStarts {
+    | --------------- associated items in this implementation
+...
+ 79 |     fn init(&self, module: &mut walrus::Module, _: &super::GeneratorCtx) -> eyre::R...
+    |        ^^^^
+...
+ 95 |     fn build(&self, module: &mut walrus::Module, ctx: &super::GeneratorCtx) -> eyre...
+    |        ^^^^^
+...
+155 |     fn create_dummy_start(
+    |        ^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: methods `flat_read` and `all_rewrite` are never used
+   --> wasi_virt_layer-cli/src/util.rs:160:8
+    |
+111 | pub(crate) trait WalrusUtilFuncs {
+    |                  --------------- methods in this trait
+...
+160 |     fn flat_read<T>(
+    |        ^^^^^^^^^
+...
+168 |     fn all_rewrite<T>(
+    |        ^^^^^^^^^^^
+
+warning: missing documentation for a function
+ --> wasi_virt_layer-cli/src/feature_extractor.rs:3:1
+  |
+3 | / pub fn extract_features(
+4 | |     matches: &ArgMatches,
+5 | |     wasm_count: usize,
+6 | | ) -> (
+7 | |     crate::args::VfsBuildOptions,
+8 | |     Box<[crate::args::VfsBuildOptions]>,
+9 | | ) {
+  | |_^
+  |
+note: the lint level is defined here
+ --> wasi_virt_layer-cli/src/lib.rs:1:9
+  |
+1 | #![warn(missing_docs)]
+  |         ^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/generator/mod.rs:11:1
+   |
+11 | pub mod memory_post_components;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/generator/mod.rs:20:1
+   |
+20 | pub mod starts;
+   | ^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/generator/mod.rs:25:1
+   |
+25 | pub mod vfs_host;
+   | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/generator/mod.rs:87:5
+   |
+87 |     pub starts: starts::FnInStarts,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> wasi_virt_layer-cli/src/generator/mod.rs:572:5
+    |
+572 |     pub generators: Vec<Box<dyn Generator + 'static>>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/generator/memory_post_components.rs:6:1
+  |
+6 | pub struct PostComponentsMemoryFix {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> wasi_virt_layer-cli/src/generator/shared_global.rs:59:5
+   |
+59 |     GlobalAltSetWithLock,
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/generator/starts.rs:57:5
+   |
+57 |     pub fn new(wasms: &[WasmName]) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:1:1
+  |
+1 | pub mod tracker;
+  | ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:2:1
+  |
+2 | pub mod pipeline;
+  | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:3:1
+  |
+3 | pub mod passes;
+  | ^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:4:1
+  |
+4 | pub mod translator;
+  | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:5:1
+  |
+5 | pub mod mem_info;
+  | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:14:5
+   |
+14 |     pub parser: Parser,
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:15:5
+   |
+15 |     pub encoder: Module,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:16:5
+   |
+16 |     pub func_tracker: tracker::IndexTracker,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:17:5
+   |
+17 |     pub global_tracker: tracker::IndexTracker,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:18:5
+   |
+18 |     pub memory_tracker: tracker::IndexTracker,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:19:5
+   |
+19 |     pub type_tracker: tracker::IndexTracker,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/mod.rs:23:5
+   |
+23 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/tracker.rs:18:5
+   |
+18 |     pub explicit_map: HashMap<u32, u32>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/tracker.rs:22:5
+   |
+22 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a trait
+ --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:4:1
+  |
+4 | pub trait StreamPass: Send + Sync {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a trait
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:10:1
+   |
+10 | pub trait StreamChecker: Send + Sync {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:11:5
+   |
+11 |     fn check(&mut self, payload: &wasmparser::Payload) -> eyre::Result<()>;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:14:1
+   |
+14 | pub struct ParallelCheckStreamPass {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:19:5
+   |
+19 |     pub fn new(checkers: Vec<Box<dyn StreamChecker>>) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:79:5
+   |
+79 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:83:5
+   |
+83 |     pub fn add_pass(&mut self, pass: Box<dyn StreamPass>) {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> wasi_virt_layer-cli/src/wasm_stream/pipeline.rs:87:5
+   |
+87 |     pub fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:1:1
+  |
+1 | pub mod multi_memory_lowering;
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:2:1
+  |
+2 | pub mod shared_global;
+  | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:3:1
+  |
+3 | pub mod threads;
+  | ^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:4:1
+  |
+4 | pub mod wrap_unreachable;
+  | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:5:1
+  |
+5 | pub mod pre_vfs_memory_refuge;
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:6:1
+  |
+6 | pub mod starts_pre;
+  | ^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:7:1
+  |
+7 | pub mod post_combine;
+  | ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:8:1
+  |
+8 | pub mod dummy_injector;
+  | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:9:1
+  |
+9 | pub mod producer;
+  | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:10:1
+   |
+10 | pub mod anonymous;
+   | ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:11:1
+   |
+11 | pub mod check;
+   | ^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:12:1
+   |
+12 | pub mod check_unused_threads;
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:13:1
+   |
+13 | pub mod patch_component;
+   | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a module
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/mod.rs:14:1
+   |
+14 | pub mod abi_connect;
+   | ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:7:1
+  |
+7 | pub struct MultiMemoryLoweringStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:8:5
+  |
+8 |     pub threads: bool,
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/multi_memory_lowering.rs:12:5
+   |
+12 |     pub fn new(threads: bool) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:8:1
+  |
+8 | pub struct SharedGlobalStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:9:5
+  |
+9 |     pub threads: bool,
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:10:5
+   |
+10 |     pub target_names: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/shared_global.rs:14:5
+   |
+14 |     pub fn new(threads: bool, target_names: Vec<String>) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:5:1
+  |
+5 | pub struct ThreadsStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:6:5
+  |
+6 |     pub threads: bool,
+  |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:7:5
+  |
+7 |     pub unstable_print_debug: bool,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:8:5
+  |
+8 |     pub target_names: Vec<String>,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/threads.rs:12:5
+   |
+12 |     pub fn new(threads: bool, unstable_print_debug: bool, target_names: Vec<String>) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/wrap_unreachable.rs:5:1
+  |
+5 | pub struct WrapUnreachableStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/wrap_unreachable.rs:6:5
+  |
+6 |     pub adjust_abi: bool,
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/wrap_unreachable.rs:10:5
+   |
+10 |     pub fn new(adjust_abi: bool) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:6:1
+  |
+6 | pub struct TemporaryRefugeMemoryStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:7:5
+  |
+7 |     pub memory_count: usize,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:8:5
+  |
+8 |     pub had_shared: bool,
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:9:5
+  |
+9 |     pub rename_memory_export: Option<String>,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/pre_vfs_memory_refuge.rs:13:5
+   |
+13 |     pub fn new(rename_memory_export: Option<String>) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:5:1
+  |
+5 | pub struct StartsPreStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:6:5
+  |
+6 |     pub is_vfs: bool,
+  |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:7:5
+  |
+7 |     pub is_library: bool,
+  |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:8:5
+  |
+8 |     pub start_export_name: String,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/starts_pre.rs:12:5
+   |
+12 |     pub fn new(is_vfs: bool, is_library: bool, start_export_name: String) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:11:1
+   |
+11 | pub struct PostCombineStreamPass {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:12:5
+   |
+12 |     pub target_names: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/post_combine.rs:16:5
+   |
+16 |     pub fn new(target_names: Vec<String>) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/dummy_injector.rs:5:1
+  |
+5 | pub struct DummyInjectorStreamPass {
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+ --> wasi_virt_layer-cli/src/wasm_stream/passes/dummy_injector.rs:6:5
+  |
+6 |     pub dummy_names: Vec<String>,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/dummy_injector.rs:10:5
+   |
+10 |     pub fn new(dummy_names: Vec<String>) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/producer.rs:11:5
+   |
+11 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/anonymous.rs:23:5
+   |
+23 |     pub fn new(ctx: GeneratorCtx) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:17:5
+   |
+17 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:45:5
+   |
+45 |     pub fn new(ctx: GeneratorCtx) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:156:5
+    |
+156 |     pub fn new(ctx: GeneratorCtx) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> wasi_virt_layer-cli/src/wasm_stream/passes/check.rs:201:5
+    |
+201 |     pub fn new() -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/check_unused_threads.rs:14:5
+   |
+14 |     pub fn new(ctx: GeneratorCtx) -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> wasi_virt_layer-cli/src/wasm_stream/passes/patch_component.rs:18:5
+   |
+18 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a trait
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:3:1
+  |
+3 | pub trait Rebind {
+  | ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:4:5
+  |
+4 |     fn function(&self, index: u32) -> u32 { index }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:5:5
+  |
+5 |     fn global(&self, index: u32) -> u32 { index }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:6:5
+  |
+6 |     fn memory(&self, index: u32) -> u32 { index }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:7:5
+  |
+7 |     fn table(&self, index: u32) -> u32 { index }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:8:5
+  |
+8 |     fn ty(&self, index: u32) -> u32 { index }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+ --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:9:5
+  |
+9 |     fn data(&self, index: u32) -> u32 { index }
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:10:5
+   |
+10 |     fn elem(&self, index: u32) -> u32 { index }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:11:5
+   |
+11 |     fn tag(&self, index: u32) -> u32 { index }
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:14:1
+   |
+14 | pub fn translate_memory_type(t: wasmparser::MemoryType) -> wasm_encoder::MemoryType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:24:1
+   |
+24 | pub fn translate_table_type<R: Rebind>(t: wasmparser::TableType, rebinder: &R) -> wasm_encoder::TableType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:34:1
+   |
+34 | pub fn translate_global_type<R: Rebind>(t: wasmparser::GlobalType, rebinder: &R) -> wasm_encoder::GlobalType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:42:1
+   |
+42 | pub fn translate_tag_type(t: wasmparser::TagType) -> wasm_encoder::TagType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:53:1
+   |
+53 | pub fn translate_ref_type<R: Rebind>(r: wasmparser::RefType, rebinder: &R) -> wasm_encoder::RefType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:60:1
+   |
+60 | pub fn translate_heap_type<R: Rebind>(h: wasmparser::HeapType, rebinder: &R) -> wasm_encoder::HeapType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:77:1
+   |
+77 | pub fn translate_sub_type<R: Rebind>(sub_ty: &wasmparser::SubType, rebinder: &R) -> wasm_encoder::SubType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+  --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:98:1
+   |
+98 | pub fn translate_abstract_heap_type(t: wasmparser::AbstractHeapType) -> wasm_encoder::AbstractHeapType {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:116:1
+    |
+116 | pub struct DefaultRebinder;
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:119:1
+    |
+119 | pub fn translate<'a, R: Rebind>(op: &wasmparser::Operator<'a>, rebinder: &R) -> Instruction<'a> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:755:1
+    |
+755 | pub fn translate_val_type<R: Rebind>(ty: wasmparser::ValType, rebinder: &R) -> wasm_encoder::ValType {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:766:1
+    |
+766 | pub fn translate_block_type<R: Rebind>(bty: wasmparser::BlockType, rebinder: &R) -> wasm_encoder::BlockType {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:774:1
+    |
+774 | pub fn translate_catch<R: Rebind>(catch: &wasmparser::Catch, rebinder: &R) -> wasm_encoder::Catch {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:783:1
+    |
+783 | pub fn translate_memarg<R: Rebind>(memarg: &wasmparser::MemArg, rebinder: &R) -> wasm_encoder::MemArg {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a function
+   --> wasi_virt_layer-cli/src/wasm_stream/translator.rs:791:1
+    |
+791 | pub fn translate_const_expr<R: Rebind>(expr: &wasmparser::ConstExpr, rebinder: &R) -> Result<wasm_encoder::ConstExpr> {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `wasi_virt_layer-cli` (lib test) generated 294 warnings (294 duplicates)
+warning: `wasi_virt_layer-cli` (lib) generated 294 warnings (run `cargo fix --lib -p wasi_virt_layer-cli` to apply 162 suggestions)
+warning: unused variable: `op`
+ --> wasi_virt_layer-cli/src/bin/test_memarg.rs:7:9
+  |
+7 |     let op = wasm_encoder::Instruction::I32Load(memarg);
+  |         ^^
+  |
+  = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+help: you might have meant to pattern match on the similarly named variant `Nop`
+  |
+7 |     let wasm_encoder::Instruction::Nop = wasm_encoder::Instruction::I32Load(memarg);
+  |         ++++++++++++++++++++++++++++
+help: if this is intentional, prefix it with an underscore
+  |
+7 |     let _op = wasm_encoder::Instruction::I32Load(memarg);
+  |         +
+
+warning: `wasi_virt_layer-cli` (bin "test_memarg") generated 1 warning (run `cargo fix --bin "test_memarg" -p wasi_virt_layer-cli` to apply 1 suggestion)
+warning: `wasi_virt_layer-cli` (bin "test_memarg" test) generated 1 warning (1 duplicate)
+    Finished `test` profile [optimized + debuginfo] target(s) in 2m 58s
+     Running unittests src/lib.rs (target/debug/deps/wasi_virt_layer_cli-09e1cd1261a81d9e)
+
+running 20 tests
+test fallback_command::tests::test_fallback_command ... ignored, fallback feature disabled
+test gen_ts_helper::tests::test_detect_vfs_exports ... ok
+test gen_ts_helper::tests::test_generate_pseudo_wasm ... ok
+test gen_ts_helper::tests::test_parse_pseudo_wasm_export ... ok
+test gen_ts_helper::tests::test_parse_shared_memory_export ... ok
+test unique_name::tests::test_unique_name_start_alternative ... ok
+test unique_name::tests::test_unique_name_threads_import_anchor_is_prefixed ... ok
+test gen_ts_helper::tests::test_generate_shared_memory ... ok
+test unique_name::tests::test_unique_name_to_str ... ok
+test util::bits::tests::test_add_assign ... ok
+test gen_ts_helper::tests::test_no_duplicate_exports ... ok
+test unique_name::unique_name_iterator_tests::test_unique_name_iterator_start_alternative ... ok
+test util::bits::tests::test_increment ... ok
+test util::tests::test_bit_generator ... ok
+test util::tests::test_feature_combination_iterator_complex_cycle - should panic ... ok
+test util::tests::test_feature_combination_iterator_complex_valid ... ok
+test util::tests::test_feature_combination_iterator_mutual_ref - should panic ... ok
+test util::tests::test_feature_combination_iterator ... ok
+test util::tests::test_feature_combination_iterator_complex_diamond ... ok
+test util::tests::test_get_file_main_name ... ok
+
+test result: ok. 19 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/debug_wasm.rs (target/debug/deps/debug_wasm-b25aa59daaf985cf)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/debug_wasm2.rs (target/debug/deps/debug_wasm2-9af91024e3da2189)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/debug_wasm3.rs (target/debug/deps/debug_wasm3-98d3c0ded932cc36)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/debug_wasm4.rs (target/debug/deps/debug_wasm4-aa7aa06b08709046)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/debug_wasm5.rs (target/debug/deps/debug_wasm5-cf9470a3a2f36a23)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/test_constexpr.rs (target/debug/deps/test_constexpr-d9e40448e4dae209)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/test_global_encoder.rs (target/debug/deps/test_global_encoder-dad8835f0be432c5)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/test_imports.rs (target/debug/deps/test_imports-fc8a7f01a014d4e6)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/test_memarg.rs (target/debug/deps/test_memarg-c29b1269a699577b)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/test_walrus.rs (target/debug/deps/test_walrus-a0d5d111e2fc89bb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/main.rs (target/debug/deps/wasi_virt_layer-e2b0d6c7c61f6659)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/inspect_helper.rs (target/debug/deps/inspect_helper-d7e3c152e26bc961)
+
+running 1 test
+test inspect_generated_helper ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/integration_test.rs (target/debug/deps/integration_test-edb26221a691ad77)
+
+running 30 tests
+test doc_gen_imports_exports ... ignored
+test test_args_vfs_example ... ok
+test all_features_with_threads ... FAILED
+test test_anonymous_with_threads ... FAILED
+test test_atomic_wait_vfs ... FAILED

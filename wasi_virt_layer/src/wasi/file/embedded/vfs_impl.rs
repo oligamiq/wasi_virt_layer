@@ -415,24 +415,17 @@ where
     ) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_datasync: fd={fd}");
 
-        match self.with_inode_and_lfs(fd, |inode, lfs| {
-            lfs.fd_datasync_raw::<Wasm>(inode)
-        }) {
+        match self.with_inode_and_lfs(fd, |inode, lfs| lfs.fd_datasync_raw::<Wasm>(inode)) {
             Ok(Ok(())) => wasip1::ERRNO_SUCCESS,
             Ok(Err(e)) => e,
             Err(e) => e,
         }
     }
 
-    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(
-        &self,
-        fd: Fd,
-    ) -> wasip1::Errno {
+    fn fd_sync_raw<Wasm: WasmAccess + WasmAccessName + 'static>(&self, fd: Fd) -> wasip1::Errno {
         trace_fs!(self, Wasm; "fd_sync: fd={fd}");
 
-        match self.with_inode_and_lfs(fd, |inode, lfs| {
-            lfs.fd_sync_raw::<Wasm>(inode)
-        }) {
+        match self.with_inode_and_lfs(fd, |inode, lfs| lfs.fd_sync_raw::<Wasm>(inode)) {
             Ok(Ok(())) => wasip1::ERRNO_SUCCESS,
             Ok(Err(e)) => e,
             Err(e) => e,

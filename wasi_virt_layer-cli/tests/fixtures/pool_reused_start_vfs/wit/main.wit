@@ -1,0 +1,5 @@
+package tests:pool-reused-start;
+
+world component-abi {
+  export main: func();
+}

@@ -25,18 +25,10 @@ impl Guest for Starter {
     fn init(pool_size: u32) {
         println!("%%% Initializing thread pool with size {}", pool_size);
 
-        unsafe { THREAD_POOL.init() };
-
         println!("%%% Setting thread pool capacity to {}", pool_size);
-
-        THREAD_POOL.set_capacity(pool_size as usize);
-
-        println!("%%% Flushing thread pool capacity...");
-        let waiter = THREAD_POOL.flush_capacity();
-
         println!("%%% Waiting for thread pool to initialize...");
 
-        waiter.wait();
+        unsafe { THREAD_POOL.init_with_capacity_and_wait(pool_size as usize) };
 
         println!("%%% Thread pool initialized.");
     }

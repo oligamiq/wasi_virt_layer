@@ -30,22 +30,18 @@ impl Guest for Hello {
     }
     fn main() {
         println!("Running test_threads...");
-        test_threads::_reset();
         test_threads::_start();
         test_threads::_main();
 
         println!("Running ls...");
-        ls::_reset();
         ls::_start();
         ls::_main();
 
         println!("Running args...");
-        args::_reset();
         args::_start();
         args::_main();
 
         println!("Running ls2...");
-        ls2::_reset();
         ls2::_start();
         ls2::_main();
     }
@@ -57,10 +53,7 @@ export!(Hello);
 plug_thread!(
     { wasi_virt_layer::thread::DirectThreadPool::<ThreadAccessor>::new_const() },
     self,
-    test_threads,
-    ls,
-    args,
-    ls2
+    test_threads
 );
 
 plug_process!(StandardProcess, test_threads, ls, args, ls2, self);
@@ -93,6 +86,7 @@ plug_args!(@embedded, VirtualArgsTy, test_threads, ls, args, ls2, self);
 plug_clock!(StandardClock, test_threads, ls, args, ls2, self);
 plug_random!(StandardRandom, test_threads, ls, args, ls2, self);
 plug_poll!(DefaultPoll, test_threads, ls, args, ls2, self);
+plug_sched!(DefaultSched, ls, args, ls2, self);
 
 #[allow(dead_code)]
 mod fs {

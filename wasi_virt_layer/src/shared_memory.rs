@@ -22,7 +22,7 @@ use smallvec::SmallVec;
 /// Metadata about a single target module's memory region.
 /// Stored in the shared VFS memory, passed between modules via pointers.
 #[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct TargetMemoryMetadata {
     /// Base pointer of this target's memory region in the shared linear memory
     pub base_ptr: i32,
@@ -295,6 +295,84 @@ macro_rules! export_shared_memory_manager {
             }
         }
     };
+}
+
+/// Global registry for target memory regions.
+#[cfg(target_arch = "wasm32")]
+const MAX_TARGETS: usize = 64;
+
+#[cfg(target_arch = "wasm32")]
+static mut TARGET_METADATA_ARRAY: [TargetMemoryMetadata; MAX_TARGETS] = [TargetMemoryMetadata {
+    base_ptr: 0,
+    limit_ptr: 0,
+    current_pages: 0,
+    max_pages: 0,
+}; MAX_TARGETS];
+
+#[cfg(target_arch = "wasm32")]
+static TARGET_COUNT: core::sync::atomic::AtomicUsize = core::sync::atomic::AtomicUsize::new(0);
+
+#[cfg(target_arch = "wasm32")]
+static GLOBAL_SHARED_LOCK: parking_lot::RwLock<()> = parking_lot::RwLock::new(());
+
+/// ABI: Register a new target module's memory region.
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn wasip1_vfs_register_shared_memory_target(
+    base: i32,
+    pages: u32,
+    max_pages: u32,
+) -> *const TargetMemoryMetadata {
+    let id = TARGET_COUNT.fetch_add(1, core::sync::atomic::Ordering::SeqCst);
+    if id >= MAX_TARGETS {
+        return core::ptr::null();
+    }
+
+    unsafe {
+        let metadata = &mut TARGET_METADATA_ARRAY[id];
+        metadata.base_ptr = base;
+        metadata.current_pages = pages;
+        metadata.max_pages = max_pages;
+        metadata.limit_ptr = base + (pages as i32 * 65536);
+        metadata as *const TargetMemoryMetadata
+    }
+}
+
+/// ABI: Get the global lock pointer for shared memory operations.
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn wasip1_vfs_shared_memory_get_lock_ptr(
+    _metadata_ptr: *const TargetMemoryMetadata,
+) -> *const u8 {
+    &GLOBAL_SHARED_LOCK as *const _ as *const u8
+}
+
+/// ABI: Grow memory for a target module.
+#[cfg(target_arch = "wasm32")]
+#[unsafe(no_mangle)]
+pub extern "C" fn wasip1_vfs_shared_memory_grow(
+    metadata_ptr: *mut TargetMemoryMetadata,
+    delta_pages: u32,
+) -> i32 {
+    if metadata_ptr.is_null() {
+        return -1;
+    }
+
+    let metadata = unsafe { &mut *metadata_ptr };
+    let old_pages = metadata.current_pages;
+    let new_pages = old_pages + delta_pages;
+
+    if metadata.max_pages != 0 && new_pages > metadata.max_pages {
+        return -1;
+    }
+
+    // In a shared memory model, we don't actually grow the physical Wasm memory here,
+    // as it's shared. We just update the target's logical limit.
+    // The VFS should have already allocated enough space or handles growth globally.
+    metadata.current_pages = new_pages;
+    metadata.limit_ptr = metadata.base_ptr + (new_pages as i32 * 65536);
+
+    old_pages as i32
 }
 
 #[cfg(test)]

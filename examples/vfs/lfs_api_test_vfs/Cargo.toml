@@ -7,7 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
-wasi_virt_layer = { path = "../../../wasi_virt_layer", features = [
+wasi_virt_layer = { workspace = true, features = [
     "dynamic-fs",
 ] }
 wit-bindgen = "0.36.0"

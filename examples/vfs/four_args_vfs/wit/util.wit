@@ -1,0 +1,7 @@
+// wit/util.wit
+// wit is only kebab-case
+
+world utils {
+  export add-env: func(env: string);
+  export get-envs: func() -> list<string>;
+}

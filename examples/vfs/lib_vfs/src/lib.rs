@@ -14,9 +14,7 @@ plug_sched!(DefaultSched, test_lib, self);
 // We define a simple embedded environment
 #[const_struct]
 const HOST_ENV: VirtualEnvEmbeddedState = VirtualEnvEmbeddedState {
-    environ: &[
-        "HELLO=World_from_VFS",
-    ],
+    environ: &["HELLO=World_from_VFS"],
 };
 
 plug_env!(@embedded, HostEnvTy, test_lib);
@@ -26,12 +24,7 @@ const FILE_COUNT: usize = 2;
 
 #[const_struct]
 const EMBEDDED_FILES: StandardEmbeddedFiles<WasiEmbeddedFile<&'static str>, { FILE_COUNT }> =
-    EmbeddedFiles!([
-        (
-            "/",
-            [("dummy.txt", WasiEmbeddedFile::new("dummy"))]
-        )
-    ]);
+    EmbeddedFiles!([("/", [("dummy.txt", WasiEmbeddedFile::new("dummy"))])]);
 
 mod fs {
     use super::*;
@@ -48,4 +41,3 @@ mod fs {
 
     plug_fs!(&VIRTUAL_FILE_SYSTEM, test_lib);
 }
-

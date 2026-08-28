@@ -48,6 +48,7 @@ unsafe extern "C" {
 /// # Safety
 /// Called from generated wasm code via C-ABI.
 #[unsafe(no_mangle)]
+#[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_read_acquire() {
     loop {
         let old = RWLOCK_STATE.load(Ordering::Relaxed);
@@ -79,6 +80,7 @@ pub extern "C" fn __wasip1_vfs_memory_lock_read_acquire() {
 /// # Safety
 /// Called from generated wasm code via C-ABI.
 #[unsafe(no_mangle)]
+#[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_read_release() {
     let old = RWLOCK_STATE.fetch_sub(1, Ordering::Release);
     if old == 1 {
@@ -95,11 +97,15 @@ pub extern "C" fn __wasip1_vfs_memory_lock_read_release() {
 /// # Safety
 /// Called from generated wasm code via C-ABI.
 #[unsafe(no_mangle)]
+#[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_write_acquire() {
     loop {
         match RWLOCK_STATE.compare_exchange_weak(0, -1, Ordering::Acquire, Ordering::Relaxed) {
             Ok(_) => return, // Successfully acquired write lock
             Err(current) => {
+                if current == 0 {
+                    continue; // Spurious failure, retry immediately
+                }
                 // Someone else holds the lock — wait until state changes
                 unsafe {
                     __wvl_atomic_wait32_vfs(
@@ -117,6 +123,7 @@ pub extern "C" fn __wasip1_vfs_memory_lock_write_acquire() {
 /// # Safety
 /// Called from generated wasm code via C-ABI.
 #[unsafe(no_mangle)]
+#[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_write_release() {
     RWLOCK_STATE.store(0, Ordering::Release);
     unsafe {

@@ -1,0 +1,7 @@
+package self-rw-threads-vfs:host;
+
+world init {
+  export init: func();
+  export start: func();
+  export main: func();
+}

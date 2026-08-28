@@ -1,8 +1,108 @@
 use camino::Utf8PathBuf;
-use clap::{Parser, Subcommand};
+use clap::{Args as ClapArgs, Parser, Subcommand};
 use eyre::Context as _;
+use std::str::FromStr;
 
 use crate::{generator::WasmPath, util::ResultUtil as _};
+
+/// A module-specific byte size supplied as `MODULE=SIZE`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleStackSize {
+    /// Module name, or the special alias `vfs`.
+    pub module: String,
+    /// Stack size in bytes.
+    pub bytes: u32,
+}
+
+impl FromStr for ModuleStackSize {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (module, size) = value
+            .split_once('=')
+            .ok_or_else(|| "expected MODULE=SIZE".to_string())?;
+        if module.is_empty() {
+            return Err("module name must not be empty".to_string());
+        }
+
+        let size = size.trim();
+        let (digits, multiplier) = if let Some(digits) = size.strip_suffix("MiB") {
+            (digits, 1024_u64 * 1024)
+        } else if let Some(digits) = size.strip_suffix("KiB") {
+            (digits, 1024)
+        } else if let Some(digits) = size.strip_suffix("M") {
+            (digits, 1024_u64 * 1024)
+        } else if let Some(digits) = size.strip_suffix("K") {
+            (digits, 1024)
+        } else {
+            (size, 1)
+        };
+        let bytes = digits
+            .parse::<u64>()
+            .map_err(|_| format!("invalid stack size `{size}`"))?
+            .checked_mul(multiplier)
+            .ok_or_else(|| format!("stack size `{size}` overflows"))?;
+        let bytes = u32::try_from(bytes)
+            .map_err(|_| format!("stack size `{size}` exceeds the wasm32 address space"))?;
+        if bytes == 0 {
+            return Err("stack size must be greater than zero".to_string());
+        }
+
+        Ok(Self {
+            module: module.to_string(),
+            bytes,
+        })
+    }
+}
+
+/// A module-specific slot count supplied as `MODULE=COUNT`.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ModuleStackSlots {
+    /// Target module name.
+    pub module: String,
+    /// Number of fixed stack slots.
+    pub slots: u32,
+}
+
+impl FromStr for ModuleStackSlots {
+    type Err = String;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let (module, slots) = value
+            .split_once('=')
+            .ok_or_else(|| "expected MODULE=COUNT".to_string())?;
+        if module.is_empty() {
+            return Err("module name must not be empty".to_string());
+        }
+        let slots = slots
+            .parse::<u32>()
+            .map_err(|_| format!("invalid stack slot count `{slots}`"))?;
+        if slots == 0 {
+            return Err("stack slot count must be greater than zero".to_string());
+        }
+        Ok(Self {
+            module: module.to_string(),
+            slots,
+        })
+    }
+}
+
+/// Export-stack isolation settings.
+#[derive(ClapArgs, Clone, Debug, Default)]
+pub struct StackOptions {
+    /// Enable export-stack isolation for a module and set its stack size.
+    ///
+    /// Accepts bytes or binary suffixes, for example `vfs=1MiB` or
+    /// `worker=512KiB`. May be repeated.
+    #[arg(long = "stack-size", value_name = "MODULE=SIZE")]
+    pub sizes: Vec<ModuleStackSize>,
+
+    /// Set the fixed slot count for a multi-memory target.
+    ///
+    /// This option is invalid for the VFS and for single-memory builds.
+    #[arg(long = "stack-slots", value_name = "MODULE=COUNT")]
+    pub slots: Vec<ModuleStackSlots>,
+}
 
 /// Common interface for post-build (transpilation) arguments.
 pub trait PostBuildContext {
@@ -20,6 +120,8 @@ pub trait PostBuildContext {
     ) -> Result<js_component_bindgen::Transpiled, eyre::Error>;
     /// Returns whether to skip Wasm optimization (dev mode).
     fn dev(&self) -> bool;
+    /// Returns whether to validate generated Wasm modules.
+    fn validate(&self) -> bool;
 }
 
 /// The main command-line interface for `wasi_virt_layer-cli`.
@@ -58,8 +160,6 @@ pub enum Command {
     Postbuild(PostBuildArgs),
     /// Initializes a new WASI Virt Layer project.
     New(NewArgs),
-    /// Prepares a target WASM module for shared memory operation.
-    PrepareTarget(PrepareTargetArgs),
 }
 
 #[derive(Parser, Debug)]
@@ -80,30 +180,6 @@ pub struct NewArgs {
     /// Whether to enable multi-threading support in the new project.
     #[arg(long, default_value = "false")]
     pub threads: bool,
-}
-
-#[derive(Parser, Debug)]
-#[clap(author, version, about, long_about = None, help_template = "
-{name} {version}
-{author}
-{about}
-
-{usage-heading} {usage}
-
-{all-args}")]
-/// Arguments for the `prepare-target` command.
-pub struct PrepareTargetArgs {
-    /// Path to the target WASM module (wasip1)
-    #[arg(value_name = "TARGET_WASM")]
-    pub target_wasm: Utf8PathBuf,
-
-    /// Output path for the transformed WASM module
-    #[arg(short, long, value_name = "OUTPUT")]
-    pub output: Option<Utf8PathBuf>,
-
-    /// Whether to keep intermediate build artifacts
-    #[arg(long, default_value = "false")]
-    pub keep_artifacts: bool,
 }
 
 #[derive(Parser, Debug)]
@@ -137,6 +213,10 @@ pub struct BuildArgs {
     #[arg(long)]
     wasm_memory_hint: Vec<isize>,
 
+    /// Enable unwind for the target WASM modules.
+    #[arg(long = "wasm-unwind")]
+    pub wasm_unwind: Vec<bool>,
+
     /// Output directory for the generated files
     #[arg(long, default_value = "./dist")]
     pub out_dir: Utf8PathBuf,
@@ -158,7 +238,7 @@ pub struct BuildArgs {
 
     /// Enable dwarf
     /// This is broken currently.
-    /// See https://github.com/wasm-bindgen/walrus/issues/258
+    /// See <https://github.com/wasm-bindgen/walrus/issues/258>
     #[arg(long)]
     pub dwarf: Option<bool>,
 
@@ -175,6 +255,10 @@ pub struct BuildArgs {
     #[arg(long, default_value = "false")]
     pub dev: bool,
 
+    /// Validate the generated Wasm modules.
+    #[arg(long, default_value = "false")]
+    pub validate: bool,
+
     /// Options for building the VFS module.
     #[command(flatten)]
     pub vfs_build_opts: VfsBuildOptions,
@@ -182,6 +266,18 @@ pub struct BuildArgs {
     /// Options for building target Wasm modules.
     #[arg(skip)]
     pub target_vfs_build_opts: Option<Box<[VfsBuildOptions]>>,
+
+    /// Enable own-memory mode.
+    #[arg(long, default_value = "false")]
+    pub own_memory: bool,
+
+    /// Enable atomic wait deadlock detection for threaded builds.
+    #[arg(long, default_value = "false")]
+    pub detect_deadlock: bool,
+
+    /// Export-stack isolation settings.
+    #[command(flatten)]
+    pub stack_options: StackOptions,
 }
 
 impl BuildArgs {
@@ -191,6 +287,16 @@ impl BuildArgs {
             .iter()
             .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
             .chain(std::iter::repeat(None))
+            .take(self.wasm.len())
+            .collect::<Box<_>>()
+    }
+
+    /// Returns the unwind configuration for each target module.
+    pub fn get_wasm_unwinds(&self) -> Box<[bool]> {
+        self.wasm_unwind
+            .iter()
+            .copied()
+            .chain(std::iter::repeat(false))
             .take(self.wasm.len())
             .collect::<Box<_>>()
     }
@@ -250,6 +356,10 @@ impl PostBuildContext for BuildArgs {
     fn dev(&self) -> bool {
         self.dev
     }
+
+    fn validate(&self) -> bool {
+        self.validate
+    }
 }
 
 #[derive(Parser, Debug)]
@@ -283,6 +393,10 @@ pub struct PreBuildArgs {
     #[arg(long)]
     wasm_memory_hint: Vec<isize>,
 
+    /// Enable unwind for the target WASM modules.
+    #[arg(long = "wasm-unwind")]
+    pub wasm_unwind: Vec<bool>,
+
     /// Output directory for the generated Component WASM
     #[arg(long, default_value = "./dist")]
     pub out_dir: Utf8PathBuf,
@@ -299,7 +413,7 @@ pub struct PreBuildArgs {
 
     /// Enable dwarf
     /// This is broken currently.
-    /// See https://github.com/wasm-bindgen/walrus/issues/258
+    /// See <https://github.com/wasm-bindgen/walrus/issues/258>
     #[arg(long)]
     pub dwarf: Option<bool>,
 
@@ -316,6 +430,10 @@ pub struct PreBuildArgs {
     #[arg(long, default_value = "false")]
     pub dev: bool,
 
+    /// Validate the generated Wasm modules.
+    #[arg(long, default_value = "false")]
+    pub validate: bool,
+
     /// Options for building the VFS module.
     #[command(flatten)]
     pub vfs_build_opts: VfsBuildOptions,
@@ -323,6 +441,18 @@ pub struct PreBuildArgs {
     /// Options for building target Wasm modules.
     #[arg(skip)]
     pub target_vfs_build_opts: Option<Box<[VfsBuildOptions]>>,
+
+    /// Enable own-memory mode.
+    #[arg(long, default_value = "false")]
+    pub own_memory: bool,
+
+    /// Enable atomic wait deadlock detection for threaded builds.
+    #[arg(long, default_value = "false")]
+    pub detect_deadlock: bool,
+
+    /// Export-stack isolation settings.
+    #[command(flatten)]
+    pub stack_options: StackOptions,
 }
 
 impl PreBuildArgs {
@@ -332,6 +462,16 @@ impl PreBuildArgs {
             .iter()
             .map(|&hint| if hint < 0 { None } else { Some(hint as usize) })
             .chain(std::iter::repeat(None))
+            .take(self.wasm.len())
+            .collect::<Box<_>>()
+    }
+
+    /// Returns the unwind configuration for each target module.
+    pub fn get_wasm_unwinds(&self) -> Box<[bool]> {
+        self.wasm_unwind
+            .iter()
+            .copied()
+            .chain(std::iter::repeat(false))
             .take(self.wasm.len())
             .collect::<Box<_>>()
     }
@@ -406,6 +546,10 @@ pub struct PostBuildArgs {
     /// Enable development mode (skips Wasm optimization).
     #[arg(long, default_value = "false")]
     pub dev: bool,
+
+    /// Validate the generated Wasm modules.
+    #[arg(long, default_value = "false")]
+    pub validate: bool,
 }
 
 impl PostBuildContext for PostBuildArgs {
@@ -431,6 +575,10 @@ impl PostBuildContext for PostBuildArgs {
 
     fn dev(&self) -> bool {
         self.dev
+    }
+
+    fn validate(&self) -> bool {
+        self.validate
     }
 }
 
@@ -566,7 +714,16 @@ pub(super) mod analysis {
 }
 
 /// Specifies the memory architecture of the target WebAssembly module.
-#[derive(Debug, Clone, Copy, PartialEq, strum::EnumString, strum::Display)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    strum::EnumString,
+    strum::Display,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub enum TargetMemoryType {
     /// Traditional single memory environment.
     #[strum(ascii_case_insensitive)]
@@ -598,6 +755,10 @@ pub struct VfsBuildOptions {
     /// Do not activate the `default` feature of the VFS module.
     #[arg(long, action = clap::ArgAction::Count)]
     pub no_default_features: u8,
+
+    /// Enable unwind for the module.
+    #[arg(long = "vfs-unwind", default_value = "false")]
+    pub unwind: bool,
 
     /// Disable optimization for this specific module.
     #[arg(long, action = clap::ArgAction::Count)]

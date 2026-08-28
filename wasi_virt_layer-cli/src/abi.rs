@@ -1,54 +1,74 @@
 /// Module for validating WASM modules against the expected WASI ABI.
 pub mod is_valid {
-    use crate::unique_name::UniqueName;
 
-    /// Validates if a WASM module is suitable for component transformation,
-    /// ensuring no un-plugged custom WASIP1 imports remain.
-    pub fn is_valid_wasm_for_component(
-        wasm_bytes: &[u8],
+    /// Validates if unresolved WASI imports remain, ensuring no un-plugged custom WASIP1 imports are dropped silently.
+    pub fn validate_unresolved_imports(
+        unresolved_imports: &[&str],
         wasm_names: &[impl AsRef<str>],
     ) -> eyre::Result<()> {
-        let module = walrus::Module::from_buffer(wasm_bytes)
-            .to_eyre()
-            .wrap_err_with(|| eyre::eyre!("Failed to load module from buffer"))?;
+        let mut err_wasm_names = HashMap::<_, Vec<_>>::new();
 
-        let import = module.imports;
-
-        let err_wasm_names = import
-        .iter()
-        .filter(|import| {
-            import.module == UniqueName::WASIP1_ABI_MODULE
-                && matches!(import.kind, walrus::ImportKind::Function(_))
-        })
-        .map(|import| {
-            let name = import.name.strip_prefix("__wasip1_vfs_")
-                .wrap_err_with(|| eyre::eyre!("This import is not a valid this library custom import. {name}", name = import.name))?;
-            wasm_names.iter().find_map(|n| {
-                let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
-                if func_name == "thread_spawn" {
-                    return Some((n.as_ref().to_string(), Wasip1ABIPlugger::PlugThread, "thread_spawn".to_string()));
+        for i_name in unresolved_imports {
+            let name_str = i_name.strip_prefix("__wasip1_vfs_");
+            if let Some(name) = name_str {
+                if let Some(func_name) = name.strip_prefix("__self_") {
+                    if let Ok(_func) = func_name.parse::<super::Wasip1ABIFunc>() {
+                        // self is ignored if not plugged
+                        continue;
+                    }
                 }
-                let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
-                Some((n.as_ref().to_string(), Wasip1ABIPlugger::from_variant(&func).unwrap(), func.to_string()))
-            })
-            .wrap_err("Failed to parse wasm target and WASI function name")
-        })
-        .filter_map(|v| v.inspect_err(|e| {
-            log::error!("Invalid import: {e}");
-        }).ok())
-        .fold(HashMap::<_, Vec<_>>::new(), |mut acc, (wasm_name, plugger, v)| {
-            acc
-                .entry((wasm_name, plugger))
-                .or_default()
-                .push(v);
-            acc
-        })
+
+                if name == "wasi_thread_start_entry" {
+                    continue;
+                }
+
+                if let Some((wasm_name, plugger, func_name)) = wasm_names.iter().find_map(|n| {
+                    let func_name = name.strip_prefix(n.as_ref())?.strip_prefix("_")?;
+                    if func_name == "thread_spawn" || func_name == "wasi_thread_start" {
+                        return Some((
+                            n.as_ref().to_string(),
+                            Wasip1ABIPlugger::PlugThread,
+                            func_name.to_string(),
+                        ));
+                    }
+                    let func: super::Wasip1ABIFunc = func_name.parse().ok()?;
+                    Some((
+                        n.as_ref().to_string(),
+                        Wasip1ABIPlugger::from_variant(&func).unwrap(),
+                        func.to_string(),
+                    ))
+                }) {
+                    err_wasm_names
+                        .entry((wasm_name, plugger))
+                        .or_default()
+                        .push(func_name);
+                } else {
+                    return Err(eyre::eyre!(
+                        "Invalid import: Failed to parse wasm target and WASI function name. \
+                         This import is not a valid custom import or the function name is malformed: {}",
+                        i_name
+                    ));
+                }
+            } else {
+                if let Ok(_func) = i_name.parse::<super::Wasip1ABIFunc>() {
+                    // self is ignored if not plugged
+                    continue;
+                } else {
+                    return Err(eyre::eyre!(
+                        "This import is not a valid this library custom import: {}",
+                        i_name
+                    ));
+                }
+            }
+        }
+
+        let err_wasm_names = err_wasm_names
         .into_iter()
         .map(|((wasm_name, plugger), variants)| {
             log::error!(
                 "Extra imports remain for `{wasm_name}`. You must use the `{plugger}!` macro plugger to export these functions: {}{}",
                 variants.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", "),
-                format!("\nExtra message: {}", plugger.get_message().unwrap_or(""))
+                format!("\n    Extra message: {}", plugger.get_message().unwrap_or(""))
             );
             wasm_name
         })
@@ -110,10 +130,7 @@ pub mod is_valid {
 
     use std::collections::HashMap;
 
-    use eyre::{Context as _, ContextCompat};
     use strum::EnumMessage as _;
-
-    use crate::util::ResultUtil as _;
 
     use super::{Wasip1ABIFunc, Wasip1ABIFunc::*};
     impl Wasip1ABIPlugger {
@@ -306,4 +323,6 @@ pub enum Wasip1ThreadsABIFunc {
 pub enum Wasip1ThreadsABIExportFunc {
     /// wasi_thread_start
     WasiThreadStart,
+    /// wasi_thread_start_entry
+    WasiThreadStartEntry,
 }

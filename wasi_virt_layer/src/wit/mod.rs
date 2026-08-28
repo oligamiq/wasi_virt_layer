@@ -467,12 +467,13 @@ mod export {
 
         impl Guest for Exporter {
             fn wasi_thread_start(thread_id: i32, data_ptr: i32) {
-                #[link(wasm_import_module = "wasip1-vfs")]
+                crate::thread::mark_wasi_thread_started();
+
                 unsafe extern "C" {
-                    pub fn __wasip1_vfs_wasi_thread_start_entry(thread_id: i32, ptr: i32);
+                    pub fn wasi_thread_start(thread_id: i32, ptr: i32);
                 }
 
-                unsafe { __wasip1_vfs_wasi_thread_start_entry(thread_id, data_ptr) }
+                unsafe { wasi_thread_start(thread_id, data_ptr) }
             }
         }
 

@@ -58,13 +58,16 @@ fn test_vfs_export_detection() -> color_eyre::Result<()> {
         .wrap_err_with(|| format!("Failed to read WASM file: {:?}", wasm_path))?;
 
     // Parse with walrus using default config
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM module: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
-    // Extract export names
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
 
     // Check VFS exports
     let exports = detect_vfs_exports(&export_names);
@@ -119,13 +122,16 @@ fn test_pseudo_wasm_helper_generation() -> color_eyre::Result<()> {
     let wasm_bytes =
         fs::read(&wasm_path).wrap_err_with(|| format!("Failed to read WASM: {:?}", wasm_path))?;
 
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
-    // Extract export names and detect VFS exports
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
     let vfs_exports = detect_vfs_exports(&export_names);
 
     // Generate helper
@@ -184,13 +190,16 @@ fn test_helper_typescript_structure() -> color_eyre::Result<()> {
 
     let wasm_bytes = fs::read(&wasm_path).wrap_err("Failed to read WASM")?;
 
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse WASM: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
-    // Extract exports and generate helper
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
     let vfs_exports = detect_vfs_exports(&export_names);
     let helper_code = generate_ts_helper("test_helper_vfs", &vfs_exports, &[]);
 
@@ -255,13 +264,17 @@ fn test_minimal_helper_generation() -> color_eyre::Result<()> {
 
     let wasm_bytes = fs::read(&wasm_path).wrap_err("Failed to read test_wasm")?;
 
-    let config = walrus::ModuleConfig::new();
-    let module = config
-        .parse(&wasm_bytes)
-        .map_err(|e| eyre::eyre!("Failed to parse test_wasm: {}", e))?;
+    let mut export_names = Vec::new();
+    for payload in wasmparser::Parser::new(0).parse_all(&wasm_bytes) {
+        if let wasmparser::Payload::ExportSection(s) = payload.wrap_err("Failed to parse WASM")? {
+            for export in s {
+                export_names.push(export.wrap_err("Failed to parse export")?.name.to_string());
+            }
+        }
+    }
 
     // Extract exports (should be empty)
-    let export_names: Vec<&str> = module.exports.iter().map(|e| e.name.as_str()).collect();
+    let export_names: Vec<&str> = export_names.iter().map(|s| s.as_str()).collect();
     let vfs_exports = detect_vfs_exports(&export_names);
 
     // Generate helper for module with no VFS exports

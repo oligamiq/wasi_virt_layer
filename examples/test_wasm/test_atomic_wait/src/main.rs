@@ -1,4 +1,4 @@
-// cargo +nightly b -r --target wasm32-wasip1-threads -p test_atomic_wait
+// cargo b -r --target wasm32-wasip1-threads -p test_atomic_wait
 //
 // This test exercises `memory.atomic.wait32` and `memory.atomic.notify`
 // via Rust's standard `Condvar` / `Mutex` primitives.

@@ -1,8 +1,8 @@
 use const_struct::const_struct;
-use wasi_virt_layer::prelude::*;
-use wasi_virt_layer::file::*;
-use std::sync::LazyLock;
 use parking_lot::Mutex;
+use std::sync::LazyLock;
+use wasi_virt_layer::file::*;
+use wasi_virt_layer::prelude::*;
 
 // We import the target wasm
 import_wasm!(vfs_host_test_target);

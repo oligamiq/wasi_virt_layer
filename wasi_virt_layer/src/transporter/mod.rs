@@ -3,6 +3,13 @@
 use crate::__private::wasip1;
 
 /// Transports data between the virtual layer and the underlying WASI system.
+///
+/// # Re-entrancy warning
+///
+/// The underlying host operation must bypass the virtualized WASI implementation. If, for
+/// example, a forwarded stderr write enters the VFS `fd_write` implementation again, the call
+/// becomes recursive and may hang while reacquiring a lock already held by the current thread.
+/// Enable the `detect-wasi-reentrancy` feature while diagnosing host routing.
 pub struct Wasip1Transporter;
 
 #[cfg(all(not(feature = "multi_memory"), target_os = "wasi"))]
@@ -17,6 +24,9 @@ use crate::prelude::WasmAccess;
 #[cfg(not(feature = "multi_memory"))]
 use crate::memory::WasmAccessDynCompatibleRaw;
 
+/// Calls the host `fd_read` implementation without intentionally routing through a VFS plug.
+///
+/// The host implementation must not synchronously re-enter a non-recursive WASI call.
 pub unsafe fn non_recursive_fd_read(
     fd: wasip1::Fd,
     iovs: wasip1::IovecArray<'_>,
@@ -43,6 +53,10 @@ pub unsafe fn non_recursive_fd_read(
     }
 }
 
+/// Calls the host `fd_write` implementation without intentionally routing through a VFS plug.
+///
+/// The final output sink must bypass virtualized stdout/stderr. Forwarding to a stream backed by
+/// the same VFS can re-enter this function and create an unbounded call cycle.
 pub unsafe fn non_recursive_fd_write(
     fd: wasip1::Fd,
     iovs: wasip1::CiovecArray<'_>,
@@ -182,12 +196,14 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let iovec_arr = [wasip1::Iovec {
-                buf: Wasm::memory_director_mut(buf),
-                buf_len: len,
-            }];
+            Wasm::with_directed_memory_mut(buf, |directed_buf| {
+                let iovec_arr = [wasip1::Iovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            })
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -206,13 +222,15 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "alloc")]
-            if let Some(directed_buf) = access.memory_director_mut_with(buf) {
+            if let Some(result) = access.with_directed_memory_mut_with(buf, |directed_buf| {
                 let iovec_arr = [wasip1::Iovec {
                     buf: directed_buf,
                     buf_len: len,
                 }];
 
                 unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+            }) {
+                result
             } else {
                 let mut alloc_buf = alloc::vec![0u8; len];
                 let iovec_arr = [wasip1::Iovec {
@@ -228,12 +246,16 @@ impl Wasip1Transporter {
 
             #[cfg(not(feature = "alloc"))]
             {
-                let iovec_arr = [wasip1::Iovec {
-                    buf: access.memory_director_mut_with(buf).unwrap(),
-                    buf_len: len,
-                }];
+                access
+                    .with_directed_memory_mut_with(buf, |directed_buf| {
+                        let iovec_arr = [wasip1::Iovec {
+                            buf: directed_buf,
+                            buf_len: len,
+                        }];
 
-                unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                        unsafe { non_recursive_fd_read(wasip1::FD_STDIN, &iovec_arr) }
+                    })
+                    .unwrap()
             }
         }
 
@@ -269,14 +291,16 @@ impl Wasip1Transporter {
         buf: *const u8,
         len: usize,
     ) -> Result<wasip1::Size, wasip1::Errno> {
-        let ciovec_arr = [wasip1::Ciovec {
-            buf: Wasm::memory_director(buf),
-            buf_len: len,
-        }];
-
         #[cfg(target_os = "wasi")]
-        unsafe {
-            non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr)
+        {
+            Wasm::with_directed_memory(buf, |directed_buf| {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
+
+                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            })
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -295,13 +319,15 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "alloc")]
-            if let Some(directed_buf) = access.memory_director_with(buf) {
+            if let Some(result) = access.with_directed_memory_with(buf, |directed_buf| {
                 let ciovec_arr = [wasip1::Ciovec {
                     buf: directed_buf,
                     buf_len: len,
                 }];
 
                 unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+            }) {
+                result
             } else {
                 let mut alloc_buf = alloc::vec![0u8; len];
                 access.memcpy_to_with(&mut alloc_buf, buf);
@@ -314,12 +340,16 @@ impl Wasip1Transporter {
 
             #[cfg(not(feature = "alloc"))]
             {
-                let ciovec_arr = [wasip1::Ciovec {
-                    buf: access.memory_director_with(buf).unwrap(),
-                    buf_len: len,
-                }];
+                access
+                    .with_directed_memory_with(buf, |directed_buf| {
+                        let ciovec_arr = [wasip1::Ciovec {
+                            buf: directed_buf,
+                            buf_len: len,
+                        }];
 
-                unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+                        unsafe { non_recursive_fd_write(wasip1::FD_STDOUT, &ciovec_arr) }
+                    })
+                    .unwrap()
             }
         }
 
@@ -357,12 +387,14 @@ impl Wasip1Transporter {
     ) -> Result<wasip1::Size, wasip1::Errno> {
         #[cfg(target_os = "wasi")]
         {
-            let ciovec_arr = [wasip1::Ciovec {
-                buf: Wasm::memory_director(buf),
-                buf_len: len,
-            }];
+            Wasm::with_directed_memory(buf, |directed_buf| {
+                let ciovec_arr = [wasip1::Ciovec {
+                    buf: directed_buf,
+                    buf_len: len,
+                }];
 
-            unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            })
         }
 
         #[cfg(not(target_os = "wasi"))]
@@ -381,13 +413,15 @@ impl Wasip1Transporter {
         #[cfg(target_os = "wasi")]
         {
             #[cfg(feature = "alloc")]
-            if let Some(directed_buf) = access.memory_director_with(buf) {
+            if let Some(result) = access.with_directed_memory_with(buf, |directed_buf| {
                 let ciovec_arr = [wasip1::Ciovec {
                     buf: directed_buf,
                     buf_len: len,
                 }];
 
                 unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+            }) {
+                result
             } else {
                 let mut alloc_buf = alloc::vec![0u8; len];
                 access.memcpy_to_with(&mut alloc_buf, buf);
@@ -400,12 +434,16 @@ impl Wasip1Transporter {
 
             #[cfg(not(feature = "alloc"))]
             {
-                let ciovec_arr = [wasip1::Ciovec {
-                    buf: access.memory_director_with(buf).unwrap(),
-                    buf_len: len,
-                }];
+                access
+                    .with_directed_memory_with(buf, |directed_buf| {
+                        let ciovec_arr = [wasip1::Ciovec {
+                            buf: directed_buf,
+                            buf_len: len,
+                        }];
 
-                unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                        unsafe { non_recursive_fd_write(wasip1::FD_STDERR, &ciovec_arr) }
+                    })
+                    .unwrap()
             }
         }
 
