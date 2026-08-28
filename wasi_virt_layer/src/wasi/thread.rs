@@ -1955,7 +1955,7 @@ pub mod vfs_atomic {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "detect-deadlock"))]
 mod deadlock_detector_tests {
     use super::deadlock_detector::{AtomicLocation, DeadlockDetector};
     #[cfg(all(target_os = "wasi", feature = "detect-deadlock"))]
