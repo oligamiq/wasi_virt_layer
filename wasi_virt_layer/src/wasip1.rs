@@ -1327,7 +1327,7 @@ pub struct Prestat {
 }
 
 #[allow(unused)]
-/// Ref https://docs.rs/wasi/0.11.1+wasi-snapshot-preview1/wasi/wasi_snapshot_preview1/index.html
+/// Ref <https://docs.rs/wasi/0.11.1+wasi-snapshot-preview1/wasi/wasi_snapshot_preview1/index.html>
 /// This module contains the bindings for the WASI snapshot preview1 ABI.
 pub mod wasi_snapshot_preview1 {
     /// Writes to a file descriptor.
