@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Fixed
 - **Threaded target reset lifecycle**:
-    - `_reset()` now cancels target atomic waits, waits for all queued/running logical threads from the old target generation to finish, and only then frees atomic-wait cells and restarts the target. This prevents stale threads from racing with reset memory and stealing or missing notifications.
+    - `_reset()` now cancels target atomic waits, waits for all queued/running logical threads from the old target generation to finish before mutating target state, then frees atomic-wait cells, restores target state, and restarts the target. This prevents stale threads from racing with reset memory and stealing or missing notifications.
     - Thread activity is counted from enqueue time so child threads queued by an old-generation worker are included in the reset barrier.
     - Thread activity tracking is internal and keyed per `ThreadAccessor` type/target, so the public `ThreadAccess` trait remains unchanged for downstream implementations.
 - **Threaded integration test logging**:

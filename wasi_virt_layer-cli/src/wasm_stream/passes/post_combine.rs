@@ -1433,6 +1433,31 @@ impl StreamPass for PostCombineStreamPass {
                     ));
                 }
 
+                // 1. Wait for every queued/running logical thread from the old target
+                // generation to finish before mutating target globals or memory. The
+                // counter starts at enqueue time, so children queued by an old worker
+                // are included in the barrier.
+                let wait_threads_idle_name =
+                    format!("__wasip1_vfs_{target_name}_wait_threads_idle");
+                if let Some(&wait_threads_idle_idx) =
+                    info.exported_funcs.get(&wait_threads_idle_name)
+                {
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(wait_threads_idle_idx),
+                    ));
+                }
+
+                // 2. Atomic wait cells can only be freed after the old generation is
+                // idle; until this point late waiters still hold stable cell addresses.
+                if let Some(&cleanup_atomic_idx) =
+                    info.exported_funcs.get("__vfs_atomic_cleanup_target")
+                {
+                    func.instruction(&wasm_encoder::Instruction::I32Const(wasm_mem as i32 - 1));
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(cleanup_atomic_idx),
+                    ));
+                }
+
                 if let Some(&set_unreachable_flag_idx) =
                     info.set_unreachable_flag_funcs.get(target_name)
                 {
@@ -1442,7 +1467,7 @@ impl StreamPass for PostCombineStreamPass {
                     ));
                 }
 
-                // 1. Reset globals
+                // 3. Reset globals
                 if let Some(&reset_globals_idx) = info.reset_globals_funcs.get(target_name) {
                     func.instruction(&wasm_encoder::Instruction::Call(
                         rebinder.function(reset_globals_idx),
@@ -1467,7 +1492,7 @@ impl StreamPass for PostCombineStreamPass {
 
                 let target_data_segments =
                     data_segments_for_memory(&info.data_segments, wasm_mem).collect::<Vec<_>>();
-                // 2. Zero-fill memory
+                // 4. Zero-fill memory
                 // memory.size returns pages, so multiply by 64KB to get bytes.
                 func.instruction(&wasm_encoder::Instruction::I32Const(0)); // dst
                 func.instruction(&wasm_encoder::Instruction::I32Const(0)); // val
@@ -1476,7 +1501,7 @@ impl StreamPass for PostCombineStreamPass {
                 func.instruction(&wasm_encoder::Instruction::I32Mul); // length
                 func.instruction(&wasm_encoder::Instruction::MemoryFill(wasm_mem));
 
-                // 3. Restore active data. Passive data is restored by the flesh start below.
+                // 5. Restore active data. Passive data is restored by the flesh start below.
                 for (segment_index, offset, bytes) in target_data_segments {
                     func.instruction(&wasm_encoder::Instruction::I32Const(offset)); // dst
                     func.instruction(&wasm_encoder::Instruction::I32Const(0)); // src
@@ -1493,31 +1518,6 @@ impl StreamPass for PostCombineStreamPass {
                 ) {
                     func.instruction(&wasm_encoder::Instruction::I32Const(*initial_pages as i32));
                     func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(set_idx)));
-                }
-
-                // 4. Wait for every logical thread from the old target generation to
-                // finish before releasing its atomic-wait cells or starting the new
-                // generation. The counter starts at enqueue time, so queued children
-                // spawned by an old thread are included in the barrier.
-                let wait_threads_idle_name =
-                    format!("__wasip1_vfs_{target_name}_wait_threads_idle");
-                if let Some(&wait_threads_idle_idx) =
-                    info.exported_funcs.get(&wait_threads_idle_name)
-                {
-                    func.instruction(&wasm_encoder::Instruction::Call(
-                        rebinder.function(wait_threads_idle_idx),
-                    ));
-                }
-
-                // 5. Atomic wait cells can only be freed after the old generation is
-                // idle; until this point late waiters still hold stable cell addresses.
-                if let Some(&cleanup_atomic_idx) =
-                    info.exported_funcs.get("__vfs_atomic_cleanup_target")
-                {
-                    func.instruction(&wasm_encoder::Instruction::I32Const(wasm_mem as i32 - 1));
-                    func.instruction(&wasm_encoder::Instruction::Call(
-                        rebinder.function(cleanup_atomic_idx),
-                    ));
                 }
 
                 // 6. Re-run the target's module start. Besides memory.init, this
@@ -2679,13 +2679,21 @@ mod tests {
                             })
                         })
                     };
-                    if let (Some(reset), Some(wait), Some(cleanup), Some(start)) = (
+                    let memory_reset = ops.iter().position(|op| {
+                        matches!(op, wasmparser::Operator::MemoryFill { .. })
+                    });
+                    if let (Some(reset), Some(wait), Some(cleanup), Some(memory_reset), Some(start)) = (
                         call_pos(atomic_reset_idx),
                         call_pos(wait_idle_idx),
                         call_pos(cleanup_idx),
+                        memory_reset,
                         call_pos(target_start_idx),
                     ) {
-                        if reset < wait && wait < cleanup && cleanup < start {
+                        if reset < wait
+                            && wait < cleanup
+                            && cleanup < memory_reset
+                            && memory_reset < start
+                        {
                             found_order = true;
                         }
                     }
@@ -2696,7 +2704,7 @@ mod tests {
 
         assert!(
             found_order,
-            "synthesized _reset should cancel atomic waits, wait for old logical threads, cleanup wait cells, then restart the target"
+            "synthesized _reset should cancel atomic waits, wait for old logical threads, cleanup wait cells, reset memory, then restart the target"
         );
         Ok(())
     }
