@@ -157,6 +157,7 @@ fn build_only(
     wasm: &str,
     t_single: bool,
     threads: bool,
+    use_thread_toolchain: bool,
     other_args: &[&str],
     keep_build_artifacts: bool,
 ) -> color_eyre::Result<Utf8PathBuf> {
@@ -165,6 +166,9 @@ fn build_only(
     cmd.arg("build").args(["-p", p_vfs]).arg(wasm);
     if threads {
         cmd.args(["--threads", "true"]);
+    }
+    if use_thread_toolchain {
+        cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
     }
     match t_single {
         true => {
@@ -197,7 +201,7 @@ fn build_only(
 #[test]
 fn dev_with_own_memory_validates() -> color_eyre::Result<()> {
     color_eyre::install().ok();
-    if !has_required_wasi_targets(false) {
+    if !has_required_wasi_targets(true) {
         return Ok(());
     }
     let out_dir = build_only(
@@ -205,6 +209,7 @@ fn dev_with_own_memory_validates() -> color_eyre::Result<()> {
         "big_alloc",
         false,
         false,
+        true,
         &["--own-memory"],
         false,
     )?;
@@ -241,6 +246,7 @@ fn dev_rejects_zero_stack_size() -> color_eyre::Result<()> {
     }
     let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
     let output = Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"))
+        .env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN)
         .args([
             "build",
             "-p",
@@ -282,6 +288,7 @@ fn dev_accepts_minimal_stack_size() -> color_eyre::Result<()> {
         "test_threads",
         true,
         true,
+        true,
         &["--stack-size", "vfs=1"],
         false,
     )?;
@@ -307,6 +314,7 @@ fn dev_accepts_large_stack_size() -> color_eyre::Result<()> {
     let out_dir = build_only(
         "threads_vfs",
         "test_threads",
+        true,
         true,
         true,
         &["--stack-size", "vfs=16777216"],

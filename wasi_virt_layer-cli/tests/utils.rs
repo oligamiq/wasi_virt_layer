@@ -9,6 +9,7 @@ use wait_timeout::ChildExt;
 
 pub const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
+pub const THREAD_TEST_TOOLCHAIN: &str = "nightly-2026-08-27";
 
 static INSTALLED_TARGETS_STABLE: std::sync::OnceLock<std::collections::HashSet<String>> =
     std::sync::OnceLock::new();
@@ -18,10 +19,11 @@ static INSTALLED_TARGETS_NIGHTLY: std::sync::OnceLock<std::collections::HashSet<
 fn installed_targets(nightly: bool) -> &'static std::collections::HashSet<String> {
     let list = || {
         let mut cmd = std::process::Command::new("rustup");
+        cmd.args(["target", "list", "--installed"]);
         if nightly {
-            cmd.arg("+nightly");
+            cmd.args(["--toolchain", THREAD_TEST_TOOLCHAIN]);
         }
-        let output = cmd.args(["target", "list", "--installed"]).output();
+        let output = cmd.output();
 
         let Ok(output) = output else {
             return std::collections::HashSet::new();
@@ -55,7 +57,7 @@ pub fn has_required_wasi_targets(threads: bool) -> bool {
 
     if threads && !installed_targets(true).contains("wasm32-wasip1-threads") {
         eprintln!(
-            "Skipping test: missing nightly rust target `wasm32-wasip1-threads` (install with `rustup +nightly target add wasm32-wasip1-threads`)"
+            "Skipping test: missing rust target `wasm32-wasip1-threads` for {THREAD_TEST_TOOLCHAIN} (install with `rustup target add --toolchain {THREAD_TEST_TOOLCHAIN} wasm32-wasip1-threads`)"
         );
         return false;
     }
@@ -277,6 +279,55 @@ pub fn run_wasi_virt_layer(
     other_args: &[&str],
     timeout: Option<Duration>,
 ) -> color_eyre::Result<TestDir> {
+    run_wasi_virt_layer_inner(
+        p_vfs,
+        wasm,
+        t_single,
+        threads,
+        threads,
+        out_dir,
+        keep_build_artifacts,
+        other_args,
+        timeout,
+    )
+}
+
+#[allow(dead_code, clippy::too_many_arguments)]
+pub fn run_wasi_virt_layer_with_thread_toolchain(
+    p_vfs: Option<&str>,
+    wasm: Option<&str>,
+    t_single: Option<bool>,
+    threads: bool,
+    out_dir: OutDir,
+    keep_build_artifacts: bool,
+    other_args: &[&str],
+    timeout: Option<Duration>,
+) -> color_eyre::Result<TestDir> {
+    run_wasi_virt_layer_inner(
+        p_vfs,
+        wasm,
+        t_single,
+        threads,
+        true,
+        out_dir,
+        keep_build_artifacts,
+        other_args,
+        timeout,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_wasi_virt_layer_inner(
+    p_vfs: Option<&str>,
+    wasm: Option<&str>,
+    t_single: Option<bool>,
+    threads: bool,
+    use_thread_toolchain: bool,
+    out_dir: OutDir,
+    keep_build_artifacts: bool,
+    other_args: &[&str],
+    timeout: Option<Duration>,
+) -> color_eyre::Result<TestDir> {
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
     cmd.arg("build");
     println!("COMMAND: {:?}", cmd.get_program());
@@ -294,6 +345,11 @@ pub fn run_wasi_virt_layer(
 
     if threads {
         cmd.args(["--threads", "true"]);
+    }
+    if use_thread_toolchain {
+        // Threaded VFS modules are reactors/cdylibs, so exercise them with the
+        // first nightly that contains the wasi-sdk 34 / rust-lang/rust#146843 fix.
+        cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
     }
 
     if keep_build_artifacts {
@@ -327,7 +383,11 @@ pub fn run_wasi_virt_layer(
     }
 
     let cmd_line = {
-        let mut args = vec!["cargo r -r --".to_string()];
+        let mut args = vec![if use_thread_toolchain {
+            format!("RUSTUP_TOOLCHAIN={THREAD_TEST_TOOLCHAIN} cargo r -r --")
+        } else {
+            "cargo r -r --".to_string()
+        }];
 
         let mut skip_next = false;
         for a in cmd.get_args() {

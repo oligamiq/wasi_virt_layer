@@ -334,6 +334,7 @@ fn test_self_rw_threads_vfs_example() -> color_eyre::Result<()> {
     let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
     cmd.current_dir(THIS_FOLDER).args([
         "build",
         "-p",
@@ -1202,6 +1203,7 @@ fn test_minimal_repro() -> color_eyre::Result<()> {
     let manifest_path = workspace_root.join("examples/vfs/minimal_repro/Cargo.toml");
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
     cmd.current_dir(THIS_FOLDER).args([
         "build",
         "--manifest-path",
@@ -1252,6 +1254,7 @@ fn test_minimal_repro_virtual() -> color_eyre::Result<()> {
     let manifest_path = workspace_root.join("examples/vfs/minimal_repro_virtual/Cargo.toml");
 
     let mut cmd = std::process::Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
     cmd.current_dir(THIS_FOLDER).args([
         "build",
         "--manifest-path",

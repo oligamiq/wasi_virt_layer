@@ -55,6 +55,7 @@ fn test_own_memory_smoke_auto_detects_exports_without_flag() -> color_eyre::Resu
     let _cleanup = RemoveDirOnDrop(out_root.clone());
     let out_dir = format!("{out_root}/dist");
     let mut cmd = assert_cmd::cargo::cargo_bin_cmd!("wasi_virt_layer");
+    cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
     cmd.args([
         "build",
         "-p",
