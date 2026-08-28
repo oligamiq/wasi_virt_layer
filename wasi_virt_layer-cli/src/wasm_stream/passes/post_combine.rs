@@ -1495,7 +1495,32 @@ impl StreamPass for PostCombineStreamPass {
                     func.instruction(&wasm_encoder::Instruction::Call(rebinder.function(set_idx)));
                 }
 
-                // 4. Re-run the target's module start. Besides memory.init, this
+                // 4. Wait for every logical thread from the old target generation to
+                // finish before releasing its atomic-wait cells or starting the new
+                // generation. The counter starts at enqueue time, so queued children
+                // spawned by an old thread are included in the barrier.
+                let wait_threads_idle_name =
+                    format!("__wasip1_vfs_{target_name}_wait_threads_idle");
+                if let Some(&wait_threads_idle_idx) =
+                    info.exported_funcs.get(&wait_threads_idle_name)
+                {
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(wait_threads_idle_idx),
+                    ));
+                }
+
+                // 5. Atomic wait cells can only be freed after the old generation is
+                // idle; until this point late waiters still hold stable cell addresses.
+                if let Some(&cleanup_atomic_idx) =
+                    info.exported_funcs.get("__vfs_atomic_cleanup_target")
+                {
+                    func.instruction(&wasm_encoder::Instruction::I32Const(wasm_mem as i32 - 1));
+                    func.instruction(&wasm_encoder::Instruction::Call(
+                        rebinder.function(cleanup_atomic_idx),
+                    ));
+                }
+
+                // 6. Re-run the target's module start. Besides memory.init, this
                 // restores once guards and other runtime state that cannot be
                 // reconstructed from data segments alone.
                 if let Some(&start_idx) = info.start_funcs.flesh_target_starts.get(target_name) {
@@ -2607,7 +2632,7 @@ mod tests {
     }
 
     #[test]
-    fn reset_body_calls_atomic_reset_target() -> eyre::Result<()> {
+    fn reset_body_orders_atomic_cancel_idle_cleanup_before_restart() -> eyre::Result<()> {
         let input = module_with_flesh_vfs_start_and_reset();
         let mut pass = PostCombineStreamPass::new(
             "vfs".to_string(),
@@ -2618,15 +2643,24 @@ mod tests {
         let output = pass.run(&input)?;
 
         let mut atomic_reset_idx = None;
-        let mut found_call_to_atomic_reset = false;
+        let mut wait_idle_idx = None;
+        let mut cleanup_idx = None;
+        let mut target_start_idx = None;
+        let mut found_order = false;
 
         for payload in wasmparser::Parser::new(0).parse_all(&output) {
             match payload? {
                 wasmparser::Payload::ExportSection(exports) => {
                     for export in exports {
                         let export = export?;
-                        if export.name == "__vfs_atomic_reset_target" {
-                            atomic_reset_idx = Some(export.index);
+                        match export.name {
+                            "__vfs_atomic_reset_target" => atomic_reset_idx = Some(export.index),
+                            "__wasip1_vfs_test_target_wait_threads_idle" => {
+                                wait_idle_idx = Some(export.index)
+                            }
+                            "__vfs_atomic_cleanup_target" => cleanup_idx = Some(export.index),
+                            "__test_target_start_probe" => target_start_idx = Some(export.index),
+                            _ => {}
                         }
                     }
                 }
@@ -2635,17 +2669,24 @@ mod tests {
                         .get_operators_reader()?
                         .into_iter()
                         .collect::<Result<Vec<_>, _>>()?;
-                    for window in ops.windows(2) {
-                        if let (
-                            wasmparser::Operator::I32Const { value: 0 },
-                            wasmparser::Operator::Call { function_index },
-                        ) = (&window[0], &window[1])
-                        {
-                            if let Some(ari) = atomic_reset_idx {
-                                if *function_index == ari {
-                                    found_call_to_atomic_reset = true;
-                                }
-                            }
+                    let call_pos = |idx: Option<u32>| {
+                        idx.and_then(|idx| {
+                            ops.iter().position(|op| {
+                                matches!(
+                                    op,
+                                    wasmparser::Operator::Call { function_index } if *function_index == idx
+                                )
+                            })
+                        })
+                    };
+                    if let (Some(reset), Some(wait), Some(cleanup), Some(start)) = (
+                        call_pos(atomic_reset_idx),
+                        call_pos(wait_idle_idx),
+                        call_pos(cleanup_idx),
+                        call_pos(target_start_idx),
+                    ) {
+                        if reset < wait && wait < cleanup && cleanup < start {
+                            found_order = true;
                         }
                     }
                 }
@@ -2654,8 +2695,8 @@ mod tests {
         }
 
         assert!(
-            found_call_to_atomic_reset,
-            "A synthesized function (like _reset) should call __vfs_atomic_reset_target"
+            found_order,
+            "synthesized _reset should cancel atomic waits, wait for old logical threads, cleanup wait cells, then restart the target"
         );
         Ok(())
     }
@@ -2746,21 +2787,54 @@ mod tests {
         module.section(&imports);
 
         let mut functions = wasm_encoder::FunctionSection::new();
-        functions.function(1);
+        functions.function(1); // atomic reset
+        functions.function(1); // atomic cleanup
+        functions.function(0); // wait threads idle
+        functions.function(0); // target start
         module.section(&functions);
 
         let mut exports = wasm_encoder::ExportSection::new();
         exports.export(
             "__vfs_atomic_reset_target",
             wasm_encoder::ExportKind::Func,
-            1, // func index 1 is the atomic func
+            1,
+        );
+        exports.export(
+            "__vfs_atomic_cleanup_target",
+            wasm_encoder::ExportKind::Func,
+            2,
+        );
+        exports.export(
+            "__wasip1_vfs_test_target_wait_threads_idle",
+            wasm_encoder::ExportKind::Func,
+            3,
+        );
+        exports.export(
+            "__flesh_test_target_start",
+            wasm_encoder::ExportKind::Func,
+            4,
+        );
+        // Keep a non-pipeline alias so the test can observe the rebound start index.
+        exports.export(
+            "__test_target_start_probe",
+            wasm_encoder::ExportKind::Func,
+            4,
         );
         module.section(&exports);
 
         let mut code = wasm_encoder::CodeSection::new();
-        let mut atomic_func = wasm_encoder::Function::new([(1, wasm_encoder::ValType::I32)]);
-        atomic_func.instruction(&wasm_encoder::Instruction::End);
-        code.function(&atomic_func);
+        let mut atomic_reset = wasm_encoder::Function::new([]);
+        atomic_reset.instruction(&wasm_encoder::Instruction::End);
+        code.function(&atomic_reset);
+        let mut atomic_cleanup = wasm_encoder::Function::new([]);
+        atomic_cleanup.instruction(&wasm_encoder::Instruction::End);
+        code.function(&atomic_cleanup);
+        let mut wait_idle = wasm_encoder::Function::new([]);
+        wait_idle.instruction(&wasm_encoder::Instruction::End);
+        code.function(&wait_idle);
+        let mut target_start = wasm_encoder::Function::new([]);
+        target_start.instruction(&wasm_encoder::Instruction::End);
+        code.function(&target_start);
         module.section(&code);
 
         module.finish().to_vec()

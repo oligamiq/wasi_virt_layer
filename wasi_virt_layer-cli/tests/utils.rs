@@ -1,4 +1,4 @@
-use std::{io::Read as _, process::Stdio, time::Duration};
+use std::{process::Stdio, time::Duration};
 
 use assert_cmd::assert::OutputAssertExt as _;
 use camino::{Utf8Path, Utf8PathBuf};
@@ -184,33 +184,23 @@ pub fn run_thread(
         .assert()
         .success();
 
+    let stdout_path = Utf8Path::new(out_dir).join(".deno-test-stdout.log");
+    let stderr_path = Utf8Path::new(out_dir).join(".deno-test-stderr.log");
+    let stdout_file = std::fs::File::create(&stdout_path)?;
+    let stderr_file = std::fs::File::create(&stderr_path)?;
+
     let mut child = std::process::Command::new("deno")
         .args(["run", "-A", "test_run.ts"])
         .current_dir(out_dir)
         .env("BUN_TMPDIR", bun_tmpdir.as_str())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stdout(Stdio::from(stdout_file))
+        .stderr(Stdio::from(stderr_file))
         .spawn()?;
 
     let msg = match child.wait_timeout(timeout)? {
         Some(status) => {
-            use std::io::Read;
-            let mut stdout = String::new();
-            if let Some(mut s) = child.stdout.take() {
-                s.read_to_string(&mut stdout).unwrap_or_default();
-            }
-            let mut stderr = String::new();
-            if let Some(mut s) = child.stderr.take() {
-                s.read_to_string(&mut stderr).unwrap_or_default();
-            }
-            std::fs::write(
-                Utf8Path::new(out_dir).join(".deno-test-stdout.log"),
-                &stdout,
-            )?;
-            std::fs::write(
-                Utf8Path::new(out_dir).join(".deno-test-stderr.log"),
-                &stderr,
-            )?;
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
             println!(
                 "Process exited with {}.\nstdout: {}\nstderr: {}",
                 status, stdout, stderr
@@ -224,26 +214,16 @@ pub fn run_thread(
         None => {
             child.kill()?;
             let code = child.wait()?.code();
+            let stdout = std::fs::read_to_string(&stdout_path).unwrap_or_default();
+            let stderr = std::fs::read_to_string(&stderr_path).unwrap_or_default();
             format!(
-                "Process timed out after {:?} and was killed. Exit code: {:?}",
-                timeout, code
+                "Process timed out after {:?} and was killed. Exit code: {:?}\nstdout: {}\nstderr: {}",
+                timeout, code, stdout, stderr
             )
         }
     };
 
-    let mut stdout = String::new();
-    let mut stderr = String::new();
-
-    if let Some(mut out) = child.stdout.take() {
-        let _ = out.read_to_string(&mut stdout);
-    }
-    if let Some(mut err) = child.stderr.take() {
-        let _ = err.read_to_string(&mut stderr);
-    }
-
-    Err(color_eyre::eyre::eyre!(
-        "{msg}\nSTDOUT:\n{stdout}\nSTDERR:\n{stderr}"
-    ))
+    Err(color_eyre::eyre::eyre!(msg))
 }
 
 pub enum OutDir<'a> {

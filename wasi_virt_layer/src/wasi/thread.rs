@@ -1,10 +1,14 @@
 use core::{
+    any::TypeId,
     cell::Cell,
     num::NonZero,
     ptr::NonNull,
     sync::atomic::{AtomicU32, AtomicUsize, Ordering},
 };
-use std::{sync::Arc, thread::JoinHandle};
+use std::{
+    sync::{Arc, LazyLock},
+    thread::JoinHandle,
+};
 
 #[allow(unused_imports)]
 use crate::{__private::wasip1, memory::WasmAccess};
@@ -293,6 +297,41 @@ impl Drop for InFlightRunGuard {
     }
 }
 
+static ACTIVE_TARGET_THREADS: LazyLock<
+    dashmap::DashMap<(TypeId, usize), Arc<AtomicUsize>>,
+> = LazyLock::new(dashmap::DashMap::new);
+
+fn active_target_thread_counter<T: ThreadAccess>(accessor: T) -> Arc<AtomicUsize> {
+    ACTIVE_TARGET_THREADS
+        .entry((TypeId::of::<T>(), accessor.as_usize()))
+        .or_insert_with(|| Arc::new(AtomicUsize::new(0)))
+        .clone()
+}
+
+struct TargetThreadRunGuard(Arc<AtomicUsize>);
+
+impl TargetThreadRunGuard {
+    fn new<T: ThreadAccess>(accessor: T) -> Self {
+        let counter = active_target_thread_counter(accessor);
+        counter.fetch_add(1, Ordering::SeqCst);
+        Self(counter)
+    }
+}
+
+impl Drop for TargetThreadRunGuard {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+#[doc(hidden)]
+pub fn wait_for_active_target_threads<T: ThreadAccess>(accessor: T) {
+    let counter = active_target_thread_counter(accessor);
+    while counter.load(Ordering::SeqCst) != 0 {
+        std::thread::yield_now();
+    }
+}
+
 /// Options for waiting for threads in a thread pool to join.
 pub enum WaitThreadJoin {
     /// No waiting required.
@@ -339,6 +378,7 @@ enum VirtualThreadPoolMessage<ThreadAccessor: ThreadAccess> {
         ThreadAccessorWrapper<ThreadAccessor>,
         NonZero<u32>,
         InFlightRunGuard,
+        TargetThreadRunGuard,
     ),
     AddThread(usize, std::sync::mpsc::SyncSender<()>, JoinPoolHandle),
     Terminate(flume::Sender<()>, JoinPoolHandle),
@@ -347,7 +387,13 @@ enum VirtualThreadPoolMessage<ThreadAccessor: ThreadAccess> {
 impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
     pub fn use_(self, queue: &flume::Receiver<VirtualThreadPoolMessage<ThreadAccessor>>) -> bool {
         match self {
-            VirtualThreadPoolMessage::Run(runner, accessor_wrapper, thread_id, in_flight_guard) => {
+            VirtualThreadPoolMessage::Run(
+                runner,
+                accessor_wrapper,
+                thread_id,
+                in_flight_guard,
+                target_thread_guard,
+            ) => {
                 let accessor = accessor_wrapper.as_accessor();
                 // Track whether this worker thread has already processed a Run
                 // message. On the first Run, the Wasm start section was already
@@ -360,6 +406,7 @@ impl<ThreadAccessor: ThreadAccess> VirtualThreadPoolMessage<ThreadAccessor> {
                     flag.set(true);
                 });
                 let _in_flight_guard = in_flight_guard;
+                let _target_thread_guard = target_thread_guard;
                 accessor.call_wasi_thread_start(runner, Some(thread_id));
                 #[cfg(feature = "trace-thread")]
                 println!("[] Thread pool worker finished Run for thread {thread_id}");
@@ -650,7 +697,13 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
     /// the Wasm start section function is re-executed before
     /// `wasi_thread_start` to reinitialize global constructors and TLS state.
     /// Reuse detection is per-worker via a `thread_local` flag.
-    pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
+    fn run(
+        &self,
+        accessor: ThreadAccessor,
+        runner: ThreadRunner,
+        thread_id: NonZero<u32>,
+        target_thread_guard: TargetThreadRunGuard,
+    ) {
         let in_flight_runs = unsafe { self.in_flight_runs.get() }.clone();
         let need_expansion = {
             let mut sender_lock = self.queue.lock();
@@ -666,6 +719,7 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
                     ThreadAccessorWrapper::new(accessor),
                     thread_id,
                     in_flight_guard,
+                    target_thread_guard,
                 ))
                 .unwrap();
 
@@ -963,7 +1017,8 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator> VirtualThread<T
             return None;
         }
 
-        self.run(accessor, runner, thread_id_nz);
+        let target_thread_guard = TargetThreadRunGuard::new(accessor);
+        self.run(accessor, runner, thread_id_nz, target_thread_guard);
 
         Some(thread_id_nz)
     }
@@ -1059,9 +1114,11 @@ impl<ThreadAccessor: ThreadAccess> VirtualThread<ThreadAccessor>
         let thread_id_nz = NonZero::new(thread_id as u32)?;
         println!("VFS: Spawning thread {} with root_spawn", thread_id);
 
+        let target_thread_guard = TargetThreadRunGuard::new(accessor);
         let res = root_spawn(
             std::thread::Builder::new().name(format!("worker-{}", thread_id_nz)),
             move || {
+                let _target_thread_guard = target_thread_guard;
                 println!("VFS: inside root_spawn closure for {}", thread_id_nz);
                 accessor.call_wasi_thread_start(runner, Some(thread_id_nz));
             },
@@ -1276,6 +1333,15 @@ macro_rules! plug_thread {
                     $wasm,
                 )*
             }
+
+            $(
+                #[cfg(target_os = "wasi")]
+                #[doc(hidden)]
+                #[unsafe(no_mangle)]
+                pub unsafe extern "C" fn [<__wasip1_vfs_ $wasm _wait_threads_idle>]() {
+                    $crate::thread::wait_for_active_target_threads(ThreadAccessor::$wasm);
+                }
+            )*
 
             impl $crate::thread::ThreadAccess for ThreadAccessor {
                 fn call_wasi_thread_start(&self, ptr: $crate::thread::ThreadRunner, thread_id: Option<core::num::NonZero<u32>>) {
@@ -1512,6 +1578,13 @@ pub mod vfs_atomic {
 
     static WAIT_MAP: LazyLock<DashMap<u64, Box<u32>, BuildHasherDefault<FxHasher>>> =
         LazyLock::new(DashMap::default);
+    static RESETTING_TARGETS: LazyLock<DashMap<u32, (), BuildHasherDefault<FxHasher>>> =
+        LazyLock::new(DashMap::default);
+
+    #[inline]
+    fn target_is_resetting(wasm_id: u32) -> bool {
+        RESETTING_TARGETS.contains_key(&wasm_id)
+    }
 
     #[unsafe(no_mangle)]
     #[cfg(not(feature = "detect-deadlock"))]
@@ -1522,12 +1595,15 @@ pub mod vfs_atomic {
         timeout: i64,
     ) -> i32 {
         let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        if target_is_resetting(wasm_id) {
+            return 1; // reset cancellation behaves like not-equal
+        }
         let (ptr, vfs_expected) = {
             let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             unsafe {
                 let val = __wvl_atomic_load32_target(wasm_id, relative_addr as *const u32);
-                if val != expected {
-                    return 1; // not-equal
+                if val != expected || target_is_resetting(wasm_id) {
+                    return 1; // not-equal or reset cancellation
                 }
                 let ptr = &**entry.value() as *const u32;
                 let vfs_expected = *ptr;
@@ -1548,12 +1624,15 @@ pub mod vfs_atomic {
     ) -> i32 {
         let _ = thread_id;
         let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        if target_is_resetting(wasm_id) {
+            return 1; // reset cancellation behaves like not-equal
+        }
         let (ptr, vfs_expected) = {
             let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             unsafe {
                 let val = __wvl_atomic_load32_target(wasm_id, relative_addr as *const u32);
-                if val != expected {
-                    return 1; // not-equal
+                if val != expected || target_is_resetting(wasm_id) {
+                    return 1; // not-equal or reset cancellation
                 }
                 let ptr = &**entry.value() as *const u32;
                 let vfs_expected = *ptr;
@@ -1579,12 +1658,15 @@ pub mod vfs_atomic {
         timeout: i64,
     ) -> i32 {
         let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        if target_is_resetting(wasm_id) {
+            return 1; // reset cancellation behaves like not-equal
+        }
         let (ptr, vfs_expected) = {
             let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             unsafe {
                 let val = __wvl_atomic_load64_target(wasm_id, relative_addr as *const u64);
-                if val != expected {
-                    return 1; // not-equal
+                if val != expected || target_is_resetting(wasm_id) {
+                    return 1; // not-equal or reset cancellation
                 }
                 let ptr = &**entry.value() as *const u32;
                 let vfs_expected = *ptr;
@@ -1605,12 +1687,15 @@ pub mod vfs_atomic {
     ) -> i32 {
         let _ = thread_id;
         let key = ((wasm_id as u64) << 32) | (relative_addr as u64);
+        if target_is_resetting(wasm_id) {
+            return 1; // reset cancellation behaves like not-equal
+        }
         let (ptr, vfs_expected) = {
             let entry = WAIT_MAP.entry(key).or_insert_with(|| Box::new(0));
             unsafe {
                 let val = __wvl_atomic_load64_target(wasm_id, relative_addr as *const u64);
-                if val != expected {
-                    return 1; // not-equal
+                if val != expected || target_is_resetting(wasm_id) {
+                    return 1; // not-equal or reset cancellation
                 }
                 let ptr = &**entry.value() as *const u32;
                 let vfs_expected = *ptr;
@@ -1723,36 +1808,49 @@ pub mod vfs_atomic {
         );
     }
 
-    /// Resets the atomic-wait state for a single target, freeing its wait cells.
+    /// Begins resetting the atomic-wait state for one target.
     ///
-    /// Called from the generated `_reset` body. For each wait cell belonging to
-    /// `wasm_id`, this first notifies (wakes) all threads parked on the cell so
-    /// they are removed from the runtime's wait queue, then removes the cell from
-    /// `WAIT_MAP`, freeing the VFS memory it occupied.
-    ///
-    /// This prevents a stale wait queue entry from being woken when the target is
-    /// re-run after reset: without the notify, a zombie thread parked on a
-    /// reused address would be woken instead of the new thread.
+    /// New waits for `wasm_id` are cancelled. Existing wait cells have their
+    /// generation counter advanced before all waiters are notified, so a waiter
+    /// that races with reset cannot miss the wake and block on a stale cell.
+    /// Cells remain allocated until [`__vfs_atomic_cleanup_target`] is called
+    /// after the target's logical threads have become idle.
+    #[unsafe(no_mangle)]
+    pub unsafe extern "C" fn __vfs_atomic_reset_target(wasm_id: u32) {
+        RESETTING_TARGETS.insert(wasm_id, ());
+
+        let cells: Vec<*const u32> = WAIT_MAP
+            .iter_mut()
+            .filter(|e| (*e.key() >> 32) as u32 == wasm_id)
+            .map(|mut entry| {
+                let value = entry.value_mut().as_mut();
+                *value = value.wrapping_add(1);
+                value as *const u32
+            })
+            .collect();
+
+        for ptr in cells {
+            unsafe { __wvl_atomic_notify_vfs(ptr, u32::MAX) };
+        }
+    }
+
+    /// Finishes an atomic-wait reset after all logical threads for the target are idle.
     ///
     /// # Safety
     ///
-    /// Must only be called when no thread is still blocked on those cells -- i.e.
-    /// under the same preconditions as `_reset()`.
+    /// No logical thread belonging to `wasm_id` may still be running or queued.
     #[unsafe(no_mangle)]
-    pub unsafe extern "C" fn __vfs_atomic_reset_target(wasm_id: u32) {
-        let cells: Vec<(u64, *const u32)> = WAIT_MAP
+    pub unsafe extern "C" fn __vfs_atomic_cleanup_target(wasm_id: u32) {
+        let keys: Vec<u64> = WAIT_MAP
             .iter()
             .filter(|e| (*e.key() >> 32) as u32 == wasm_id)
-            .map(|e| (*e.key(), &**e.value() as *const u32))
+            .map(|e| *e.key())
             .collect();
 
-        for (_, ptr) in &cells {
-            unsafe { __wvl_atomic_notify_vfs(*ptr, u32::MAX) };
-        }
-
-        for (key, _) in cells {
+        for key in keys {
             WAIT_MAP.remove(&key);
         }
+        RESETTING_TARGETS.remove(&wasm_id);
     }
 
     #[cfg(test)]
@@ -1760,24 +1858,32 @@ pub mod vfs_atomic {
         use super::*;
 
         #[test]
-        fn reset_target_removes_only_matching_wasm_id_entries() {
+        fn reset_target_invalidates_then_cleanup_removes_only_matching_entries() {
             WAIT_MAP.clear();
+            RESETTING_TARGETS.clear();
             let key_a = (1u64 << 32) | 0x100;
             let key_b = (1u64 << 32) | 0x200;
             let key_c = (2u64 << 32) | 0x100;
-            WAIT_MAP.insert(key_a, Box::new(0));
-            WAIT_MAP.insert(key_b, Box::new(0));
-            WAIT_MAP.insert(key_c, Box::new(0));
-            assert_eq!(WAIT_MAP.len(), 3);
+            WAIT_MAP.insert(key_a, Box::new(7));
+            WAIT_MAP.insert(key_b, Box::new(11));
+            WAIT_MAP.insert(key_c, Box::new(13));
 
             unsafe { __vfs_atomic_reset_target(1) };
 
+            assert!(target_is_resetting(1));
+            assert_eq!(**WAIT_MAP.get(&key_a).unwrap(), 8);
+            assert_eq!(**WAIT_MAP.get(&key_b).unwrap(), 12);
+            assert_eq!(**WAIT_MAP.get(&key_c).unwrap(), 13);
+
+            unsafe { __vfs_atomic_cleanup_target(1) };
+
+            assert!(!target_is_resetting(1));
             assert!(!WAIT_MAP.contains_key(&key_a));
             assert!(!WAIT_MAP.contains_key(&key_b));
             assert!(WAIT_MAP.contains_key(&key_c));
-            assert_eq!(WAIT_MAP.len(), 1);
 
             WAIT_MAP.clear();
+            RESETTING_TARGETS.clear();
         }
     }
 }

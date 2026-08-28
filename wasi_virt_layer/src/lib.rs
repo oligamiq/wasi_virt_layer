@@ -402,6 +402,8 @@ pub mod prelude {
 pub mod thread {
     #[cfg(target_os = "wasi")]
     pub use crate::wasi::thread::__wasip1_vfs_is_root_spawn;
+    #[doc(hidden)]
+    pub use crate::wasi::thread::wait_for_active_target_threads;
     pub use crate::wasi::thread::{
         DirectThreadPool, ReservedRangeThreadIdGenerator, ThreadAccess, ThreadIdGenerator,
         ThreadRunner, VirtualThread, VirtualThreadPool, is_virtual_thread_pool_worker,
