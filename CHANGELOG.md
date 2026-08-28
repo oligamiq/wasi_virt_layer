@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Crate metadata now declares the tested MSRV explicitly: Rust 1.89.0 for `wasi_virt_layer` and Rust 1.93.0 for `wasi_virt_layer-cli`.
 - **Release safety**:
     - Added a staged release workflow and `scripts/release-preflight.sh` to verify repository state, target-version availability, Dependabot/RustSec status, regression tests, SemVer compatibility, MSRV builds, strict rustdoc, and publish dry-runs before tagging.
+    - Added `scripts/release-postflight.sh` to verify tag/workflow/release commit identity, the cargo-dist asset set, release checksums and installer version references after tagging, then confirm both exact crates.io versions after publication.
 
 ## [0.7.0] - 2026-08-28
 ### Fixed
