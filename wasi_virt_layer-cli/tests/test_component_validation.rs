@@ -168,7 +168,9 @@ fn build_only(
         cmd.args(["--threads", "true"]);
     }
     if use_thread_toolchain {
-        cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
+        if let Some(toolchain) = thread_test_toolchain_override()? {
+            cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+        }
     }
     match t_single {
         true => {
@@ -245,8 +247,11 @@ fn dev_rejects_zero_stack_size() -> color_eyre::Result<()> {
         return Ok(());
     }
     let out_dir = format!("{THIS_FOLDER}/onetime/{}/dist", Uuid::new_v4());
-    let output = Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"))
-        .env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN)
+    let mut cmd = Command::new(assert_cmd::cargo::cargo_bin("wasi_virt_layer"));
+    if let Some(toolchain) = thread_test_toolchain_override()? {
+        cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+    }
+    let output = cmd
         .args([
             "build",
             "-p",

@@ -53,6 +53,11 @@ fn supports_threaded_vfs(info: &RustcToolchainInfo) -> bool {
     parse_release_triplet(&info.release).is_some_and(|version| version >= THREADED_VFS_MIN_STABLE)
 }
 
+#[doc(hidden)]
+pub fn current_toolchain_supports_threaded_vfs() -> eyre::Result<bool> {
+    threaded_vfs_toolchain_info(false).map(|info| supports_threaded_vfs(&info))
+}
+
 fn threaded_vfs_toolchain_info(use_nightly: bool) -> eyre::Result<RustcToolchainInfo> {
     let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
     let mut command = std::process::Command::new(rustc);

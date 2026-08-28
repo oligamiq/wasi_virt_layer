@@ -2,6 +2,10 @@ use crate::utils::{self, OutDir};
 
 #[test]
 fn test_own_memory_expansion() {
+    if !utils::has_required_wasi_targets(true) {
+        return;
+    }
+
     // When the memory is not manually expanded, the test should fail to allocate memory.
     let err = utils::run_wasi_virt_layer_with_thread_toolchain(
         Some("own_memory_vfs"),
@@ -44,6 +48,10 @@ fn test_own_memory_expansion() {
 
 #[test]
 fn test_own_memory_self_api() {
+    if !utils::has_required_wasi_targets(true) {
+        return;
+    }
+
     let dir = utils::run_wasi_virt_layer_with_thread_toolchain(
         Some("own_memory_vfs"),
         None,

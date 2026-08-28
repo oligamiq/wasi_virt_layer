@@ -9,19 +9,27 @@ use wait_timeout::ChildExt;
 
 pub const EXAMPLE_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../examples");
 pub const THIS_FOLDER: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests");
-pub const THREAD_TEST_TOOLCHAIN: &str = "nightly-2026-08-27";
+const THREAD_TEST_FALLBACK_TOOLCHAIN: &str = "nightly-2026-08-27";
 
-static INSTALLED_TARGETS_STABLE: std::sync::OnceLock<std::collections::HashSet<String>> =
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ThreadTestToolchain {
+    Current,
+    FallbackNightly,
+}
+
+static INSTALLED_TARGETS_CURRENT: std::sync::OnceLock<std::collections::HashSet<String>> =
     std::sync::OnceLock::new();
-static INSTALLED_TARGETS_NIGHTLY: std::sync::OnceLock<std::collections::HashSet<String>> =
+static INSTALLED_TARGETS_FALLBACK: std::sync::OnceLock<std::collections::HashSet<String>> =
+    std::sync::OnceLock::new();
+static THREAD_TEST_TOOLCHAIN: std::sync::OnceLock<Option<ThreadTestToolchain>> =
     std::sync::OnceLock::new();
 
-fn installed_targets(nightly: bool) -> &'static std::collections::HashSet<String> {
+fn installed_targets(fallback: bool) -> &'static std::collections::HashSet<String> {
     let list = || {
         let mut cmd = std::process::Command::new("rustup");
         cmd.args(["target", "list", "--installed"]);
-        if nightly {
-            cmd.args(["--toolchain", THREAD_TEST_TOOLCHAIN]);
+        if fallback {
+            cmd.args(["--toolchain", THREAD_TEST_FALLBACK_TOOLCHAIN]);
         }
         let output = cmd.output();
 
@@ -40,24 +48,58 @@ fn installed_targets(nightly: bool) -> &'static std::collections::HashSet<String
             .collect()
     };
 
-    if nightly {
-        INSTALLED_TARGETS_NIGHTLY.get_or_init(list)
+    if fallback {
+        INSTALLED_TARGETS_FALLBACK.get_or_init(list)
     } else {
-        INSTALLED_TARGETS_STABLE.get_or_init(list)
+        INSTALLED_TARGETS_CURRENT.get_or_init(list)
+    }
+}
+
+fn thread_test_toolchain() -> Option<ThreadTestToolchain> {
+    *THREAD_TEST_TOOLCHAIN.get_or_init(|| {
+        let current_targets = installed_targets(false);
+        if wasi_virt_layer_cli::compile::current_toolchain_supports_threaded_vfs().unwrap_or(false)
+            && current_targets.contains("wasm32-wasip1")
+            && current_targets.contains("wasm32-wasip1-threads")
+        {
+            return Some(ThreadTestToolchain::Current);
+        }
+
+        let fallback_targets = installed_targets(true);
+        if fallback_targets.contains("wasm32-wasip1")
+            && fallback_targets.contains("wasm32-wasip1-threads")
+        {
+            return Some(ThreadTestToolchain::FallbackNightly);
+        }
+
+        None
+    })
+}
+
+pub fn thread_test_toolchain_override() -> color_eyre::Result<Option<&'static str>> {
+    match thread_test_toolchain() {
+        Some(ThreadTestToolchain::Current) => Ok(None),
+        Some(ThreadTestToolchain::FallbackNightly) => Ok(Some(THREAD_TEST_FALLBACK_TOOLCHAIN)),
+        None => Err(color_eyre::eyre::eyre!(
+            "no supported threaded VFS test toolchain with wasm32-wasip1 and wasm32-wasip1-threads targets is installed"
+        )),
     }
 }
 
 pub fn has_required_wasi_targets(threads: bool) -> bool {
-    if !installed_targets(false).contains("wasm32-wasip1") {
+    if threads {
+        if thread_test_toolchain().is_some() {
+            return true;
+        }
         eprintln!(
-            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
+            "Skipping test: install wasm32-wasip1 and wasm32-wasip1-threads for stable Rust 1.100+ or {THREAD_TEST_FALLBACK_TOOLCHAIN}"
         );
         return false;
     }
 
-    if threads && !installed_targets(true).contains("wasm32-wasip1-threads") {
+    if !installed_targets(false).contains("wasm32-wasip1") {
         eprintln!(
-            "Skipping test: missing rust target `wasm32-wasip1-threads` for {THREAD_TEST_TOOLCHAIN} (install with `rustup target add --toolchain {THREAD_TEST_TOOLCHAIN} wasm32-wasip1-threads`)"
+            "Skipping test: missing rust target `wasm32-wasip1` (install with `rustup target add wasm32-wasip1`)"
         );
         return false;
     }
@@ -346,11 +388,17 @@ fn run_wasi_virt_layer_inner(
     if threads {
         cmd.args(["--threads", "true"]);
     }
-    if use_thread_toolchain {
-        // Threaded VFS modules are reactors/cdylibs, so exercise them with the
-        // first nightly that contains the wasi-sdk 34 / rust-lang/rust#146843 fix.
-        cmd.env("RUSTUP_TOOLCHAIN", THREAD_TEST_TOOLCHAIN);
-    }
+    let thread_toolchain_override = if use_thread_toolchain {
+        // Prefer a supported current toolchain (stable 1.100+ or a sufficiently new
+        // nightly); otherwise fall back to the first nightly with the reactor fix.
+        let toolchain = thread_test_toolchain_override()?;
+        if let Some(toolchain) = toolchain {
+            cmd.env("RUSTUP_TOOLCHAIN", toolchain);
+        }
+        toolchain
+    } else {
+        None
+    };
 
     if keep_build_artifacts {
         cmd.arg("--keep-build-artifacts");
@@ -383,8 +431,8 @@ fn run_wasi_virt_layer_inner(
     }
 
     let cmd_line = {
-        let mut args = vec![if use_thread_toolchain {
-            format!("RUSTUP_TOOLCHAIN={THREAD_TEST_TOOLCHAIN} cargo r -r --")
+        let mut args = vec![if let Some(toolchain) = thread_toolchain_override {
+            format!("RUSTUP_TOOLCHAIN={toolchain} cargo r -r --")
         } else {
             "cargo r -r --".to_string()
         }];
