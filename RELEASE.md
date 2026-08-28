@@ -51,7 +51,13 @@ git tag -a v<version> -m "Release <version>"
 git push origin v<version>
 ```
 
-The tag triggers `.github/workflows/release.yml` / cargo-dist. Wait for all release jobs to succeed and verify that the GitHub Release points at exactly the tagged commit. Stop here if cargo-dist fails or the release/tag source does not match `main`.
+The tag triggers `.github/workflows/release.yml` / cargo-dist. Wait for all release jobs to succeed, then run:
+
+```bash
+./scripts/release-postflight.sh <version> github
+```
+
+This verifies the annotated tag and `main` identity, the successful tag-triggered Release workflow SHA, the GitHub Release target, the exact cargo-dist 0.31.0 asset set, archive checksums, and installer version references. Stop here if any check fails.
 
 ## 4. crates.io publication
 
@@ -62,4 +68,10 @@ cargo publish -p wasi_virt_layer
 cargo publish -p wasi_virt_layer-cli
 ```
 
-Publish the core crate first and verify it before publishing the CLI, so a partial crates.io release leaves the foundational library available first. The two public crates do not have a direct Cargo dependency on each other. Verify the intended version of both crates on crates.io after publication.
+Publish the core crate first and verify it before publishing the CLI, so a partial crates.io release leaves the foundational library available first. The two public crates do not have a direct Cargo dependency on each other. After both publishes complete, run:
+
+```bash
+./scripts/release-postflight.sh <version> complete
+```
+
+The `complete` mode repeats all GitHub Release checks and additionally requires the exact version of both public crates to be visible from the crates.io registry.

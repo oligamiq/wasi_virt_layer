@@ -80,7 +80,7 @@ fi
 
 for crate in wasi_virt_layer wasi_virt_layer-cli; do
   info_file="$(mktemp)"
-  if cargo info "${crate}@${VERSION}" >"$info_file" 2>&1; then
+  if cargo info --registry crates-io "${crate}@${VERSION}" >"$info_file" 2>&1; then
     rm -f "$info_file"
     echo "${crate} ${VERSION} already exists on crates.io" >&2
     exit 1
