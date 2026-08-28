@@ -118,3 +118,9 @@ lto = "thin"
 [workspace.metadata.release]
 tag-name = "v{{version}}"
 shared-version = true
+allow-branch = ["main", "release/*"]
+consolidate-commits = true
+pre-release-commit-message = "chore(release): {{version}}"
+publish = false
+tag = false
+push = false
