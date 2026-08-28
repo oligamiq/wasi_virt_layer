@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Fixed
+- **WASI threads toolchain compatibility**:
+    - Removed the obsolete manual `__wasi_init_tp` / `__wasm_call_ctors` initializer workaround and its synthetic `__thread_patch` startup placeholder after the upstream WASI TLS initialization fix.
+    - Stopped forcing `+nightly` solely for `wasm32-wasip1-threads`; Rust 1.92.0 and later include the stable fix for rust-lang/rust#146721.
+    - Threaded reactor/library builds now rely on the upstream wasi-sdk 34 initialization behavior available from nightly-2026-08-27 and, on stable, Rust 1.100.0; older toolchains are rejected before the VFS build starts.
+
 ## [0.6.1] - 2026-07-18
 ### Fixed
 - **Wasm Generation**:

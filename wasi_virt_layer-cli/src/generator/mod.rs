@@ -648,7 +648,6 @@ impl GeneratorRunner {
                             .vfs_size(cloned_ctx.vfs_name.as_ref()),
                     )));
                     pipeline.add_pass(Box::new(DummyInjectorStreamPass::new(vec![
-                        fn_in_starts.thread_patch.clone(),
                         fn_in_starts.init_offset_global.clone(),
                         fn_in_starts.save_target_memory.clone(),
                         fn_in_starts.simple_debug_pre_init.clone(),

@@ -134,15 +134,12 @@ fn should_drop_export(name: &str) -> bool {
         name,
         "_start"
             | "__flesh_vfs_start"
-            | "__thread_patch"
             | "__save_target_memory"
             | "__simple_debug_wasip1_vfs_pre_init"
             | "simple_debug_wasip1_vfs_pre_init"
             | "__wasip1_vfs_wasi_thread_spawn_wrapper"
             | "__wasip1_vfs_wasi_thread_spawn___self"
             | "__wasip1_vfs_is_root_spawn"
-            | "wasi_thread_initializer"
-            | "__wasip1_vfs_thread_initializer"
             | "__wasip1_vfs_wasi_thread_start_entry"
     ) {
         return true;
@@ -310,9 +307,6 @@ impl StreamPass for PostCombineStreamPass {
                                 "__flesh_vfs_start" => {
                                     info.start_funcs.flesh_vfs_start = Some(export.index)
                                 }
-                                "__thread_patch" => {
-                                    info.start_funcs.thread_patch = Some(export.index)
-                                }
                                 "__init_offset_global" => {
                                     info.start_funcs.init_offset_global = Some(export.index)
                                 }
@@ -321,9 +315,6 @@ impl StreamPass for PostCombineStreamPass {
                                 }
                                 "simple_debug_wasip1_vfs_pre_init" => {
                                     info.start_funcs.simple_debug_pre_init = Some(export.index)
-                                }
-                                "wasi_thread_initializer" | "__wasip1_vfs_thread_initializer" => {
-                                    info.start_funcs.wasi_thread_initializer = Some(export.index)
                                 }
                                 name if name.starts_with("__flesh_")
                                     && name.ends_with("_start") =>
@@ -1600,40 +1591,6 @@ mod tests {
     }
 
     #[test]
-    fn synthesized_start_prefers_vfs_thread_initializer_export() -> eyre::Result<()> {
-        let input = module_with_thread_initializer();
-        let mut pass = PostCombineStreamPass::new("vfs".to_string(), Vec::new(), vec![3], true);
-        let output = pass.run(&input)?;
-
-        let mut start = None;
-        let mut calls = Vec::new();
-        let mut func_idx = 0;
-
-        for payload in wasmparser::Parser::new(0).parse_all(&output) {
-            match payload? {
-                wasmparser::Payload::StartSection { func, .. } => {
-                    start = Some(func);
-                }
-                wasmparser::Payload::CodeSectionEntry(body) => {
-                    if Some(func_idx) == start {
-                        for op in body.get_operators_reader()? {
-                            if let wasmparser::Operator::Call { function_index } = op? {
-                                calls.push(function_index);
-                            }
-                        }
-                    }
-                    func_idx += 1;
-                }
-                _ => {}
-            }
-        }
-
-        assert_eq!(start, Some(3));
-        assert_eq!(calls, vec![0, 1]);
-        Ok(())
-    }
-
-    #[test]
     fn synthesized_start_uses_flesh_target_start_export() -> eyre::Result<()> {
         let input = module_with_target_start_pair();
         let mut pass = PostCombineStreamPass::new(
@@ -2170,10 +2127,7 @@ mod tests {
     fn tag_type_indices(output: &[u8]) -> eyre::Result<Vec<u32>> {
         for payload in wasmparser::Parser::new(0).parse_all(output) {
             if let wasmparser::Payload::TagSection(tags) = payload? {
-                return tags
-                    .into_iter()
-                    .map(|tag| Ok(tag?.func_type_idx))
-                    .collect();
+                return tags.into_iter().map(|tag| Ok(tag?.func_type_idx)).collect();
             }
         }
         Ok(Vec::new())
@@ -2321,36 +2275,6 @@ mod tests {
         caller.instruction(&Instruction::Call(0));
         caller.instruction(&Instruction::End);
         code.function(&caller);
-        module.section(&code);
-
-        module.finish()
-    }
-
-    fn module_with_thread_initializer() -> Vec<u8> {
-        let mut module = Module::new();
-
-        let mut types = TypeSection::new();
-        types.ty().function([], []);
-        module.section(&types);
-
-        let mut functions = FunctionSection::new();
-        functions.function(0);
-        functions.function(0);
-        functions.function(0);
-        module.section(&functions);
-
-        let mut exports = ExportSection::new();
-        exports.export("__flesh_vfs_start", ExportKind::Func, 0);
-        exports.export("__wasip1_vfs_thread_initializer", ExportKind::Func, 1);
-        exports.export("__thread_patch", ExportKind::Func, 2);
-        module.section(&exports);
-
-        let mut code = CodeSection::new();
-        for _ in 0..3 {
-            let mut func = Function::new([]);
-            func.instruction(&Instruction::End);
-            code.function(&func);
-        }
         module.section(&code);
 
         module.finish()

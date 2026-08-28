@@ -8,6 +8,80 @@ use eyre::{Context as _, ContextCompat};
 
 use crate::{down_color, fallback_command, util::ResultUtil as _};
 
+const THREADED_VFS_MIN_STABLE: (u32, u32, u32) = (1, 100, 0);
+// nightly-2026-08-27 is built from the 2026-08-26 rustc commit snapshot.
+const THREADED_VFS_MIN_NIGHTLY_COMMIT_DATE: &str = "2026-08-26";
+
+#[derive(Debug, PartialEq, Eq)]
+struct RustcToolchainInfo {
+    release: String,
+    commit_date: Option<String>,
+}
+
+fn parse_rustc_verbose(version: &str) -> eyre::Result<RustcToolchainInfo> {
+    let mut release = None;
+    let mut commit_date = None;
+    for line in version.lines() {
+        if let Some(value) = line.strip_prefix("release: ") {
+            release = Some(value.trim().to_string());
+        } else if let Some(value) = line.strip_prefix("commit-date: ") {
+            commit_date = Some(value.trim().to_string());
+        }
+    }
+
+    Ok(RustcToolchainInfo {
+        release: release.wrap_err("rustc -Vv did not report a release")?,
+        commit_date,
+    })
+}
+
+fn parse_release_triplet(release: &str) -> Option<(u32, u32, u32)> {
+    let numeric = release.split('-').next()?;
+    let mut parts = numeric.split('.');
+    Some((
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+        parts.next()?.parse().ok()?,
+    ))
+}
+
+fn supports_threaded_vfs(info: &RustcToolchainInfo) -> bool {
+    if info.release.contains("-nightly") || info.release.contains("-dev") {
+        return info.commit_date.as_deref() >= Some(THREADED_VFS_MIN_NIGHTLY_COMMIT_DATE);
+    }
+
+    parse_release_triplet(&info.release).is_some_and(|version| version >= THREADED_VFS_MIN_STABLE)
+}
+
+fn threaded_vfs_toolchain_info(use_nightly: bool) -> eyre::Result<RustcToolchainInfo> {
+    let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+    let mut command = std::process::Command::new(rustc);
+    if use_nightly && std::env::var_os("RUSTC").is_none() {
+        command.arg("+nightly");
+    }
+    let output = command
+        .arg("-Vv")
+        .output()
+        .wrap_err("Failed to query rustc version for threaded VFS build")?;
+    if !output.status.success() {
+        eyre::bail!("rustc -Vv failed while checking threaded VFS toolchain support");
+    }
+    parse_rustc_verbose(&String::from_utf8_lossy(&output.stdout))
+}
+
+fn ensure_threaded_vfs_toolchain(use_nightly: bool) -> eyre::Result<()> {
+    let info = threaded_vfs_toolchain_info(use_nightly)?;
+    if supports_threaded_vfs(&info) {
+        return Ok(());
+    }
+
+    let commit_date = info.commit_date.as_deref().unwrap_or("unknown date");
+    Err(eyre::eyre!(
+        "threaded VFS/reactor builds require nightly-2026-08-27 or newer, or stable Rust 1.100.0 or newer; current rustc is {} ({commit_date}). rust-lang/rust#146721 no longer requires nightly for command modules, but this toolchain does not contain the reactor fix for rust-lang/rust#146843",
+        info.release
+    ))
+}
+
 struct CustomReadIterator<const T: usize, R: BufRead> {
     r: R,
     chars: [char; T],
@@ -47,6 +121,10 @@ pub fn build_vfs(
     threads: bool,
     vfs_build_opts: &crate::args::VfsBuildOptions,
 ) -> eyre::Result<camino::Utf8PathBuf> {
+    if threads {
+        ensure_threaded_vfs_toolchain(vfs_build_opts.unwind)?;
+    }
+
     let mut ret = None;
 
     let mut command_base = std::process::Command::new("cargo");
@@ -83,8 +161,7 @@ pub fn build_vfs(
         if vfs_build_opts.no_default_features > 0 {
             args.push("--no-default-features");
         }
-        // todo!() https://github.com/rust-lang/rust/issues/146721
-        if threads || vfs_build_opts.unwind {
+        if vfs_build_opts.unwind {
             args.insert(0, "+nightly");
 
             // https://github.com/rust-lang/rust/pull/151309
@@ -536,4 +613,56 @@ pub fn wasm_to_component(
     file.sync_data()?;
 
     Ok(output_path)
+}
+
+#[cfg(test)]
+mod toolchain_tests {
+    use super::*;
+
+    fn info(release: &str, commit_date: Option<&str>) -> RustcToolchainInfo {
+        RustcToolchainInfo {
+            release: release.to_string(),
+            commit_date: commit_date.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn parses_rustc_verbose_output() {
+        let parsed = parse_rustc_verbose(
+            "rustc 1.100.0-nightly\ncommit-date: 2026-08-26\nrelease: 1.100.0-nightly\n",
+        )
+        .unwrap();
+        assert_eq!(parsed, info("1.100.0-nightly", Some("2026-08-26")));
+    }
+
+    #[test]
+    fn stable_threaded_vfs_requires_1_100() {
+        assert!(!supports_threaded_vfs(&info("1.99.0", Some("2026-09-01"))));
+        assert!(supports_threaded_vfs(&info("1.100.0", Some("2026-10-01"))));
+        assert!(supports_threaded_vfs(&info(
+            "1.101.0-beta.1",
+            Some("2026-11-01")
+        )));
+    }
+
+    #[test]
+    fn nightly_threaded_vfs_uses_wasi_sdk_34_boundary() {
+        assert!(!supports_threaded_vfs(&info(
+            "1.100.0-nightly",
+            Some("2026-08-25")
+        )));
+        assert!(supports_threaded_vfs(&info(
+            "1.100.0-nightly",
+            Some("2026-08-26")
+        )));
+        assert!(supports_threaded_vfs(&info(
+            "1.100.0-nightly",
+            Some("2026-08-27")
+        )));
+    }
+
+    #[test]
+    fn nightly_without_commit_date_is_rejected() {
+        assert!(!supports_threaded_vfs(&info("1.100.0-nightly", None)));
+    }
 }

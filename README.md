@@ -67,6 +67,7 @@ install deno
 - `cargo nextest run -r --fail-fast`
 
 # Notes and Caveats
+- **Thread Toolchain**: `wasm32-wasip1-threads` command-style builds require Rust 1.92.0 or later. Threaded VFS/reactor (`cdylib`) builds require nightly-2026-08-27 or later until the corresponding fix reaches stable Rust 1.100.0.
 - **Thread & Memory Modes**: `single_memory` mode can sometimes fail in scenarios where `multi_memory` succeeds. A sequence like `_reset(); _start(); _main();` in multi-threaded environments has been observed to trigger issues in single-memory mode.
 - **Build Cache**: Caching build artifacts in `target/` to speed up subsequent builds is under consideration (not yet implemented).
 - **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.

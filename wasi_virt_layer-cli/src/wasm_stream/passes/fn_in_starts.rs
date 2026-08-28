@@ -22,11 +22,10 @@ use std::collections::HashMap;
 /// ```text
 /// _start() {
 ///   1. flesh_vfs_start            — VFS内部状態の初期化
-///   2. thread_patch               — スレッド用初期化パッチ (一回きり)
-///   3. init_offset_global         — メモリオフセットグローバルの初期化 (一回きり)
-///   4. save_target_memory         — ターゲットメモリの初期状態保存 (一回きり)
-///   5. flesh_target_start[..]     — 各ターゲットモジュールの _start (ターゲット順)
-///   6. simple_debug_pre_init      — デバッグフラグ切り替え
+///   2. init_offset_global         — メモリオフセットグローバルの初期化 (一回きり)
+///   3. save_target_memory         — ターゲットメモリの初期状態保存 (一回きり)
+///   4. flesh_target_start[..]     — 各ターゲットモジュールの _start (ターゲット順)
+///   5. simple_debug_pre_init      — デバッグフラグ切り替え
 /// }
 /// ```
 #[derive(Debug, Clone)]
@@ -40,15 +39,7 @@ pub struct FnInStarts {
     pub flesh_vfs_start: String,
 
     // =========================================================================
-    // 2. Thread Patch
-    // =========================================================================
-    /// スレッド用初期化関数。何故かデフォルトでVFSの `_start` に入っていないので、
-    /// こちらでパッチする。
-    /// この関数の呼び出しは一回きりにする。
-    pub thread_patch: String,
-
-    // =========================================================================
-    // 3. Init Offset Global
+    // 2. Init Offset Global
     // =========================================================================
     /// メモリLoweringで使われているオフセット用グローバル変数は共有メモリでは使えない。
     /// なぜなら、共有メモリではグローバル変数は共有されないからである。
@@ -62,7 +53,7 @@ pub struct FnInStarts {
     pub init_offset_global: String,
 
     // =========================================================================
-    // 4. Save Target Memory
+    // 3. Save Target Memory
     // =========================================================================
     /// 初回起動時にターゲットモジュールのメモリを保存する。リセット関数のために必要。
     /// Wasmには初期化時に静的に書き込まれるメモリが存在する。
@@ -74,14 +65,14 @@ pub struct FnInStarts {
     pub save_target_memory: String,
 
     // =========================================================================
-    // 5. Flesh Target Starts (per target, in order)
+    // 4. Flesh Target Starts (per target, in order)
     // =========================================================================
     /// ターゲットモジュールが持っていた `_start`。
     /// この関数は一回限りの呼び出しではない。
     pub flesh_target_starts: HashMap<String, String>,
 
     // =========================================================================
-    // 6. Simple Debug Pre Init
+    // 5. Simple Debug Pre Init
     // =========================================================================
     /// `_start` の最後の最後に呼び出される関数。
     /// `_start` 中はimportした関数を呼べないため、デバッグログの出力などを抑える必要がある。
@@ -101,17 +92,13 @@ pub struct FnInStarts {
 pub struct ResolvedStartFuncs {
     /// 1. VFS の `_start` 関数のインデックス
     pub flesh_vfs_start: Option<u32>,
-    /// 2. スレッドパッチ関数のインデックス (wasi_thread_initializer 優先)
-    pub thread_patch: Option<u32>,
-    /// 2'. wasi_thread_initializer のインデックス (thread_patch より優先)
-    pub wasi_thread_initializer: Option<u32>,
-    /// 3. オフセットグローバル初期化関数のインデックス
+    /// 2. オフセットグローバル初期化関数のインデックス
     pub init_offset_global: Option<u32>,
-    /// 4. ターゲットメモリ保存関数のインデックス
+    /// 3. ターゲットメモリ保存関数のインデックス
     pub save_target_memory: Option<u32>,
-    /// 5. 各ターゲットの `_start` 関数のインデックス
+    /// 4. 各ターゲットの `_start` 関数のインデックス
     pub flesh_target_starts: HashMap<String, u32>,
-    /// 6. デバッグ用初期化フラグ切り替え関数のインデックス
+    /// 5. デバッグ用初期化フラグ切り替え関数のインデックス
     pub simple_debug_pre_init: Option<u32>,
 }
 
@@ -130,7 +117,6 @@ impl FnInStarts {
 
         Self {
             flesh_vfs_start: "__flesh_vfs_start".to_string(),
-            thread_patch: "__thread_patch".to_string(),
             init_offset_global: "__init_offset_global".to_string(),
             save_target_memory: "__save_target_memory".to_string(),
             flesh_target_starts,
@@ -145,7 +131,6 @@ impl FnInStarts {
     /// but must exist as exports so that the in-process merge can resolve references.
     pub fn dummy_export_names(&self) -> Vec<String> {
         vec![
-            self.thread_patch.clone(),
             self.init_offset_global.clone(),
             self.save_target_memory.clone(),
             format!("__{}_dummy_holder", self.simple_debug_pre_init),
@@ -170,29 +155,19 @@ impl FnInStarts {
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
         }
 
-        // 2. thread_patch — スレッド用初期化パッチ
-        //    wasi_thread_initializer が存在する場合はそちらを優先する
-        if let Some(idx) = resolved.wasi_thread_initializer {
-            let rebound = rebind_fn(idx);
-            start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
-        } else if let Some(idx) = resolved.thread_patch {
-            let rebound = rebind_fn(idx);
-            start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
-        }
-
-        // 3. init_offset_global — メモリオフセットグローバルの初期化
+        // 2. init_offset_global — メモリオフセットグローバルの初期化
         if let Some(idx) = resolved.init_offset_global {
             let rebound = rebind_fn(idx);
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
         }
 
-        // 4. save_target_memory — ターゲットメモリの初期状態保存
+        // 3. save_target_memory — ターゲットメモリの初期状態保存
         if let Some(idx) = resolved.save_target_memory {
             let rebound = rebind_fn(idx);
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
         }
 
-        // 5. flesh_target_start[..] — 各ターゲットモジュールの _start (ターゲット順)
+        // 4. flesh_target_start[..] — 各ターゲットモジュールの _start (ターゲット順)
         for target_name in target_names {
             if let Some(&idx) = resolved.flesh_target_starts.get(target_name) {
                 let rebound = rebind_fn(idx);
@@ -200,7 +175,7 @@ impl FnInStarts {
             }
         }
 
-        // 6. simple_debug_pre_init — デバッグフラグ切り替え
+        // 5. simple_debug_pre_init — デバッグフラグ切り替え
         if let Some(idx) = resolved.simple_debug_pre_init {
             let rebound = rebind_fn(idx);
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
@@ -219,7 +194,6 @@ mod tests {
     fn test_fn_in_starts_new() {
         let starts = FnInStarts::new(&["test_target", "other_target"]);
         assert_eq!(starts.flesh_vfs_start, "__flesh_vfs_start");
-        assert_eq!(starts.thread_patch, "__thread_patch");
         assert_eq!(starts.init_offset_global, "__init_offset_global");
         assert_eq!(starts.save_target_memory, "__save_target_memory");
         assert_eq!(
@@ -236,7 +210,6 @@ mod tests {
     fn test_dummy_export_names() {
         let starts = FnInStarts::new::<String>(&[]);
         let names = starts.dummy_export_names();
-        assert!(names.contains(&"__thread_patch".to_string()));
         assert!(names.contains(&"__init_offset_global".to_string()));
         assert!(names.contains(&"__save_target_memory".to_string()));
     }
@@ -246,8 +219,6 @@ mod tests {
         let starts = FnInStarts::new(&["my_target"]);
         let resolved = ResolvedStartFuncs {
             flesh_vfs_start: Some(10),
-            thread_patch: Some(20),
-            wasi_thread_initializer: None,
             init_offset_global: Some(30),
             save_target_memory: Some(40),
             flesh_target_starts: {

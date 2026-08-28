@@ -343,7 +343,6 @@ pub mod simple_debug;
 mod __self;
 #[cfg(all(feature = "unstable_print_debug", target_os = "wasi"))]
 mod debug;
-mod initializer;
 /// Memory operations to bridge host and WebAssembly memory models.
 pub mod memory;
 #[cfg(all(
