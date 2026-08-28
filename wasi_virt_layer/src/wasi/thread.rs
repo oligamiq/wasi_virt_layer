@@ -297,9 +297,8 @@ impl Drop for InFlightRunGuard {
     }
 }
 
-static ACTIVE_TARGET_THREADS: LazyLock<
-    dashmap::DashMap<(TypeId, usize), Arc<AtomicUsize>>,
-> = LazyLock::new(dashmap::DashMap::new);
+static ACTIVE_TARGET_THREADS: LazyLock<dashmap::DashMap<(TypeId, usize), Arc<AtomicUsize>>> =
+    LazyLock::new(dashmap::DashMap::new);
 
 fn active_target_thread_counter<T: ThreadAccess>(accessor: T) -> Arc<AtomicUsize> {
     ACTIVE_TARGET_THREADS
@@ -697,7 +696,12 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator>
     /// the Wasm start section function is re-executed before
     /// `wasi_thread_start` to reinitialize global constructors and TLS state.
     /// Reuse detection is per-worker via a `thread_local` flag.
-    fn run(
+    pub fn run(&self, accessor: ThreadAccessor, runner: ThreadRunner, thread_id: NonZero<u32>) {
+        let target_thread_guard = TargetThreadRunGuard::new(accessor);
+        self.run_with_target_guard(accessor, runner, thread_id, target_thread_guard);
+    }
+
+    fn run_with_target_guard(
         &self,
         accessor: ThreadAccessor,
         runner: ThreadRunner,
@@ -792,6 +796,70 @@ mod tests {
     fn test_runner(f: impl FnOnce() + 'static) -> ThreadRunner {
         let boxed: Box<dyn FnOnce()> = Box::new(f);
         ThreadRunner::__new(Box::into_raw(Box::new(boxed)))
+    }
+
+    #[derive(Clone, Copy)]
+    struct PublicRunThreadAccessor;
+
+    impl ThreadAccess for PublicRunThreadAccessor {
+        fn call_wasi_thread_start(&self, ptr: ThreadRunner, _thread_id: Option<NonZero<u32>>) {
+            unsafe {
+                let boxed: Box<Box<dyn FnOnce()>> = Box::from_raw(ptr.inner());
+                boxed();
+            }
+        }
+
+        fn call_thread_start_init(&self) {}
+
+        fn as_name(&self) -> &'static str {
+            "public-run-thread-accessor"
+        }
+
+        fn as_usize(&self) -> usize {
+            0
+        }
+
+        fn from_usize(_v: usize) -> Self {
+            Self
+        }
+    }
+
+    #[test]
+    fn virtual_thread_pool_public_run_is_tracked_until_completion() {
+        use std::sync::mpsc;
+
+        let pool = unsafe { VirtualThreadPool::<PublicRunThreadAccessor>::new_const(1) };
+        unsafe { pool.init_with_capacity_and_wait(1) };
+
+        let (started_tx, started_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(0);
+        let runner = test_runner(move || {
+            started_tx.send(()).unwrap();
+            release_rx.recv().unwrap();
+        });
+
+        pool.run(PublicRunThreadAccessor, runner, NonZero::new(42).unwrap());
+        started_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("public run did not start");
+
+        let (idle_tx, idle_rx) = mpsc::sync_channel(1);
+        std::thread::spawn(move || {
+            wait_for_active_target_threads(PublicRunThreadAccessor);
+            idle_tx.send(()).unwrap();
+        });
+
+        assert!(
+            idle_rx
+                .recv_timeout(std::time::Duration::from_millis(100))
+                .is_err(),
+            "public run was not included in the target activity barrier"
+        );
+
+        release_tx.send(()).unwrap();
+        idle_rx
+            .recv_timeout(std::time::Duration::from_secs(5))
+            .expect("target activity barrier did not clear after public run completed");
     }
 
     #[test]
@@ -1017,8 +1085,7 @@ impl<ThreadAccessor: ThreadAccess, Generator: ThreadIdGenerator> VirtualThread<T
             return None;
         }
 
-        let target_thread_guard = TargetThreadRunGuard::new(accessor);
-        self.run(accessor, runner, thread_id_nz, target_thread_guard);
+        self.run(accessor, runner, thread_id_nz);
 
         Some(thread_id_nz)
     }
