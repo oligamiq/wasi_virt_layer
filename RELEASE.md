@@ -62,4 +62,4 @@ cargo publish -p wasi_virt_layer
 cargo publish -p wasi_virt_layer-cli
 ```
 
-Publish the core crate first because the CLI is downstream of it. Verify the intended version of both crates on crates.io after publication.
+Publish the core crate first and verify it before publishing the CLI, so a partial crates.io release leaves the foundational library available first. The two public crates do not have a direct Cargo dependency on each other. Verify the intended version of both crates on crates.io after publication.
