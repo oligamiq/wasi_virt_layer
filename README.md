@@ -70,7 +70,6 @@ install deno
 # Notes and Caveats
 - **MSRV**: `wasi_virt_layer` supports Rust 1.89.0 or later. Building `wasi_virt_layer-cli` requires Rust 1.93.0 or later with the current dependency set.
 - **Thread Toolchain**: `wasm32-wasip1-threads` command-style builds require Rust 1.92.0 or later. Threaded VFS/reactor (`cdylib`) builds require nightly-2026-08-27 or later until the corresponding fix reaches stable Rust 1.100.0.
-- **Thread & Memory Modes**: Threaded `_reset()` waits for queued/running logical threads from the old target generation before releasing atomic-wait state and restarting the target. Other `single_memory`-specific limitations may still exist in configurations where `multi_memory` succeeds.
 - **Build Cache**: Caching build artifacts in `target/` to speed up subsequent builds is under consideration (not yet implemented).
 - **Concurrency**: The CLI implements file-based locking to prevent collisions during parallel builds.
 - **CLI Arguments**: Very long argument lists might still cause issues in some environments.
