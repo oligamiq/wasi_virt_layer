@@ -14,7 +14,13 @@ test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
 ```
 
-Before preparing a version, confirm that its `v<version>` tag and crates.io versions do not already exist. Run the normal test suite, SemVer checks, docs/MSRV checks, `cargo audit`, and `cargo publish --dry-run` for both public crates. GitHub Dependabot must have no open security alerts.
+Run the complete automated preflight before creating the release branch:
+
+```bash
+./scripts/release-preflight.sh <version>
+```
+
+It verifies the clean/synchronized `main` state, absence of the target Git tag and crates.io versions, a single root `Cargo.lock`, zero open Dependabot alerts, RustSec audit, regression tests, SemVer compatibility, MSRV/docs builds, and publish dry-runs for both public crates.
 
 ## 2. Prepare a release PR
 
