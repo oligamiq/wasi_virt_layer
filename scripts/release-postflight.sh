@@ -27,7 +27,7 @@ require() {
     exit 1
   }
 }
-for cmd in git cargo gh python3 sort grep sha256sum; do
+for cmd in git cargo gh python3 sort grep sha256sum tar; do
   require "$cmd"
 done
 
@@ -173,6 +173,30 @@ gh release download "$TAG" \
   cd "$TMP"
   sha256sum -c sha256.sum
 )
+
+echo "== Linux release artifact smoke test =="
+SMOKE_DIR="$TMP/linux-smoke"
+mkdir -p "$SMOKE_DIR"
+tar -xJf "$TMP/wasi_virt_layer-cli-x86_64-unknown-linux-gnu.tar.xz" -C "$SMOKE_DIR"
+SMOKE_ROOT="$SMOKE_DIR/wasi_virt_layer-cli-x86_64-unknown-linux-gnu"
+SMOKE_BIN="$SMOKE_ROOT/wasi_virt_layer"
+[[ -x "$SMOKE_BIN" ]] || {
+  echo "Linux release archive does not contain an executable wasi_virt_layer binary" >&2
+  exit 1
+}
+for required in CHANGELOG.md LICENSE README.md; do
+  [[ -f "$SMOKE_ROOT/$required" ]] || {
+    echo "Linux release archive is missing $required" >&2
+    exit 1
+  }
+done
+[[ "$("$SMOKE_BIN" --version)" == "wasi_virt_layer-cli ${VERSION}" ]] || {
+  echo "Linux release binary reports the wrong version" >&2
+  "$SMOKE_BIN" --version >&2 || true
+  exit 1
+}
+"$SMOKE_BIN" --help >/dev/null
+
 grep -Fq "$TAG" "$TMP/wasi_virt_layer-cli-installer.sh" || {
   echo "shell installer does not reference ${TAG}" >&2
   exit 1
