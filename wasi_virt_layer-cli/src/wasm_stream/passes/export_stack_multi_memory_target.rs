@@ -543,7 +543,11 @@ impl StreamPass for ExportStackMultiMemoryTargetStreamPass {
                         let original_func_idx = *original_idx;
                         let func_ty = match &types[*type_idx as usize].composite_type.inner {
                             CompositeInnerType::Func(f) => f,
-                            _ => eyre::bail!("unexpected non-func type for export {name}"),
+                            _ => {
+                                return Err(eyre::eyre!(
+                                    "unexpected non-func type for export {name}"
+                                ));
+                            }
                         };
                         let params = func_ty.params();
                         let results = func_ty.results();

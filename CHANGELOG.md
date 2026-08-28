@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - Thread activity tracking is internal and keyed per `ThreadAccessor` type/target, so the public `ThreadAccess` trait remains unchanged for downstream implementations.
 - **Threaded integration test logging**:
     - Deno stdout/stderr are written directly to test log files instead of undrained pipes, avoiding pipe backpressure during verbose threaded runs.
+- **Future Rust compatibility**:
+    - Removed expression-position `eyre::bail!` usages that trigger Rust future-incompatibility lints, and fixed bare rustdoc URLs in the CLI.
 - **Publishing metadata**:
     - Crate packages now include the repository README, and `wasi_virt_layer` uses the repository's actual `LICENSE` file instead of the previous incorrect `MIT OR Apache-2.0` metadata declaration.
     - Crate metadata now declares the tested MSRV explicitly: Rust 1.89.0 for `wasi_virt_layer` and Rust 1.93.0 for `wasi_virt_layer-cli`.

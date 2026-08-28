@@ -1347,7 +1347,7 @@ impl WasmPath {
     pub fn path(&self) -> eyre::Result<&Utf8PathBuf> {
         match self {
             WasmPath::Maybe { .. } => {
-                eyre::bail!("WasmPath is not definitely set: {self:?}")
+                return Err(eyre::eyre!("WasmPath is not definitely set: {self:?}"));
             }
             WasmPath::Definitely(p)
             | WasmPath::Component(p)
@@ -1365,7 +1365,7 @@ impl WasmPath {
     pub fn set_path(&mut self, path: Utf8PathBuf) -> eyre::Result<()> {
         match self {
             WasmPath::Maybe { .. } => {
-                eyre::bail!("WasmPath is not definitely set: {path}")
+                return Err(eyre::eyre!("WasmPath is not definitely set: {path}"));
             }
             WasmPath::Original { current, .. } => {
                 // Keep the original path, only update current

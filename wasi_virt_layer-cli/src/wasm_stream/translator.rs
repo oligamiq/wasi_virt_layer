@@ -1440,6 +1440,6 @@ pub fn translate_const_expr<R: Rebind>(
         wasmparser::Operator::RefFunc { function_index } => Ok(wasm_encoder::ConstExpr::ref_func(
             rebinder.function(function_index),
         )),
-        _ => eyre::bail!("Unsupported const expr operator: {:?}", op),
+        _ => Err(eyre::eyre!("Unsupported const expr operator: {:?}", op)),
     }
 }

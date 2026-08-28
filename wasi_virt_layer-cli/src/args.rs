@@ -238,7 +238,7 @@ pub struct BuildArgs {
 
     /// Enable dwarf
     /// This is broken currently.
-    /// See https://github.com/wasm-bindgen/walrus/issues/258
+    /// See <https://github.com/wasm-bindgen/walrus/issues/258>
     #[arg(long)]
     pub dwarf: Option<bool>,
 
@@ -413,7 +413,7 @@ pub struct PreBuildArgs {
 
     /// Enable dwarf
     /// This is broken currently.
-    /// See https://github.com/wasm-bindgen/walrus/issues/258
+    /// See <https://github.com/wasm-bindgen/walrus/issues/258>
     #[arg(long)]
     pub dwarf: Option<bool>,
 

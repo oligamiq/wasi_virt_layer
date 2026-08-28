@@ -1544,10 +1544,10 @@ impl StreamPass for ExportStackPreTargetStreamPass {
                             match &types[export.type_index as usize].composite_type.inner {
                                 CompositeInnerType::Func(function_type) => function_type,
                                 _ => {
-                                    eyre::bail!(
+                                    return Err(eyre::eyre!(
                                         "export `{}` does not have a function type",
                                         export.name
-                                    )
+                                    ));
                                 }
                             };
                         output.function(&build_wrapper(
@@ -2007,10 +2007,12 @@ impl StreamPass for ExportStackPreVfsStreamPass {
                         let function_type =
                             match &types[export.type_index as usize].composite_type.inner {
                                 CompositeInnerType::Func(function_type) => function_type,
-                                _ => eyre::bail!(
-                                    "export `{}` does not have a function type",
-                                    export.name
-                                ),
+                                _ => {
+                                    return Err(eyre::eyre!(
+                                        "export `{}` does not have a function type",
+                                        export.name
+                                    ));
+                                }
                             };
                         output.function(&build_wrapper(
                             export,
