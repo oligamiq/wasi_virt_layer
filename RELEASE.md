@@ -57,7 +57,7 @@ The tag triggers `.github/workflows/release.yml` / cargo-dist. Wait for all rele
 ./scripts/release-postflight.sh <version> github
 ```
 
-This verifies the annotated tag and `main` identity, the successful tag-triggered Release workflow SHA, the GitHub Release target, the exact cargo-dist 0.31.0 asset set, archive checksums, and installer version references. Stop here if any check fails.
+This verifies the annotated tag and `main` identity, the successful tag-triggered Release workflow SHA, the GitHub Release target, the exact cargo-dist 0.31.0 asset set, archive checksums, installer version references, and the packaged x86_64 Linux CLI by checking its executable bit, bundled release files, `--version`, and `--help`. Stop here if any check fails.
 
 ## 4. crates.io publication
 
