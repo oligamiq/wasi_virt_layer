@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-09
+### Changed
+- **JavaScript thread shim**:
+    - Updated `@oligami/browser_wasi_shim-threads` to `0.5.0` in the Deno test environment and generated CLI runner.
+
 ## [0.7.2] - 2026-08-28
 ### Fixed
 - **Threaded target reset rollback**:
