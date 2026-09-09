@@ -57,7 +57,7 @@ still returns normally.
 - Commit subject:
   `feat(vfs): add terminal capture for debugging and improve rustc sysroot handling`
 - `wasi_virt_layer`: `0.5.3`
-- `@oligami/browser_wasi_shim-threads`: `0.3.7`
+- `@oligami/browser_wasi_shim-threads`: `0.5.0`
 - Rust target: `wasm32-wasip1-threads`
 - VFS build mode: single combined memory with WASI threads
 

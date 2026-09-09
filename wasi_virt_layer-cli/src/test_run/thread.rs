@@ -414,7 +414,7 @@ fn package_json() -> &'static str {
 	"type": "module",
 	"dependencies": {
 		"@bjorn3/browser_wasi_shim": "^0.4",
-		"@oligami/browser_wasi_shim-threads": "^0.3",
+		"@oligami/browser_wasi_shim-threads": "^0.5",
 		"@xterm/xterm": "^5.5",
 		"xterm-addon-fit": "^0.8.0"
 	},
