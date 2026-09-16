@@ -3,7 +3,7 @@ use crate::__private::wasip1::Size;
 
 #[allow(unused_imports)]
 use crate::memory::WasmAccess;
-#[cfg(not(feature = "multi_memory"))]
+
 use crate::memory::WasmAccessName;
 use crate::transporter::Wasip1Transporter;
 
@@ -18,7 +18,9 @@ pub struct DefaultStdIO;
 
 #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl StdIO for DefaultStdIO {
-    fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
+    fn read<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &mut [u8],
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::read_from_stdin(buf)
     }
 
@@ -43,7 +45,9 @@ impl StdIO for DefaultStdIO {
         Wasip1Transporter::read_from_stdin_direct_dyn_compatible(access, buf, len)
     }
 
-    fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn write<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stdout(buf)
     }
 
@@ -64,7 +68,9 @@ impl StdIO for DefaultStdIO {
         Wasip1Transporter::write_to_stdout_direct_dyn_compatible(access, buf, len)
     }
 
-    fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn ewrite<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stderr(buf)
     }
 
@@ -92,7 +98,9 @@ impl StdIO for DefaultStdIO {
 pub trait StdIO: core::fmt::Debug {
     /// Reads data from stdin into the provided buffer.
     #[allow(unused_variables)]
-    fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
+    fn read<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &mut [u8],
+    ) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
     }
 
@@ -158,7 +166,9 @@ pub trait StdIO: core::fmt::Debug {
     /// it is better to use this.
     /// Writes data to stdout from the provided buffer.
     #[allow(unused_variables)]
-    fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn write<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
     }
 
@@ -206,7 +216,9 @@ pub trait StdIO: core::fmt::Debug {
     /// it is better to use this.
     /// Writes data to stderr from the provided buffer.
     #[allow(unused_variables)]
-    fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn ewrite<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
     }
 
