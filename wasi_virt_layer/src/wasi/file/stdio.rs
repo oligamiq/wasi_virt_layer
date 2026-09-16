@@ -117,7 +117,7 @@ pub trait StdIO: core::fmt::Debug {
 
             let (_, size) = unsafe {
                 alloc_buff(len, |b| {
-                    let size = Self::read(b)?;
+                    let size = Self::read::<Wasm>(b)?;
                     Wasm::memcpy(buf, &b[..size]);
                     Ok(size)
                 })
@@ -145,7 +145,7 @@ pub trait StdIO: core::fmt::Debug {
 
             let (_, size) = unsafe {
                 alloc_buff(len, |b| {
-                    let size = Self::read(b)?;
+                    let size = Self::read::<crate::memory::WasmAccessFaker>(b)?;
                     access.memcpy_with(buf, &b[..size]);
                     Ok(size)
                 })
@@ -181,7 +181,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::write(&Wasm::get_array(buf, len))
+            Self::write::<Wasm>(&Wasm::get_array(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -200,7 +200,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::write(&access.get_array_with(buf, len))
+            Self::write::<crate::memory::WasmAccessFaker>(&access.get_array_with(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -231,7 +231,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::ewrite(&Wasm::get_array(buf, len))
+            Self::ewrite::<Wasm>(&Wasm::get_array(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -250,7 +250,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::ewrite(&access.get_array_with(buf, len))
+            Self::ewrite::<crate::memory::WasmAccessFaker>(&access.get_array_with(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]

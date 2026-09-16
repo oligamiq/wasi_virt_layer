@@ -49,7 +49,13 @@ pub fn build_vfs(
 ) -> eyre::Result<camino::Utf8PathBuf> {
     let mut ret = None;
 
-    let mut command_base = std::process::Command::new("cargo");
+    let mut command_base = if threads || vfs_build_opts.unwind {
+        // The cargo executable may be a wrapper that does not understand
+        // rustup's `+toolchain` syntax, so invoke rustup explicitly.
+        std::process::Command::new("rustup")
+    } else {
+        std::process::Command::new("cargo")
+    };
 
     let existing_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
     let mut new_rustflags = format!("{existing_rustflags} -C link-arg=--allow-undefined");
@@ -85,7 +91,9 @@ pub fn build_vfs(
         }
         // todo!() https://github.com/rust-lang/rust/issues/146721
         if threads || vfs_build_opts.unwind {
-            args.insert(0, "+nightly");
+            args.insert(0, "cargo");
+            args.insert(0, "nightly");
+            args.insert(0, "run");
 
             // https://github.com/rust-lang/rust/pull/151309
             // args.insert(0, "+nightly-2025-12-20");

@@ -324,6 +324,10 @@ fn test_self_vfs_example() -> color_eyre::Result<()> {
 /// Runtime execution is intentionally skipped here because the Node/Bun test runner backend
 /// used by `run_thread` does not support `parking_lot` parking in this environment.
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "requires native wasm-opt support for shared-everything threads"
+)]
 fn test_self_rw_threads_vfs_example() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
@@ -1533,8 +1537,13 @@ fn test_rayon_self_pool_tls_issue() -> color_eyre::Result<()> {
 
     let out_dir = test_dir.0.as_str();
 
-    let output = Command::new("timeout")
-        .args(["5s", "deno", "run", "-A", "test_run.ts"])
+    let (command, args): (&str, &[&str]) = if cfg!(windows) {
+        ("deno", &["run", "-A", "test_run.ts"])
+    } else {
+        ("timeout", &["5s", "deno", "run", "-A", "test_run.ts"])
+    };
+    let output = Command::new(command)
+        .args(args)
         .current_dir(out_dir)
         .output()
         .wrap_err("Failed to execute deno")?;

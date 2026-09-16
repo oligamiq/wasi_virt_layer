@@ -787,7 +787,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         {
             let mut buf = alloc::vec![0u8; data_len];
             Wasm::memcpy_to(&mut buf, data);
-            StdIo::write(&buf)
+            StdIo::write::<Wasm>(&buf)
         }
     }
 
@@ -804,7 +804,7 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         {
             let mut buf = alloc::vec![0u8; data_len];
             Wasm::memcpy_to(&mut buf, data);
-            StdIo::ewrite(&buf)
+            StdIo::ewrite::<Wasm>(&buf)
         }
     }
 
@@ -1193,7 +1193,8 @@ impl<StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'static> Wasip1LFS
         #[cfg(feature = "multi_memory")]
         {
             let mut internal_buf = alloc::vec![0u8; buf_len];
-            let read = StdIo::read(&mut internal_buf).map_err(|_| wasip1::ERRNO_IO)?;
+            let read = StdIo::read::<crate::memory::WasmAccessFaker>(&mut internal_buf)
+                .map_err(|_| wasip1::ERRNO_IO)?;
             Wasm::memcpy(buf, &internal_buf[..read]);
             Ok(read)
         }
@@ -1535,7 +1536,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         {
             let mut buf = alloc::vec![0u8; data_len];
             access.memcpy_to_with(&mut buf, data);
-            StdIo::write(&buf)
+            StdIo::write::<crate::memory::WasmAccessFaker>(&buf)
         }
     }
 
@@ -1553,7 +1554,7 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         {
             let mut buf = alloc::vec![0u8; data_len];
             access.memcpy_to_with(&mut buf, data);
-            StdIo::ewrite(&buf)
+            StdIo::ewrite::<crate::memory::WasmAccessFaker>(&buf)
         }
     }
 
@@ -1752,7 +1753,8 @@ impl<B: BoxedInode, StdIo: StdIO + 'static, AddInfo: WasiAddInfo + Default + 'st
         #[cfg(feature = "multi_memory")]
         {
             let mut internal_buf = alloc::vec![0u8; buf_len];
-            let read = StdIo::read(&mut internal_buf).map_err(|_| wasip1::ERRNO_IO)?;
+            let read = StdIo::read::<crate::memory::WasmAccessFaker>(&mut internal_buf)
+                .map_err(|_| wasip1::ERRNO_IO)?;
             access.memcpy_with(buf, &internal_buf[..read]);
             Ok(read)
         }

@@ -2,6 +2,7 @@ use assert_cmd::Command;
 use uuid::Uuid;
 
 #[test]
+#[cfg_attr(windows, ignore = "nightly build-std is incompatible with this Windows toolchain")]
 fn test_unwind_flags() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
@@ -33,6 +34,7 @@ fn test_unwind_flags() -> color_eyre::Result<()> {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "nightly build-std is incompatible with this Windows toolchain")]
 fn test_unwind_target_compile_with_unwind() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 
