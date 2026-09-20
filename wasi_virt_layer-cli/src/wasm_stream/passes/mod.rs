@@ -9,6 +9,8 @@ pub mod patch_component;
 pub mod post_combine;
 pub mod pre_vfs_memory_refuge;
 pub mod producer;
+pub mod reactor_initialize;
+pub mod reactor_opt;
 pub mod shared_global;
 pub mod special_func;
 pub mod starts_pre;

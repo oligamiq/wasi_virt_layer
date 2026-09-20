@@ -7,6 +7,7 @@
 //! All initialization-related items are listed here, and they are combined
 //! into a single `_start` function during the post-combine pass.
 
+use super::reactor_initialize::ReactorInitializer;
 use std::collections::HashMap;
 
 /// 実行順序が指定された順にエクスポート名のリストを表す。
@@ -22,10 +23,11 @@ use std::collections::HashMap;
 /// ```text
 /// _start() {
 ///   1. flesh_vfs_start            — VFS内部状態の初期化
-///   2. init_offset_global         — メモリオフセットグローバルの初期化 (一回きり)
-///   3. save_target_memory         — ターゲットメモリの初期状態保存 (一回きり)
-///   4. flesh_target_start[..]     — 各ターゲットモジュールの _start (ターゲット順)
-///   5. simple_debug_pre_init      — デバッグフラグ切り替え
+///   2. _initialize                — Rust公式reactor初期化 (共有runtimeで一回きり)
+///   3. init_offset_global         — メモリオフセットグローバルの初期化 (一回きり)
+///   4. save_target_memory         — ターゲットメモリの初期状態保存 (一回きり)
+///   5. flesh_target_start[..]     — 各ターゲットモジュールの _start (ターゲット順)
+///   6. simple_debug_pre_init      — デバッグフラグ切り替え
 /// }
 /// ```
 #[derive(Debug, Clone)]
@@ -39,7 +41,13 @@ pub struct FnInStarts {
     pub flesh_vfs_start: String,
 
     // =========================================================================
-    // 2. Init Offset Global
+    // 2. Official Reactor Initialize
+    // =========================================================================
+    /// Provenance marker for the official initializer, not a generated stub.
+    pub initialize: String,
+
+    // =========================================================================
+    // 3. Init Offset Global
     // =========================================================================
     /// メモリLoweringで使われているオフセット用グローバル変数は共有メモリでは使えない。
     /// なぜなら、共有メモリではグローバル変数は共有されないからである。
@@ -53,7 +61,7 @@ pub struct FnInStarts {
     pub init_offset_global: String,
 
     // =========================================================================
-    // 3. Save Target Memory
+    // 4. Save Target Memory
     // =========================================================================
     /// 初回起動時にターゲットモジュールのメモリを保存する。リセット関数のために必要。
     /// Wasmには初期化時に静的に書き込まれるメモリが存在する。
@@ -65,14 +73,14 @@ pub struct FnInStarts {
     pub save_target_memory: String,
 
     // =========================================================================
-    // 4. Flesh Target Starts (per target, in order)
+    // 5. Flesh Target Starts (per target, in order)
     // =========================================================================
     /// ターゲットモジュールが持っていた `_start`。
     /// この関数は一回限りの呼び出しではない。
     pub flesh_target_starts: HashMap<String, String>,
 
     // =========================================================================
-    // 5. Simple Debug Pre Init
+    // 6. Simple Debug Pre Init
     // =========================================================================
     /// `_start` の最後の最後に呼び出される関数。
     /// `_start` 中はimportした関数を呼べないため、デバッグログの出力などを抑える必要がある。
@@ -92,13 +100,17 @@ pub struct FnInStarts {
 pub struct ResolvedStartFuncs {
     /// 1. VFS の `_start` 関数のインデックス
     pub flesh_vfs_start: Option<u32>,
-    /// 2. オフセットグローバル初期化関数のインデックス
+    /// Official threaded reactor call, with shared-instance once coordination.
+    /// Occupies the v0.6.1 thread initializer slot, after linker memory init and
+    /// before offset setup / target memory allocation. Its body is never inlined.
+    pub initialize: Option<ReactorInitializer>,
+    /// 3. オフセットグローバル初期化関数のインデックス
     pub init_offset_global: Option<u32>,
-    /// 3. ターゲットメモリ保存関数のインデックス
+    /// 4. ターゲットメモリ保存関数のインデックス
     pub save_target_memory: Option<u32>,
-    /// 4. 各ターゲットの `_start` 関数のインデックス
+    /// 5. 各ターゲットの `_start` 関数のインデックス
     pub flesh_target_starts: HashMap<String, u32>,
-    /// 5. デバッグ用初期化フラグ切り替え関数のインデックス
+    /// 6. デバッグ用初期化フラグ切り替え関数のインデックス
     pub simple_debug_pre_init: Option<u32>,
 }
 
@@ -117,6 +129,7 @@ impl FnInStarts {
 
         Self {
             flesh_vfs_start: "__flesh_vfs_start".to_string(),
+            initialize: super::reactor_initialize::INITIALIZE_EXPORT.to_string(),
             init_offset_global: "__init_offset_global".to_string(),
             save_target_memory: "__save_target_memory".to_string(),
             flesh_target_starts,
@@ -155,19 +168,26 @@ impl FnInStarts {
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
         }
 
-        // 2. init_offset_global — メモリオフセットグローバルの初期化
+        // 2. Official reactor: memory/TLS setup in flesh_vfs_start must run first.
+        // As in v0.6.1, constructors run before target offsets and starts. Host
+        // memory-dependent canonical imports are not wired during core start.
+        if let Some(initialize) = &resolved.initialize {
+            initialize.emit(&mut start_func, &rebind_fn);
+        }
+
+        // 3. init_offset_global — メモリオフセットグローバルの初期化
         if let Some(idx) = resolved.init_offset_global {
             let rebound = rebind_fn(idx);
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
         }
 
-        // 3. save_target_memory — ターゲットメモリの初期状態保存
+        // 4. save_target_memory — ターゲットメモリの初期状態保存
         if let Some(idx) = resolved.save_target_memory {
             let rebound = rebind_fn(idx);
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
         }
 
-        // 4. flesh_target_start[..] — 各ターゲットモジュールの _start (ターゲット順)
+        // 5. flesh_target_start[..] — 各ターゲットモジュールの _start (ターゲット順)
         for target_name in target_names {
             if let Some(&idx) = resolved.flesh_target_starts.get(target_name) {
                 let rebound = rebind_fn(idx);
@@ -175,7 +195,7 @@ impl FnInStarts {
             }
         }
 
-        // 5. simple_debug_pre_init — デバッグフラグ切り替え
+        // 6. simple_debug_pre_init — デバッグフラグ切り替え
         if let Some(idx) = resolved.simple_debug_pre_init {
             let rebound = rebind_fn(idx);
             start_func.instruction(&wasm_encoder::Instruction::Call(rebound));
@@ -219,6 +239,7 @@ mod tests {
         let starts = FnInStarts::new(&["my_target"]);
         let resolved = ResolvedStartFuncs {
             flesh_vfs_start: Some(10),
+            initialize: None,
             init_offset_global: Some(30),
             save_target_memory: Some(40),
             flesh_target_starts: {

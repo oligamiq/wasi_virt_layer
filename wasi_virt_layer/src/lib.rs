@@ -354,6 +354,19 @@ pub mod memory;
 pub mod shared_global;
 mod transporter;
 mod utils;
+
+/// Shared coordination word for CLI-folded Rust reactor initialization.
+///
+/// The synthesized core start calls the official `_initialize` exactly once per
+/// shared runtime: 0 = unclaimed, 1 = initializing, 2 = complete. Workers run
+/// core start too, but libc's `_initialize` traps on a second call. This static
+/// reserves storage through the linker without depending on libc's private guard
+/// layout. It is internal ABI; the CLI removes its export after resolving it.
+#[cfg(all(feature = "threads", target_arch = "wasm32", target_os = "wasi"))]
+#[used]
+#[unsafe(no_mangle)]
+pub static __wasip1_vfs_reactor_init_state: core::sync::atomic::AtomicU32 =
+    core::sync::atomic::AtomicU32::new(0);
 /// WebAssembly System Interface (WASI) modules and utilities.
 pub mod wasi;
 mod wit;

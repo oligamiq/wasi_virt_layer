@@ -180,6 +180,10 @@ fn wrap_unreachable_proc_exit_target<'a>(name: &'a str, info: &ParsedInfo) -> Op
 impl StreamPass for PostCombineStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
         let mut info = ParsedInfo::default();
+        if self.threads {
+            info.start_funcs.initialize =
+                super::reactor_initialize::ReactorInitializer::resolve(input_wasm, true)?;
+        }
         let mut func_import_count = 0;
         let mut global_count = 0;
         let mut type_count = 0;
@@ -836,7 +840,10 @@ impl StreamPass for PostCombineStreamPass {
                 wasmparser::Payload::ExportSection(s) => {
                     for export in s {
                         let export = export?;
-                        if should_drop_export(export.name) {
+                        if should_drop_export(export.name)
+                            || (info.start_funcs.initialize.is_some()
+                                && export.name == super::reactor_initialize::PREPARED_STATE_EXPORT)
+                        {
                             continue; // dropped
                         }
                         if export.kind == wasmparser::ExternalKind::Memory {

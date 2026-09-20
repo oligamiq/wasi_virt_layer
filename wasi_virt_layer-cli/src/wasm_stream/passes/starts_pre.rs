@@ -12,6 +12,8 @@ pub struct StartsPreStreamPass {
     /// allows the VFS to call the start section initializer independently
     /// for reused pool worker threads.
     pub thread_start_export_name: Option<String>,
+    /// Validate and mark a threaded VFS reactor before optimization/merging.
+    pub fold_reactor: bool,
 }
 
 impl StartsPreStreamPass {
@@ -21,6 +23,7 @@ impl StartsPreStreamPass {
             is_library,
             start_export_name,
             thread_start_export_name: None,
+            fold_reactor: false,
         }
     }
 
@@ -33,15 +36,31 @@ impl StartsPreStreamPass {
         self.thread_start_export_name = Some(name);
         self
     }
+
+    /// Enable VFS-only reactor validation and provenance markers for threaded builds.
+    pub fn with_reactor_folding(mut self, threads: bool) -> Self {
+        self.fold_reactor = threads;
+        self
+    }
 }
 
 impl StreamPass for StartsPreStreamPass {
     fn run(&mut self, input_wasm: &[u8]) -> eyre::Result<Vec<u8>> {
+        use super::reactor_initialize::{
+            INITIALIZE_EXPORT, PREPARED_STATE_EXPORT, ReactorInitializer, STATE_EXPORT,
+        };
+        // Provenance must be checked on the VFS alone: target exports and
+        // optimizer-reordered merged function counts cannot establish ownership.
+        let fold = self.is_vfs
+            && self.fold_reactor
+            && ReactorInitializer::resolve(input_wasm, false)?.is_some();
         let mut module = Module::new();
         let parser = wasmparser::Parser::new(0);
 
         let mut start_func_id = None;
         let mut has_export_section = false;
+        let mut has_initialize = false;
+        let mut has_command_start = false;
 
         // Pass 1: Find start section
         for payload in wasmparser::Parser::new(0).parse_all(input_wasm) {
@@ -61,6 +80,21 @@ impl StreamPass for StartsPreStreamPass {
                     let mut exports = ExportSection::new();
                     for export in s {
                         let export = export?;
+                        eyre::ensure!(
+                            !matches!(export.name, INITIALIZE_EXPORT | PREPARED_STATE_EXPORT),
+                            "reserved reactor export {} in input module",
+                            export.name
+                        );
+                        // Diagnose ambiguous reactors before the merger can
+                        // deduplicate exports or erase the command's _start name.
+                        if self.is_vfs && export.name == "_initialize" {
+                            eyre::ensure!(!has_initialize, "duplicate _initialize export");
+                            eyre::ensure!(
+                                export.kind == wasmparser::ExternalKind::Func,
+                                "_initialize must be a function export"
+                            );
+                            has_initialize = true;
+                        }
                         let kind = match export.kind {
                             wasmparser::ExternalKind::Func => ExportKind::Func,
                             wasmparser::ExternalKind::FuncExact => ExportKind::Func,
@@ -72,11 +106,25 @@ impl StreamPass for StartsPreStreamPass {
                         };
 
                         if export.name == "_start" && matches!(kind, ExportKind::Func) {
+                            has_command_start = true;
                             start_func_id = Some(export.index);
                         } else {
-                            exports.export(export.name, kind, export.index);
+                            let name = if fold {
+                                match export.name {
+                                    "_initialize" => INITIALIZE_EXPORT,
+                                    STATE_EXPORT => PREPARED_STATE_EXPORT,
+                                    name => name,
+                                }
+                            } else {
+                                export.name
+                            };
+                            exports.export(name, kind, export.index);
                         }
                     }
+                    eyre::ensure!(
+                        !(self.is_vfs && has_initialize && has_command_start),
+                        "unexpected _initialize alongside command _start"
+                    );
                     if let Some(func_id) = start_func_id {
                         exports.export(&self.start_export_name, ExportKind::Func, func_id);
                         // For target modules, also export the Wasm start section

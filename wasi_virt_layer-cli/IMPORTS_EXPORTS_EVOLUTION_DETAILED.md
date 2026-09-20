@@ -88,6 +88,44 @@ During this stage, the `wasi_virt_layer-cli` processes the input WASM modules.
 
 ## Stage 3: Output (Combined WASM)
 
+### Threaded reactor initialization (C-2)
+
+The VFS's official Rust `_initialize: () -> ()` is called directly from the
+synthesized core start, after `__flesh_vfs_start` (linker memory initialization)
+and before `__init_offset_global`, `__save_target_memory`, target starts, and
+debug pre-init. This is the thread-initializer slot from WVL v0.6.1; no manual
+TLS/constructor initializer is restored and no reactor body is copied.
+
+`__wasip1_vfs_reactor_init_state` is a linker-allocated AtomicU32 exported as an
+immutable i32 address by threaded WVL builds. The CLI uses it to elect the single
+caller and publish constructor completion to worker core instances. libc's own
+guard traps on repeat calls, so it cannot replace this coordination. A trapping
+initializer invalidates the shared runtime; its state is not reset or retried.
+
+Before merging, the VFS-only pre-pass validates both exports and renames them to
+the reserved markers `__wvl_reactor_initialize` and `__wvl_reactor_init_state`.
+Targets cannot supply these reserved names. This preserves VFS provenance across
+merging and optimizer function reordering. The post-combine pass consumes the
+state marker and emits the guarded direct call.
+
+The function marker remains through all optimization and componentization stages.
+Every native wasm-opt invocation assigns it a collision-free internal function
+name and applies `--no-inline` before optimization. This prevents production
+`-Oz` from removing the official function boundary. The final core writer verifies
+exactly one direct call from start and removes the marker export. The old 0.116
+fallback optimizer cannot order this protection correctly; folded reactors require
+native wasm-opt or `--dev` instead of silently accepting inlining.
+
+wit-component sees neither `_initialize` nor a WIT-exported initialization shim,
+so it emits no reactor start-shim core module. Non-threaded reactors retain
+`_initialize`; a VFS without it retains the previous start sequence. Prebuilt
+threaded reactors missing the state ABI must be rebuilt with the matching WVL
+library.
+
+Core start runs before memory-dependent canonical imports are wired to the new
+instance. As with the v0.6.1 initialization sequence, reactor constructors must
+not use those imports (including host re-entry) during core instantiation.
+
 - **Exports:**
   - `_start`: The main entry point (orchestrates everything).
   - `wasi:thread/spawn`: Thread spawn export (if threads enabled).

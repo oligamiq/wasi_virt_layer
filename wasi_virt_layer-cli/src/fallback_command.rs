@@ -13,6 +13,18 @@ pub(crate) const COMMAND_ALTERNATE_ENV_VAR: &str = "WASI_VIRT_LAYER_FALLBACK_ALT
 pub(crate) fn wasm_opt(args: &[String]) -> i32 {
     #[cfg(feature = "fallback")]
     {
+        if args
+            .iter()
+            .any(|arg| arg.starts_with("--no-inline=__wvl_reactor_initialize"))
+        {
+            // The 0.116 backend cannot parse pass arguments or schedule
+            // no-inline before its default optimization passes. Never silently
+            // inline the reactor when the native optimizer is missing.
+            eprintln!(
+                "threaded reactor optimization requires native wasm-opt with --no-inline support; install wasm-opt or use --dev"
+            );
+            return 1;
+        }
         let mut command = wasm_opt::integration::Command::new("wasm-opt");
         command.args(args.iter().skip(1));
 

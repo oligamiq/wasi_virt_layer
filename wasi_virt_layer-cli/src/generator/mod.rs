@@ -637,11 +637,14 @@ impl GeneratorRunner {
 
                     let fn_in_starts =
                         crate::wasm_stream::passes::fn_in_starts::FnInStarts::new::<String>(&[]);
-                    pipeline.add_pass(Box::new(StartsPreStreamPass::new(
-                        true,
-                        pipeline_is_library,
-                        fn_in_starts.flesh_vfs_start.clone(),
-                    )));
+                    pipeline.add_pass(Box::new(
+                        StartsPreStreamPass::new(
+                            true,
+                            pipeline_is_library,
+                            fn_in_starts.flesh_vfs_start.clone(),
+                        )
+                        .with_reactor_folding(cloned_ctx.threads),
+                    ));
                     pipeline.add_pass(Box::new(ExportStackPreVfsStreamPass::new(
                         cloned_ctx
                             .stack_config
@@ -1093,6 +1096,11 @@ impl ComponentRunner {
             new_dwarf
         };
 
+        // Keep the optimizer anchor through componentization and every core
+        // optimization, then remove only its export from the published core.
+        let final_core =
+            crate::wasm_stream::passes::reactor_opt::finish(&std::fs::read(self.path.path()?)?)?;
+        std::fs::write(self.path.path()?, final_core)?;
         std::fs::rename(self.path.path()?, &core_wasm_path).wrap_err_with(|| {
             eyre::eyre!(
                 "Failed to rename final wasm from {} to {}",

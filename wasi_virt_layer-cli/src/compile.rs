@@ -506,6 +506,18 @@ pub fn optimize_wasm(
 
         let mut cmd = fallback_command::get_fallback_command("wasm-opt");
 
+        // Binaryen's no-inline marker is invocation-local. Reapply it after
+        // every pass that might reindex/strip names, before any optimization.
+        let protected =
+            crate::wasm_stream::passes::reactor_opt::optimizer_input(&std::fs::read(wasm_path)?)?;
+        let mut protected_file = None;
+        if let Some((bytes, name)) = &protected {
+            let mut file = tempfile::NamedTempFile::new()?;
+            file.write_all(bytes)?;
+            cmd.arg(format!("--no-inline={name}"));
+            protected_file = Some(file);
+        }
+
         if dwarf {
             cmd.arg("--debuginfo");
         }
@@ -532,7 +544,15 @@ pub fn optimize_wasm(
             "--enable-gc",
         ]);
 
-        cmd.arg(wasm_path.as_str());
+        if let Some(file) = &protected_file {
+            cmd.arg(
+                file.path()
+                    .to_str()
+                    .ok_or_else(|| eyre::eyre!("non-UTF8 optimizer temporary path"))?,
+            );
+        } else {
+            cmd.arg(wasm_path.as_str());
+        }
 
         cmd.args(["--output", output_path.as_str()]);
         let command = cmd.spawn().wrap_err("Failed to spawn wasm-opt process")?;

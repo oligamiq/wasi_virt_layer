@@ -90,6 +90,9 @@ fn should_protect(name: &str) -> bool {
         && !name.starts_with("cabi_realloc_")
         && !name.starts_with("__wasip1_vfs_stack_")
         && !name.starts_with("__flesh_")
+        // The reactor must remain a direct call to the official function, not
+        // an export-stack wrapper. Core start has already installed its stack.
+        && name != super::reactor_initialize::INITIALIZE_EXPORT
         && !name.contains("reset_globals")
         && !name.ends_with("_resetter")
 }

@@ -33,6 +33,7 @@ export!(Hello);
 
 plug_process!(StandardProcess, test_unwind_target, self);
 plug_random!(StandardRandom, test_unwind_target, self);
+plug_clock!(StandardClock, test_unwind_target, self);
 plug_sched!(DefaultSched, test_unwind_target, self);
 
 struct VirtualEnvState {
