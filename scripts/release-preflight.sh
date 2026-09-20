@@ -57,17 +57,25 @@ CLI_VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import 
   exit 1
 }
 BASELINE_TAG="v${CURRENT_VERSION}"
-EXPECTED_VERSION="$(python3 - "$CURRENT_VERSION" <<'PYV'
+RELEASE_TYPE="$(python3 - "$CURRENT_VERSION" "$VERSION" <<'PYV'
 import sys
-major, minor, patch = map(int, sys.argv[1].split('.'))
-print(f"{major}.{minor}.{patch + 1}")
+current = tuple(map(int, sys.argv[1].split('.')))
+target = tuple(map(int, sys.argv[2].split('.')))
+major, minor, patch = current
+if target == (major, minor, patch + 1):
+    print("patch")
+elif target == (major, minor + 1, 0):
+    print("minor")
+elif target == (major + 1, 0, 0):
+    print("major")
+else:
+    raise SystemExit(1)
 PYV
-)"
-[[ "$VERSION" == "$EXPECTED_VERSION" ]] || {
-  echo "target must be the next patch version: ${EXPECTED_VERSION}" >&2
+)" || {
+  echo "target must be the next patch, minor, or major version after ${CURRENT_VERSION}" >&2
   exit 1
 }
-echo "current=$CURRENT_VERSION target=$VERSION baseline=$BASELINE_TAG"
+echo "current=$CURRENT_VERSION target=$VERSION release_type=$RELEASE_TYPE baseline=$BASELINE_TAG"
 echo "== target availability =="
 if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
   echo "tag v${VERSION} already exists locally" >&2
@@ -113,9 +121,9 @@ git rev-parse -q --verify "refs/tags/${BASELINE_TAG}" >/dev/null || {
   exit 1
 }
 cargo semver-checks -p wasi_virt_layer \
-  --baseline-rev "$BASELINE_TAG" --release-type patch --color never
+  --baseline-rev "$BASELINE_TAG" --release-type "$RELEASE_TYPE" --color never
 cargo semver-checks -p wasi_virt_layer-cli \
-  --baseline-rev "$BASELINE_TAG" --release-type patch \
+  --baseline-rev "$BASELINE_TAG" --release-type "$RELEASE_TYPE" \
   --default-features --color never
 
 echo "== MSRV =="

@@ -6,8 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-
-## [0.8.0] - 2026-09-13
+### Fixed
+- **Threaded reactor startup**:
+    - Fold Rust reactor `_initialize` into WVL's synthesized core start and coordinate it once across shared worker instances, eliminating the extra reactor start-shim core module while preserving linker memory initialization and target-start ordering.
+    - Reject incompatible prebuilt threaded VFS artifacts that lack the reactor-initialization coordination ABI, with regression coverage for optimized and unoptimized composition, worker reuse, malformed exports, and generated core-module counts.
 
 ## [0.8.0] - 2026-09-09
 ### Changed
