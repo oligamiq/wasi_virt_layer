@@ -132,7 +132,13 @@ pub fn build_vfs(
 
     let mut ret = None;
 
-    let mut command_base = std::process::Command::new("cargo");
+    let mut command_base = if vfs_build_opts.unwind {
+        // The cargo executable may be a wrapper that does not understand
+        // rustup's `+toolchain` syntax, so invoke rustup explicitly.
+        std::process::Command::new("rustup")
+    } else {
+        std::process::Command::new("cargo")
+    };
 
     let existing_rustflags = std::env::var("RUSTFLAGS").unwrap_or_default();
     let mut new_rustflags = format!("{existing_rustflags} -C link-arg=--allow-undefined");
@@ -167,7 +173,9 @@ pub fn build_vfs(
             args.push("--no-default-features");
         }
         if vfs_build_opts.unwind {
-            args.insert(0, "+nightly");
+            args.insert(0, "cargo");
+            args.insert(0, "nightly");
+            args.insert(0, "run");
 
             // https://github.com/rust-lang/rust/pull/151309
             // args.insert(0, "+nightly-2025-12-20");
