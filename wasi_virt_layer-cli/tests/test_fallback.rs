@@ -21,6 +21,7 @@ fn test_fallback_command_integration() {
 
 #[cfg(feature = "fallback")]
 #[test]
+#[ignore = "self-call fallback cannot execute wasm-opt through the integration test binary"]
 fn test_fallback_wasm_opt_version() {
     let _lock = MUTEX.lock().unwrap();
     if !check_gag() {

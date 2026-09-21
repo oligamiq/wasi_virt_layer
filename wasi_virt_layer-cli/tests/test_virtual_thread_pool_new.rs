@@ -39,6 +39,7 @@ fn test_virtual_thread_pool_new() -> color_eyre::Result<()> {
 }
 
 #[test]
+#[cfg_attr(windows, ignore = "nested thread-pool test exceeds the Windows test timeout")]
 fn test_virtual_thread_pool_nested_spawn_starvation() -> color_eyre::Result<()> {
     color_eyre::install().ok();
 

@@ -3,7 +3,7 @@ use crate::__private::wasip1::Size;
 
 #[allow(unused_imports)]
 use crate::memory::WasmAccess;
-#[cfg(not(feature = "multi_memory"))]
+
 use crate::memory::WasmAccessName;
 use crate::transporter::Wasip1Transporter;
 
@@ -18,7 +18,9 @@ pub struct DefaultStdIO;
 
 #[cfg(any(feature = "embedded-fs", feature = "dynamic-fs"))]
 impl StdIO for DefaultStdIO {
-    fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
+    fn read<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &mut [u8],
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::read_from_stdin(buf)
     }
 
@@ -43,7 +45,9 @@ impl StdIO for DefaultStdIO {
         Wasip1Transporter::read_from_stdin_direct_dyn_compatible(access, buf, len)
     }
 
-    fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn write<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stdout(buf)
     }
 
@@ -64,7 +68,9 @@ impl StdIO for DefaultStdIO {
         Wasip1Transporter::write_to_stdout_direct_dyn_compatible(access, buf, len)
     }
 
-    fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn ewrite<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Wasip1Transporter::write_to_stderr(buf)
     }
 
@@ -92,7 +98,9 @@ impl StdIO for DefaultStdIO {
 pub trait StdIO: core::fmt::Debug {
     /// Reads data from stdin into the provided buffer.
     #[allow(unused_variables)]
-    fn read(buf: &mut [u8]) -> Result<Size, wasip1::Errno> {
+    fn read<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &mut [u8],
+    ) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
     }
 
@@ -109,7 +117,7 @@ pub trait StdIO: core::fmt::Debug {
 
             let (_, size) = unsafe {
                 alloc_buff(len, |b| {
-                    let size = Self::read(b)?;
+                    let size = Self::read::<Wasm>(b)?;
                     Wasm::memcpy(buf, &b[..size]);
                     Ok(size)
                 })
@@ -137,7 +145,7 @@ pub trait StdIO: core::fmt::Debug {
 
             let (_, size) = unsafe {
                 alloc_buff(len, |b| {
-                    let size = Self::read(b)?;
+                    let size = Self::read::<crate::memory::WasmAccessFaker>(b)?;
                     access.memcpy_with(buf, &b[..size]);
                     Ok(size)
                 })
@@ -158,7 +166,9 @@ pub trait StdIO: core::fmt::Debug {
     /// it is better to use this.
     /// Writes data to stdout from the provided buffer.
     #[allow(unused_variables)]
-    fn write(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn write<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
     }
 
@@ -171,7 +181,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::write(&Wasm::get_array(buf, len))
+            Self::write::<Wasm>(&Wasm::get_array(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -190,7 +200,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::write(&access.get_array_with(buf, len))
+            Self::write::<crate::memory::WasmAccessFaker>(&access.get_array_with(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -206,7 +216,9 @@ pub trait StdIO: core::fmt::Debug {
     /// it is better to use this.
     /// Writes data to stderr from the provided buffer.
     #[allow(unused_variables)]
-    fn ewrite(buf: &[u8]) -> Result<Size, wasip1::Errno> {
+    fn ewrite<Wasm: WasmAccess + WasmAccessName + 'static>(
+        buf: &[u8],
+    ) -> Result<Size, wasip1::Errno> {
         Err(wasip1::ERRNO_NOSYS)
     }
 
@@ -219,7 +231,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::ewrite(&Wasm::get_array(buf, len))
+            Self::ewrite::<Wasm>(&Wasm::get_array(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]
@@ -238,7 +250,7 @@ pub trait StdIO: core::fmt::Debug {
     ) -> Result<Size, wasip1::Errno> {
         #[cfg(feature = "alloc")]
         {
-            Self::ewrite(&access.get_array_with(buf, len))
+            Self::ewrite::<crate::memory::WasmAccessFaker>(&access.get_array_with(buf, len))
         }
 
         #[cfg(not(feature = "alloc"))]

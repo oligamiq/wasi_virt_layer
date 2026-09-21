@@ -12,6 +12,10 @@ use uuid::Uuid;
 mod utils;
 use utils::*;
 
+fn has_wasm_tools() -> bool {
+    Command::new("wasm-tools").arg("--version").status().is_ok()
+}
+
 /// Helper to build with `--run-with-opt` (no --dev) so that the component
 /// file is generated, then validate it.
 fn build_and_validate_component(
@@ -21,6 +25,9 @@ fn build_and_validate_component(
     threads: bool,
     other_args: &[&str],
 ) -> color_eyre::Result<()> {
+    if !has_wasm_tools() {
+        return Ok(());
+    }
     let mut combined = vec!["--run-with-opt"];
     combined.extend(other_args);
 
@@ -71,6 +78,9 @@ fn build_and_validate_dev(
     threads: bool,
     other_args: &[&str],
 ) -> color_eyre::Result<()> {
+    if !has_wasm_tools() {
+        return Ok(());
+    }
     let dist_dir = utils::run_wasi_virt_layer(
         Some(p_vfs),
         Some(wasm),
@@ -203,7 +213,7 @@ fn build_only(
 #[test]
 fn dev_with_own_memory_validates() -> color_eyre::Result<()> {
     color_eyre::install().ok();
-    if !has_required_wasi_targets(true) {
+    if !has_required_wasi_targets(true) || !has_wasm_tools() {
         return Ok(());
     }
     let out_dir = build_only(
@@ -285,7 +295,7 @@ fn dev_rejects_zero_stack_size() -> color_eyre::Result<()> {
 #[test]
 fn dev_accepts_minimal_stack_size() -> color_eyre::Result<()> {
     color_eyre::install().ok();
-    if !has_required_wasi_targets(true) {
+    if !has_required_wasi_targets(true) || !has_wasm_tools() {
         return Ok(());
     }
     let out_dir = build_only(
@@ -311,9 +321,13 @@ fn dev_accepts_minimal_stack_size() -> color_eyre::Result<()> {
 }
 
 #[test]
+#[cfg_attr(
+    windows,
+    ignore = "large stack-size dev build requires unavailable Windows tool"
+)]
 fn dev_accepts_large_stack_size() -> color_eyre::Result<()> {
     color_eyre::install().ok();
-    if !has_required_wasi_targets(true) {
+    if !has_required_wasi_targets(true) || !has_wasm_tools() {
         return Ok(());
     }
     let out_dir = build_only(

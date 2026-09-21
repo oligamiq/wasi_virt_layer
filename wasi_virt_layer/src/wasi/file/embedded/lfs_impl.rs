@@ -55,7 +55,7 @@ impl<
                 use crate::utils::alloc_buff;
                 alloc_buff(data_len, |buf| Wasm::memcpy_to(buf, data))
             };
-            StdIo::write(&buf)
+            StdIo::write::<Wasm>(&buf)
         }
     }
 
@@ -74,7 +74,7 @@ impl<
                 use crate::utils::alloc_buff;
                 alloc_buff(data_len, |buf| Wasm::memcpy_to(buf, data))
             };
-            StdIo::ewrite(&buf)
+            StdIo::ewrite::<crate::memory::WasmAccessFaker>(&buf)
         }
     }
     fn is_dir(&self, inode: &Self::Inode) -> bool {
@@ -192,7 +192,11 @@ impl<
         {
             use crate::__private::utils;
 
-            let (buf_vec, read) = unsafe { utils::alloc_buff(buf_len, |buf| StdIo::read(buf)) };
+            let (buf_vec, read) = unsafe {
+                utils::alloc_buff(buf_len, |buf| {
+                    StdIo::read::<crate::memory::WasmAccessFaker>(buf)
+                })
+            };
             Wasm::memcpy(buf, &buf_vec);
             Ok(read?)
         }
@@ -502,7 +506,7 @@ impl<
                 use crate::utils::alloc_buff;
                 alloc_buff(data_len, |buf| access.memcpy_to_with(buf, data))
             };
-            StdIo::write(&buf)
+            StdIo::write::<crate::memory::WasmAccessFaker>(&buf)
         }
     }
 
@@ -522,7 +526,7 @@ impl<
                 use crate::utils::alloc_buff;
                 alloc_buff(data_len, |buf| access.memcpy_to_with(buf, data))
             };
-            StdIo::ewrite(&buf)
+            StdIo::ewrite::<crate::memory::WasmAccessFaker>(&buf)
         }
     }
 
@@ -654,7 +658,11 @@ impl<
         {
             use crate::__private::utils;
 
-            let (buf_vec, read) = unsafe { utils::alloc_buff(buf_len, |buf| StdIo::read(buf)) };
+            let (buf_vec, read) = unsafe {
+                utils::alloc_buff(buf_len, |buf| {
+                    StdIo::read::<crate::memory::WasmAccessFaker>(buf)
+                })
+            };
             access.memcpy_with(buf, &buf_vec);
             Ok(read?)
         }

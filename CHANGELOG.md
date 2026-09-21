@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Generic standard I/O hooks**:
+    - `StdIO::read`, `StdIO::write`, and `StdIO::ewrite` now receive the active Wasm access type as a generic parameter, allowing custom standard-I/O implementations to use the same Wasm memory-access context as direct I/O paths.
+
+### Fixed
+- **Windows CLI and test compatibility**:
+    - Nightly unwind builds now invoke Cargo through `rustup run nightly cargo`, avoiding failures when `cargo` is provided by a wrapper that does not understand `+nightly`.
+    - Improved fallback `wasm-opt` handling for version checks and shared-everything/multi-memory pass-through, and adjusted integration tests for Windows-only tool/timeout limitations and missing `wasm-tools`.
+
 ## [0.9.0] - 2026-09-20
 ### Fixed
 - **Threaded reactor startup**:

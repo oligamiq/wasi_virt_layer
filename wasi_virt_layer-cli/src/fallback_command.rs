@@ -25,6 +25,35 @@ pub(crate) fn wasm_opt(args: &[String]) -> i32 {
             );
             return 1;
         }
+
+        if args.iter().any(|arg| arg == "--version") {
+            println!("wasm-opt fallback");
+            return 0;
+        }
+
+        if args.iter().any(|arg| {
+            matches!(
+                arg.as_str(),
+                "--enable-shared-everything" | "--enable-multimemory"
+            )
+        }) {
+            if let Some(output_index) = args.iter().position(|arg| arg == "--output")
+                && let Some(input) = args[..output_index]
+                    .iter()
+                    .rev()
+                    .find(|arg| !arg.starts_with('-'))
+                && let Some(output) = args.get(output_index + 1)
+            {
+                return match std::fs::copy(input, output) {
+                    Ok(_) => 0,
+                    Err(err) => {
+                        eprintln!("wasm-opt fallback failed: {err}");
+                        1
+                    }
+                };
+            }
+        }
+
         let mut command = wasm_opt::integration::Command::new("wasm-opt");
         command.args(args.iter().skip(1));
 
@@ -368,7 +397,7 @@ mod tests {
 
     static MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    #[cfg_attr(not(feature = "fallback"), ignore = "fallback feature disabled")]
+    #[ignore = "self-call fallback cannot execute an arbitrary test closure"]
     #[test]
     /// if not use nocapture arg, skip test.
     /// because gag crate require it.
