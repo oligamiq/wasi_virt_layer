@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-09-21
+
 ### Changed
 - **Generic standard I/O hooks**:
     - `StdIO::read`, `StdIO::write`, and `StdIO::ewrite` now receive the active Wasm access type as a generic parameter, allowing custom standard-I/O implementations to use the same Wasm memory-access context as direct I/O paths.
