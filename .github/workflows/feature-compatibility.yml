@@ -1,0 +1,27 @@
+name: Library feature compatibility
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Install MSRV toolchain and targets
+        run: |
+          rustup toolchain install 1.89.0 --profile minimal
+          rustup target add --toolchain 1.89.0 thumbv7em-none-eabi wasm32-wasip1 wasm32-wasip1-threads
+      - name: Check no_std on a std-less target
+        run: cargo +1.89.0 check -p wasi_virt_layer --no-default-features --target thumbv7em-none-eabi --locked
+      - name: Check WASI std
+        run: cargo +1.89.0 check -p wasi_virt_layer --no-default-features --features std --target wasm32-wasip1 --locked
+      - name: Check WASI threads
+        run: cargo +1.89.0 check -p wasi_virt_layer --no-default-features --features threads --target wasm32-wasip1-threads --locked
