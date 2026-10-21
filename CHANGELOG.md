@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-10-21
+
+### Fixed
+- **`no_std` dependency compatibility**: Gate `flume` and `fxhash` behind the `threads` feature, and disable `smallbox`'s default `std` feature unless the library's `std` feature is enabled. This allows `wasi_virt_layer` to compile for truly `std`-less targets while preserving the existing threaded and standard-library configurations.
+
 ## [0.10.0] - 2026-09-21
 
 ### Changed
