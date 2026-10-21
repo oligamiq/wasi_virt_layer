@@ -20,7 +20,9 @@ wit-bindgen = { version = "0.54.0", default-features = false, features = [
 
 [dependencies.wasi_virt_layer]
 workspace = true
-features = ["std", "embedded-fs", "threads"]
+features = ["std", "embedded-fs", "threads", "own-memory"]
 
 [lib]
 crate-type = ["cdylib"]
+# This WASI guest exports its own entry point and is not a native test harness.
+test = false
