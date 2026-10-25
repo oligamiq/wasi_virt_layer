@@ -1,0 +1,79 @@
+name: Memory lock experiment
+on:
+  workflow_dispatch:
+  push:
+    branches: [perf/waiter-aware-memory-lock]
+permissions:
+  contents: read
+concurrency:
+  group: memory-lock-${{ github.ref }}
+  cancel-in-progress: true
+env:
+  RUSTUP_TOOLCHAIN: nightly-2026-09-13
+  CARGO_BUILD_JOBS: "2"
+  CARGO_INCREMENTAL: "0"
+  BINARYEN_CORES: "1"
+jobs:
+  protocol-and-relocation:
+    if: github.repository == 'oligamiq/wasi_virt_layer'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 70
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: 2.9.7
+      - name: Pinned toolchain and required targets
+        run: |
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rust-src --target wasm32-wasip1,wasm32-wasip1-threads
+          mkdir -p ci-logs "$RUNNER_TEMP/lock-tools/bin"
+          real_cargo=$(command -v cargo)
+          printf '%s\n' '#!/usr/bin/env bash' \
+            'if [[ "${1:-}" == "+nightly" ]]; then shift; set -- "+${RUSTUP_TOOLCHAIN}" "$@"; fi' \
+            "exec \"$real_cargo\" \"\$@\"" > "$RUNNER_TEMP/lock-tools/bin/cargo"
+          chmod +x "$RUNNER_TEMP/lock-tools/bin/cargo"
+          echo "$RUNNER_TEMP/lock-tools/bin" >> "$GITHUB_PATH"
+          rustup target list --installed | tee ci-logs/targets.txt
+          grep -Fx wasm32-wasip1 ci-logs/targets.txt
+          grep -Fx wasm32-wasip1-threads ci-logs/targets.txt
+          { rustc -Vv; cargo -V; bun --version; deno --version; lscpu; free -m; } > ci-logs/environment.txt
+      - name: Native tests in both feature modes
+        run: |
+          rustc --test --edition=2024 wasi_virt_layer/tests/memory_lock_protocol.rs -o "$RUNNER_TEMP/lock-baseline"
+          "$RUNNER_TEMP/lock-baseline" | tee ci-logs/native-baseline.log
+          rustc --test --edition=2024 --cfg 'feature="waiter-aware-memory-lock"' wasi_virt_layer/tests/memory_lock_protocol.rs -o "$RUNNER_TEMP/lock-candidate"
+          "$RUNNER_TEMP/lock-candidate" | tee ci-logs/native-candidate.log
+      - name: Install validated WASM tools
+        run: |
+          tools="$RUNNER_TEMP/lock-tools"
+          mkdir -p "$tools/wasm-tools" "$tools/binaryen"
+          curl -fL --retry 2 https://github.com/bytecodealliance/wasm-tools/releases/download/v1.252.0/wasm-tools-1.252.0-x86_64-linux.tar.gz -o "$tools/wasm-tools.tar.gz"
+          printf '%s  %s\n' 097b1181d5b2bc3f2ebc44b4e72edf18308902023f1f1483a1a7dc1268ea988d "$tools/wasm-tools.tar.gz" | sha256sum -c -
+          curl -fL --retry 2 https://github.com/WebAssembly/binaryen/releases/download/version_131/binaryen-version_131-x86_64-linux.tar.gz -o "$tools/binaryen.tar.gz"
+          printf '%s  %s\n' b5bf1f0eaf17c63ee588ff7a5954dc8f6ce2c26989051c66f24dfe9ece3e46db "$tools/binaryen.tar.gz" | sha256sum -c -
+          tar -xf "$tools/wasm-tools.tar.gz" -C "$tools/wasm-tools" --strip-components=1
+          tar -xf "$tools/binaryen.tar.gz" -C "$tools/binaryen" --strip-components=1
+          printf '%s\n' "$tools/wasm-tools" "$tools/binaryen/bin" >> "$GITHUB_PATH"
+      - name: Generated relocation and reset regressions
+        run: |
+          cargo test --locked -p wasi_virt_layer-cli --test test_memory_lock_relocation -- --nocapture 2>&1 | tee ci-logs/relocation.log
+          cargo test --locked -p wasi_virt_layer-cli --test test_pool_own_memory -- --nocapture 2>&1 | tee ci-logs/pool.log
+          cargo test --locked -p wasi_virt_layer-cli --test test_atomic_wait_reset -- --nocapture 2>&1 | tee ci-logs/atomic-reset.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: memory-lock-evidence
+          path: |
+            ci-logs
+            wasi_virt_layer-cli/tests/onetime/**/dist/*.wasm
+            wasi_virt_layer-cli/tests/onetime/**/dist/.deno-test-*.log
+          include-hidden-files: true
+          retention-days: 3

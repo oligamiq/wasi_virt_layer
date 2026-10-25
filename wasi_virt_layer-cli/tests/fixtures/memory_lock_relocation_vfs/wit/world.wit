@@ -1,0 +1,5 @@
+package tests:memory-lock;
+
+world component-abi {
+  export main: func();
+}

@@ -1,0 +1,16 @@
+[package]
+name = "memory_lock_relocation_vfs"
+version = "0.0.1"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+waiter-aware-memory-lock = ["wasi_virt_layer/waiter-aware-memory-lock"]
+
+[dependencies]
+wit-bindgen = "0.54.0"
+const_struct = "0.6.4"
+wasi_virt_layer = { path = "../../../../wasi_virt_layer", default-features = false, features = ["threads", "embedded-fs", "own-memory"] }
