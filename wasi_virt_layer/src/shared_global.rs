@@ -15,18 +15,39 @@
 //
 // The lock state lives in a single `AtomicI32`:
 //   0    : free
-//   N > 0: N active readers
+//   N > 0: N active readers (plus the optional sticky writer-waiting bit)
 //   -1   : writer active
+//
+// `waiter-aware-memory-lock` reserves bit 30 of positive states for a waiting
+// writer, so uncontended last-reader releases need not notify. The feature is
+// off by default; both modes keep the same exports and relocation exclusion.
 
-use core::sync::atomic::{AtomicI32, Ordering};
+use core::sync::atomic::AtomicI32;
 
-/// Atomic RwLock state variable.
-///
-/// Layout:
-/// -  `0`   → unlocked
-/// -  `N>0` → N readers active
-/// -  `-1`  → writer active
-static RWLOCK_STATE: AtomicI32 = AtomicI32::new(0);
+#[path = "memory_lock.rs"]
+mod memory_lock;
+use memory_lock::{MemoryAccessLock, WaitNotify};
+
+/// Shared relocation lock; all workers use the same storage.
+static MEMORY_LOCK: MemoryAccessLock = MemoryAccessLock::new();
+
+struct WasmWaitNotify;
+
+impl WaitNotify for WasmWaitNotify {
+    #[inline(always)]
+    fn wait(&self, state: &AtomicI32, expected: i32) {
+        unsafe {
+            __wvl_atomic_wait32_vfs(state.as_ptr().cast(), expected as u32, -1);
+        }
+    }
+
+    #[inline(always)]
+    fn notify(&self, state: &AtomicI32, count: u32) {
+        unsafe {
+            __wvl_atomic_notify_vfs(state.as_ptr().cast(), count);
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // wvl_atomic primitives (resolved by CLI generator to VFS memory instructions)
@@ -50,45 +71,19 @@ unsafe extern "C" {
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_read_acquire() {
-    loop {
-        let old = RWLOCK_STATE.load(Ordering::Relaxed);
-        if old >= 0 {
-            // Attempt to increment reader count
-            if RWLOCK_STATE
-                .compare_exchange_weak(old, old + 1, Ordering::Acquire, Ordering::Relaxed)
-                .is_ok()
-            {
-                return;
-            }
-            // CAS failed — retry immediately (no wait needed, state just changed)
-            continue;
-        }
-        // Writer is active (state < 0) — wait until state changes
-        unsafe {
-            __wvl_atomic_wait32_vfs(
-                RWLOCK_STATE.as_ptr() as *const u32,
-                old as u32, // wait while state == old (i.e. writer still active)
-                -1,         // no timeout
-            );
-        }
-    }
+    MEMORY_LOCK.read_acquire(&WasmWaitNotify);
 }
 
 /// Release a read lock.
 ///
-/// If this was the last reader, wakes one waiting writer.
+/// If this was the last reader, wakes one waiting writer. With the experimental
+/// waiter-aware feature, notification requires a registered writer.
 /// # Safety
 /// Called from generated wasm code via C-ABI.
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_read_release() {
-    let old = RWLOCK_STATE.fetch_sub(1, Ordering::Release);
-    if old == 1 {
-        // Last reader released — wake a waiting writer
-        unsafe {
-            __wvl_atomic_notify_vfs(RWLOCK_STATE.as_ptr() as *const u32, 1);
-        }
-    }
+    MEMORY_LOCK.read_release(&WasmWaitNotify);
 }
 
 /// Acquire a write lock (blocks until all readers and other writers release).
@@ -99,24 +94,7 @@ pub extern "C" fn __wasip1_vfs_memory_lock_read_release() {
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_write_acquire() {
-    loop {
-        match RWLOCK_STATE.compare_exchange_weak(0, -1, Ordering::Acquire, Ordering::Relaxed) {
-            Ok(_) => return, // Successfully acquired write lock
-            Err(current) => {
-                if current == 0 {
-                    continue; // Spurious failure, retry immediately
-                }
-                // Someone else holds the lock — wait until state changes
-                unsafe {
-                    __wvl_atomic_wait32_vfs(
-                        RWLOCK_STATE.as_ptr() as *const u32,
-                        current as u32,
-                        -1,
-                    );
-                }
-            }
-        }
-    }
+    MEMORY_LOCK.write_acquire(&WasmWaitNotify);
 }
 
 /// Release the write lock and wake all waiting threads.
@@ -125,10 +103,7 @@ pub extern "C" fn __wasip1_vfs_memory_lock_write_acquire() {
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn __wasip1_vfs_memory_lock_write_release() {
-    RWLOCK_STATE.store(0, Ordering::Release);
-    unsafe {
-        __wvl_atomic_notify_vfs(RWLOCK_STATE.as_ptr() as *const u32, u32::MAX);
-    }
+    MEMORY_LOCK.write_release(&WasmWaitNotify);
 }
 
 // ---------------------------------------------------------------------------

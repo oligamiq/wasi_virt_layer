@@ -21,6 +21,8 @@ default = ["std"]
 alloc = []
 multi_memory = ["alloc"]
 own-memory = []
+# Experimental: avoid last-reader notifications without a registered writer.
+waiter-aware-memory-lock = []
 std = ["alloc", "wasip1/std"]
 threads = ["std", "dep:parking_lot", "dep:dashmap", "parking_lot/nightly"]
 trace = ["trace-fs", "trace-thread"]
