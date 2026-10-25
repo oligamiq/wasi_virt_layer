@@ -9,6 +9,8 @@ const TARGET: &str = r#"
   (memory (export "memory") 1 16)
   (data (i32.const 1024) "\78\56\34\12\87\a9\cb\ed")
   (func (export "_start"))
+  ;; VFS pool routes include this ABI even though this guest spawns no threads.
+  (func (export "wasi_thread_start") (param i32 i32) unreachable)
   (func (export "__main_void") (result i32) (local $i i32)
     (loop $check
       (if (i32.ne (i32.load (i32.const 1024)) (i32.const 0x12345678))
@@ -58,6 +60,61 @@ fn concurrent_guest_loads_survive_physical_relocation_in_both_modes() -> color_e
             output.contains("relocation sentinel checks passed"),
             "{output}"
         );
+        assert_release_shape(
+            &std::fs::read(dir.0.join("memory_lock_relocation_vfs.core.wasm"))?,
+            candidate,
+        )?;
     }
+    Ok(())
+}
+
+fn assert_release_shape(wasm: &[u8], candidate: bool) -> color_eyre::Result<()> {
+    use wasmparser::{Operator, Parser, Payload, TypeRef};
+    let mut release = None;
+    let mut index = 0;
+    let mut checked = false;
+    for payload in Parser::new(0).parse_all(wasm) {
+        match payload? {
+            Payload::ImportSection(section) => {
+                for group in section {
+                    for import in group? {
+                        if matches!(import?.1.ty, TypeRef::Func(_)) {
+                            index += 1;
+                        }
+                    }
+                }
+            }
+            Payload::ExportSection(section) => {
+                for export in section {
+                    let export = export?;
+                    if export.name == "__wasip1_vfs_memory_lock_read_release" {
+                        release = Some(export.index);
+                    }
+                }
+            }
+            Payload::CodeSectionEntry(body) => {
+                if release == Some(index) {
+                    let mut calls = 0;
+                    let mut expected_constant = false;
+                    let expected = if candidate { (1 << 30) | 1 } else { 1 };
+                    for op in body.get_operators_reader()? {
+                        match op? {
+                            Operator::Call { .. } => calls += 1,
+                            Operator::I32Const { value } if value == expected => {
+                                expected_constant = true
+                            }
+                            _ => {}
+                        }
+                    }
+                    assert!(expected_constant, "wrong generated last-reader guard");
+                    assert!(calls <= 1, "unexpected hot-path forwarding calls: {calls}");
+                    checked = true;
+                }
+                index += 1;
+            }
+            _ => {}
+        }
+    }
+    assert!(checked, "read-release export/body missing");
     Ok(())
 }

@@ -1,6 +1,6 @@
 use const_struct::const_struct;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use wasi_virt_layer::{file::*, poll::*, prelude::*, process::*, thread::VirtualThreadPool};
+use wasi_virt_layer::{file::*, poll::*, prelude::*, thread::VirtualThreadPool};
 
 struct ComponentABI;
 wit_bindgen::generate!({ world: "component-abi" });
