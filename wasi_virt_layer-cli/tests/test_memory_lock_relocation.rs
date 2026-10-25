@@ -31,13 +31,16 @@ fn concurrent_guest_loads_survive_physical_relocation_in_both_modes() -> color_e
     let target = temporary.path().join("memory_lock_relocation_target.wasm");
     std::fs::write(&target, wat::parse_str(TARGET)?)?;
     for candidate in [false, true] {
-        let mut args = vec!["--own-memory", "--validate", "--no-cache"];
+        let mut args = vec!["--own-memory", "--validate"];
         if candidate {
             args.extend(["--features", "waiter-aware-memory-lock"]);
         }
+        // Features apply to the preceding target, so put the VFS feature before
+        // the positional guest. The helper's `wasm` argument would put it first.
+        args.push(target.to_str().unwrap());
         let dir = run_wasi_virt_layer(
             Some("memory_lock_relocation_vfs"),
-            Some(target.to_str().unwrap()),
+            None,
             Some(true),
             true,
             OutDir::Random,
