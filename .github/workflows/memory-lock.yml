@@ -62,15 +62,26 @@ jobs:
           tar -xf "$tools/wasm-tools.tar.gz" -C "$tools/wasm-tools" --strip-components=1
           tar -xf "$tools/binaryen.tar.gz" -C "$tools/binaryen" --strip-components=1
           printf '%s\n' "$tools/wasm-tools" "$tools/binaryen/bin" >> "$GITHUB_PATH"
-      - name: Generated relocation and reset regressions
+      - name: Required threaded relocation and reset regressions
         run: |
           status=0
           cargo test --locked -p wasi_virt_layer-cli --test test_memory_lock_relocation -- --nocapture 2>&1 | tee ci-logs/relocation.log || status=1
-          cargo test --locked -p wasi_virt_layer-cli --test test_pool_own_memory -- --nocapture 2>&1 | tee ci-logs/pool.log || status=1
+          cargo test --locked -p wasi_virt_layer-cli --test test_pool_own_memory test_pool_own_memory -- --exact --nocapture 2>&1 | tee ci-logs/pool.log || status=1
           cargo test --locked -p wasi_virt_layer-cli --test test_atomic_wait_reset -- --nocapture 2>&1 | tee ci-logs/atomic-reset.log || status=1
           exit "$status"
+      # User-approved scope exception: these two non-threaded failures also
+      # reproduce on untouched 0.10.0 (run 40212316762). Retain their evidence.
+      - name: Diagnostic only - known non-threaded reset failures
+        id: legacy
+        if: always()
+        continue-on-error: true
+        run: |
+          cargo test --locked -p wasi_virt_layer-cli --test test_pool_own_memory \
+            test_own_memory_reset -- --nocapture 2>&1 | tee ci-logs/non-threaded-reset-diagnostic.log
       - name: Reproduce failed non-threaded reset checks on untouched 0.10.0
-        if: failure()
+        id: legacy-control
+        if: always() && steps.legacy.outcome == 'failure'
+        continue-on-error: true
         run: |
           git fetch --no-tags --depth=1 origin 657ba779ce611edda36386696f4eba26480d8c88
           git worktree add --detach "$RUNNER_TEMP/wvl-baseline" FETCH_HEAD
@@ -78,6 +89,15 @@ jobs:
             --manifest-path "$RUNNER_TEMP/wvl-baseline/Cargo.toml" \
             -p wasi_virt_layer-cli --test test_pool_own_memory test_own_memory_reset \
             -- --nocapture 2>&1 | tee ci-logs/baseline-reset-control.log
+      - name: Record approved diagnostic exception
+        if: always()
+        env:
+          DIAGNOSTIC_OUTCOME: ${{ steps.legacy.outcome }}
+          CONTROL_OUTCOME: ${{ steps.legacy-control.outcome }}
+        run: |
+          mkdir -p ci-logs
+          printf 'Non-threaded reset diagnostic: %s\nUnchanged 0.10.0 control: %s\nExcluded from the threaded experiment gate by explicit user approval.\n' \
+            "$DIAGNOSTIC_OUTCOME" "$CONTROL_OUTCOME" | tee ci-logs/approved-scope-exception.txt >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
