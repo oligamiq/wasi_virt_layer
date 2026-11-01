@@ -16,7 +16,7 @@ env:
   CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
   CARGO_PROFILE_RELEASE_LTO: fat
   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
-  WVL_OPTIMIZATION_PROFILE: speed-o4
+  WVL_OPTIMIZATION_PROFILE: max-compatible
 jobs:
   protocol-and-relocation:
     if: github.repository == 'oligamiq/wasi_virt_layer'
@@ -70,7 +70,9 @@ jobs:
           printf '%s\n' "$tools/wasm-tools" "$tools/binaryen/bin" >> "$GITHUB_PATH"
       - name: Required threaded relocation and reset regressions
         run: |
+          ulimit -c 0
           status=0
+          cargo test --locked -p wasi_virt_layer-cli --lib max_compatible_eh_tests -- --nocapture 2>&1 | tee ci-logs/eh-optimization-ceiling.log || status=1
           cargo test --locked -p wasi_virt_layer-cli --test test_memory_lock_relocation -- --nocapture 2>&1 | tee ci-logs/relocation.log || status=1
           cargo test --locked -p wasi_virt_layer-cli --test test_pool_own_memory test_pool_own_memory -- --exact --nocapture 2>&1 | tee ci-logs/pool.log || status=1
           cargo test --locked -p wasi_virt_layer-cli --test test_atomic_wait_reset -- --nocapture 2>&1 | tee ci-logs/atomic-reset.log || status=1

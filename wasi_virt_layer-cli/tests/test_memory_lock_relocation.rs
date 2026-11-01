@@ -34,7 +34,10 @@ fn concurrent_guest_loads_survive_physical_relocation_in_both_modes() -> color_e
     std::fs::write(&target, wat::parse_str(TARGET)?)?;
     for candidate in [false, true] {
         let mut args = vec!["--own-memory", "--validate"];
-        if std::env::var("WVL_OPTIMIZATION_PROFILE").as_deref() == Ok("speed-o4") {
+        if matches!(
+            std::env::var("WVL_OPTIMIZATION_PROFILE").as_deref(),
+            Ok("speed-o4" | "max-compatible")
+        ) {
             args.push("--run-with-opt");
         }
         if candidate {

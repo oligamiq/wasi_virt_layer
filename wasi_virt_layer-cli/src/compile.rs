@@ -500,6 +500,29 @@ pub fn optimize_wasm(
     let profile_value = std::env::var("WVL_OPTIMIZATION_PROFILE").ok();
     let profile = crate::optimization_profile::OptimizationProfile::parse(profile_value.as_deref())
         .map_err(|error| eyre::eyre!(error))?;
+    optimize_wasm_with_profile(wasm_path, add_args, require_update, dwarf, profile)
+}
+
+fn has_try_table(bytes: &[u8]) -> eyre::Result<bool> {
+    for payload in wasmparser::Parser::new(0).parse_all(bytes) {
+        if let wasmparser::Payload::CodeSectionEntry(body) = payload? {
+            for op in body.get_operators_reader()? {
+                if matches!(op?, wasmparser::Operator::TryTable { .. }) {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn optimize_wasm_with_profile(
+    wasm_path: &camino::Utf8PathBuf,
+    add_args: &[&str],
+    require_update: bool,
+    dwarf: bool,
+    profile: crate::optimization_profile::OptimizationProfile,
+) -> eyre::Result<camino::Utf8PathBuf> {
     // if dwarf {
     //     return Ok(wasm_path.clone());
     // }
@@ -519,8 +542,9 @@ pub fn optimize_wasm(
 
         // Binaryen's no-inline marker is invocation-local. Reapply it after
         // every pass that might reindex/strip names, before any optimization.
-        let protected =
-            crate::wasm_stream::passes::reactor_opt::optimizer_input(&std::fs::read(wasm_path)?)?;
+        let input_bytes = std::fs::read(wasm_path)?;
+        let contains_try_table = profile.single_pass() && has_try_table(&input_bytes)?;
+        let protected = crate::wasm_stream::passes::reactor_opt::optimizer_input(&input_bytes)?;
         let mut protected_file = None;
         if let Some((bytes, name)) = &protected {
             let mut file = tempfile::NamedTempFile::new()?;
@@ -533,7 +557,7 @@ pub fn optimize_wasm(
             cmd.arg("--debuginfo");
         }
 
-        cmd.args(profile.arguments(add_args));
+        cmd.args(profile.arguments(add_args, contains_try_table));
         cmd.args(profile.features().iter().copied());
 
         if let Some(file) = &protected_file {
@@ -553,7 +577,7 @@ pub fn optimize_wasm(
             let output = std::process::Command::new(&cmd.bin)
                 .args(&cmd.args)
                 .output()
-                .wrap_err("speed-o4 requires native wasm-opt")?;
+                .wrap_err("speed optimization requires native wasm-opt")?;
             (output.status.success(), output.stdout, output.stderr)
         } else {
             let output = cmd
@@ -581,7 +605,9 @@ pub fn optimize_wasm(
             println!(
                 "[wvl-speed-opt] {}",
                 serde_json::json!({
-                    "profile": "speed-o4", "args": cmd.args, "accepted": true,
+                    "profile": if profile == crate::optimization_profile::OptimizationProfile::MaxCompatible { "max-compatible" } else { "speed-o4" },
+                    "hasTryTable": contains_try_table,
+                    "args": cmd.args, "accepted": true,
                     "beforeBytes": before_size, "afterBytes": after_size,
                 })
             );
@@ -612,6 +638,51 @@ pub fn optimize_wasm(
     }
 
     Ok(before_path)
+}
+
+#[cfg(test)]
+mod max_compatible_eh_tests {
+    use super::*;
+    use crate::optimization_profile::OptimizationProfile;
+
+    #[test]
+    fn try_table_uses_o3_while_forced_o4_reproduces_binaryen_limitation() -> eyre::Result<()> {
+        let module = wat::parse_str(
+            r#"(module
+          (import "env" "may_throw" (func $call (param i32) (result i32)))
+          (tag $e (param i32))
+          (export "exception" (tag $e))
+          (func (export "test") (param i32) (result i32)
+            (block $caught (result i32)
+              (try_table (result i32) (catch $e $caught)
+                (call $call (local.get 0))))))"#,
+        )?;
+        assert!(has_try_table(&module)?);
+        let dir = tempfile::tempdir()?;
+        let input = camino::Utf8PathBuf::from_path_buf(dir.path().join("try-table.wasm")).unwrap();
+        std::fs::write(&input, module)?;
+        let error =
+            optimize_wasm_with_profile(&input, &[], true, false, OptimizationProfile::SpeedO4)
+                .expect_err("pinned Binaryen O4 must expose unsupported TryTable flattening");
+        assert!(
+            error.to_string().contains("unexpected expr type")
+                || error
+                    .to_string()
+                    .contains("Unsupported instruction for Flatten"),
+            "{error:?}"
+        );
+        let output = optimize_wasm_with_profile(
+            &input,
+            &[],
+            true,
+            false,
+            OptimizationProfile::MaxCompatible,
+        )?;
+        wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+            .validate_all(&std::fs::read(output)?)?;
+        println!("max-compatible EH fixture: forced O4 failed, selected O3 validated");
+        Ok(())
+    }
 }
 
 /// Converts a WebAssembly module into a WebAssembly Component.
