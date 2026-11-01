@@ -13,6 +13,10 @@ env:
   CARGO_BUILD_JOBS: "2"
   CARGO_INCREMENTAL: "0"
   BINARYEN_CORES: "1"
+  CARGO_PROFILE_RELEASE_OPT_LEVEL: "3"
+  CARGO_PROFILE_RELEASE_LTO: fat
+  CARGO_PROFILE_RELEASE_CODEGEN_UNITS: "1"
+  WVL_OPTIMIZATION_PROFILE: speed-o4
 jobs:
   protocol-and-relocation:
     if: github.repository == 'oligamiq/wasi_virt_layer'
@@ -47,6 +51,8 @@ jobs:
           { rustc -Vv; cargo -V; bun --version; deno --version; lscpu; free -m; } > ci-logs/environment.txt
       - name: Native tests in both feature modes
         run: |
+          rustc --test --edition=2024 wasi_virt_layer-cli/tests/optimization_profile_native.rs -o "$RUNNER_TEMP/optimization-profile"
+          "$RUNNER_TEMP/optimization-profile" | tee ci-logs/optimization-profile.log
           rustc --test --edition=2024 wasi_virt_layer/tests/memory_lock_protocol.rs -o "$RUNNER_TEMP/lock-baseline"
           "$RUNNER_TEMP/lock-baseline" | tee ci-logs/native-baseline.log
           rustc --test --edition=2024 --cfg 'feature="waiter-aware-memory-lock"' wasi_virt_layer/tests/memory_lock_protocol.rs -o "$RUNNER_TEMP/lock-candidate"

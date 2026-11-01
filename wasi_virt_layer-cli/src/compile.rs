@@ -497,6 +497,9 @@ pub fn optimize_wasm(
     require_update: bool,
     dwarf: bool,
 ) -> eyre::Result<camino::Utf8PathBuf> {
+    let profile_value = std::env::var("WVL_OPTIMIZATION_PROFILE").ok();
+    let profile = crate::optimization_profile::OptimizationProfile::parse(profile_value.as_deref())
+        .map_err(|error| eyre::eyre!(error))?;
     // if dwarf {
     //     return Ok(wasm_path.clone());
     // }
@@ -530,27 +533,8 @@ pub fn optimize_wasm(
             cmd.arg("--debuginfo");
         }
 
-        const OPTS: &[&str] = &["-O", "-O0", "-O1", "-O2", "-O3", "-O4", "-Oz", "-Os"];
-
-        cmd.args(add_args.iter().filter(|&&arg| !OPTS.contains(&arg)));
-
-        cmd.args(add_args.iter().filter(|&&arg| OPTS.contains(&arg)));
-
-        if add_args.iter().all(|&arg| !OPTS.contains(&arg)) {
-            cmd.arg("-Oz");
-        }
-
-        cmd.args([
-            "--enable-threads",
-            "--enable-bulk-memory",
-            "--enable-reference-types",
-            "--enable-simd",
-            "--enable-exception-handling",
-            "--enable-shared-everything",
-            "--enable-multivalue",
-            "--enable-multimemory",
-            "--enable-gc",
-        ]);
+        cmd.args(profile.arguments(add_args));
+        cmd.args(profile.features().iter().copied());
 
         if let Some(file) = &protected_file {
             cmd.arg(
@@ -563,15 +547,26 @@ pub fn optimize_wasm(
         }
 
         cmd.args(["--output", output_path.as_str()]);
-        let command = cmd.spawn().wrap_err("Failed to spawn wasm-opt process")?;
+        let (success, stdout, stderr) = if profile.single_pass() {
+            // The legacy fallback can copy an input without optimizing it.
+            // A speed-profile build must execute a real native optimizer.
+            let output = std::process::Command::new(&cmd.bin)
+                .args(&cmd.args)
+                .output()
+                .wrap_err("speed-o4 requires native wasm-opt")?;
+            (output.status.success(), output.stdout, output.stderr)
+        } else {
+            let output = cmd
+                .spawn()
+                .wrap_err("Failed to spawn wasm-opt process")?
+                .wait_with_output()
+                .wrap_err("Failed to wait for wasm-opt process")?;
+            (output.success, output.stdout, output.stderr)
+        };
 
-        let output = command
-            .wait_with_output()
-            .wrap_err("Failed to wait for wasm-opt process")?;
-
-        if !output.success {
-            let out = String::from_utf8_lossy(&output.stdout);
-            let err = String::from_utf8_lossy(&output.stderr);
+        if !success {
+            let out = String::from_utf8_lossy(&stdout);
+            let err = String::from_utf8_lossy(&stderr);
             eyre::bail!("wasm-opt failed: {err}\nstdout: {out}");
         }
 
@@ -582,9 +577,20 @@ pub fn optimize_wasm(
             .map(|meta| meta.len())
             .unwrap_or(0);
 
+        if profile.single_pass() {
+            println!(
+                "[wvl-speed-opt] {}",
+                serde_json::json!({
+                    "profile": "speed-o4", "args": cmd.args, "accepted": true,
+                    "beforeBytes": before_size, "afterBytes": after_size,
+                })
+            );
+            return Ok(output_path);
+        }
+
         if before_size <= after_size {
             if first {
-                if !require_update {
+                if !profile.keep_first_output(before_size, after_size, require_update) {
                     std::fs::remove_file(&output_path)
                         .wrap_err("Failed to remove existing optimized WASM file")?;
                     std::fs::copy(&before_path, &output_path)

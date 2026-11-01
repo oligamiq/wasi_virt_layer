@@ -53,6 +53,7 @@ pub mod gen_ts_helper;
 /// Internal generators for modifying and stitching Wasm structures.
 #[allow(missing_docs)]
 pub mod generator;
+mod optimization_profile;
 /// Instruction scanning and rewriting utilities for Walrus IR.
 
 /// Utilities for running integration tests against Wasm runtimes.
