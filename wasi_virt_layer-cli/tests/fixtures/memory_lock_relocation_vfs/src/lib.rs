@@ -12,6 +12,25 @@ static IN_GUEST: AtomicBool = AtomicBool::new(false);
 static CHECKS: AtomicUsize = AtomicUsize::new(0);
 
 impl Guest for ComponentABI {
+    #[cfg(feature = "lifecycle-probe")]
+    fn main() {
+        assert_ne!(memory_reserve::<__self>(1024), -1);
+        assert_ne!(memory_reserve::<memory_lock_relocation_target>(16), -1);
+        memory_lock_relocation_target::_reset();
+        memory_lock_relocation_target::_start();
+        let counters = memory_lock_relocation_target::get_array(0 as *const u32, 2);
+        assert_eq!(
+            &*counters,
+            &[0, 1],
+            "target start must run constructors without running main"
+        );
+        assert_eq!(memory_lock_relocation_target::_main().raw(), 0);
+        let counters = memory_lock_relocation_target::get_array(0 as *const u32, 2);
+        assert_eq!(&*counters, &[1, 1], "main must run exactly once");
+        println!("optimized target lifecycle passed");
+    }
+
+    #[cfg(not(feature = "lifecycle-probe"))]
     fn main() {
         println!(
             "waiter-aware={}",

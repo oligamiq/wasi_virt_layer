@@ -8,6 +8,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [features]
+lifecycle-probe = []
 waiter-aware-memory-lock = ["wasi_virt_layer/waiter-aware-memory-lock"]
 
 [dependencies]

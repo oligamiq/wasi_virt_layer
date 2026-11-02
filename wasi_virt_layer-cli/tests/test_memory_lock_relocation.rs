@@ -23,6 +23,51 @@ const TARGET: &str = r#"
 "#;
 
 #[test]
+fn optimized_command_start_does_not_run_main() -> color_eyre::Result<()> {
+    assert!(has_required_wasi_targets(true));
+    let temporary = tempfile::tempdir()?;
+    let target = temporary.path().join("memory_lock_relocation_target.wasm");
+    std::fs::write(
+        &target,
+        wat::parse_str(
+            r#"(module
+      (memory (export "memory") 1 16)
+      (func $main (export "__main_void") (result i32)
+        (i32.store (i32.const 0) (i32.add (i32.load (i32.const 0)) (i32.const 1)))
+        (i32.const 0))
+      (func (export "_start")
+        (i32.store (i32.const 4) (i32.add (i32.load (i32.const 4)) (i32.const 1)))
+        (drop (call $main)))
+      (func (export "wasi_thread_start") (param i32 i32) unreachable))"#,
+        )?,
+    )?;
+    let args = [
+        "--own-memory",
+        "--validate",
+        "--run-with-opt",
+        "--features",
+        "lifecycle-probe",
+        target.to_str().unwrap(),
+    ];
+    let dir = run_wasi_virt_layer(
+        Some("memory_lock_relocation_vfs"),
+        None,
+        Some(true),
+        true,
+        OutDir::Random,
+        true,
+        &args,
+        Some(Duration::from_secs(30)),
+    )?;
+    let output = std::fs::read_to_string(dir.0.join(".deno-test-stdout.log"))?;
+    assert!(
+        output.contains("optimized target lifecycle passed"),
+        "{output}"
+    );
+    Ok(())
+}
+
+#[test]
 fn concurrent_guest_loads_survive_physical_relocation_in_both_modes() -> color_eyre::Result<()> {
     color_eyre::install().ok();
     assert!(
